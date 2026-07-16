@@ -1,0 +1,18 @@
+from fastapi import FastAPI
+
+from app.api.router import api_router
+from app.config.settings import get_settings
+
+
+def create_app(include_ui: bool = True) -> FastAPI:
+    settings = get_settings()
+    app = FastAPI(title=settings.app_name, debug=settings.app_debug)
+    app.include_router(api_router)
+    if include_ui:
+        from nicegui import ui
+
+        from app.ui.pages import register_ui_pages
+
+        register_ui_pages()
+        ui.run_with(app, mount_path="/")
+    return app
