@@ -77,3 +77,19 @@ Status: Accepted
 Na Fase 4, o provider de imagem mockado gera SVGs locais deterministicas. Isso
 mantem o fluxo funcional sem APIs pagas e prepara o contrato para providers reais
 de imagem nas fases seguintes.
+
+## ADR-0011: Storyboard sempre deriva de Shot
+
+Status: Accepted
+
+Quadros de storyboard sao gerados a partir de planos (`Shot`), nao diretamente
+do roteiro completo. Isso preserva duracao, acao, emocao, camera e dependencias
+por plano.
+
+## ADR-0012: Animatic inicial como manifesto JSON
+
+Status: Accepted
+
+Na Fase 5, o animatic e um manifesto estruturado com quadros, duracoes, narracao
+provisoria e timeline preliminar. Isso valida o fluxo antes de introduzir FFmpeg
+e renderizacao real nas fases posteriores.

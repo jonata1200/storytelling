@@ -16,6 +16,8 @@ Storytelling Studio comeca como um modular monolith em Python.
 - `app/generation`: templates de prompt e auditoria de execucoes.
 - `app/providers`: contratos e providers substituiveis.
 - `app/storytelling`: briefing, ideias, Story Bible, roteiro, cenas e planos.
+- `app/storyboards`: quadros de storyboard, narracao provisoria, animatic e
+  timeline preliminar.
 - `app/visual_bible`: personagens, locais, objetos, fichas canonicas e
   referencias visuais.
 - `app/workers`: Celery e tarefas em background.
@@ -34,8 +36,10 @@ Storytelling Studio comeca como um modular monolith em Python.
   auditoria antes de integrar APIs pagas.
 - A Fase 4 usa um `MockImageProvider` que grava SVG local. Ele exercita assets,
   prompts, provider substituivel e consistencia sem custo externo.
+- A Fase 5 gera storyboards a partir dos planos, nunca diretamente do roteiro
+  inteiro. O animatic inicial e um manifesto JSON; renderizacao real entra depois.
 
 ## Evolucao prevista
 
-A Fase 5 deve transformar planos em storyboard, gerar quadros mockados/visuais,
-montar um animatic preliminar e preparar timeline inicial.
+A Fase 6 deve introduzir `VideoProvider`, jobs de geracao de video, polling ou
+webhook, revisao de clipes, retentativas e custos de video.

@@ -131,7 +131,37 @@ Concluido:
   - `ruff check .`: passou.
   - `mypy app tests`: passou.
 
+## Fase 5 - Storyboard
+
+Status: base concluida
+
+Concluido:
+
+- Entidades de `StoryboardFrame`, `AudioTrack`, `Animatic`, `Timeline` e
+  `TimelineItem`.
+- Storyboards gerados a partir de `Shot`.
+- Quadros de storyboard gerados com `MockImageProvider`.
+- Assets de storyboard gravados fora do banco.
+- Registro de prompt/provider/modelo para cada quadro.
+- Narração provisoria com transcript e alinhamento aproximado por palavra.
+- Animatic preliminar como manifesto JSON.
+- Timeline preliminar 9:16 com camada visual e camada de audio.
+- Dependencias entre planos, storyboard, narracao, animatic e timeline.
+- Endpoints de geracao/listagem de storyboard e geracao de animatic.
+- Migracao `202607160005_phase5_storyboards`.
+- `alembic upgrade head` executado com sucesso.
+- Smoke test storyboard executado contra PostgreSQL:
+  - 4 cenas;
+  - 12 quadros de storyboard;
+  - narração provisoria de 240 segundos;
+  - animatic de 240 segundos;
+  - timeline com 13 itens.
+- Verificacoes executadas:
+  - `pytest`: 16 testes passaram.
+  - `ruff check .`: passou.
+  - `mypy app tests`: passou.
+
 Proximo:
 
-- Fase 5: shot list, storyboard, animatic, timeline preliminar e narracao
-  provisoria.
+- Fase 6: `VideoProvider`, jobs, polling/webhook, revisao de clipes,
+  retentativas e custos de video.

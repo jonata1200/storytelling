@@ -72,6 +72,7 @@ Fase 1 e base da Fase 2 estao implementadas:
 - Briefing, ideias, Story Bible, roteiro, cenas e planos com provider mock.
 - Templates e execucoes de prompt auditaveis.
 - Personagens, locais, objetos e referencias visuais mockadas.
+- Storyboards, narracao provisoria, animatic e timeline preliminar.
 - Testes de health, auth, maquina de estados, dependencias, custos e mock LLM.
 
 ## Fluxo narrativo inicial
@@ -105,3 +106,17 @@ GET  /api/v1/visual-bible/projects/{project_id}/consistency/{target_kind}/{targe
 
 O `MockImageProvider` gera arquivos SVG locais em `storage/mock_images/`.
 Esses arquivos entram como `Asset` e nao sao salvos no PostgreSQL.
+
+## Fluxo de storyboard inicial
+
+Endpoints principais da Fase 5:
+
+```text
+POST /api/v1/storyboards/projects/{project_id}/generate
+GET  /api/v1/storyboards/projects/{project_id}/frames
+POST /api/v1/storyboards/projects/{project_id}/animatic/generate
+```
+
+O animatic da Fase 5 e um manifesto JSON com quadros, duracoes, narracao
+provisoria e timeline preliminar. Renderizacao em video fica para a fase de
+FFmpeg.
