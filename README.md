@@ -22,6 +22,14 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+Se o comando `docker` nao aparecer no PowerShell logo apos instalar o Docker
+Desktop, reinicie o VS Code/terminal ou use temporariamente:
+
+```powershell
+$env:Path = "C:\Program Files\Docker\Docker\resources\bin;$env:Path"
+& "C:\Program Files\Docker\Docker\resources\bin\docker.exe" compose up -d
+```
+
 Interface:
 
 ```text
@@ -51,3 +59,14 @@ mypy app tests
 
 Os testes automatizados nao devem chamar APIs pagas. Providers externos entram por
 interfaces e devem ter mocks por padrao.
+
+## Estado atual
+
+Fase 1 e base da Fase 2 estao implementadas:
+
+- API FastAPI com UI NiceGUI inicial.
+- PostgreSQL, pgvector e Redis via Docker Compose.
+- Alembic async usando `asyncpg`.
+- Projetos, versoes, artefatos, aprovacoes, dependencias, assets e custos.
+- Maquina de estados inicial para o pipeline de projeto.
+- Testes de health, auth, maquina de estados, dependencias e custos.

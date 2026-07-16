@@ -1,11 +1,14 @@
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import ArtifactStatus
+from app.core.enums import ArtifactStatus, DependencyKind, ProjectStatus
 from app.projects.models import Artifact, ArtifactVersion, Project, ProjectVersion
+from app.projects.repository import ProjectRepository
 from app.projects.schemas import ArtifactCreate, ProjectCreate
+from app.projects.versioning import create_artifact_version, mark_dependents_stale
+from app.workflows.models import ArtifactDependency
+from app.workflows.state_machine import assert_project_transition
 
 
 async def create_project(session: AsyncSession, data: ProjectCreate) -> Project:
@@ -26,10 +29,7 @@ async def create_project(session: AsyncSession, data: ProjectCreate) -> Project:
 
 
 async def list_projects(session: AsyncSession) -> list[Project]:
-    result = await session.execute(
-        select(Project).where(Project.deleted_at.is_(None)).order_by(Project.created_at.desc())
-    )
-    return list(result.scalars())
+    return await ProjectRepository(session).list_projects()
 
 
 async def create_artifact(
@@ -58,3 +58,60 @@ async def create_artifact(
     await session.commit()
     await session.refresh(artifact)
     return artifact
+
+
+async def transition_project_status(
+    session: AsyncSession, project_id: UUID, target_status: ProjectStatus
+) -> Project | None:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return None
+    assert_project_transition(project.status, target_status)
+    project.status = target_status
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
+async def add_artifact_version(
+    session: AsyncSession,
+    artifact_id: UUID,
+    payload: dict,
+    change_note: str | None = None,
+) -> ArtifactVersion | None:
+    artifact = await ProjectRepository(session).get_artifact(artifact_id)
+    if artifact is None:
+        return None
+    version = await create_artifact_version(session, artifact, payload, change_note)
+    await session.commit()
+    await session.refresh(version)
+    return version
+
+
+async def add_artifact_dependency(
+    session: AsyncSession,
+    upstream_artifact_id: UUID,
+    downstream_artifact_id: UUID,
+    dependency_kind: DependencyKind,
+) -> ArtifactDependency | None:
+    repository = ProjectRepository(session)
+    upstream = await repository.get_artifact(upstream_artifact_id)
+    downstream = await repository.get_artifact(downstream_artifact_id)
+    if upstream is None or downstream is None:
+        return None
+
+    dependency = ArtifactDependency(
+        upstream_artifact_id=upstream_artifact_id,
+        downstream_artifact_id=downstream_artifact_id,
+        dependency_kind=dependency_kind,
+    )
+    session.add(dependency)
+    await session.commit()
+    await session.refresh(dependency)
+    return dependency
+
+
+async def stale_dependents_for_artifact(session: AsyncSession, artifact_id: UUID) -> set[UUID]:
+    stale_ids = await mark_dependents_stale(session, {artifact_id})
+    await session.commit()
+    return stale_ids

@@ -19,7 +19,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    project_status = sa.Enum(
+    project_status = postgresql.ENUM(
         "DRAFT",
         "IDEA_GENERATION",
         "IDEA_APPROVAL",
@@ -42,8 +42,9 @@ def upgrade() -> None:
         "FAILED",
         "ARCHIVED",
         name="project_status",
+        create_type=False,
     )
-    artifact_status = sa.Enum(
+    artifact_status = postgresql.ENUM(
         "PENDING",
         "GENERATING",
         "READY_FOR_REVIEW",
@@ -53,8 +54,9 @@ def upgrade() -> None:
         "FAILED",
         "CANCELLED",
         name="artifact_status",
+        create_type=False,
     )
-    artifact_type = sa.Enum(
+    artifact_type = postgresql.ENUM(
         "BRIEFING",
         "STORY_IDEA",
         "STORY_BIBLE",
@@ -71,19 +73,21 @@ def upgrade() -> None:
         "TIMELINE",
         "EXPORT",
         name="artifact_type",
+        create_type=False,
     )
-    approval_decision = sa.Enum(
+    approval_decision = postgresql.ENUM(
         "APPROVED",
         "REJECTED",
         "CHANGES_REQUESTED",
         "BLOCKED",
         name="approval_decision",
+        create_type=False,
     )
 
-    project_status.create(op.get_bind())
-    artifact_status.create(op.get_bind())
-    artifact_type.create(op.get_bind())
-    approval_decision.create(op.get_bind())
+    project_status.create(op.get_bind(), checkfirst=True)
+    artifact_status.create(op.get_bind(), checkfirst=True)
+    artifact_type.create(op.get_bind(), checkfirst=True)
+    approval_decision.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "users",
@@ -219,7 +223,7 @@ def downgrade() -> None:
     op.drop_table("workspaces")
     op.drop_index(op.f("ix_users_email"), table_name="users")
     op.drop_table("users")
-    sa.Enum(name="approval_decision").drop(op.get_bind())
-    sa.Enum(name="artifact_type").drop(op.get_bind())
-    sa.Enum(name="artifact_status").drop(op.get_bind())
-    sa.Enum(name="project_status").drop(op.get_bind())
+    postgresql.ENUM(name="approval_decision").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="artifact_type").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="artifact_status").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="project_status").drop(op.get_bind(), checkfirst=True)

@@ -3,7 +3,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.enums import ArtifactStatus, ArtifactType, ProjectStatus
+from app.core.enums import (
+    ApprovalDecision,
+    ArtifactStatus,
+    ArtifactType,
+    DependencyKind,
+    ProjectStatus,
+)
 
 
 class ProjectCreate(BaseModel):
@@ -41,3 +47,59 @@ class ArtifactRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProjectStatusUpdate(BaseModel):
+    status: ProjectStatus
+
+
+class ArtifactVersionCreate(BaseModel):
+    payload: dict = Field(default_factory=dict)
+    change_note: str | None = None
+
+
+class ArtifactVersionRead(BaseModel):
+    id: UUID
+    artifact_id: UUID
+    version_number: int
+    payload: dict
+    change_note: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ApprovalCreate(BaseModel):
+    artifact_version_id: UUID
+    decision: ApprovalDecision
+    notes: str | None = None
+
+
+class ApprovalRead(BaseModel):
+    id: UUID
+    artifact_id: UUID
+    artifact_version_id: UUID
+    decision: ApprovalDecision
+    notes: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ArtifactDependencyCreate(BaseModel):
+    upstream_artifact_id: UUID
+    downstream_artifact_id: UUID
+    dependency_kind: DependencyKind = DependencyKind.DERIVED_FROM
+
+
+class ArtifactDependencyRead(BaseModel):
+    id: UUID
+    upstream_artifact_id: UUID
+    downstream_artifact_id: UUID
+    dependency_kind: DependencyKind
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StaleArtifactsRead(BaseModel):
+    stale_artifact_ids: list[UUID]

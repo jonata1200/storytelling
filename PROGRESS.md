@@ -2,7 +2,7 @@
 
 ## Fase 1 - Fundacao
 
-Status: concluida como base local
+Status: concluida
 
 Concluido:
 
@@ -27,16 +27,38 @@ Concluido:
   - import do ASGI app completo: passou.
   - `uvicorn app.main:app`: subiu corretamente em primeiro plano.
 
-Pendencias de ambiente:
+Observacoes:
 
-- Docker nao esta instalado ou nao esta no PATH deste Windows; por isso o
-  `docker compose config` e o banco local ainda nao foram validados.
-- A migracao `alembic upgrade head` deve ser executada apos o PostgreSQL estar
-  ativo via Docker.
-- O processo Uvicorn em segundo plano nao permaneceu vivo neste ambiente de
-  execucao; use o comando do README em um terminal local para manter o servidor
-  aberto.
+- Docker Desktop esta instalado, mas o comando `docker` ainda nao aparece no PATH
+  normal do terminal. O caminho completo funciona:
+  `C:\Program Files\Docker\Docker\resources\bin\docker.exe`.
+
+## Fase 2 - Dominio
+
+Status: base concluida
+
+Concluido:
+
+- Repositorio inicial de projetos e artefatos.
+- Maquina de estados do projeto com transicoes validas.
+- Versionamento incremental de artefatos.
+- Aprovacoes humanas com decisao, notas e bloqueio de artefato.
+- Grafo de dependencias entre artefatos.
+- Invalidacao transitiva de dependentes como `STALE`.
+- Respeito a artefatos bloqueados durante invalidacao automatica.
+- Modelos de assets e versoes de assets.
+- Registro e estimativa de custos.
+- Endpoints para status, versoes, aprovacoes, dependencias, assets e custos.
+- Migracao `202607160002_phase2_domain`.
+- PostgreSQL e Redis subidos via Docker Compose.
+- `alembic upgrade head` executado com sucesso.
+- `/api/v1/health/ready` validado contra PostgreSQL e Redis reais.
+- Verificacoes executadas:
+  - `pytest`: 9 testes passaram.
+  - `ruff check .`: passou.
+  - `mypy app tests`: passou.
 
 Proximo:
 
-- Avancar para a Fase 2 com maquina de estados, dependencias, custos e assets.
+- Avancar para a Fase 3 com briefing, ideias, Story Bible, roteiro, cenas,
+  planos, templates de prompt e provider mock de linguagem.

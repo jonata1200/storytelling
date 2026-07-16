@@ -59,3 +59,25 @@ class ArtifactType(StrEnum):
     AUDIO_TRACK = "AUDIO_TRACK"
     TIMELINE = "TIMELINE"
     EXPORT = "EXPORT"
+
+
+class DependencyKind(StrEnum):
+    DERIVED_FROM = "DERIVED_FROM"
+    REQUIRES_APPROVAL_OF = "REQUIRES_APPROVAL_OF"
+    REFERENCES = "REFERENCES"
+    INVALIDATES = "INVALIDATES"
+
+
+class AssetKind(StrEnum):
+    IMAGE = "IMAGE"
+    VIDEO = "VIDEO"
+    AUDIO = "AUDIO"
+    SUBTITLE = "SUBTITLE"
+    DOCUMENT = "DOCUMENT"
+    OTHER = "OTHER"
+
+
+class CostEntryType(StrEnum):
+    ESTIMATE = "ESTIMATE"
+    ACTUAL = "ACTUAL"
+    CREDIT = "CREDIT"
