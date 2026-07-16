@@ -109,3 +109,19 @@ Status: Accepted
 O provider de video mockado grava arquivos `.mockvideo.json`, representando o
 clipe gerado. Isso exercita jobs, assets, custos e revisao humana sem chamar APIs
 pagas.
+
+## ADR-0015: MockSpeechProvider como primeira camada de voz
+
+Status: Accepted
+
+A Fase 7 usa um provider de voz mockado que grava WAV silencioso local e produz
+alinhamento por palavra. Isso permite gerar legendas, dependencias, assets e
+timeline final sem depender de um servico pago de TTS.
+
+## ADR-0016: Exportacao cai para manifesto quando FFmpeg falta
+
+Status: Accepted
+
+Quando `ffmpeg` nao esta disponivel no PATH, a exportacao grava um manifesto JSON
+com timeline, legenda e perfil 9:16. Esse fallback mantem o fluxo testavel no
+Windows local e deixa claro onde a renderizacao MP4 real sera conectada.

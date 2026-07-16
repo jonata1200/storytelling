@@ -62,7 +62,7 @@ interfaces e devem ter mocks por padrao.
 
 ## Estado atual
 
-Fase 1 e base da Fase 2 estao implementadas:
+Fases 1 a 7 estao implementadas em base funcional:
 
 - API FastAPI com UI NiceGUI inicial.
 - PostgreSQL, pgvector e Redis via Docker Compose.
@@ -74,6 +74,7 @@ Fase 1 e base da Fase 2 estao implementadas:
 - Personagens, locais, objetos e referencias visuais mockadas.
 - Storyboards, narracao provisoria, animatic e timeline preliminar.
 - Jobs de video, provider mock de video, clipes e revisao humana.
+- Narracao final mock, legendas SRT, timeline final e export manifest.
 - Testes de health, auth, maquina de estados, dependencias, custos e mock LLM.
 
 ## Fluxo narrativo inicial
@@ -136,3 +137,18 @@ POST /api/v1/video/projects/{project_id}/clips/{clip_id}/review
 
 O `MockVideoProvider` gera arquivos `.mockvideo.json` em `storage/mock_videos/`.
 Ele simula clipes e jobs sem chamar APIs pagas.
+
+## Fluxo de finalizacao inicial
+
+Endpoints principais da Fase 7:
+
+```text
+POST /api/v1/finalization/projects/{project_id}/narration/generate
+POST /api/v1/finalization/projects/{project_id}/subtitles/generate
+POST /api/v1/finalization/projects/{project_id}/timeline/final
+POST /api/v1/finalization/projects/{project_id}/exports
+```
+
+O `MockSpeechProvider` gera WAV silencioso local em `storage/mock_speech/` com
+alinhamento por palavra. As legendas sao geradas em SRT e a exportacao grava um
+manifesto JSON quando `ffmpeg` nao esta disponivel no PATH.

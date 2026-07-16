@@ -21,6 +21,7 @@ Storytelling Studio comeca como um modular monolith em Python.
 - `app/visual_bible`: personagens, locais, objetos, fichas canonicas e
   referencias visuais.
 - `app/video_generation`: providers de video, jobs, clipes e revisao humana.
+- `app/finalization`: narracao final, legendas, timeline final e exportacao.
 - `app/workers`: Celery e tarefas em background.
 
 ## Decisoes estruturais
@@ -42,8 +43,11 @@ Storytelling Studio comeca como um modular monolith em Python.
 - A Fase 6 registra jobs de geracao de video no banco e usa provider mock por
   padrao. Celery pode executar esses jobs de forma assincrona nas proximas
   iteracoes sem mudar o contrato de dominio.
+- A Fase 7 usa um `MockSpeechProvider` para gerar WAV local e alinhamento por
+  palavra. Exportacoes geram um manifesto JSON quando FFmpeg nao esta instalado,
+  preservando o contrato de timeline/export sem exigir renderizacao real.
 
 ## Evolucao prevista
 
-A Fase 7 deve introduzir voz, legendas, musica, efeitos, timeline final,
-integracao FFmpeg e exportacao MP4/SRT.
+A proxima etapa deve endurecer a renderizacao real com FFmpeg, presets de
+musica/efeitos, processamento assincrono e artefatos prontos para revisao final.

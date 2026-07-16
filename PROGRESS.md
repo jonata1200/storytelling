@@ -193,6 +193,37 @@ Concluido:
   - `ruff check .`: passou.
   - `mypy app tests`: passou.
 
-Proximo:
+## Fase 7 - Finalizacao
 
-- Fase 7: voz, legendas, musica, efeitos, timeline final, FFmpeg e exportacao.
+Status: base concluida
+
+Concluido:
+
+- Contrato `SpeechProvider`.
+- `MockSpeechProvider` que gera WAV local sem custo externo.
+- Alinhamento por palavra reutilizado para legendas.
+- Geracao de legenda SRT com perfil de area segura para video vertical.
+- Entidades de `SubtitleTrack` e `Export`.
+- Timeline final derivada dos clipes de video selecionados.
+- Perfil de exportacao vertical 9:16 em 1080x1920.
+- Exportacao como manifesto JSON quando FFmpeg nao esta disponivel.
+- Dependencias entre audio, legenda, timeline e exportacao.
+- Endpoints de narracao final, legenda, timeline final e export.
+- Migracao `202607160007_phase7_finalization`.
+- `alembic upgrade head` executado com sucesso.
+- Smoke test de finalizacao executado contra PostgreSQL:
+  - 12 frames de storyboard;
+  - 2 clipes de video;
+  - narracao final de 29 segundos;
+  - legenda SRT com 843 caracteres;
+  - timeline final com 2 itens;
+  - exportacao `MOCK_RENDERED`.
+- Verificacoes executadas:
+  - `pytest`: 24 testes passaram.
+  - `ruff check .`: passou.
+  - `mypy app tests`: passou.
+
+Observacao:
+
+- FFmpeg ainda nao esta instalado/configurado no PATH deste Windows. Por isso a
+  Fase 7 gera manifesto de exportacao em vez de MP4 real.
