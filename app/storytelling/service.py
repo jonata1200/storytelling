@@ -5,10 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ArtifactStatus, ArtifactType, DependencyKind, ProjectStatus
+from app.generation.model_settings import llm_provider_for_task
 from app.generation.service import run_structured_generation
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
-from app.providers.llm.mock import MockLLMProvider
 from app.storytelling.models import (
     Briefing,
     Scene,
@@ -131,8 +131,9 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
         "primary_emotion": briefing.primary_emotion,
         "genre": briefing.genre,
     }
+    provider, model = await llm_provider_for_task(session, project_id, "generate_story_ideas")
     result, execution = await run_structured_generation(
-        session, MockLLMProvider(), project_id, "generate_story_ideas", variables
+        session, provider, project_id, "generate_story_ideas", variables, model=model
     )
     ideas: list[StoryIdea] = []
     for item in result.content["ideas"]:
@@ -185,8 +186,9 @@ async def generate_story_bible(
     variables = _briefing_payload(
         BriefingCreate.model_validate(briefing, from_attributes=True)
     ) | {"idea": idea.payload, "idea_title": idea.title}
+    provider, model = await llm_provider_for_task(session, project_id, "generate_story_bible")
     result, _execution = await run_structured_generation(
-        session, MockLLMProvider(), project_id, "generate_story_bible", variables
+        session, provider, project_id, "generate_story_bible", variables, model=model
     )
     payload = result.content
     artifact = await _create_artifact(
@@ -228,8 +230,9 @@ async def generate_script(
         "language": briefing.language,
         "target_duration_seconds": target_duration_seconds,
     }
+    provider, model = await llm_provider_for_task(session, project_id, "generate_script")
     result, _execution = await run_structured_generation(
-        session, MockLLMProvider(), project_id, "generate_script", variables
+        session, provider, project_id, "generate_script", variables, model=model
     )
     payload = result.content
     artifact = await _create_artifact(
@@ -271,15 +274,17 @@ async def generate_scenes_and_shots(
     if project is None or script is None or script.project_id != project_id:
         return None
 
+    provider, model = await llm_provider_for_task(session, project_id, "generate_scenes_and_shots")
     result, _execution = await run_structured_generation(
         session,
-        MockLLMProvider(),
+        provider,
         project_id,
         "generate_scenes_and_shots",
         {
             "script": script.content,
             "target_duration_seconds": script.target_duration_seconds,
         },
+        model=model,
     )
 
     scenes: list[Scene] = []

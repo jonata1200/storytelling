@@ -142,3 +142,12 @@ Status: Accepted
 Cada requisicao recebe ou propaga `x-correlation-id`. A implementacao inicial
 adiciona tambem `x-process-time-ms`, preparando logs estruturados e rastreamento
 mais completo sem criar dependencia de uma stack externa de observabilidade.
+
+## ADR-0019: OpenRouter por HTTP e fallback mock
+
+Status: Accepted
+
+O OpenRouter e integrado por HTTP usando o endpoint compativel com Chat
+Completions, sem SDK externo no dominio. A selecao de modelo fica persistida por
+projeto e tarefa em `project_model_settings`. Quando `OPENROUTER_API_KEY` nao
+esta configurada, a aplicacao cai automaticamente para `MockLLMProvider`.

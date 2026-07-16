@@ -36,3 +36,14 @@ class PromptExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     parameters: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     estimated_cost: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=0, nullable=False)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class ProjectModelSetting(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "project_model_settings"
+
+    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    task: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(120), nullable=False)
+    model: Mapped[str] = mapped_column(String(220), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    parameters: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)

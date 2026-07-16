@@ -262,3 +262,19 @@ Observacao:
 
 - A fase 8 entrega uma base automatica de QA. As proximas melhorias naturais sao
   checks visuais reais, painel de revisao na UI e testes E2E completos via API.
+
+## Incremento - UI de producao e OpenRouter
+
+Status: concluido
+
+Concluido:
+
+- Formulario de briefing com contraste corrigido.
+- Central de producao e workspace guiado por projeto.
+- Acoes de UI para executar as etapas principais do pipeline.
+- Configuracao de modelos por projeto e tarefa narrativa.
+- Provider `OpenRouterLLMProvider` via HTTP.
+- Fallback automatico para mock quando `OPENROUTER_API_KEY` nao existe.
+- Migracao `202607160009_openrouter_model_settings`.
+- Verificacoes executadas:
+  - `pytest`: 32 testes passaram.

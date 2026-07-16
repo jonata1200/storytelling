@@ -49,7 +49,12 @@ function Invoke-DockerCompose {
 $python = Get-ProjectPython
 
 if (-not (Test-Path ".env")) {
-    Write-Warning "Arquivo .env nao encontrado. Crie com: Copy-Item .env.example .env"
+    if (Test-Path ".env.example") {
+        Copy-Item ".env.example" ".env"
+        Write-Host "Arquivo .env criado a partir de .env.example."
+    } else {
+        Write-Warning "Arquivo .env nao encontrado e .env.example nao existe."
+    }
 }
 
 if (-not $SkipDocker) {

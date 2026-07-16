@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     storage_backend: str = "local"
     local_storage_path: Path = Path("./storage")
 
+    openrouter_api_key: str | None = Field(default=None, repr=False)
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_site_url: str = "http://127.0.0.1:8000"
+    openrouter_app_title: str = "Storytelling Studio"
+    openrouter_default_model: str = "openai/gpt-4o-mini"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

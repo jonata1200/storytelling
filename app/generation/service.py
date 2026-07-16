@@ -55,6 +55,7 @@ async def run_structured_generation(
     task: str,
     variables: dict,
     artifact_id: UUID | None = None,
+    model: str | None = None,
 ) -> tuple[LLMResult, PromptExecution]:
     template = await get_or_create_prompt_template(session, task)
     prompt = compile_prompt(template.template_text, variables)
@@ -65,6 +66,7 @@ async def run_structured_generation(
             prompt=prompt,
             variables=variables,
             output_schema=template.output_schema,
+            model=model or "mock-llm",
         )
     )
     duration_ms = int((perf_counter() - started) * 1000)

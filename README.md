@@ -46,6 +46,20 @@ Se o PowerShell bloquear scripts locais, use:
 powershell -ExecutionPolicy Bypass -File .\scripts\executar.ps1
 ```
 
+## OpenRouter
+
+Por padrao, o projeto usa providers mockados para evitar custo. Para usar modelos
+reais via OpenRouter, configure no `.env`:
+
+```env
+OPENROUTER_API_KEY=sua_chave_aqui
+OPENROUTER_DEFAULT_MODEL=openai/gpt-4o-mini
+```
+
+No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para
+escolher `mock` ou `openrouter` e definir um modelo diferente para ideias, Story
+Bible, roteiro e cenas/planos.
+
 Se o comando `docker` nao aparecer no PowerShell logo apos instalar o Docker
 Desktop, reinicie o VS Code/terminal ou use temporariamente:
 
@@ -86,7 +100,7 @@ interfaces e devem ter mocks por padrao.
 
 ## Estado atual
 
-Fases 1 a 7 estao implementadas em base funcional:
+Fases 1 a 8 estao implementadas em base funcional:
 
 - API FastAPI com UI NiceGUI inicial.
 - PostgreSQL, pgvector e Redis via Docker Compose.
