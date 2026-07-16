@@ -71,6 +71,7 @@ Fase 1 e base da Fase 2 estao implementadas:
 - Maquina de estados inicial para o pipeline de projeto.
 - Briefing, ideias, Story Bible, roteiro, cenas e planos com provider mock.
 - Templates e execucoes de prompt auditaveis.
+- Personagens, locais, objetos e referencias visuais mockadas.
 - Testes de health, auth, maquina de estados, dependencias, custos e mock LLM.
 
 ## Fluxo narrativo inicial
@@ -88,3 +89,19 @@ POST /api/v1/storytelling/projects/{project_id}/scenes/generate
 
 Todas as geracoes da Fase 3 usam `MockLLMProvider` por padrao e nao consomem
 APIs pagas.
+
+## Fluxo visual inicial
+
+Endpoints principais da Fase 4:
+
+```text
+POST /api/v1/visual-bible/projects/{project_id}/generate
+GET  /api/v1/visual-bible/projects/{project_id}/characters
+GET  /api/v1/visual-bible/projects/{project_id}/locations
+GET  /api/v1/visual-bible/projects/{project_id}/props
+POST /api/v1/visual-bible/projects/{project_id}/references/generate
+GET  /api/v1/visual-bible/projects/{project_id}/consistency/{target_kind}/{target_id}
+```
+
+O `MockImageProvider` gera arquivos SVG locais em `storage/mock_images/`.
+Esses arquivos entram como `Asset` e nao sao salvos no PostgreSQL.

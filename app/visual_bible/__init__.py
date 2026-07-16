@@ -1,0 +1,1 @@
+"""Visual bible domain."""

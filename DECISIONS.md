@@ -61,3 +61,19 @@ Status: Accepted
 A Fase 3 usa um provider mock deterministico para gerar estruturas narrativas.
 Isso permite desenvolver o pipeline e os testes sem custos, sem instabilidade de
 API externa e sem acoplar o dominio a um modelo especifico.
+
+## ADR-0009: Referencias visuais como Asset mais VisualReference
+
+Status: Accepted
+
+Referencias visuais sao rastreadas em uma tabela propria (`VisualReference`) e o
+arquivo gerado fica em `Asset`. O PostgreSQL guarda metadados, caminho e hash,
+mas nao armazena o arquivo pesado.
+
+## ADR-0010: MockImageProvider gera SVG local
+
+Status: Accepted
+
+Na Fase 4, o provider de imagem mockado gera SVGs locais deterministicas. Isso
+mantem o fluxo funcional sem APIs pagas e prepara o contrato para providers reais
+de imagem nas fases seguintes.

@@ -12,6 +12,7 @@ from app.database.base import Base
 from app.generation import models as generation_models  # noqa: F401
 from app.projects import models  # noqa: F401
 from app.storytelling import models as storytelling_models  # noqa: F401
+from app.visual_bible import models as visual_bible_models  # noqa: F401
 from app.workflows import models as workflow_models  # noqa: F401
 
 config = context.config

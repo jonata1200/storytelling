@@ -98,7 +98,40 @@ Observacao:
   caminho comum, mas vamos criar testes de integracao async dedicados quando
   adicionarmos fixture de banco.
 
+## Fase 4 - Biblia visual
+
+Status: base concluida
+
+Concluido:
+
+- Contrato `ImageProvider`.
+- `MockImageProvider` que gera SVG local sem custo externo.
+- Entidades de personagens, versoes de personagem, locais, versoes de local,
+  objetos, versoes de objeto e referencias visuais.
+- `character_fingerprint` com hash da ficha canonica e prompt canonico.
+- Geracao de Biblia Visual a partir da Story Bible.
+- Criacao de `Artifact` versionado para personagens, locais, objetos e
+  referencias visuais.
+- Criacao de `Asset` e `AssetVersion` para referencias visuais.
+- Registro de execucao de prompt para geracao de imagem mockada.
+- Dependencias entre Story Bible, entidades visuais e referencias.
+- Checagem inicial de consistencia visual por vistas obrigatorias.
+- Endpoints de Biblia Visual, listas canonicas, geracao de referencias e
+  consistencia.
+- Migracao `202607160004_phase4_visual_bible`.
+- `alembic upgrade head` executado com sucesso.
+- Smoke test visual executado contra PostgreSQL:
+  - 1 personagem criado;
+  - 1 local criado;
+  - 1 objeto criado;
+  - 2 referencias visuais mockadas geradas;
+  - checagem apontou vistas restantes ausentes.
+- Verificacoes executadas:
+  - `pytest`: 14 testes passaram.
+  - `ruff check .`: passou.
+  - `mypy app tests`: passou.
+
 Proximo:
 
-- Fase 4: personagens, locais, objetos, fichas canonicas, referencias visuais,
-  consistencia e provider mock/configuravel de imagem.
+- Fase 5: shot list, storyboard, animatic, timeline preliminar e narracao
+  provisoria.
