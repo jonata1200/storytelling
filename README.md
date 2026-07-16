@@ -22,6 +22,30 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+Depois da primeira configuracao, voce pode usar os scripts da pasta `scripts`:
+
+```powershell
+.\scripts\executar.ps1
+```
+
+Para iniciar a API em segundo plano:
+
+```powershell
+.\scripts\executar.ps1 -Background
+```
+
+Para finalizar a API e parar os containers:
+
+```powershell
+.\scripts\finalizar.ps1
+```
+
+Se o PowerShell bloquear scripts locais, use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\executar.ps1
+```
+
 Se o comando `docker` nao aparecer no PowerShell logo apos instalar o Docker
 Desktop, reinicie o VS Code/terminal ou use temporariamente:
 
