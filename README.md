@@ -69,4 +69,22 @@ Fase 1 e base da Fase 2 estao implementadas:
 - Alembic async usando `asyncpg`.
 - Projetos, versoes, artefatos, aprovacoes, dependencias, assets e custos.
 - Maquina de estados inicial para o pipeline de projeto.
-- Testes de health, auth, maquina de estados, dependencias e custos.
+- Briefing, ideias, Story Bible, roteiro, cenas e planos com provider mock.
+- Templates e execucoes de prompt auditaveis.
+- Testes de health, auth, maquina de estados, dependencias, custos e mock LLM.
+
+## Fluxo narrativo inicial
+
+Endpoints principais da Fase 3:
+
+```text
+POST /api/v1/storytelling/projects/{project_id}/briefing
+POST /api/v1/storytelling/projects/{project_id}/ideas/generate
+GET  /api/v1/storytelling/projects/{project_id}/ideas
+POST /api/v1/storytelling/projects/{project_id}/story-bible/generate
+POST /api/v1/storytelling/projects/{project_id}/script/generate
+POST /api/v1/storytelling/projects/{project_id}/scenes/generate
+```
+
+Todas as geracoes da Fase 3 usam `MockLLMProvider` por padrao e nao consomem
+APIs pagas.

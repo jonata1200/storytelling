@@ -44,3 +44,20 @@ Status: Accepted
 Dependencias entre artefatos sao persistidas como arestas explicitas. Quando um
 artefato muda, apenas dependentes transitivos nao bloqueados sao marcados como
 `STALE`.
+
+## ADR-0007: Narrativa concreta mais Artifact generico
+
+Status: Accepted
+
+Briefing, ideias, Story Bible, roteiro, cenas e planos possuem tabelas proprias
+para consulta e fluxo de produto, mas tambem sao salvos como `Artifact`
+versionado. Isso preserva auditoria, aprovacao, dependencia e invalidacao em um
+modelo comum.
+
+## ADR-0008: Provider mock como primeira integracao LLM
+
+Status: Accepted
+
+A Fase 3 usa um provider mock deterministico para gerar estruturas narrativas.
+Isso permite desenvolver o pipeline e os testes sem custos, sem instabilidade de
+API externa e sem acoplar o dominio a um modelo especifico.

@@ -58,7 +58,47 @@ Concluido:
   - `ruff check .`: passou.
   - `mypy app tests`: passou.
 
+## Fase 3 - Narrativa
+
+Status: base concluida
+
+Concluido:
+
+- Contrato `LLMProvider`.
+- `MockLLMProvider` deterministico.
+- Templates de prompt versionaveis.
+- Registro de execucoes de prompt com provider, modelo, prompt, variaveis,
+  resposta, custo estimado e duracao.
+- Entidades de briefing, ideias, Story Bible, roteiro, versoes de roteiro,
+  cenas e planos.
+- Endpoints para criar briefing e gerar ideias, Story Bible, roteiro, cenas e
+  planos.
+- Artefatos narrativos ligados ao `Artifact` versionado.
+- Dependencias criadas entre briefing, ideias, Story Bible, roteiro, cenas e
+  planos.
+- Migracao `202607160003_phase3_storytelling`.
+- `alembic upgrade head` executado com sucesso.
+- Smoke test de fluxo narrativo executado contra PostgreSQL:
+  - projeto criado;
+  - briefing criado;
+  - 3 ideias geradas;
+  - Story Bible gerada;
+  - roteiro gerado;
+  - 4 cenas geradas com planos.
+- Verificacoes executadas:
+  - `pytest`: 12 testes passaram.
+  - `ruff check .`: passou.
+  - `mypy app tests`: passou.
+
+Observacao:
+
+- O smoke test via `TestClient` com multiplas chamadas de banco encontrou uma
+  limitacao de pool/event loop do `asyncpg`; o fluxo foi validado diretamente
+  pelos services async no mesmo loop. Em servidor ASGI real isso nao deve ser o
+  caminho comum, mas vamos criar testes de integracao async dedicados quando
+  adicionarmos fixture de banco.
+
 Proximo:
 
-- Avancar para a Fase 3 com briefing, ideias, Story Bible, roteiro, cenas,
-  planos, templates de prompt e provider mock de linguagem.
+- Fase 4: personagens, locais, objetos, fichas canonicas, referencias visuais,
+  consistencia e provider mock/configuravel de imagem.

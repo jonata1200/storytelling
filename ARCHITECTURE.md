@@ -13,6 +13,9 @@ Storytelling Studio comeca como um modular monolith em Python.
 - `app/workflows`: maquina de estados e grafo de dependencias.
 - `app/assets`: metadados e versoes de arquivos armazenados fora do banco.
 - `app/costs`: estimativas e registros de custo.
+- `app/generation`: templates de prompt e auditoria de execucoes.
+- `app/providers`: contratos e providers substituiveis.
+- `app/storytelling`: briefing, ideias, Story Bible, roteiro, cenas e planos.
 - `app/workers`: Celery e tarefas em background.
 
 ## Decisoes estruturais
@@ -25,9 +28,10 @@ Storytelling Studio comeca como um modular monolith em Python.
 - Providers de IA ficarao atras de interfaces, nunca dentro do dominio.
 - Migrações usam Alembic com engine async para manter um unico driver PostgreSQL:
   `asyncpg`.
+- A Fase 3 usa um `MockLLMProvider` deterministico para validar fluxo, dados e
+  auditoria antes de integrar APIs pagas.
 
 ## Evolucao prevista
 
-A Fase 3 introduz briefing, ideias, Story Bible, roteiro, templates de prompt e
-provider mock de linguagem. Esses artefatos devem usar o versionamento e o grafo
-de dependencias ja criados.
+A Fase 4 deve adicionar personagens, locais, objetos, referencias visuais,
+consistencia visual e um provider de imagem atras de interface.
