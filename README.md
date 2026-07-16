@@ -75,6 +75,8 @@ Fases 1 a 7 estao implementadas em base funcional:
 - Storyboards, narracao provisoria, animatic e timeline preliminar.
 - Jobs de video, provider mock de video, clipes e revisao humana.
 - Narracao final mock, legendas SRT, timeline final e export manifest.
+- Continuity Ledger, quality gate, varredura inicial de seguranca e correlation
+  ID por requisicao.
 - Testes de health, auth, maquina de estados, dependencias, custos e mock LLM.
 
 ## Fluxo narrativo inicial
@@ -152,3 +154,20 @@ POST /api/v1/finalization/projects/{project_id}/exports
 O `MockSpeechProvider` gera WAV silencioso local em `storage/mock_speech/` com
 alinhamento por palavra. As legendas sao geradas em SRT e a exportacao grava um
 manifesto JSON quando `ffmpeg` nao esta disponivel no PATH.
+
+## Fluxo de qualidade inicial
+
+Endpoints principais da Fase 8:
+
+```text
+POST /api/v1/quality/projects/{project_id}/continuity/build
+GET  /api/v1/quality/projects/{project_id}/continuity/issues
+POST /api/v1/quality/projects/{project_id}/continuity/issues/{issue_id}/accept
+POST /api/v1/quality/projects/{project_id}/checks/run
+GET  /api/v1/quality/projects/{project_id}/observability
+POST /api/v1/quality/security/scan
+```
+
+O controle de qualidade cria estados de continuidade por plano, alerta
+divergencias estruturadas e resume jobs, custos, artefatos obsoletos e score de
+qualidade do projeto.

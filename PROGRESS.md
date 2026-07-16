@@ -227,3 +227,38 @@ Observacao:
 
 - FFmpeg ainda nao esta instalado/configurado no PATH deste Windows. Por isso a
   Fase 7 gera manifesto de exportacao em vez de MP4 real.
+
+## Fase 8 - Qualidade
+
+Status: base concluida
+
+Concluido:
+
+- Modulo `app/quality`.
+- `ContinuityState` para registrar o estado de continuidade por plano.
+- `ContinuityIssue` para divergencias automaticas e aceitacao manual.
+- `QualityCheck` para quality gate com score e metricas.
+- Regras iniciais para roupa, cabelo, personagem ausente, objeto desaparecido,
+  lacunas e sobreposicoes na timeline.
+- Varredura inicial de prompt injection e redacao de segredos em textos.
+- Middleware de correlation ID com header `x-correlation-id`.
+- Resumo operacional com jobs por status, custo acumulado, artefatos `STALE`,
+  alertas abertos e score mais recente.
+- Endpoints de continuidade, qualidade, observabilidade e security scan.
+- Migracao `202607160008_phase8_quality`.
+- `alembic upgrade head` executado com sucesso.
+- Smoke test de qualidade executado contra PostgreSQL:
+  - 12 estados de continuidade criados;
+  - 0 alertas abertos;
+  - quality check `PASSED`;
+  - score 100;
+  - 2 jobs de geracao `SUCCEEDED`.
+- Verificacoes executadas:
+  - `pytest`: 30 testes passaram.
+  - `ruff check .`: passou.
+  - `mypy app tests`: passou.
+
+Observacao:
+
+- A fase 8 entrega uma base automatica de QA. As proximas melhorias naturais sao
+  checks visuais reais, painel de revisao na UI e testes E2E completos via API.

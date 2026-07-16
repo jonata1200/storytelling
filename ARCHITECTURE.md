@@ -22,6 +22,9 @@ Storytelling Studio comeca como um modular monolith em Python.
   referencias visuais.
 - `app/video_generation`: providers de video, jobs, clipes e revisao humana.
 - `app/finalization`: narracao final, legendas, timeline final e exportacao.
+- `app/quality`: Continuity Ledger, alertas automaticos, quality gate e
+  resumo operacional.
+- `app/observability`: correlation ID e instrumentacao HTTP leve.
 - `app/workers`: Celery e tarefas em background.
 
 ## Decisoes estruturais
@@ -46,8 +49,13 @@ Storytelling Studio comeca como um modular monolith em Python.
 - A Fase 7 usa um `MockSpeechProvider` para gerar WAV local e alinhamento por
   palavra. Exportacoes geram um manifesto JSON quando FFmpeg nao esta instalado,
   preservando o contrato de timeline/export sem exigir renderizacao real.
+- A Fase 8 persiste continuidade por plano em `ContinuityState`, registra
+  divergencias em `ContinuityIssue` e consolida o resultado em `QualityCheck`.
+  A primeira camada de seguranca detecta prompt injection e redige segredos em
+  textos fornecidos pelo usuario antes de eles entrarem em prompts futuros.
 
 ## Evolucao prevista
 
 A proxima etapa deve endurecer a renderizacao real com FFmpeg, presets de
-musica/efeitos, processamento assincrono e artefatos prontos para revisao final.
+musica/efeitos, processamento assincrono, provider comercial real e uma UI mais
+completa para revisao do pipeline.

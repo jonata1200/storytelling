@@ -125,3 +125,20 @@ Status: Accepted
 Quando `ffmpeg` nao esta disponivel no PATH, a exportacao grava um manifesto JSON
 com timeline, legenda e perfil 9:16. Esse fallback mantem o fluxo testavel no
 Windows local e deixa claro onde a renderizacao MP4 real sera conectada.
+
+## ADR-0017: Qualidade como modulo separado do pipeline criativo
+
+Status: Accepted
+
+Continuity Ledger, alertas, security scan e metricas ficam em `app/quality`, sem
+misturar regras de controle com os services de narrativa, visual, video ou
+finalizacao. Isso permite rodar qualidade sob demanda, aceitar divergencias
+intencionais e evoluir checks sem alterar os providers.
+
+## ADR-0018: Correlation ID em middleware HTTP
+
+Status: Accepted
+
+Cada requisicao recebe ou propaga `x-correlation-id`. A implementacao inicial
+adiciona tambem `x-process-time-ms`, preparando logs estruturados e rastreamento
+mais completo sem criar dependencia de uma stack externa de observabilidade.
