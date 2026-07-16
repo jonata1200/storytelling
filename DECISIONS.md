@@ -93,3 +93,19 @@ Status: Accepted
 Na Fase 5, o animatic e um manifesto estruturado com quadros, duracoes, narracao
 provisoria e timeline preliminar. Isso valida o fluxo antes de introduzir FFmpeg
 e renderizacao real nas fases posteriores.
+
+## ADR-0013: Jobs de video persistidos antes de Celery completo
+
+Status: Accepted
+
+Jobs de geracao sao registrados no banco com status, tentativas, payload,
+provider, custo e idempotencia. A execucao da Fase 6 ainda e sincrona com provider
+mockado, mas o modelo ja permite mover a execucao para Celery sem mudar a API.
+
+## ADR-0014: MockVideoProvider gera manifesto de clipe
+
+Status: Accepted
+
+O provider de video mockado grava arquivos `.mockvideo.json`, representando o
+clipe gerado. Isso exercita jobs, assets, custos e revisao humana sem chamar APIs
+pagas.

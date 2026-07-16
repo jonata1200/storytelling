@@ -20,6 +20,7 @@ Storytelling Studio comeca como um modular monolith em Python.
   timeline preliminar.
 - `app/visual_bible`: personagens, locais, objetos, fichas canonicas e
   referencias visuais.
+- `app/video_generation`: providers de video, jobs, clipes e revisao humana.
 - `app/workers`: Celery e tarefas em background.
 
 ## Decisoes estruturais
@@ -38,8 +39,11 @@ Storytelling Studio comeca como um modular monolith em Python.
   prompts, provider substituivel e consistencia sem custo externo.
 - A Fase 5 gera storyboards a partir dos planos, nunca diretamente do roteiro
   inteiro. O animatic inicial e um manifesto JSON; renderizacao real entra depois.
+- A Fase 6 registra jobs de geracao de video no banco e usa provider mock por
+  padrao. Celery pode executar esses jobs de forma assincrona nas proximas
+  iteracoes sem mudar o contrato de dominio.
 
 ## Evolucao prevista
 
-A Fase 6 deve introduzir `VideoProvider`, jobs de geracao de video, polling ou
-webhook, revisao de clipes, retentativas e custos de video.
+A Fase 7 deve introduzir voz, legendas, musica, efeitos, timeline final,
+integracao FFmpeg e exportacao MP4/SRT.

@@ -7,6 +7,7 @@ from app.costs.router import router as costs_router
 from app.projects.router import router as projects_router
 from app.storyboards.router import router as storyboards_router
 from app.storytelling.router import router as storytelling_router
+from app.video_generation.router import router as video_generation_router
 from app.visual_bible.router import router as visual_bible_router
 
 api_router = APIRouter(prefix="/api/v1")
@@ -18,3 +19,4 @@ api_router.include_router(costs_router)
 api_router.include_router(storytelling_router)
 api_router.include_router(visual_bible_router)
 api_router.include_router(storyboards_router)
+api_router.include_router(video_generation_router)

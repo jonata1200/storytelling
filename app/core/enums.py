@@ -82,3 +82,26 @@ class CostEntryType(StrEnum):
     ESTIMATE = "ESTIMATE"
     ACTUAL = "ACTUAL"
     CREDIT = "CREDIT"
+
+
+class GenerationJobStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    RETRY_SCHEDULED = "RETRY_SCHEDULED"
+
+
+class GenerationJobType(StrEnum):
+    IMAGE = "IMAGE"
+    VIDEO = "VIDEO"
+    SPEECH = "SPEECH"
+    RENDER = "RENDER"
+    ANALYSIS = "ANALYSIS"
+
+
+class ClipReviewDecision(StrEnum):
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    NEEDS_REGENERATION = "NEEDS_REGENERATION"

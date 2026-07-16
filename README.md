@@ -73,6 +73,7 @@ Fase 1 e base da Fase 2 estao implementadas:
 - Templates e execucoes de prompt auditaveis.
 - Personagens, locais, objetos e referencias visuais mockadas.
 - Storyboards, narracao provisoria, animatic e timeline preliminar.
+- Jobs de video, provider mock de video, clipes e revisao humana.
 - Testes de health, auth, maquina de estados, dependencias, custos e mock LLM.
 
 ## Fluxo narrativo inicial
@@ -120,3 +121,18 @@ POST /api/v1/storyboards/projects/{project_id}/animatic/generate
 O animatic da Fase 5 e um manifesto JSON com quadros, duracoes, narracao
 provisoria e timeline preliminar. Renderizacao em video fica para a fase de
 FFmpeg.
+
+## Fluxo de video inicial
+
+Endpoints principais da Fase 6:
+
+```text
+POST /api/v1/video/projects/{project_id}/cost-estimate
+POST /api/v1/video/projects/{project_id}/clips/generate
+GET  /api/v1/video/projects/{project_id}/clips
+GET  /api/v1/video/projects/{project_id}/jobs/{job_id}
+POST /api/v1/video/projects/{project_id}/clips/{clip_id}/review
+```
+
+O `MockVideoProvider` gera arquivos `.mockvideo.json` em `storage/mock_videos/`.
+Ele simula clipes e jobs sem chamar APIs pagas.

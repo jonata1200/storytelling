@@ -161,7 +161,38 @@ Concluido:
   - `ruff check .`: passou.
   - `mypy app tests`: passou.
 
+## Fase 6 - Video
+
+Status: base concluida
+
+Concluido:
+
+- Contrato `VideoProvider`.
+- `ProviderCapabilities` para selecionar providers por recursos.
+- `MockVideoProvider` com text-to-video e image-to-video simulados.
+- Entidades de `GenerationJob`, `VideoClip` e `ClipReview`.
+- Idempotencia por storyboard frame, variante, provider e modelo.
+- Status, progresso, tentativas, erro, custo estimado e payload de job.
+- Backoff exponencial para retentativas.
+- Geracao de clipes mockados a partir de storyboard frames.
+- Assets de video mockado fora do banco.
+- Registro de custo estimado por clipe.
+- Revisao humana de clipes com aprovacao, rejeicao ou regeneracao.
+- Endpoints de estimativa de custo, geracao de clipes, listagem, status de job
+  e revisao.
+- Migracao `202607160006_phase6_video_generation`.
+- `alembic upgrade head` executado com sucesso.
+- Smoke test de video executado contra PostgreSQL:
+  - 12 frames de storyboard;
+  - 2 jobs de video;
+  - 2 clipes gerados;
+  - job `SUCCEEDED`;
+  - revisao `APPROVED`.
+- Verificacoes executadas:
+  - `pytest`: 19 testes passaram.
+  - `ruff check .`: passou.
+  - `mypy app tests`: passou.
+
 Proximo:
 
-- Fase 6: `VideoProvider`, jobs, polling/webhook, revisao de clipes,
-  retentativas e custos de video.
+- Fase 7: voz, legendas, musica, efeitos, timeline final, FFmpeg e exportacao.
