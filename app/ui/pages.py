@@ -69,6 +69,8 @@ from app.video_generation.service import generate_video_clips
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import generate_visual_bible, generate_visual_references
 
+BRAND_MARK_URL = "/ui-assets/favicon.png"
+
 
 @dataclass(frozen=True)
 class ProductionStep:
@@ -149,9 +151,9 @@ PRODUCTION_STEPS = [
 def _body_style() -> None:
     ui.page_title(get_settings().app_name)
     ui.query("body").classes("studio-body")
+    ui.add_head_html(f'<link rel="icon" type="image/png" href="{BRAND_MARK_URL}">')
     ui.add_head_html(
         """
-        <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='17' fill='%23efff58'/%3E%3Cpath d='M16 21h32v25a5 5 0 0 1-5 5H21a5 5 0 0 1-5-5V21Z' fill='%23090b0a'/%3E%3Cpath d='M16 14h32v10H16z' fill='%23090b0a'/%3E%3Cpath d='m20 14 6 10m4-10 6 10m4-10 6 10' stroke='%23efff58' stroke-width='3'/%3E%3C/svg%3E">
         <meta name="theme-color" content="#090b0a">
         <style>
           @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
@@ -822,10 +824,7 @@ def _render_timeline_strip(timeline: Timeline | None, items: list[TimelineItem])
 
 def _studio_logo(compact: bool = False) -> None:
     with ui.row().classes("items-center gap-3"):
-        with ui.element("div").classes(
-            "w-9 h-9 acid-bg rounded-xl flex items-center justify-center"
-        ):
-            ui.icon("movie_creation").classes("text-xl")
+        ui.image(BRAND_MARK_URL).classes("w-9 h-9 rounded-xl object-cover")
         if not compact:
             ui.label("Storytelling").classes("brand-type text-xl font-extrabold")
 

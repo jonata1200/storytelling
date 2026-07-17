@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.config.settings import get_settings
@@ -15,6 +18,11 @@ def create_app(include_ui: bool = True) -> FastAPI:
 
         from app.ui.pages import register_ui_pages
 
+        app.mount(
+            "/ui-assets",
+            StaticFiles(directory=Path(__file__).parent / "ui"),
+            name="ui-assets",
+        )
         register_ui_pages()
         ui.run_with(app, mount_path="/")
     return app
