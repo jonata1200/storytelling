@@ -1642,7 +1642,7 @@ def register_ui_pages() -> None:
                                     value=current.openrouter_default_model,
                                     with_input=True,
                                 )
-                                .props("outlined use-input")
+                                .props("outlined use-input new-value-mode=add-unique")
                                 .classes("w-full mt-3")
                             )
                             image_model = (
@@ -1652,7 +1652,7 @@ def register_ui_pages() -> None:
                                     value=current.openrouter_image_model,
                                     with_input=True,
                                 )
-                                .props("outlined use-input")
+                                .props("outlined use-input new-value-mode=add-unique")
                                 .classes("w-full mt-3")
                             )
                             video_model = (
@@ -1662,9 +1662,17 @@ def register_ui_pages() -> None:
                                     value=current.openrouter_video_model,
                                     with_input=True,
                                 )
-                                .props("outlined use-input")
+                                .props("outlined use-input new-value-mode=add-unique")
                                 .classes("w-full mt-3")
                             )
+
+                            def model_options(
+                                items: list[dict[str, str]], selected: str | None
+                            ) -> dict[str, str]:
+                                options = {m["id"]: m["name"] for m in items}
+                                if selected and selected not in options:
+                                    options[selected] = selected
+                                return options
 
                             async def load_catalog() -> None:
                                 key = api_key.value or current.openrouter_api_key
@@ -1677,9 +1685,15 @@ def register_ui_pages() -> None:
                                         openrouter_models(key, "image"),
                                         openrouter_models(key, "video"),
                                     )
-                                    text_model.options = {m["id"]: m["name"] for m in text_items}
-                                    image_model.options = {m["id"]: m["name"] for m in image_items}
-                                    video_model.options = {m["id"]: m["name"] for m in video_items}
+                                    text_model.options = model_options(
+                                        text_items, text_model.value
+                                    )
+                                    image_model.options = model_options(
+                                        image_items, image_model.value
+                                    )
+                                    video_model.options = model_options(
+                                        video_items, video_model.value
+                                    )
                                     text_model.update()
                                     image_model.update()
                                     video_model.update()

@@ -1,5 +1,6 @@
 import base64
 import secrets
+from http.cookies import SimpleCookie
 
 from starlette.datastructures import Headers
 from starlette.responses import RedirectResponse
@@ -37,12 +38,12 @@ class UIBasicAuthMiddleware:
     @staticmethod
     def _session_authorized(scope: Scope) -> bool:
         headers = Headers(raw=scope.get("headers", []))
-        cookies = headers.get("cookie", "")
-        cookie_prefix = f"{SESSION_COOKIE_NAME}="
-        if cookie_prefix not in cookies:
+        cookies = SimpleCookie()
+        cookies.load(headers.get("cookie", ""))
+        cookie = cookies.get(SESSION_COOKIE_NAME)
+        if cookie is None:
             return False
-        token = cookies.split(cookie_prefix, 1)[-1].split(";", 1)[0]
-        return verify_session_token(token) is not None
+        return verify_session_token(cookie.value) is not None
 
     @staticmethod
     def _basic_authorized(scope: Scope) -> bool:

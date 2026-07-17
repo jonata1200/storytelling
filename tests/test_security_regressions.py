@@ -42,6 +42,22 @@ def test_local_user_store_creates_and_verifies_user(tmp_path: Path) -> None:
         create_user("jonata", "outra-senha", users_path)
 
 
+def test_ui_session_cookie_accepts_browser_cookie_header() -> None:
+    app = FastAPI()
+    app.add_middleware(UIBasicAuthMiddleware)
+
+    @app.get("/")
+    async def home() -> dict[str, bool]:
+        return {"ok": True}
+
+    token = create_session_token("jonata jesus")
+    client = TestClient(app)
+    response = client.get("/", headers={"Cookie": f"{SESSION_COOKIE_NAME}={token}"})
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
 def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     tmp_path: Path,
 ) -> None:
