@@ -60,6 +60,23 @@ No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para
 escolher `mock` ou `openrouter` e definir um modelo diferente para ideias, Story
 Bible, roteiro e cenas/planos.
 
+## Experiencia de producao
+
+A interface principal funciona como um cockpit de producao:
+
+- Ideia inicial em linguagem natural.
+- Core Setup com formato, resolucao, workflow e modelos.
+- Passos guiados para narrativa, visual, storyboard, video, finalizacao e QA.
+- Asset Canvas para personagens, cenarios, objetos e referencias.
+- Storyboard Grid para revisar quadros antes de gerar clipes.
+- Timeline Assembly para acompanhar a montagem.
+- Criacao de proximo episodio herdando configuracoes e briefing.
+
+Esse fluxo preserva o backend versionado ja existente, mas reorganiza o uso para
+ficar mais proximo de uma plataforma full-pipeline de video com IA: primeiro a
+ideia, depois configuracao de producao, ativos reutilizaveis, storyboard,
+geracao de clipes, montagem e exportacao.
+
 Se o comando `docker` nao aparecer no PowerShell logo apos instalar o Docker
 Desktop, reinicie o VS Code/terminal ou use temporariamente:
 

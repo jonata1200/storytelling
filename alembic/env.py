@@ -12,6 +12,7 @@ from app.database.base import Base
 from app.finalization import models as finalization_models  # noqa: F401
 from app.generation import models as generation_models  # noqa: F401
 from app.projects import models  # noqa: F401
+from app.production import models as production_models  # noqa: F401
 from app.quality import models as quality_models  # noqa: F401
 from app.storyboards import models as storyboard_models  # noqa: F401
 from app.storytelling import models as storytelling_models  # noqa: F401

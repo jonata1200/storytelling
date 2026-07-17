@@ -10,6 +10,7 @@ class MockLLMProvider:
             "generate_story_bible": self._story_bible,
             "generate_script": self._script,
             "generate_scenes_and_shots": self._scenes_and_shots,
+            "director_agent_chat": self._director_agent_chat,
         }
         generator = generators.get(request.task)
         if generator is None:
@@ -17,6 +18,33 @@ class MockLLMProvider:
         else:
             content = generator(request.variables)
         return LLMResult(content=content, model=request.model, provider=self.provider_name)
+
+    def _director_agent_chat(self, variables: dict) -> dict:
+        section = str(variables.get("section") or "script")
+        message = str(variables.get("message") or "").lower()
+        context = variables.get("project_context", {})
+        labels = {
+            "script": "roteiro",
+            "assets": "universo visual",
+            "storyboard": "storyboard",
+            "video": "montagem de vídeo",
+        }
+        if any(word in message for word in ("crie", "gere", "criar", "gerar")):
+            guidance = (
+                "Use o botão de geração no topo desta área; vou manter o contexto já aprovado."
+            )
+        elif any(word in message for word in ("melhor", "revise", "ajuste", "mude")):
+            guidance = (
+                "Eu sugiro priorizar clareza emocional, continuidade e um gancho visual forte."
+            )
+        else:
+            guidance = "Posso revisar, propor alternativas ou indicar o próximo passo desta etapa."
+        return {
+            "message": (
+                f"Estou acompanhando o {labels.get(section, section)}. {guidance} "
+                f"O projeto tem atualmente {context.get('summary', 'conteúdo em desenvolvimento')}."
+            )
+        }
 
     def _story_ideas(self, variables: dict) -> dict:
         theme = str(variables.get("theme") or "uma segunda chance")

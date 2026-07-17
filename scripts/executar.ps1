@@ -43,7 +43,47 @@ function Invoke-DockerCompose {
     param([string[]]$ComposeArguments)
 
     $docker = Get-DockerExecutable
-    & $docker compose @ComposeArguments
+    $dockerDirectory = Split-Path -Parent $docker
+    $originalPath = $env:PATH
+    try {
+        # O Docker CLI invoca helpers (como docker-credential-desktop) pelo PATH.
+        # Quando docker.exe foi localizado pelo fallback, sua pasta pode nao estar nele.
+        if (($env:PATH -split ";") -notcontains $dockerDirectory) {
+            $env:PATH = "$dockerDirectory;$env:PATH"
+        }
+        & $docker compose @ComposeArguments
+        if ($LASTEXITCODE -ne 0) {
+            throw "Docker Compose falhou com codigo de saida $LASTEXITCODE."
+        }
+    } finally {
+        $env:PATH = $originalPath
+    }
+}
+
+function Wait-PostgresReady {
+    param(
+        [int]$MaxAttempts = 30,
+        [int]$IntervalSeconds = 2
+    )
+
+    $docker = Get-DockerExecutable
+    Write-Host "Aguardando PostgreSQL ficar pronto..."
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        & $docker inspect `
+            --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" `
+            storytelling-postgres 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $status = & $docker inspect `
+                --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" `
+                storytelling-postgres 2>$null
+            if ($status -eq "healthy") {
+                Write-Host "PostgreSQL pronto."
+                return
+            }
+        }
+        Start-Sleep -Seconds $IntervalSeconds
+    }
+    throw "PostgreSQL nao ficou pronto dentro do tempo esperado. Consulte: docker compose logs postgres"
 }
 
 $python = Get-ProjectPython
@@ -60,11 +100,15 @@ if (-not (Test-Path ".env")) {
 if (-not $SkipDocker) {
     Write-Host "Iniciando PostgreSQL e Redis com Docker Compose..."
     Invoke-DockerCompose -ComposeArguments @("up", "-d")
+    Wait-PostgresReady
 }
 
 if (-not $SkipMigrations) {
     Write-Host "Aplicando migrations do Alembic..."
     & $python -m alembic upgrade head
+    if ($LASTEXITCODE -ne 0) {
+        throw "As migrations do Alembic falharam com codigo de saida $LASTEXITCODE."
+    }
 }
 
 $url = "http://${HostAddress}:$Port"
