@@ -1636,43 +1636,32 @@ def register_ui_pages() -> None:
                                 .classes("w-full")
                             )
                             text_model = (
-                                ui.select(
-                                    [current.openrouter_default_model],
-                                    label="Modelo de texto",
+                                ui.input(
+                                    "Modelo de texto",
                                     value=current.openrouter_default_model,
-                                    with_input=True,
+                                    placeholder="openai/gpt-4o-mini",
                                 )
-                                .props("outlined use-input new-value-mode=add-unique")
+                                .props("outlined stack-label")
                                 .classes("w-full mt-3")
                             )
                             image_model = (
-                                ui.select(
-                                    [current.openrouter_image_model],
-                                    label="Modelo de imagem",
+                                ui.input(
+                                    "Modelo de imagem",
                                     value=current.openrouter_image_model,
-                                    with_input=True,
+                                    placeholder="google/gemini-2.5-flash-image",
                                 )
-                                .props("outlined use-input new-value-mode=add-unique")
+                                .props("outlined stack-label")
                                 .classes("w-full mt-3")
                             )
                             video_model = (
-                                ui.select(
-                                    [current.openrouter_video_model],
-                                    label="Modelo de vídeo",
+                                ui.input(
+                                    "Modelo de video",
                                     value=current.openrouter_video_model,
-                                    with_input=True,
+                                    placeholder="google/veo-3.1",
                                 )
-                                .props("outlined use-input new-value-mode=add-unique")
+                                .props("outlined stack-label")
                                 .classes("w-full mt-3")
                             )
-
-                            def model_options(
-                                items: list[dict[str, str]], selected: str | None
-                            ) -> dict[str, str]:
-                                options = {m["id"]: m["name"] for m in items}
-                                if selected and selected not in options:
-                                    options[selected] = selected
-                                return options
 
                             async def load_catalog() -> None:
                                 key = api_key.value or current.openrouter_api_key
@@ -1685,19 +1674,15 @@ def register_ui_pages() -> None:
                                         openrouter_models(key, "image"),
                                         openrouter_models(key, "video"),
                                     )
-                                    text_model.options = model_options(
-                                        text_items, text_model.value
+                                    ui.notify(
+                                        (
+                                            "Catalogo OpenRouter acessivel: "
+                                            f"{len(text_items)} texto, "
+                                            f"{len(image_items)} imagem, "
+                                            f"{len(video_items)} video."
+                                        ),
+                                        color="positive",
                                     )
-                                    image_model.options = model_options(
-                                        image_items, image_model.value
-                                    )
-                                    video_model.options = model_options(
-                                        video_items, video_model.value
-                                    )
-                                    text_model.update()
-                                    image_model.update()
-                                    video_model.update()
-                                    ui.notify("Catálogo OpenRouter atualizado.", color="positive")
                                 except Exception as exc:
                                     ui.notify(
                                         f"Não foi possível carregar modelos: {exc}",
