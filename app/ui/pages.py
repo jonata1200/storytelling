@@ -902,10 +902,9 @@ def _home_sidebar() -> None:
     ):
         _studio_logo(compact=True)
         for icon, label, target in [
-            ("chat_bubble_outline", "Criar", "/"),
             ("lightbulb_outline", "Ideias", "/ideas"),
-            ("folder_open", "Projetos", "/#projects"),
-            ("collections_bookmark", "Ativos", "/#projects"),
+            ("chat_bubble_outline", "Criar", "/"),
+            ("folder_open", "Projetos", "/projects"),
             ("settings", "Ajustes", "/settings"),
         ]:
             with (
@@ -1333,6 +1332,62 @@ def register_ui_pages() -> None:
                             ):
                                 ui.icon("add_circle_outline").classes("text-4xl acid")
                                 ui.label("Criar novo projeto").classes("mt-2 font-semibold")
+
+    @ui.page("/projects")
+    async def projects_page() -> None:
+        _body_style()
+        projects = await _project_cards()
+        _home_sidebar()
+        with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
+            with ui.column().classes("w-full max-w-6xl mx-auto px-6 py-8 gap-7"):
+                with ui.row().classes("w-full items-center justify-between"):
+                    with ui.column().classes("gap-1"):
+                        ui.label("Projetos").classes("brand-type text-4xl font-bold")
+                        ui.label("Acompanhe e continue suas produções de vídeo.").classes(
+                            "text-[#8f9590]"
+                        )
+                    with ui.row().classes("items-center gap-2"):
+                        _theme_toggle()
+                        ui.button(
+                            "Novo projeto",
+                            icon="add",
+                            on_click=lambda: ui.navigate.to("/"),
+                        ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                if not projects:
+                    with ui.element("div").classes(
+                        "w-full border border-dashed border-[#363b36] rounded-2xl min-h-64 flex flex-col items-center justify-center text-[#969c97]"
+                    ):
+                        ui.icon("folder_open").classes("text-5xl")
+                        ui.label("Nenhum projeto criado ainda.").classes(
+                            "mt-3 text-lg font-semibold"
+                        )
+                        ui.button(
+                            "Começar uma criação",
+                            icon="auto_awesome",
+                            on_click=lambda: ui.navigate.to("/"),
+                        ).props("flat no-caps").classes("acid mt-2")
+                else:
+                    with ui.grid().classes(
+                        "w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                    ):
+                        for project in projects:
+                            with (
+                                ui.element("article")
+                                .classes("entity-card rounded-2xl overflow-hidden cursor-pointer")
+                                .on(
+                                    "click",
+                                    lambda p=project.id: ui.navigate.to(f"/projects/{p}/script"),
+                                )
+                            ):
+                                with ui.element("div").classes(
+                                    "visual-placeholder aspect-video p-5 flex items-end"
+                                ):
+                                    ui.icon("play_circle").classes("text-4xl acid")
+                                with ui.column().classes("p-4 gap-1"):
+                                    ui.label(project.title).classes("brand-type text-xl font-bold")
+                                    ui.label(
+                                        project.description or "Projeto em desenvolvimento"
+                                    ).classes("text-sm text-[#8d938e] line-clamp-2")
 
     @ui.page("/ideas")
     async def ideas_page() -> None:
