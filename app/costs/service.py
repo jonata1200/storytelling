@@ -30,6 +30,10 @@ async def create_cost_entry(session: AsyncSession, data: CostEntryCreate) -> Cos
     project = await ProjectRepository(session).get_project(data.project_id)
     if project is None:
         return None
+    if data.artifact_id is not None:
+        artifact = await ProjectRepository(session).get_artifact(data.artifact_id)
+        if artifact is None or artifact.project_id != data.project_id:
+            return None
 
     entry = CostEntry(
         project_id=data.project_id,

@@ -60,6 +60,13 @@ No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para
 escolher `mock` ou `openrouter` e definir um modelo diferente para ideias, Story
 Bible, roteiro e cenas/planos.
 
+Preferencias alteradas pela interface sao gravadas em `.runtime/preferences.json`.
+O arquivo `.env` permanece somente para configuracao de inicializacao e nao e
+modificado pela aplicacao em execucao.
+
+O provider real atualmente implementado e o OpenRouter para texto. Imagem, video
+e voz continuam mockados; a API rejeita providers de video ainda nao implementados.
+
 ## Experiencia de producao
 
 A interface principal funciona como um cockpit de producao:

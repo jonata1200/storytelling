@@ -20,6 +20,7 @@ from app.quality.security import security_scan_text
 from app.storyboards.models import Timeline, TimelineItem
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryBible
 from app.video_generation.models import GenerationJob
+from app.workflows.state_machine import advance_project_status
 
 
 async def _latest_story_bible(session: AsyncSession, project_id: UUID) -> StoryBible | None:
@@ -259,7 +260,7 @@ async def run_quality_check(session: AsyncSession, project_id: UUID) -> QualityC
     )
     session.add(check)
     if project.status in {ProjectStatus.ASSEMBLY, ProjectStatus.FINAL_APPROVAL}:
-        project.status = ProjectStatus.QUALITY_CONTROL
+        advance_project_status(project, ProjectStatus.QUALITY_CONTROL)
     await session.commit()
     await session.refresh(check)
     return check

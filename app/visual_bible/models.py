@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +21,9 @@ class Character(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class CharacterVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "character_versions"
+    __table_args__ = (
+        UniqueConstraint("character_id", "version_number", name="uq_character_version_number"),
+    )
 
     character_id: Mapped[UUID] = mapped_column(
         ForeignKey("characters.id"), nullable=False, index=True
@@ -43,6 +46,9 @@ class Location(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class LocationVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "location_versions"
+    __table_args__ = (
+        UniqueConstraint("location_id", "version_number", name="uq_location_version_number"),
+    )
 
     location_id: Mapped[UUID] = mapped_column(
         ForeignKey("locations.id"), nullable=False, index=True
@@ -65,6 +71,9 @@ class Prop(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class PropVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "prop_versions"
+    __table_args__ = (
+        UniqueConstraint("prop_id", "version_number", name="uq_prop_version_number"),
+    )
 
     prop_id: Mapped[UUID] = mapped_column(ForeignKey("props.id"), nullable=False, index=True)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)

@@ -1,7 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, cast
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,7 +37,20 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    @model_validator(mode="after")
+    def reject_insecure_non_local_defaults(self) -> "Settings":
+        if self.app_env.lower() not in {"local", "development", "test"}:
+            if self.api_basic_username == "admin" and self.api_basic_password == "admin":
+                raise ValueError("Default API credentials are forbidden outside local environments")
+            if self.app_secret_key == "change-me-in-development":
+                raise ValueError("APP_SECRET_KEY must be changed outside local environments")
+            if self.app_debug:
+                raise ValueError("APP_DEBUG must be false outside local environments")
+        return self
+
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    from app.config.runtime_preferences import load_runtime_preferences
+
+    return Settings(**cast(dict[str, Any], load_runtime_preferences()))

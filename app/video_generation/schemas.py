@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,7 +11,7 @@ from app.core.enums import ClipReviewDecision, GenerationJobStatus, GenerationJo
 class GenerateVideoClipsRequest(BaseModel):
     storyboard_frame_ids: list[UUID] | None = None
     variants_per_frame: int = Field(default=1, ge=1, le=4)
-    provider: str = "mock"
+    provider: Literal["mock"] = "mock"
     model: str = "mock-video"
 
 

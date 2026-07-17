@@ -17,6 +17,7 @@ from app.providers.speech.types import SpeechRequest
 from app.storyboards.models import AudioTrack, Timeline, TimelineItem
 from app.video_generation.models import VideoClip
 from app.workflows.models import ArtifactDependency
+from app.workflows.state_machine import advance_project_status
 
 
 def export_profile(fps: int = 30, bitrate: str = "8M", embed_subtitles: bool = True) -> dict:
@@ -263,7 +264,7 @@ async def create_final_timeline(
         )
         cursor_ms += duration_ms
 
-    project.status = ProjectStatus.ASSEMBLY
+    advance_project_status(project, ProjectStatus.ASSEMBLY)
     await session.commit()
     await session.refresh(timeline)
     return timeline
@@ -352,7 +353,7 @@ async def export_timeline(
         render_log=render_log,
     )
     session.add(export)
-    project.status = ProjectStatus.FINAL_APPROVAL
+    advance_project_status(project, ProjectStatus.FINAL_APPROVAL)
     await session.commit()
     await session.refresh(export)
     return export

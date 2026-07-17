@@ -99,6 +99,8 @@ async def add_artifact_dependency(
     downstream = await repository.get_artifact(downstream_artifact_id)
     if upstream is None or downstream is None:
         return None
+    if upstream.project_id != downstream.project_id or upstream.id == downstream.id:
+        return None
 
     dependency = ArtifactDependency(
         upstream_artifact_id=upstream_artifact_id,

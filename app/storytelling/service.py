@@ -20,6 +20,7 @@ from app.storytelling.models import (
 )
 from app.storytelling.schemas import BriefingCreate
 from app.workflows.models import ArtifactDependency
+from app.workflows.state_machine import advance_project_status
 
 
 async def _create_artifact(
@@ -103,7 +104,7 @@ async def create_briefing(
         call_to_action=data.call_to_action,
         constraints=data.constraints,
     )
-    project.status = ProjectStatus.IDEA_GENERATION
+    advance_project_status(project, ProjectStatus.IDEA_GENERATION)
     session.add(briefing)
     await session.commit()
     await session.refresh(briefing)
@@ -160,7 +161,7 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
         session.add(idea)
         ideas.append(idea)
     execution.response = result.content
-    project.status = ProjectStatus.IDEA_APPROVAL
+    advance_project_status(project, ProjectStatus.IDEA_APPROVAL)
     await session.commit()
     for idea in ideas:
         await session.refresh(idea)
@@ -204,7 +205,7 @@ async def generate_story_bible(
         payload=payload,
     )
     session.add(story_bible)
-    project.status = ProjectStatus.STORY_APPROVAL
+    advance_project_status(project, ProjectStatus.STORY_APPROVAL)
     await session.commit()
     await session.refresh(story_bible)
     return story_bible
@@ -260,7 +261,7 @@ async def generate_script(
             payload=payload,
         )
     )
-    project.status = ProjectStatus.SCRIPT_APPROVAL
+    advance_project_status(project, ProjectStatus.SCRIPT_APPROVAL)
     await session.commit()
     await session.refresh(script)
     return script
@@ -336,7 +337,7 @@ async def generate_scenes_and_shots(
                 )
             )
         scenes.append(scene)
-    project.status = ProjectStatus.VISUAL_BIBLE_GENERATION
+    advance_project_status(project, ProjectStatus.VISUAL_BIBLE_GENERATION)
     await session.commit()
     for scene in scenes:
         await session.refresh(scene)

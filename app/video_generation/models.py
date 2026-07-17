@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,6 +45,14 @@ class GenerationJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class VideoClip(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "video_clips"
+    __table_args__ = (
+        Index(
+            "uq_video_clip_selected_per_frame",
+            "storyboard_frame_id",
+            unique=True,
+            postgresql_where=text("selected"),
+        ),
+    )
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     artifact_id: Mapped[UUID] = mapped_column(ForeignKey("artifacts.id"), nullable=False)

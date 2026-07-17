@@ -29,6 +29,7 @@ from app.storyboards.models import StoryboardFrame
 from app.video_generation.models import ClipReview, GenerationJob, VideoClip
 from app.video_generation.retry import exponential_backoff_seconds
 from app.workflows.models import ArtifactDependency
+from app.workflows.state_machine import advance_project_status
 
 MOCK_VIDEO_UNIT_COST_PER_SECOND = Decimal("0.000000")
 
@@ -114,6 +115,8 @@ async def generate_video_clips(
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         return None
+    if provider_name != "mock":
+        raise ValueError(f"Unsupported video provider: {provider_name}")
 
     frames = await _storyboard_frames(session, project_id, frame_ids)
     if not frames:
@@ -136,6 +139,12 @@ async def generate_video_clips(
             existing_job = existing.scalars().first()
             if existing_job is not None:
                 jobs.append(existing_job)
+                existing_clip = await session.execute(
+                    select(VideoClip).where(VideoClip.generation_job_id == existing_job.id)
+                )
+                clip = existing_clip.scalars().first()
+                if clip is not None:
+                    clips.append(clip)
                 continue
 
             request_payload = {
@@ -264,7 +273,7 @@ async def generate_video_clips(
                 )
             )
 
-    project.status = ProjectStatus.VIDEO_REVIEW
+    advance_project_status(project, ProjectStatus.VIDEO_REVIEW)
     await session.commit()
     for item in [*jobs, *clips]:
         await session.refresh(item)
@@ -284,15 +293,26 @@ async def get_job_status(session: AsyncSession, job_id: UUID) -> GenerationJob |
 
 async def review_clip(
     session: AsyncSession,
+    project_id: UUID,
     clip_id: UUID,
     decision: ClipReviewDecision,
     notes: str | None = None,
     selected: bool = False,
 ) -> ClipReview | None:
     clip = await session.get(VideoClip, clip_id)
-    if clip is None:
+    if clip is None or clip.project_id != project_id:
         return None
     if selected or decision == ClipReviewDecision.APPROVED:
+        sibling_result = await session.execute(
+            select(VideoClip).where(
+                VideoClip.project_id == project_id,
+                VideoClip.storyboard_frame_id == clip.storyboard_frame_id,
+                VideoClip.id != clip.id,
+                VideoClip.selected.is_(True),
+            )
+        )
+        for sibling in sibling_result.scalars():
+            sibling.selected = False
         clip.selected = True
     review = ClipReview(video_clip_id=clip_id, decision=decision, notes=notes)
     session.add(review)

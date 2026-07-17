@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import Enum, ForeignKey, Integer, String
+from sqlalchemy import Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,6 +24,9 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class AssetVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "asset_versions"
+    __table_args__ = (
+        UniqueConstraint("asset_id", "version_number", name="uq_asset_version_number"),
+    )
 
     asset_id: Mapped[UUID] = mapped_column(ForeignKey("assets.id"), nullable=False, index=True)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)

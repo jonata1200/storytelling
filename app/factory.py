@@ -1,18 +1,29 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
+from app.auth.ui_middleware import UIBasicAuthMiddleware
 from app.config.settings import get_settings
 from app.observability.middleware import CorrelationIdMiddleware
+from app.workflows.state_machine import WorkflowStateError
 
 
 def create_app(include_ui: bool = True) -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, debug=settings.app_debug)
     app.add_middleware(CorrelationIdMiddleware)
+    if include_ui:
+        app.add_middleware(UIBasicAuthMiddleware)
     app.include_router(api_router)
+
+    @app.exception_handler(WorkflowStateError)
+    async def workflow_state_error_handler(
+        _request: Request, exc: WorkflowStateError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
     if include_ui:
         from nicegui import ui
 

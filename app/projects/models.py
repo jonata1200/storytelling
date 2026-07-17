@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -46,6 +46,9 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class ProjectVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "project_versions"
+    __table_args__ = (
+        UniqueConstraint("project_id", "version_number", name="uq_project_version_number"),
+    )
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -79,6 +82,9 @@ class Artifact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class ArtifactVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "artifact_versions"
+    __table_args__ = (
+        UniqueConstraint("artifact_id", "version_number", name="uq_artifact_version_number"),
+    )
 
     artifact_id: Mapped[UUID] = mapped_column(
         ForeignKey("artifacts.id"), nullable=False, index=True

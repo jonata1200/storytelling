@@ -17,6 +17,7 @@ from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeli
 from app.storyboards.timeline import build_visual_timeline_items, build_word_alignment
 from app.storytelling.models import Scene, Script, Shot
 from app.workflows.models import ArtifactDependency
+from app.workflows.state_machine import advance_project_status
 
 
 async def _create_artifact(
@@ -173,7 +174,7 @@ async def generate_storyboard_frames(
         session.add(frame)
         frames.append(frame)
 
-    project.status = ProjectStatus.STORYBOARD_APPROVAL
+    advance_project_status(project, ProjectStatus.STORYBOARD_APPROVAL)
     await session.commit()
     for frame in frames:
         await session.refresh(frame)
@@ -370,7 +371,7 @@ async def generate_animatic_bundle(
     session.add(audio_item)
     items.append(audio_item)
 
-    project.status = ProjectStatus.PRODUCTION_PLANNING
+    advance_project_status(project, ProjectStatus.PRODUCTION_PLANNING)
     await session.commit()
     await session.refresh(audio_track)
     await session.refresh(animatic)

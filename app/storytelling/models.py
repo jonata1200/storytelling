@@ -1,7 +1,7 @@
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -70,6 +70,9 @@ class Script(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class ScriptVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "script_versions"
+    __table_args__ = (
+        UniqueConstraint("script_id", "version_number", name="uq_script_version_number"),
+    )
 
     script_id: Mapped[UUID] = mapped_column(ForeignKey("scripts.id"), nullable=False, index=True)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)

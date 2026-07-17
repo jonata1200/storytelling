@@ -1,0 +1,58 @@
+import json
+import os
+import tempfile
+from pathlib import Path
+
+PREFERENCE_KEYS = {
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_DEFAULT_MODEL",
+    "OPENROUTER_IMAGE_MODEL",
+    "OPENROUTER_VIDEO_MODEL",
+    "USER_DISPLAY_NAME",
+    "USER_EMAIL",
+    "USER_AVATAR_PATH",
+    "USER_THEME",
+}
+PREFERENCES_PATH = Path(".runtime/preferences.json")
+
+
+def load_runtime_preferences(path: Path = PREFERENCES_PATH) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Runtime preferences must be a JSON object")
+    return {
+        str(key).lower(): str(value)
+        for key, value in payload.items()
+        if str(key).upper() in PREFERENCE_KEYS
+    }
+
+
+def save_runtime_preferences(values: dict[str, str], path: Path = PREFERENCES_PATH) -> None:
+    normalized: dict[str, str] = {}
+    for raw_key, raw_value in values.items():
+        key = raw_key.upper()
+        if key not in PREFERENCE_KEYS:
+            raise ValueError(f"Preference is not allowed: {key}")
+        value = str(raw_value)
+        if "\n" in value or "\r" in value or "\x00" in value:
+            raise ValueError(f"Invalid control character in preference: {key}")
+        normalized[key] = value
+
+    existing = {key.upper(): value for key, value in load_runtime_preferences(path).items()}
+    existing.update(normalized)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix="preferences-", suffix=".tmp"
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(existing, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)

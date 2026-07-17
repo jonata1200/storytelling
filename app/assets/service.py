@@ -9,6 +9,10 @@ async def create_asset(session: AsyncSession, data: AssetCreate) -> Asset | None
     project = await ProjectRepository(session).get_project(data.project_id)
     if project is None:
         return None
+    if data.artifact_id is not None:
+        artifact = await ProjectRepository(session).get_artifact(data.artifact_id)
+        if artifact is None or artifact.project_id != data.project_id:
+            return None
 
     asset = Asset(
         project_id=data.project_id,

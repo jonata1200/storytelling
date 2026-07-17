@@ -96,8 +96,9 @@ async def post_clip_review(
     payload: ClipReviewCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ClipReviewRead:
-    _ = project_id
-    review = await review_clip(session, clip_id, payload.decision, payload.notes, payload.selected)
+    review = await review_clip(
+        session, project_id, clip_id, payload.decision, payload.notes, payload.selected
+    )
     if review is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clip not found")
     return ClipReviewRead.model_validate(review)
