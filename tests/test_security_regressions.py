@@ -5,7 +5,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from app.auth.session import SESSION_COOKIE_NAME, create_session_token
 from app.auth.ui_middleware import UIBasicAuthMiddleware
+from app.auth.user_store import create_user, verify_user
 from app.config.runtime_preferences import load_runtime_preferences, save_runtime_preferences
 from app.core.enums import ProjectStatus
 from app.projects.models import Project
@@ -22,8 +24,22 @@ def test_ui_middleware_requires_authentication() -> None:
         return {"ok": True}
 
     client = TestClient(app)
-    assert client.get("/").status_code == 401
+    assert client.get("/", follow_redirects=False).status_code == 303
     assert client.get("/", auth=("admin", "admin")).json() == {"ok": True}
+
+    client.cookies.set(SESSION_COOKIE_NAME, create_session_token("jonata"))
+    assert client.get("/").json() == {"ok": True}
+
+
+def test_local_user_store_creates_and_verifies_user(tmp_path: Path) -> None:
+    users_path = tmp_path / "users.json"
+    create_user("Jonata", "senha-segura", users_path)
+
+    assert verify_user("jonata", "senha-segura", users_path)
+    assert not verify_user("jonata", "senha-errada", users_path)
+
+    with pytest.raises(ValueError, match="ja existe"):
+        create_user("jonata", "outra-senha", users_path)
 
 
 def test_runtime_preferences_are_allowlisted_and_reject_control_characters(

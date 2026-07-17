@@ -860,6 +860,15 @@ def _theme_toggle() -> None:
     button.on("click", toggle_theme).tooltip("Alternar entre tema claro e escuro")
 
 
+def _logout_button() -> None:
+    ui.button(icon="logout").props("flat round").classes("text-[#aeb3ae]").on(
+        "click",
+        lambda: ui.run_javascript(
+            "fetch('/auth/logout', {method: 'POST'}).then(() => window.location.href = '/login')"
+        ),
+    ).tooltip("Sair")
+
+
 def _avatar_data_uri(path_value: str) -> str | None:
     if not path_value:
         return None
@@ -917,6 +926,7 @@ def _home_sidebar() -> None:
         ui.space()
         with ui.element("div").classes("mb-2"):
             _user_avatar(size="48px")
+        _logout_button()
 
 
 def _workspace_header(project: Project, active: str) -> None:
@@ -945,6 +955,7 @@ def _workspace_header(project: Project, active: str) -> None:
                 )
         ui.label("PT-BR").classes("desktop-nav text-sm text-[#a9aea9]")
         _theme_toggle()
+        _logout_button()
         ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
             "acid-bg rounded-xl font-semibold"
         )
