@@ -819,7 +819,7 @@ def _studio_logo(compact: bool = False) -> None:
         ):
             ui.icon("movie_creation").classes("text-xl")
         if not compact:
-            ui.label("FrameFlow").classes("brand-type text-xl font-extrabold")
+            ui.label("Storytelling").classes("brand-type text-xl font-extrabold")
 
 
 def _home_sidebar() -> None:

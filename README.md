@@ -1,4 +1,4 @@
-# Storytelling Studio
+# Storytelling
 
 Aplicacao para producao estruturada de historias emocionais em videos verticais,
 com dominio versionado, aprovacao humana e pipeline recuperavel.

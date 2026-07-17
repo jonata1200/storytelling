@@ -1,1 +1,1 @@
-"""Storytelling Studio application package."""
+"""Storytelling application package."""

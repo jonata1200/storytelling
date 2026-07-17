@@ -86,6 +86,87 @@ function Wait-PostgresReady {
     throw "PostgreSQL nao ficou pronto dentro do tempo esperado. Consulte: docker compose logs postgres"
 }
 
+function Stop-PreviousStorytellingServer {
+    param(
+        [int]$ServerPort,
+        [object[]]$Listeners
+    )
+
+    try {
+        $health = Invoke-RestMethod `
+            -Uri "http://127.0.0.1:$ServerPort/api/v1/health/live" `
+            -TimeoutSec 3 `
+            -ErrorAction Stop
+    } catch {
+        return $false
+    }
+
+    if ([string]$health.app -notlike "Storytelling*") {
+        return $false
+    }
+
+    $ownerIds = $Listeners |
+        Select-Object -ExpandProperty OwningProcess -Unique
+    Write-Host "Encerrando instancia anterior da aplicacao na porta $ServerPort..."
+    foreach ($ownerId in $ownerIds) {
+        $process = Get-Process -Id $ownerId -ErrorAction SilentlyContinue
+        if ($null -ne $process) {
+            try {
+                Stop-Process -Id $ownerId -Force -ErrorAction Stop
+                continue
+            } catch {
+                Write-Warning "O PID $ownerId exige permissao de administrador."
+            }
+        }
+
+        Write-Host "Solicitando permissao do Windows para finalizar o PID $ownerId..."
+        try {
+            $elevatedKill = Start-Process `
+                -FilePath "$env:SystemRoot\System32\taskkill.exe" `
+                -ArgumentList @("/PID", $ownerId.ToString(), "/T", "/F") `
+                -Verb RunAs `
+                -Wait `
+                -PassThru
+            if ($elevatedKill.ExitCode -ne 0) {
+                Write-Warning "O Windows nao conseguiu finalizar o PID $ownerId."
+            }
+        } catch {
+            Write-Warning "A autorizacao para finalizar o PID $ownerId foi cancelada ou negada."
+        }
+    }
+
+    for ($attempt = 1; $attempt -le 10; $attempt++) {
+        Start-Sleep -Milliseconds 500
+        $remaining = Get-NetTCPConnection `
+            -LocalPort $ServerPort `
+            -State Listen `
+            -ErrorAction SilentlyContinue
+        if ($null -eq $remaining) {
+            Write-Host "Instancia anterior encerrada."
+            return $true
+        }
+    }
+    return $false
+}
+
+function Get-NextAvailablePort {
+    param(
+        [int]$StartPort,
+        [int]$MaxAttempts = 20
+    )
+
+    for ($candidate = $StartPort; $candidate -lt ($StartPort + $MaxAttempts); $candidate++) {
+        $listener = Get-NetTCPConnection `
+            -LocalPort $candidate `
+            -State Listen `
+            -ErrorAction SilentlyContinue
+        if ($null -eq $listener) {
+            return $candidate
+        }
+    }
+    throw "Nenhuma porta livre encontrada entre $StartPort e $($StartPort + $MaxAttempts - 1)."
+}
+
 $python = Get-ProjectPython
 
 if (-not (Test-Path ".env")) {
@@ -111,6 +192,26 @@ if (-not $SkipMigrations) {
     }
 }
 
+$existingListener = Get-NetTCPConnection `
+    -LocalPort $Port `
+    -State Listen `
+    -ErrorAction SilentlyContinue
+if ($null -ne $existingListener) {
+    $stoppedPreviousServer = Stop-PreviousStorytellingServer `
+        -ServerPort $Port `
+        -Listeners $existingListener
+    if (-not $stoppedPreviousServer) {
+        $ownerIds = $existingListener |
+            Select-Object -ExpandProperty OwningProcess -Unique
+        $requestedPort = $Port
+        $Port = Get-NextAvailablePort -StartPort ($requestedPort + 1)
+        Write-Warning (
+            "Nao foi possivel encerrar o processo PID $($ownerIds -join ', ') " +
+            "na porta $requestedPort. A aplicacao sera iniciada automaticamente na porta $Port."
+        )
+    }
+}
+
 $url = "http://${HostAddress}:$Port"
 $uvicornArguments = @(
     "-m",
@@ -119,8 +220,7 @@ $uvicornArguments = @(
     "--host",
     $HostAddress,
     "--port",
-    $Port.ToString(),
-    "--reload"
+    $Port.ToString()
 )
 
 if ($Background) {
@@ -128,7 +228,7 @@ if ($Background) {
     New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
     $stdoutLog = Join-Path $runtimeDir "uvicorn.out.log"
     $stderrLog = Join-Path $runtimeDir "uvicorn.err.log"
-    $pidFile = Join-Path $runtimeDir "uvicorn.pid"
+    $pidFile = Join-Path $runtimeDir "uvicorn-$Port.pid"
 
     $process = Start-Process `
         -FilePath $python `
@@ -146,6 +246,7 @@ if ($Background) {
     exit 0
 }
 
+$uvicornArguments += "--reload"
 Write-Host "Iniciando aplicacao em primeiro plano: $url"
 Write-Host "Para finalizar, pressione Ctrl+C ou execute: .\scripts\finalizar.ps1"
 & $python @uvicornArguments
