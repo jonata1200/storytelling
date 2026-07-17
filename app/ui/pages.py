@@ -150,6 +150,7 @@ PRODUCTION_STEPS = [
 
 
 def _body_style() -> None:
+    ui.colors(primary="#5898d4")
     ui.dark_mode(value=get_settings().user_theme != "light")
     ui.page_title(get_settings().app_name)
     ui.query("body").classes("studio-body")
@@ -159,7 +160,7 @@ def _body_style() -> None:
         <meta name="theme-color" content="#090b0a">
         <style>
           @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
-          :root { --ink:#080a09; --panel:#111412; --line:#272c28; --acid:#eefb72; --muted:#969c97; }
+          :root { --ink:#080a09; --panel:#111412; --line:#272c28; --acid:#5898d4; --muted:#969c97; }
           body.studio-body { background:var(--ink); color:#f4f5f2; font-family:'DM Sans',sans-serif; }
           body:not(.body--dark).studio-body { background:#f4f5ef; color:#171a17; }
           body:not(.body--dark) .glass,
@@ -879,7 +880,7 @@ def _save_avatar_file(filename: str, content: bytes) -> Path:
     return target
 
 
-def _user_avatar(size: str = "44px", navigate: bool = True) -> None:
+def _user_avatar(size: str = "44px", navigate: bool = True) -> Any:
     current = get_settings()
     image_source = _avatar_data_uri(current.user_avatar_path)
     initial = (current.user_display_name or "U").strip()[:1].upper()
@@ -892,6 +893,7 @@ def _user_avatar(size: str = "44px", navigate: bool = True) -> None:
             ui.label(initial)
     if navigate:
         avatar.on("click", lambda: ui.navigate.to("/settings"))
+    return avatar
 
 
 def _home_sidebar() -> None:
@@ -1116,7 +1118,7 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
     with (
         ui.tabs()
         .classes("text-[#8d938e]")
-        .props("no-caps active-color=lime-3 indicator-color=lime-3") as tabs
+        .props("no-caps active-color=primary indicator-color=primary") as tabs
     ):
         people = ui.tab("Personagens")
         places = ui.tab("Locais")
@@ -1360,7 +1362,7 @@ def register_ui_pages() -> None:
                             "Sobre o que você quer contar?",
                             placeholder="Ex.: uma astronauta encontra uma mensagem enviada por ela mesma...",
                         )
-                        .props("outlined autogrow")
+                        .props("outlined autogrow stack-label")
                         .classes("w-full")
                     )
                     with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
@@ -1464,7 +1466,7 @@ def register_ui_pages() -> None:
                 with (
                     ui.tabs()
                     .classes("text-[#989e99]")
-                    .props("no-caps active-color=lime-3 indicator-color=lime-3") as settings_tabs
+                    .props("no-caps active-color=primary indicator-color=primary") as settings_tabs
                 ):
                     profile_tab = ui.tab("Perfil", icon="person")
                     ai_tab = ui.tab("Inteligência artificial", icon="auto_awesome")
@@ -1481,11 +1483,20 @@ def register_ui_pages() -> None:
                             @ui.refreshable
                             def avatar_preview() -> None:
                                 with ui.row().classes("items-center gap-4 mb-5"):
-                                    _user_avatar(size="80px", navigate=False)
+                                    photo_avatar = _user_avatar(size="80px", navigate=False)
+                                    photo_avatar.on(
+                                        "click",
+                                        lambda: ui.run_javascript(
+                                            "document.querySelector('#avatar-upload input[type=file]').click()"
+                                        ),
+                                    ).tooltip("Clique para alterar a foto")
                                     with ui.column().classes("gap-1"):
                                         ui.label("Foto do perfil").classes("font-semibold")
                                         ui.label("JPG, PNG ou WebP · máximo de 5 MB").classes(
                                             "text-xs text-[#7f8580]"
+                                        )
+                                        ui.label("Clique na foto para alterar").classes(
+                                            "text-xs acid"
                                         )
 
                             avatar_preview()
@@ -1511,8 +1522,8 @@ def register_ui_pages() -> None:
                                 ),
                                 auto_upload=True,
                                 max_file_size=5_000_000,
-                            ).props("accept=.jpg,.jpeg,.png,.webp flat bordered").classes(
-                                "w-full mb-5"
+                            ).props("id=avatar-upload accept=.jpg,.jpeg,.png,.webp").classes(
+                                "hidden"
                             )
 
                             display_name = (
@@ -1555,7 +1566,7 @@ def register_ui_pages() -> None:
                                     password=True,
                                     password_toggle_button=True,
                                 )
-                                .props("outlined")
+                                .props("outlined stack-label")
                                 .classes("w-full")
                             )
                             text_model = (

@@ -24,5 +24,12 @@ def create_app(include_ui: bool = True) -> FastAPI:
             name="ui-assets",
         )
         register_ui_pages()
-        ui.run_with(app, mount_path="/")
+        ui.run_with(
+            app,
+            mount_path="/",
+            title=settings.app_name,
+            favicon=Path(__file__).parent / "ui" / "favicon.png",
+            language="pt-BR",
+            dark=None,
+        )
     return app
