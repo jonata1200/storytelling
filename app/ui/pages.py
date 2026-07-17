@@ -55,6 +55,7 @@ from app.storyboards.models import (
     TimelineItem,
 )
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
+from app.storytelling.idea_lab import generate_freeform_ideas
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryBible, StoryIdea
 from app.storytelling.schemas import BriefingCreate
 from app.storytelling.service import (
@@ -149,16 +150,29 @@ PRODUCTION_STEPS = [
 
 
 def _body_style() -> None:
+    ui.dark_mode(value=get_settings().user_theme != "light")
     ui.page_title(get_settings().app_name)
     ui.query("body").classes("studio-body")
     ui.add_head_html(f'<link rel="icon" type="image/png" href="{BRAND_MARK_URL}">')
     ui.add_head_html(
-        """
+        r"""
         <meta name="theme-color" content="#090b0a">
         <style>
           @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
           :root { --ink:#080a09; --panel:#111412; --line:#272c28; --acid:#eefb72; --muted:#969c97; }
           body.studio-body { background:var(--ink); color:#f4f5f2; font-family:'DM Sans',sans-serif; }
+          body:not(.body--dark).studio-body { background:#f4f5ef; color:#171a17; }
+          body:not(.body--dark) .glass,
+          body:not(.body--dark) .entity-card { background:#ffffff; border-color:#d9ded7; }
+          body:not(.body--dark) .visual-placeholder { background:radial-gradient(circle at 70% 15%,#e6e9c9 0,#d9ddcf 42%,#eef0e9 80%); }
+          body:not(.body--dark) .q-field__control { background:#ffffff!important; }
+          body:not(.body--dark) .q-field__native,
+          body:not(.body--dark) .q-field__input,
+          body:not(.body--dark) .q-textarea textarea { color:#171a17!important; }
+          body:not(.body--dark) .q-menu { background:#ffffff!important; color:#171a17!important; }
+          body:not(.body--dark) .bg-\[\#0b0d0c\],
+          body:not(.body--dark) .bg-\[\#090b0a\],
+          body:not(.body--dark) .bg-\[\#0d0f0e\] { background:#f8faf6!important; }
           .studio-body .nicegui-content { padding:0; }
           .brand-type { font-family:'Manrope',sans-serif; letter-spacing:-.04em; }
           .glass { background:rgba(17,20,18,.88); border:1px solid var(--line); }
@@ -356,6 +370,7 @@ def _render_header(title: str, subtitle: str) -> None:
                 ui.label(title).classes("text-2xl font-bold")
                 ui.label(subtitle).classes("text-sm text-slate-400")
         with ui.row().classes("gap-2"):
+            _theme_toggle()
             ui.button("Projetos", icon="dashboard", on_click=lambda: ui.navigate.to("/")).classes(
                 "bg-slate-800 hover:bg-slate-700 rounded-md"
             )
@@ -829,6 +844,21 @@ def _studio_logo(compact: bool = False) -> None:
             ui.label("Storytelling").classes("brand-type text-xl font-extrabold")
 
 
+def _theme_toggle() -> None:
+    is_dark = get_settings().user_theme != "light"
+    mode = ui.dark_mode(value=is_dark)
+    button = ui.button(icon="light_mode" if is_dark else "dark_mode").props("flat round")
+
+    def toggle_theme() -> None:
+        next_dark = not bool(mode.value)
+        mode.set_value(next_dark)
+        save_preferences({"USER_THEME": "dark" if next_dark else "light"})
+        button.props(f"icon={'light_mode' if next_dark else 'dark_mode'}")
+        button.update()
+
+    button.on("click", toggle_theme).tooltip("Alternar entre tema claro e escuro")
+
+
 def _avatar_data_uri(path_value: str) -> str | None:
     if not path_value:
         return None
@@ -871,6 +901,7 @@ def _home_sidebar() -> None:
         _studio_logo(compact=True)
         for icon, label, target in [
             ("chat_bubble_outline", "Criar", "/"),
+            ("lightbulb_outline", "Ideias", "/ideas"),
             ("folder_open", "Projetos", "/#projects"),
             ("collections_bookmark", "Ativos", "/#projects"),
             ("settings", "Ajustes", "/settings"),
@@ -912,6 +943,7 @@ def _workspace_header(project: Project, active: str) -> None:
                     f"nav-pill rounded-full px-4 {'nav-active' if active == key else ''}"
                 )
         ui.label("PT-BR").classes("desktop-nav text-sm text-[#a9aea9]")
+        _theme_toggle()
         ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
             "acid-bg rounded-xl font-semibold"
         )
@@ -1197,6 +1229,7 @@ def register_ui_pages() -> None:
                     _studio_logo()
                     with ui.row().classes("items-center gap-3"):
                         ui.label("Estúdio pessoal").classes("text-sm text-[#939994]")
+                        _theme_toggle()
                         _user_avatar(size="48px")
                 with ui.column().classes("w-full max-w-4xl mx-auto items-center text-center gap-4"):
                     with ui.element("div").classes(
@@ -1299,6 +1332,117 @@ def register_ui_pages() -> None:
                                 ui.icon("add_circle_outline").classes("text-4xl acid")
                                 ui.label("Criar novo projeto").classes("mt-2 font-semibold")
 
+    @ui.page("/ideas")
+    async def ideas_page() -> None:
+        _body_style()
+        _home_sidebar()
+        ideas: list[dict[str, Any]] = []
+        with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
+            with ui.column().classes("w-full max-w-6xl mx-auto px-6 py-8 gap-7"):
+                with ui.row().classes("w-full items-center justify-between"):
+                    with ui.column().classes("gap-1"):
+                        with ui.row().classes("items-center gap-3"):
+                            ui.icon("lightbulb").classes("text-4xl acid")
+                            ui.label("Laboratório de Ideias").classes(
+                                "brand-type text-4xl font-bold"
+                            )
+                        ui.label(
+                            "Explore histórias livremente, sem criar um projeto de vídeo."
+                        ).classes("text-[#8f9590]")
+                    ui.button(
+                        "Voltar", icon="arrow_back", on_click=lambda: ui.navigate.to("/")
+                    ).props("flat no-caps")
+                    _theme_toggle()
+
+                with ui.element("div").classes("glass rounded-2xl p-5 w-full"):
+                    theme = (
+                        ui.textarea(
+                            "Sobre o que você quer contar?",
+                            placeholder="Ex.: uma astronauta encontra uma mensagem enviada por ela mesma...",
+                        )
+                        .props("outlined autogrow")
+                        .classes("w-full")
+                    )
+                    with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
+                        genre = ui.select(
+                            [
+                                "Drama",
+                                "Ficção científica",
+                                "Suspense",
+                                "Comédia",
+                                "Terror",
+                                "Romance",
+                                "Documentário",
+                            ],
+                            label="Gênero",
+                            value="Drama",
+                        ).props("outlined")
+                        emotion = ui.select(
+                            [
+                                "Esperança",
+                                "Curiosidade",
+                                "Tensão",
+                                "Alegria",
+                                "Melancolia",
+                                "Surpresa",
+                            ],
+                            label="Emoção principal",
+                            value="Esperança",
+                        ).props("outlined")
+
+                    async def generate() -> None:
+                        if not (theme.value or "").strip():
+                            ui.notify("Descreva um tema para começar.", color="warning")
+                            return
+                        try:
+                            generated = await generate_freeform_ideas(
+                                theme.value, genre.value, emotion.value
+                            )
+                            ideas.clear()
+                            ideas.extend(generated)
+                            idea_results.refresh()
+                        except Exception as exc:
+                            ui.notify(f"Não foi possível gerar ideias: {exc}", color="negative")
+
+                    ui.button("Gerar três ideias", icon="auto_awesome", on_click=generate).props(
+                        "unelevated no-caps"
+                    ).classes("acid-bg rounded-xl mt-4")
+
+                @ui.refreshable
+                def idea_results() -> None:
+                    if not ideas:
+                        with ui.element("div").classes(
+                            "w-full border border-dashed border-[#343934] rounded-2xl min-h-52 flex flex-col items-center justify-center text-[#777d78]"
+                        ):
+                            ui.icon("tips_and_updates").classes("text-5xl")
+                            ui.label("Suas ideias aparecerão aqui.").classes("mt-3")
+                        return
+                    with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-3 gap-4"):
+                        for index, idea in enumerate(ideas, 1):
+                            with ui.element("article").classes(
+                                "entity-card rounded-2xl p-5 flex flex-col min-h-80"
+                            ):
+                                ui.label(f"IDEIA {index:02d}").classes(
+                                    "text-xs acid font-semibold tracking-widest"
+                                )
+                                ui.label(str(idea.get("title") or "História sem título")).classes(
+                                    "brand-type text-2xl font-bold mt-2"
+                                )
+                                ui.label(str(idea.get("hook") or "")).classes(
+                                    "text-sm text-[#d4d8d4] mt-3 font-medium"
+                                )
+                                ui.label(str(idea.get("premise") or "")).classes(
+                                    "text-sm text-[#8d938e] mt-3 leading-6"
+                                )
+                                ui.space()
+                                ui.button(
+                                    "Desenvolver como projeto",
+                                    icon="arrow_forward",
+                                    on_click=lambda: ui.navigate.to("/new"),
+                                ).props("flat no-caps").classes("acid mt-4")
+
+                idea_results()
+
     @ui.page("/settings")
     async def settings_page() -> None:
         _body_style()
@@ -1315,6 +1459,7 @@ def register_ui_pages() -> None:
                     ui.button(
                         "Voltar", icon="arrow_back", on_click=lambda: ui.navigate.to("/")
                     ).props("flat no-caps")
+                    _theme_toggle()
 
                 with (
                     ui.tabs()

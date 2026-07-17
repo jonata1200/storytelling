@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     user_display_name: str = "Jonata"
     user_email: str = ""
     user_avatar_path: str = ""
+    user_theme: str = "dark"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
