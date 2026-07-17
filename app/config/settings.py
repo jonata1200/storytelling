@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     openrouter_site_url: str = "http://127.0.0.1:8000"
     openrouter_app_title: str = "Storytelling"
     openrouter_default_model: str = "openai/gpt-4o-mini"
+    openrouter_image_model: str = "google/gemini-2.5-flash-image"
+    openrouter_video_model: str = "google/veo-3.1"
+    user_display_name: str = "Jonata"
+    user_email: str = ""
+    user_avatar_path: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

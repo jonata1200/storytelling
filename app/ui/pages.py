@@ -1,7 +1,11 @@
 # ruff: noqa: E501
 
+import asyncio
+import base64
+import mimetypes
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -9,6 +13,7 @@ from nicegui import ui
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.preferences import openrouter_models, save_preferences
 from app.config.settings import get_settings
 from app.costs.models import CostEntry
 from app.database.session import AsyncSessionLocal
@@ -142,9 +147,12 @@ PRODUCTION_STEPS = [
 
 
 def _body_style() -> None:
+    ui.page_title(get_settings().app_name)
     ui.query("body").classes("studio-body")
     ui.add_head_html(
         """
+        <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='17' fill='%23efff58'/%3E%3Cpath d='M16 21h32v25a5 5 0 0 1-5 5H21a5 5 0 0 1-5-5V21Z' fill='%23090b0a'/%3E%3Cpath d='M16 14h32v10H16z' fill='%23090b0a'/%3E%3Cpath d='m20 14 6 10m4-10 6 10m4-10 6 10' stroke='%23efff58' stroke-width='3'/%3E%3C/svg%3E">
+        <meta name="theme-color" content="#090b0a">
         <style>
           @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
           :root { --ink:#080a09; --panel:#111412; --line:#272c28; --acid:#eefb72; --muted:#969c97; }
@@ -822,6 +830,41 @@ def _studio_logo(compact: bool = False) -> None:
             ui.label("Storytelling").classes("brand-type text-xl font-extrabold")
 
 
+def _avatar_data_uri(path_value: str) -> str | None:
+    if not path_value:
+        return None
+    path = Path(path_value)
+    if not path.is_file():
+        return None
+    mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+def _save_avatar_file(filename: str, content: bytes) -> Path:
+    suffix = Path(filename).suffix.lower()
+    target_dir = Path("storage/profile")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"avatar{suffix}"
+    target.write_bytes(content)
+    return target
+
+
+def _user_avatar(size: str = "44px", navigate: bool = True) -> None:
+    current = get_settings()
+    image_source = _avatar_data_uri(current.user_avatar_path)
+    initial = (current.user_display_name or "U").strip()[:1].upper()
+    with ui.avatar(color="grey-9", size=size).classes(
+        "cursor-pointer overflow-hidden ring-1 ring-[#3a3f3a]"
+    ) as avatar:
+        if image_source:
+            ui.image(image_source).classes("w-full h-full object-cover").props("fit=cover")
+        else:
+            ui.label(initial)
+    if navigate:
+        avatar.on("click", lambda: ui.navigate.to("/settings"))
+
+
 def _home_sidebar() -> None:
     with ui.column().classes(
         "desktop-nav fixed left-0 top-0 bottom-0 w-24 border-r border-[#222622] items-center py-6 gap-6 bg-[#0b0d0c] z-20"
@@ -831,6 +874,7 @@ def _home_sidebar() -> None:
             ("chat_bubble_outline", "Criar", "/"),
             ("folder_open", "Projetos", "/#projects"),
             ("collections_bookmark", "Ativos", "/#projects"),
+            ("settings", "Ajustes", "/settings"),
         ]:
             with (
                 ui.column()
@@ -840,7 +884,8 @@ def _home_sidebar() -> None:
                 ui.icon(icon).classes("text-2xl")
                 ui.label(label).classes("text-[11px]")
         ui.space()
-        ui.avatar("J", color="grey-9").classes("mb-2")
+        with ui.element("div").classes("mb-2"):
+            _user_avatar(size="48px")
 
 
 def _workspace_header(project: Project, active: str) -> None:
@@ -1145,86 +1190,308 @@ def register_ui_pages() -> None:
         _body_style()
         projects = await _project_cards()
         _home_sidebar()
-        with ui.column().classes("ml-0 md:ml-24 min-h-screen px-5 md:px-12 py-7 gap-10"):
-            with ui.row().classes("w-full items-center justify-between"):
-                _studio_logo()
-                with ui.row().classes("items-center gap-3"):
-                    ui.label("Estúdio pessoal").classes("text-sm text-[#939994]")
-                    ui.avatar("J", color="grey-9")
-            with ui.column().classes(
-                "w-full max-w-5xl mx-auto items-center text-center gap-5 pt-6"
-            ):
-                with ui.element("div").classes(
-                    "chat-shell glass rounded-3xl p-5 w-full min-h-[360px] flex flex-col"
+        with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
+            with ui.column().classes("w-full px-5 md:px-10 lg:px-14 py-6 gap-9"):
+                with ui.row().classes(
+                    "w-full max-w-6xl mx-auto items-center justify-between min-h-14"
                 ):
-                    idea = (
-                        ui.textarea(
-                            placeholder="Descreva sua história, cole um roteiro ou peça uma ideia..."
+                    _studio_logo()
+                    with ui.row().classes("items-center gap-3"):
+                        ui.label("Estúdio pessoal").classes("text-sm text-[#939994]")
+                        _user_avatar(size="48px")
+                with ui.column().classes("w-full max-w-4xl mx-auto items-center text-center gap-4"):
+                    with ui.element("div").classes(
+                        "chat-shell glass rounded-3xl p-4 w-full min-h-[240px] flex flex-col"
+                    ):
+                        idea = (
+                            ui.textarea(
+                                placeholder="Descreva sua história, cole um roteiro ou peça uma ideia..."
+                            )
+                            .props("borderless autogrow input-style='min-height:140px'")
+                            .classes("w-full text-lg flex-1 text-left")
                         )
-                        .props("borderless autogrow input-style='min-height:260px'")
-                        .classes("w-full text-lg flex-1 text-left")
-                    )
-                    with ui.row().classes("w-full items-center px-2 pb-1 gap-2"):
-                        ui.button(icon="add").props("flat round").classes("text-[#a4aaa5]")
-                        ui.button("Enviar roteiro", icon="description").props(
-                            "flat no-caps"
-                        ).classes("text-[#b8bdb8]")
-                        ui.space()
-                        ui.select(
-                            ["Filme narrativo", "Clipe musical", "Vídeo de produto"],
-                            value="Filme narrativo",
-                        ).props("borderless dense").classes("w-44")
+                        with ui.row().classes("w-full items-center px-2 pb-1 gap-2"):
+                            ui.button(icon="add").props("flat round").classes("text-[#a4aaa5]")
+                            ui.button("Enviar roteiro", icon="description").props(
+                                "flat no-caps"
+                            ).classes("text-[#b8bdb8]")
+                            ui.space()
+                            ui.select(
+                                ["Filme narrativo", "Clipe musical", "Vídeo de produto"],
+                                value="Filme narrativo",
+                            ).props("borderless dense").classes("w-44")
+                            ui.button(
+                                icon="arrow_upward",
+                                on_click=lambda: ui.navigate.to(f"/new?idea={idea.value or ''}"),
+                            ).props("round unelevated").classes("acid-bg")
+                    with ui.row().classes("w-full justify-center gap-2 flex-wrap"):
+                        for suggestion in [
+                            "Uma ficção científica intimista",
+                            "Documentário de marca",
+                            "Terror em 60 segundos",
+                        ]:
+                            ui.button(suggestion).props("outline rounded no-caps").classes(
+                                "border-[#343934] text-[#aeb3ae]"
+                            )
+                with (
+                    ui.column().props("id=projects").classes("w-full max-w-6xl mx-auto gap-4 pt-3")
+                ):
+                    with ui.row().classes("w-full items-center justify-between"):
+                        with ui.column().classes("gap-0"):
+                            ui.label("Projetos recentes").classes(
+                                "brand-type text-2xl md:text-3xl font-bold"
+                            )
+                            ui.label("Continue de onde parou ou comece uma nova produção.").classes(
+                                "text-sm text-[#7f8580]"
+                            )
                         ui.button(
-                            icon="arrow_upward",
-                            on_click=lambda: ui.navigate.to(f"/new?idea={idea.value or ''}"),
-                        ).props("round unelevated").classes("acid-bg")
-                with ui.row().classes("justify-center gap-2"):
-                    for suggestion in [
-                        "Uma ficção científica intimista",
-                        "Documentário de marca",
-                        "Terror em 60 segundos",
-                    ]:
-                        ui.button(suggestion).props("outline rounded no-caps").classes(
-                            "border-[#343934] text-[#aeb3ae]"
-                        )
-            with ui.column().props("id=projects").classes("w-full max-w-6xl mx-auto gap-4 pt-10"):
-                with ui.row().classes("w-full items-center justify-between"):
-                    ui.label("Projetos recentes").classes("brand-type text-3xl font-bold")
-                    ui.button(
-                        "Novo projeto", icon="add", on_click=lambda: ui.navigate.to("/new")
-                    ).props("flat no-caps").classes("acid")
-                with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"):
-                    for project in projects:
+                            "Novo projeto", icon="add", on_click=lambda: ui.navigate.to("/new")
+                        ).props("flat no-caps").classes("acid")
+                    if not projects:
                         with (
                             ui.element("div")
-                            .classes("entity-card rounded-2xl overflow-hidden cursor-pointer")
-                            .on(
-                                "click",
-                                lambda p=project.id: ui.navigate.to(f"/projects/{p}/script"),
+                            .classes(
+                                "w-full border border-dashed border-[#363b36] rounded-2xl min-h-48 flex flex-col items-center justify-center cursor-pointer text-[#969c97] bg-[#0d100e]"
                             )
+                            .on("click", lambda: ui.navigate.to("/new"))
                         ):
-                            with ui.element("div").classes(
-                                "visual-placeholder aspect-video p-5 flex items-end"
+                            ui.icon("add_circle_outline").classes("text-4xl acid")
+                            ui.label("Crie seu primeiro projeto").classes(
+                                "mt-3 text-lg font-semibold text-[#d7dbd7]"
+                            )
+                            ui.label(
+                                "Sua história, personagens e storyboards aparecerão aqui."
+                            ).classes("mt-1 text-sm text-[#747a75]")
+                    else:
+                        with ui.grid().classes(
+                            "w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                        ):
+                            for project in projects:
+                                with (
+                                    ui.element("div")
+                                    .classes(
+                                        "entity-card rounded-2xl overflow-hidden cursor-pointer"
+                                    )
+                                    .on(
+                                        "click",
+                                        lambda p=project.id: ui.navigate.to(
+                                            f"/projects/{p}/script"
+                                        ),
+                                    )
+                                ):
+                                    with ui.element("div").classes(
+                                        "visual-placeholder aspect-video p-5 flex items-end"
+                                    ):
+                                        ui.icon("play_circle").classes("text-4xl acid")
+                                    with ui.column().classes("p-4 gap-1"):
+                                        ui.label(project.title).classes(
+                                            "brand-type text-xl font-bold"
+                                        )
+                                        ui.label(
+                                            project.description or "Projeto em desenvolvimento"
+                                        ).classes("text-sm text-[#8d938e] line-clamp-2")
+                            with (
+                                ui.element("div")
+                                .classes(
+                                    "border border-dashed border-[#363b36] rounded-2xl min-h-52 flex flex-col items-center justify-center cursor-pointer text-[#969c97]"
+                                )
+                                .on("click", lambda: ui.navigate.to("/new"))
                             ):
-                                ui.icon("play_circle").classes("text-4xl acid")
-                            with ui.column().classes("p-4 gap-1"):
-                                ui.label(project.title).classes("brand-type text-xl font-bold")
-                                ui.label(
-                                    project.description or "Projeto em desenvolvimento"
-                                ).classes("text-sm text-[#8d938e] line-clamp-2")
-                    with (
-                        ui.element("div")
-                        .classes(
-                            "border border-dashed border-[#363b36] rounded-2xl min-h-52 flex flex-col items-center justify-center cursor-pointer text-[#969c97]"
+                                ui.icon("add_circle_outline").classes("text-4xl acid")
+                                ui.label("Criar novo projeto").classes("mt-2 font-semibold")
+
+    @ui.page("/settings")
+    async def settings_page() -> None:
+        _body_style()
+        current = get_settings()
+        _home_sidebar()
+        with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
+            with ui.column().classes("w-full max-w-5xl mx-auto px-6 py-8 gap-7"):
+                with ui.row().classes("w-full items-center justify-between"):
+                    with ui.column().classes("gap-1"):
+                        ui.label("Configurações").classes("brand-type text-4xl font-bold")
+                        ui.label("Gerencie seu perfil e os modelos usados pelo estúdio.").classes(
+                            "text-[#8f9590]"
                         )
-                        .on("click", lambda: ui.navigate.to("/new"))
-                    ):
-                        ui.icon("add_circle_outline").classes("text-4xl acid")
-                        ui.label("Criar novo projeto").classes("mt-2 font-semibold")
+                    ui.button(
+                        "Voltar", icon="arrow_back", on_click=lambda: ui.navigate.to("/")
+                    ).props("flat no-caps")
+
+                with (
+                    ui.tabs()
+                    .classes("text-[#989e99]")
+                    .props("no-caps active-color=lime-3 indicator-color=lime-3") as settings_tabs
+                ):
+                    profile_tab = ui.tab("Perfil", icon="person")
+                    ai_tab = ui.tab("Inteligência artificial", icon="auto_awesome")
+                with ui.tab_panels(settings_tabs, value=profile_tab).classes(
+                    "w-full bg-transparent p-0"
+                ):
+                    with ui.tab_panel(profile_tab).classes("px-0"):
+                        with ui.element("div").classes("entity-card rounded-2xl p-6"):
+                            ui.label("Dados do usuário").classes("text-xl font-semibold")
+                            ui.label("Informações exibidas no seu espaço de trabalho.").classes(
+                                "text-sm text-[#858b86] mb-4"
+                            )
+
+                            @ui.refreshable
+                            def avatar_preview() -> None:
+                                with ui.row().classes("items-center gap-4 mb-5"):
+                                    _user_avatar(size="80px", navigate=False)
+                                    with ui.column().classes("gap-1"):
+                                        ui.label("Foto do perfil").classes("font-semibold")
+                                        ui.label("JPG, PNG ou WebP · máximo de 5 MB").classes(
+                                            "text-xs text-[#7f8580]"
+                                        )
+
+                            avatar_preview()
+
+                            async def upload_avatar(event: Any) -> None:
+                                suffix = Path(event.file.name).suffix.lower()
+                                if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
+                                    ui.notify("Formato de imagem não permitido.", color="negative")
+                                    return
+                                content = await event.file.read()
+                                target = await asyncio.to_thread(
+                                    _save_avatar_file, event.file.name, content
+                                )
+                                save_preferences({"USER_AVATAR_PATH": target.as_posix()})
+                                avatar_preview.refresh()
+                                ui.notify("Foto do perfil atualizada.", color="positive")
+
+                            ui.upload(
+                                label="Escolher foto",
+                                on_upload=upload_avatar,
+                                on_rejected=lambda: ui.notify(
+                                    "A imagem deve ter no máximo 5 MB.", color="warning"
+                                ),
+                                auto_upload=True,
+                                max_file_size=5_000_000,
+                            ).props("accept=.jpg,.jpeg,.png,.webp flat bordered").classes(
+                                "w-full mb-5"
+                            )
+
+                            display_name = (
+                                ui.input("Nome", value=current.user_display_name)
+                                .props("outlined")
+                                .classes("w-full")
+                            )
+                            email = (
+                                ui.input("E-mail", value=current.user_email)
+                                .props("outlined type=email")
+                                .classes("w-full mt-3")
+                            )
+
+                            def save_profile() -> None:
+                                save_preferences(
+                                    {
+                                        "USER_DISPLAY_NAME": display_name.value or "",
+                                        "USER_EMAIL": email.value or "",
+                                    }
+                                )
+                                ui.notify("Perfil salvo.", color="positive")
+
+                            ui.button("Salvar perfil", icon="save", on_click=save_profile).props(
+                                "unelevated no-caps"
+                            ).classes("acid-bg rounded-xl mt-5")
+                    with ui.tab_panel(ai_tab).classes("px-0"):
+                        with ui.element("div").classes("entity-card rounded-2xl p-6"):
+                            ui.label("OpenRouter").classes("text-xl font-semibold")
+                            ui.label(
+                                "Conecte sua conta e escolha modelos diferentes para cada mídia."
+                            ).classes("text-sm text-[#858b86] mb-4")
+                            api_key = (
+                                ui.input(
+                                    "Chave da API",
+                                    placeholder=(
+                                        "Chave configurada — digite apenas para substituir"
+                                        if current.openrouter_api_key
+                                        else "sk-or-v1-..."
+                                    ),
+                                    password=True,
+                                    password_toggle_button=True,
+                                )
+                                .props("outlined")
+                                .classes("w-full")
+                            )
+                            text_model = (
+                                ui.select(
+                                    [current.openrouter_default_model],
+                                    label="Modelo de texto",
+                                    value=current.openrouter_default_model,
+                                    with_input=True,
+                                )
+                                .props("outlined use-input")
+                                .classes("w-full mt-3")
+                            )
+                            image_model = (
+                                ui.select(
+                                    [current.openrouter_image_model],
+                                    label="Modelo de imagem",
+                                    value=current.openrouter_image_model,
+                                    with_input=True,
+                                )
+                                .props("outlined use-input")
+                                .classes("w-full mt-3")
+                            )
+                            video_model = (
+                                ui.select(
+                                    [current.openrouter_video_model],
+                                    label="Modelo de vídeo",
+                                    value=current.openrouter_video_model,
+                                    with_input=True,
+                                )
+                                .props("outlined use-input")
+                                .classes("w-full mt-3")
+                            )
+
+                            async def load_catalog() -> None:
+                                key = api_key.value or current.openrouter_api_key
+                                if not key:
+                                    ui.notify("Informe uma chave OpenRouter.", color="warning")
+                                    return
+                                try:
+                                    text_items, image_items, video_items = await asyncio.gather(
+                                        openrouter_models(key, "text"),
+                                        openrouter_models(key, "image"),
+                                        openrouter_models(key, "video"),
+                                    )
+                                    text_model.options = {m["id"]: m["name"] for m in text_items}
+                                    image_model.options = {m["id"]: m["name"] for m in image_items}
+                                    video_model.options = {m["id"]: m["name"] for m in video_items}
+                                    text_model.update()
+                                    image_model.update()
+                                    video_model.update()
+                                    ui.notify("Catálogo OpenRouter atualizado.", color="positive")
+                                except Exception as exc:
+                                    ui.notify(
+                                        f"Não foi possível carregar modelos: {exc}",
+                                        color="negative",
+                                    )
+
+                            def save_ai() -> None:
+                                values = {
+                                    "OPENROUTER_DEFAULT_MODEL": text_model.value or "",
+                                    "OPENROUTER_IMAGE_MODEL": image_model.value or "",
+                                    "OPENROUTER_VIDEO_MODEL": video_model.value or "",
+                                }
+                                if api_key.value:
+                                    values["OPENROUTER_API_KEY"] = api_key.value
+                                save_preferences(values)
+                                ui.notify("Configurações de IA salvas.", color="positive")
+
+                            with ui.row().classes("mt-5 gap-3"):
+                                ui.button(
+                                    "Carregar modelos", icon="sync", on_click=load_catalog
+                                ).props("outline no-caps")
+                                ui.button(
+                                    "Salvar configurações", icon="save", on_click=save_ai
+                                ).props("unelevated no-caps").classes("acid-bg rounded-xl")
 
     @ui.page("/new")
     async def new_project() -> None:
         _body_style()
+        ai_defaults = get_settings()
         _render_header(settings.app_name, "Novo projeto guiado")
         form: dict[str, Any] = {}
         with ui.column().classes("w-full max-w-5xl mx-auto px-6 py-6 gap-5"):
@@ -1289,8 +1556,12 @@ def register_ui_pages() -> None:
                         min=1,
                         max=10,
                     )
-                    image_model = ui.input("Modelo de imagem", value="mock-image")
-                    video_model = ui.input("Modelo de video", value="mock-video")
+                    image_model = ui.input(
+                        "Modelo de imagem", value=ai_defaults.openrouter_image_model
+                    )
+                    video_model = ui.input(
+                        "Modelo de video", value=ai_defaults.openrouter_video_model
+                    )
                 constraints = ui.textarea(
                     "Restricoes",
                     value="evitar violencia grafica\nmanter tom familiar",
