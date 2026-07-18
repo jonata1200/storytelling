@@ -40,11 +40,11 @@ from app.production.service import (
     WORKFLOW_MODES,
     get_or_create_production_settings,
     update_production_settings,
-    workflow_mode_label,
 )
 from app.projects.models import Artifact, Project
+from app.projects.repository import ProjectRepository
 from app.projects.schemas import ProjectCreate
-from app.projects.service import create_project
+from app.projects.service import create_project, delete_project, list_projects, rename_project
 from app.quality.models import ContinuityIssue, QualityCheck
 from app.quality.service import run_quality_check
 from app.storyboards.models import (
@@ -260,6 +260,10 @@ def _body_style() -> None:
           body:not(.body--dark) .nav-active .q-icon { color:#ffffff!important; opacity:1!important; }
           body:not(.body--dark) .nav-locked,
           body:not(.body--dark) .nav-locked:hover { color:#6aa4d8!important; background:transparent!important; border-color:transparent!important; }
+          .idea-badge-genre { background:#243342!important; color:#d9efff!important; }
+          .idea-badge-emotion { background:#2f3321!important; color:#f1ff9f!important; }
+          body:not(.body--dark) .idea-badge-genre { background:#d7ebff!important; color:#164b77!important; }
+          body:not(.body--dark) .idea-badge-emotion { background:#eaf5c6!important; color:#40540e!important; }
           .entity-card { background:#151816; border:1px solid #252a26; transition:.2s ease; }
           .entity-card:hover { transform:translateY(-2px); border-color:#555d4c; }
           .visual-placeholder { background:radial-gradient(circle at 70% 15%,#4e5531 0,#24281e 32%,#141614 70%); }
@@ -333,8 +337,7 @@ async def _latest_many(
 async def _project_cards() -> list[Project]:
     try:
         async with AsyncSessionLocal() as session:
-            result = await session.execute(select(Project).order_by(Project.created_at.desc()))
-            return list(result.scalars())
+            return await list_projects(session)
     except Exception:
         return []
 
@@ -364,7 +367,7 @@ async def _dashboard_metrics() -> dict[str, str]:
 
 async def _project_summary(project_id: UUID) -> dict[str, Any] | None:
     async with AsyncSessionLocal() as session:
-        project = await session.get(Project, project_id)
+        project = await ProjectRepository(session).get_project(project_id)
         if project is None:
             return None
         await ensure_default_model_settings(session, project_id)
@@ -442,6 +445,60 @@ def _step_ready(step_key: str, counts: dict[str, int]) -> bool:
         "quality": counts["qa_issues"] >= 0,
     }
     return readiness[step_key]
+
+
+def _render_project_card(project: Project, redirect_to: str) -> None:
+    with ui.dialog() as rename_dialog, ui.card().classes("entity-card rounded-2xl p-6 min-w-96"):
+        ui.label("Renomear projeto").classes("brand-type text-2xl font-bold")
+        name_input = ui.input("Nome do projeto", value=project.title).props("outlined").classes(
+            "w-full"
+        )
+        with ui.row().classes("w-full justify-end gap-2 mt-2"):
+            ui.button("Cancelar", on_click=rename_dialog.close).props("flat no-caps")
+            ui.button(
+                "Salvar",
+                icon="save",
+                on_click=lambda p=project.id: _rename_project_from_ui(
+                    p, str(name_input.value or ""), redirect_to
+                ),
+            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+
+    with ui.dialog() as delete_dialog, ui.card().classes("entity-card rounded-2xl p-6 min-w-96"):
+        ui.label("Excluir projeto?").classes("brand-type text-2xl font-bold")
+        ui.label(
+            f'O projeto "{project.title}" será removido da lista de projetos.'
+        ).classes("text-sm text-[#8d938e]")
+        with ui.row().classes("w-full justify-end gap-2 mt-2"):
+            ui.button("Cancelar", on_click=delete_dialog.close).props("flat no-caps")
+            ui.button(
+                "Excluir",
+                icon="delete",
+                on_click=lambda p=project.id: _delete_project_from_ui(p, redirect_to),
+            ).props("unelevated no-caps").classes("bg-red-600 text-white rounded-xl")
+
+    with (
+        ui.element("article")
+        .classes("entity-card rounded-2xl overflow-hidden cursor-pointer")
+        .on("click", lambda p=project.id: ui.navigate.to(f"/projects/{p}/script"))
+    ):
+        with ui.element("div").classes("visual-placeholder aspect-video p-5 flex items-end"):
+            ui.icon("play_circle").classes("text-4xl acid")
+        with ui.column().classes("p-4 gap-2"):
+            ui.label(project.title).classes("brand-type text-xl font-bold")
+            ui.label(project.description or "Projeto em desenvolvimento").classes(
+                "text-sm text-[#8d938e] line-clamp-2"
+            )
+            with ui.row().classes("gap-2 mt-2 flex-wrap"):
+                ui.button("Renomear", icon="edit", on_click=rename_dialog.open).props(
+                    "flat no-caps"
+                ).classes("text-[#aeb3ae]").on(
+                    "click.stop", lambda: None
+                )
+                ui.button("Excluir", icon="delete", on_click=delete_dialog.open).props(
+                    "flat no-caps"
+                ).classes("text-red-300").on(
+                    "click.stop", lambda: None
+                )
 
 
 def _workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool, str]:
@@ -617,6 +674,32 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
     await _create_project_from_form(form)
 
 
+async def _rename_project_from_ui(project_id: UUID, title: str, redirect_to: str) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            project = await rename_project(session, project_id, title)
+        if project is None:
+            ui.notify("Projeto não encontrado.", color="negative")
+            return
+        ui.notify("Projeto renomeado.", color="positive")
+        ui.navigate.to(redirect_to)
+    except Exception as exc:
+        ui.notify(f"Não foi possível renomear o projeto: {exc}", color="negative")
+
+
+async def _delete_project_from_ui(project_id: UUID, redirect_to: str) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            deleted = await delete_project(session, project_id)
+        if not deleted:
+            ui.notify("Projeto não encontrado.", color="negative")
+            return
+        ui.notify("Projeto excluído.", color="positive")
+        ui.navigate.to(redirect_to)
+    except Exception as exc:
+        ui.notify(f"Não foi possível excluir o projeto: {exc}", color="negative")
+
+
 async def _save_model_setting(
     project_id: UUID, task: str, provider: str | None, model: str | None
 ) -> None:
@@ -644,7 +727,7 @@ async def _save_production_setup(project_id: UUID, payload: dict[str, Any]) -> N
 async def _create_next_episode(project_id: UUID) -> None:
     try:
         async with AsyncSessionLocal() as session:
-            project = await session.get(Project, project_id)
+            project = await ProjectRepository(session).get_project(project_id)
             briefing = await _latest(session, Briefing, project_id)
             settings = await get_or_create_production_settings(session, project_id)
             if project is None or briefing is None:
@@ -1436,8 +1519,6 @@ def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
 
 
 def register_ui_pages() -> None:
-    settings = get_settings()
-
     @ui.page("/dashboard", response_timeout=15)
     async def dashboard() -> None:
         _body_style()
@@ -1450,7 +1531,6 @@ def register_ui_pages() -> None:
                 ):
                     _studio_logo()
                     with ui.row().classes("items-center gap-3"):
-                        ui.label("Estúdio pessoal").classes("text-sm text-[#939994]")
                         _theme_toggle()
                         _user_avatar(size="48px")
                 with ui.column().classes("w-full max-w-4xl mx-auto items-center text-center gap-4"):
@@ -1503,29 +1583,7 @@ def register_ui_pages() -> None:
                             "w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
                         ):
                             for project in projects:
-                                with (
-                                    ui.element("div")
-                                    .classes(
-                                        "entity-card rounded-2xl overflow-hidden cursor-pointer"
-                                    )
-                                    .on(
-                                        "click",
-                                        lambda p=project.id: ui.navigate.to(
-                                            f"/projects/{p}/script"
-                                        ),
-                                    )
-                                ):
-                                    with ui.element("div").classes(
-                                        "visual-placeholder aspect-video p-5 flex items-end"
-                                    ):
-                                        ui.icon("play_circle").classes("text-4xl acid")
-                                    with ui.column().classes("p-4 gap-1"):
-                                        ui.label(project.title).classes(
-                                            "brand-type text-xl font-bold"
-                                        )
-                                        ui.label(
-                                            project.description or "Projeto em desenvolvimento"
-                                        ).classes("text-sm text-[#8d938e] line-clamp-2")
+                                _render_project_card(project, "/dashboard")
                             with (
                                 ui.element("div")
                                 .classes(
@@ -1574,23 +1632,7 @@ def register_ui_pages() -> None:
                         "w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
                     ):
                         for project in projects:
-                            with (
-                                ui.element("article")
-                                .classes("entity-card rounded-2xl overflow-hidden cursor-pointer")
-                                .on(
-                                    "click",
-                                    lambda p=project.id: ui.navigate.to(f"/projects/{p}/script"),
-                                )
-                            ):
-                                with ui.element("div").classes(
-                                    "visual-placeholder aspect-video p-5 flex items-end"
-                                ):
-                                    ui.icon("play_circle").classes("text-4xl acid")
-                                with ui.column().classes("p-4 gap-1"):
-                                    ui.label(project.title).classes("brand-type text-xl font-bold")
-                                    ui.label(
-                                        project.description or "Projeto em desenvolvimento"
-                                    ).classes("text-sm text-[#8d938e] line-clamp-2")
+                            _render_project_card(project, "/projects")
 
     @ui.page("/", response_timeout=15)
     @ui.page("/ideas", response_timeout=15)
@@ -1732,12 +1774,14 @@ def register_ui_pages() -> None:
                                     "brand-type text-2xl font-bold mt-2"
                                 )
                                 with ui.row().classes("gap-2 mt-3 flex-wrap"):
-                                    ui.badge(str(idea.get("genre") or "Genero sugerido")).classes(
-                                        "bg-[#243342] text-[#bfe2ff]"
+                                    ui.label(str(idea.get("genre") or "Genero sugerido")).classes(
+                                        "idea-badge-genre rounded-md px-2 py-0.5 text-xs font-medium"
                                     )
-                                    ui.badge(
+                                    ui.label(
                                         str(idea.get("primary_emotion") or "Emocao sugerida")
-                                    ).classes("bg-[#2f3321] text-[#e6f59b]")
+                                    ).classes(
+                                        "idea-badge-emotion rounded-md px-2 py-0.5 text-xs font-medium"
+                                    )
                                 if idea.get("theme"):
                                     ui.label(f"Tema: {idea['theme']}").classes(
                                         "text-xs text-[#9aa29b] mt-3"
@@ -1786,12 +1830,14 @@ def register_ui_pages() -> None:
                                     "brand-type text-2xl font-bold mt-2"
                                 )
                                 with ui.row().classes("gap-2 mt-3 flex-wrap"):
-                                    ui.badge(str(idea.get("genre") or "Genero sugerido")).classes(
-                                        "bg-[#243342] text-[#bfe2ff]"
+                                    ui.label(str(idea.get("genre") or "Genero sugerido")).classes(
+                                        "idea-badge-genre rounded-md px-2 py-0.5 text-xs font-medium"
                                     )
-                                    ui.badge(
+                                    ui.label(
                                         str(idea.get("primary_emotion") or "Emocao sugerida")
-                                    ).classes("bg-[#2f3321] text-[#e6f59b]")
+                                    ).classes(
+                                        "idea-badge-emotion rounded-md px-2 py-0.5 text-xs font-medium"
+                                    )
                                 if idea.get("theme"):
                                     ui.label(f"Tema: {idea['theme']}").classes(
                                         "text-xs text-[#9aa29b] mt-3"
@@ -1831,9 +1877,6 @@ def register_ui_pages() -> None:
                         ui.label("Gerencie seu perfil e os modelos usados pelo estúdio.").classes(
                             "text-[#8f9590]"
                         )
-                    ui.button(
-                        "Voltar", icon="arrow_back", on_click=lambda: ui.navigate.to("/")
-                    ).props("flat no-caps")
                     _theme_toggle()
 
                 with (
@@ -2019,83 +2062,6 @@ def register_ui_pages() -> None:
     async def project_workspace(project_id: str) -> None:
         ui.navigate.to(f"/projects/{project_id}/script")
         return
-        _body_style()
-        project_uuid = UUID(project_id)
-        summary = await _project_summary(project_uuid)
-        if summary is None:
-            _render_header(settings.app_name, "Projeto nao encontrado")
-            ui.label("Projeto nao encontrado.").classes("p-6")
-            return
-
-        project: Project = summary["project"]
-        production_settings: ProjectProductionSettings = summary["production_settings"]
-        counts: dict[str, int] = summary["counts"]
-        _render_header(
-            project.title,
-            f"{workflow_mode_label(production_settings.workflow_mode)} · "
-            f"{production_settings.aspect_ratio} · {production_settings.video_resolution}",
-        )
-
-        with ui.column().classes("w-full max-w-7xl mx-auto px-6 py-6 gap-6"):
-            with ui.row().classes("w-full gap-3"):
-                for label, value in [
-                    ("Status", project.status.value),
-                    ("Workflow", workflow_mode_label(production_settings.workflow_mode)),
-                    ("Custo estimado", f"USD {summary['cost_total']}"),
-                    (
-                        "Score QA",
-                        str(summary["quality"].score) if summary["quality"] else "sem check",
-                    ),
-                    ("Export", summary["export"].status if summary["export"] else "pendente"),
-                ]:
-                    with ui.card().classes(_card_classes("flex-1")):
-                        ui.label(label).classes("text-xs uppercase text-slate-400")
-                        ui.label(value).classes("text-xl font-semibold")
-
-            _render_director_cockpit(production_settings, counts)
-
-            with ui.row().classes("w-full gap-4 items-start"):
-                with ui.column().classes("flex-1 gap-4"):
-                    _render_core_setup(project_uuid, production_settings)
-                    ui.label("Passos de criacao").classes("text-2xl font-bold")
-                    with ui.grid(columns=3).classes("w-full gap-3"):
-                        for step in PRODUCTION_STEPS:
-                            _render_step_card(project_uuid, step, counts)
-                    _render_asset_canvas(summary)
-                    _render_storyboard_grid(summary["frames"])
-                    _render_timeline_strip(summary["timeline"], summary["timeline_items"])
-
-                with ui.column().classes("w-96 gap-4"):
-                    _render_model_settings(project_uuid, summary["model_settings"])
-                    ui.button(
-                        "Criar proximo episodio",
-                        icon="queue_play_next",
-                        on_click=lambda: _create_next_episode(project_uuid),
-                    ).classes(_button_classes())
-
-                    ui.label("Resumo do projeto").classes("text-2xl font-bold")
-                    with ui.card().classes(_card_classes("w-full")):
-                        for label, key in [
-                            ("Ideias", "ideas"),
-                            ("Story Bible", "bibles"),
-                            ("Roteiros", "scripts"),
-                            ("Cenas", "scenes"),
-                            ("Planos", "shots"),
-                            ("Referencias visuais", "visual_refs"),
-                            ("Storyboards", "frames"),
-                            ("Clipes", "clips"),
-                            ("Audios", "audio"),
-                            ("Legendas", "subtitles"),
-                            ("Exports", "exports"),
-                        ]:
-                            with ui.row().classes("w-full justify-between"):
-                                ui.label(label).classes("text-sm text-slate-300")
-                                ui.label(str(counts[key])).classes("font-mono text-cyan-200")
-                        ui.separator().classes("bg-slate-800")
-                        ui.link(
-                            "Ver observabilidade JSON",
-                            f"/api/v1/quality/projects/{project_id}/observability",
-                        ).classes("text-cyan-200")
 
     @ui.page("/projects/{project_id}/{section}", response_timeout=15)
     async def project_studio(project_id: str, section: str) -> None:

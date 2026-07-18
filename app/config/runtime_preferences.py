@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 
 PREFERENCE_KEYS = {
     "OPENROUTER_API_KEY",
@@ -19,9 +20,12 @@ PREFERENCES_PATH = Path(".runtime/preferences.json")
 def load_runtime_preferences(path: Path = PREFERENCES_PATH) -> dict[str, str]:
     if not path.is_file():
         return {}
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
     if not isinstance(payload, dict):
-        raise ValueError("Runtime preferences must be a JSON object")
+        return {}
     return {
         str(key).lower(): str(value)
         for key, value in payload.items()

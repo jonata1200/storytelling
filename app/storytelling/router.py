@@ -21,6 +21,7 @@ from app.storytelling.schemas import (
     StoryIdeaRead,
 )
 from app.storytelling.service import (
+    GenerationOutputError,
     create_briefing,
     generate_scenes_and_shots,
     generate_script,
@@ -57,7 +58,13 @@ async def post_generate_ideas(
     project_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[StoryIdeaRead]:
-    ideas = await generate_story_ideas(session, project_id)
+    try:
+        ideas = await generate_story_ideas(session, project_id)
+    except GenerationOutputError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
     if ideas is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -81,7 +88,13 @@ async def post_generate_story_bible(
     payload: GenerateStoryBibleRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> StoryBibleRead:
-    story_bible = await generate_story_bible(session, project_id, payload.story_idea_id)
+    try:
+        story_bible = await generate_story_bible(session, project_id, payload.story_idea_id)
+    except GenerationOutputError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
     if story_bible is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -96,7 +109,13 @@ async def post_generate_script(
     payload: GenerateScriptRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ScriptRead:
-    script = await generate_script(session, project_id, payload.story_bible_id)
+    try:
+        script = await generate_script(session, project_id, payload.story_bible_id)
+    except GenerationOutputError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
     if script is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -111,7 +130,13 @@ async def post_generate_scenes(
     payload: GenerateScenesRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[SceneRead]:
-    scenes = await generate_scenes_and_shots(session, project_id, payload.script_id)
+    try:
+        scenes = await generate_scenes_and_shots(session, project_id, payload.script_id)
+    except GenerationOutputError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
     if scenes is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ArtifactStatus, ProjectStatus
 from app.costs.models import CostEntry
-from app.projects.models import Artifact, Project
+from app.projects.models import Artifact
 from app.projects.repository import ProjectRepository
 from app.quality.continuity import (
     build_initial_shot_state,
@@ -146,6 +146,9 @@ async def build_continuity_ledger(
 async def list_open_continuity_issues(
     session: AsyncSession, project_id: UUID
 ) -> list[ContinuityIssue]:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return []
     result = await session.execute(
         select(ContinuityIssue)
         .where(ContinuityIssue.project_id == project_id, ContinuityIssue.accepted.is_(False))
@@ -157,6 +160,9 @@ async def list_open_continuity_issues(
 async def accept_continuity_issue(
     session: AsyncSession, project_id: UUID, issue_id: UUID, reason: str
 ) -> ContinuityIssue | None:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return None
     issue = await session.get(ContinuityIssue, issue_id)
     if issue is None or issue.project_id != project_id:
         return None
@@ -267,7 +273,7 @@ async def run_quality_check(session: AsyncSession, project_id: UUID) -> QualityC
 
 
 async def observability_summary(session: AsyncSession, project_id: UUID) -> dict | None:
-    project = await session.get(Project, project_id)
+    project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         return None
 

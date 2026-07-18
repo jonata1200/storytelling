@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_basic_auth
 from app.database.session import get_session
+from app.projects.repository import ProjectRepository
 from app.visual_bible.models import Character, Location, Prop
 from app.visual_bible.schemas import (
     CharacterRead,
@@ -56,6 +57,8 @@ async def get_characters(
     project_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[CharacterRead]:
+    if await ProjectRepository(session).get_project(project_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     result = await session.execute(
         select(Character).where(Character.project_id == project_id).order_by(Character.created_at)
     )
@@ -67,6 +70,8 @@ async def get_locations(
     project_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[LocationRead]:
+    if await ProjectRepository(session).get_project(project_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     result = await session.execute(
         select(Location).where(Location.project_id == project_id).order_by(Location.created_at)
     )
@@ -78,6 +83,8 @@ async def get_props(
     project_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[PropRead]:
+    if await ProjectRepository(session).get_project(project_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     result = await session.execute(
         select(Prop).where(Prop.project_id == project_id).order_by(Prop.created_at)
     )

@@ -23,6 +23,43 @@ from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
 
 
+class GenerationOutputError(RuntimeError):
+    pass
+
+
+def _required_mapping(payload: object, context: str) -> dict:
+    if not isinstance(payload, dict):
+        raise GenerationOutputError(f"{context}: expected JSON object")
+    return payload
+
+
+def _required_list(payload: dict, key: str, context: str) -> list:
+    value = payload.get(key)
+    if not isinstance(value, list) or not value:
+        raise GenerationOutputError(f"{context}: missing non-empty list '{key}'")
+    return value
+
+
+def _required_str(payload: dict, key: str, context: str) -> str:
+    value = payload.get(key)
+    if value is None:
+        raise GenerationOutputError(f"{context}: missing field '{key}'")
+    text = str(value).strip()
+    if not text:
+        raise GenerationOutputError(f"{context}: empty field '{key}'")
+    return text
+
+
+def _required_int(payload: dict, key: str, context: str) -> int:
+    value = payload.get(key)
+    if value is None:
+        raise GenerationOutputError(f"{context}: missing integer field '{key}'")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise GenerationOutputError(f"{context}: invalid integer field '{key}'") from exc
+
+
 async def _create_artifact(
     session: AsyncSession,
     project_id: UUID,
@@ -137,25 +174,33 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
         session, provider, project_id, "generate_story_ideas", variables, model=model
     )
     ideas: list[StoryIdea] = []
-    for item in result.content["ideas"]:
+    content = _required_mapping(result.content, "generate_story_ideas")
+    for index, raw_item in enumerate(_required_list(content, "ideas", "generate_story_ideas"), 1):
+        item = _required_mapping(raw_item, f"generate_story_ideas.ideas[{index}]")
         artifact = await _create_artifact(
             session,
             project_id,
             ArtifactType.STORY_IDEA,
-            str(item["title"]),
+            _required_str(item, "title", f"generate_story_ideas.ideas[{index}]"),
             item,
         )
         await _add_dependency(session, briefing.artifact_id, artifact.id)
         idea = StoryIdea(
             project_id=project_id,
             artifact_id=artifact.id,
-            title=str(item["title"]),
-            hook=str(item["hook"]),
-            premise=str(item["premise"]),
-            protagonist=str(item["protagonist"]),
-            retention_potential=int(item["retention_potential"]),
-            cliche_risk=int(item["cliche_risk"]),
-            production_complexity=int(item["production_complexity"]),
+            title=_required_str(item, "title", f"generate_story_ideas.ideas[{index}]"),
+            hook=_required_str(item, "hook", f"generate_story_ideas.ideas[{index}]"),
+            premise=_required_str(item, "premise", f"generate_story_ideas.ideas[{index}]"),
+            protagonist=_required_str(
+                item, "protagonist", f"generate_story_ideas.ideas[{index}]"
+            ),
+            retention_potential=_required_int(
+                item, "retention_potential", f"generate_story_ideas.ideas[{index}]"
+            ),
+            cliche_risk=_required_int(item, "cliche_risk", f"generate_story_ideas.ideas[{index}]"),
+            production_complexity=_required_int(
+                item, "production_complexity", f"generate_story_ideas.ideas[{index}]"
+            ),
             payload=item,
         )
         session.add(idea)
@@ -169,6 +214,9 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
 
 
 async def list_story_ideas(session: AsyncSession, project_id: UUID) -> list[StoryIdea]:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return []
     result = await session.execute(
         select(StoryIdea).where(StoryIdea.project_id == project_id).order_by(StoryIdea.created_at)
     )
@@ -191,17 +239,18 @@ async def generate_story_bible(
     result, _execution = await run_structured_generation(
         session, provider, project_id, "generate_story_bible", variables, model=model
     )
-    payload = result.content
+    payload = _required_mapping(result.content, "generate_story_bible")
+    title = _required_str(payload, "title", "generate_story_bible")
     artifact = await _create_artifact(
-        session, project_id, ArtifactType.STORY_BIBLE, str(payload["title"]), payload
+        session, project_id, ArtifactType.STORY_BIBLE, title, payload
     )
     await _add_dependency(session, idea.artifact_id, artifact.id)
     story_bible = StoryBible(
         project_id=project_id,
         artifact_id=artifact.id,
         story_idea_id=idea.id,
-        title=str(payload["title"]),
-        logline=str(payload["logline"]),
+        title=title,
+        logline=_required_str(payload, "logline", "generate_story_bible"),
         payload=payload,
     )
     session.add(story_bible)
@@ -235,20 +284,23 @@ async def generate_script(
     result, _execution = await run_structured_generation(
         session, provider, project_id, "generate_script", variables, model=model
     )
-    payload = result.content
+    payload = _required_mapping(result.content, "generate_script")
+    title = _required_str(payload, "title", "generate_script")
     artifact = await _create_artifact(
-        session, project_id, ArtifactType.SCRIPT, str(payload["title"]), payload
+        session, project_id, ArtifactType.SCRIPT, title, payload
     )
     await _add_dependency(session, story_bible.artifact_id, artifact.id)
     script = Script(
         project_id=project_id,
         artifact_id=artifact.id,
         story_bible_id=story_bible.id,
-        title=str(payload["title"]),
-        language=str(payload["language"]),
-        target_duration_seconds=int(payload["target_duration_seconds"]),
-        word_count=int(payload["word_count"]),
-        content=str(payload["content"]),
+        title=title,
+        language=_required_str(payload, "language", "generate_script"),
+        target_duration_seconds=_required_int(
+            payload, "target_duration_seconds", "generate_script"
+        ),
+        word_count=_required_int(payload, "word_count", "generate_script"),
+        content=_required_str(payload, "content", "generate_script"),
     )
     session.add(script)
     await session.flush()
@@ -289,12 +341,21 @@ async def generate_scenes_and_shots(
     )
 
     scenes: list[Scene] = []
-    for scene_payload in result.content["scenes"]:
+    content = _required_mapping(result.content, "generate_scenes_and_shots")
+    for scene_index, raw_scene_payload in enumerate(
+        _required_list(content, "scenes", "generate_scenes_and_shots"), 1
+    ):
+        scene_payload = _required_mapping(
+            raw_scene_payload, f"generate_scenes_and_shots.scenes[{scene_index}]"
+        )
+        scene_title = _required_str(
+            scene_payload, "title", f"generate_scenes_and_shots.scenes[{scene_index}]"
+        )
         scene_artifact = await _create_artifact(
             session,
             project_id,
             ArtifactType.SCENE,
-            str(scene_payload["title"]),
+            scene_title,
             scene_payload,
         )
         await _add_dependency(session, script.artifact_id, scene_artifact.id)
@@ -302,20 +363,37 @@ async def generate_scenes_and_shots(
             project_id=project_id,
             artifact_id=scene_artifact.id,
             script_id=script.id,
-            scene_number=int(scene_payload["scene_number"]),
-            title=str(scene_payload["title"]),
-            summary=str(scene_payload["summary"]),
-            duration_seconds=int(scene_payload["duration_seconds"]),
+            scene_number=_required_int(
+                scene_payload, "scene_number", f"generate_scenes_and_shots.scenes[{scene_index}]"
+            ),
+            title=scene_title,
+            summary=_required_str(
+                scene_payload, "summary", f"generate_scenes_and_shots.scenes[{scene_index}]"
+            ),
+            duration_seconds=_required_int(
+                scene_payload,
+                "duration_seconds",
+                f"generate_scenes_and_shots.scenes[{scene_index}]",
+            ),
             payload=scene_payload,
         )
         session.add(scene)
         await session.flush()
-        for shot_payload in scene_payload["shots"]:
+        for shot_index, raw_shot_payload in enumerate(
+            _required_list(
+                scene_payload, "shots", f"generate_scenes_and_shots.scenes[{scene_index}]"
+            ),
+            1,
+        ):
+            shot_context = (
+                f"generate_scenes_and_shots.scenes[{scene_index}].shots[{shot_index}]"
+            )
+            shot_payload = _required_mapping(raw_shot_payload, shot_context)
             shot_artifact = await _create_artifact(
                 session,
                 project_id,
                 ArtifactType.SHOT,
-                f"{scene.title} - Plano {shot_payload['shot_number']}",
+                f"{scene.title} - Plano {_required_int(shot_payload, 'shot_number', shot_context)}",
                 shot_payload,
             )
             await _add_dependency(session, scene_artifact.id, shot_artifact.id)
@@ -324,15 +402,17 @@ async def generate_scenes_and_shots(
                     project_id=project_id,
                     artifact_id=shot_artifact.id,
                     scene_id=scene.id,
-                    shot_number=int(shot_payload["shot_number"]),
-                    duration_seconds=int(shot_payload["duration_seconds"]),
-                    narration_text=str(shot_payload["narration_text"]),
-                    dialogue_text=str(shot_payload["dialogue_text"]),
-                    action=str(shot_payload["action"]),
-                    emotion=str(shot_payload["emotion"]),
-                    visual_composition=str(shot_payload["visual_composition"]),
-                    camera_movement=str(shot_payload["camera_movement"]),
-                    generation_type=str(shot_payload["generation_type"]),
+                    shot_number=_required_int(shot_payload, "shot_number", shot_context),
+                    duration_seconds=_required_int(shot_payload, "duration_seconds", shot_context),
+                    narration_text=_required_str(shot_payload, "narration_text", shot_context),
+                    dialogue_text=str(shot_payload.get("dialogue_text") or ""),
+                    action=_required_str(shot_payload, "action", shot_context),
+                    emotion=_required_str(shot_payload, "emotion", shot_context),
+                    visual_composition=_required_str(
+                        shot_payload, "visual_composition", shot_context
+                    ),
+                    camera_movement=_required_str(shot_payload, "camera_movement", shot_context),
+                    generation_type=_required_str(shot_payload, "generation_type", shot_context),
                     payload=shot_payload,
                 )
             )

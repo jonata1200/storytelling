@@ -82,9 +82,12 @@ def delete_generated_idea(idea_id: str, path: Path = GENERATED_IDEAS_PATH) -> No
 def _load_ideas(path: Path, label: str) -> list[dict[str, Any]]:
     if not path.is_file():
         return []
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return []
     if not isinstance(payload, list):
-        raise ValueError(f"{label} payload must be a JSON array")
+        return []
     return [_normalize_idea(item) for item in payload if isinstance(item, dict)]
 
 

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,37 @@ async def create_project(session: AsyncSession, data: ProjectCreate) -> Project:
 
 async def list_projects(session: AsyncSession) -> list[Project]:
     return await ProjectRepository(session).list_projects()
+
+
+async def rename_project(session: AsyncSession, project_id: UUID, title: str) -> Project | None:
+    cleaned_title = title.strip()
+    if not cleaned_title:
+        raise ValueError("O nome do projeto nao pode ficar vazio")
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return None
+    project.title = cleaned_title[:220]
+    project.current_version += 1
+    session.add(
+        ProjectVersion(
+            project_id=project.id,
+            version_number=project.current_version,
+            snapshot={"title": project.title, "description": project.description},
+            change_note="Project renamed",
+        )
+    )
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
+async def delete_project(session: AsyncSession, project_id: UUID) -> bool:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return False
+    project.deleted_at = datetime.now(UTC)
+    await session.commit()
+    return True
 
 
 async def create_artifact(

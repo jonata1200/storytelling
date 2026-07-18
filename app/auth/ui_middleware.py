@@ -23,10 +23,7 @@ class UIBasicAuthMiddleware:
             "/auth/login",
             "/auth/logout",
             "/auth/register",
-            "/docs",
             "/login",
-            "/openapi.json",
-            "/redoc",
             "/register",
         }
         return (

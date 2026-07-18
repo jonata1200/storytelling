@@ -5,6 +5,7 @@ import tempfile
 from dataclasses import dataclass
 from hashlib import pbkdf2_hmac
 from pathlib import Path
+from typing import Any
 
 USERS_PATH = Path(".runtime/users.json")
 PBKDF2_ITERATIONS = 210_000
@@ -20,9 +21,12 @@ class StoredUser:
 def _load_payload(path: Path = USERS_PATH) -> dict[str, dict[str, str]]:
     if not path.is_file():
         return {}
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
     if not isinstance(payload, dict):
-        raise ValueError("Users file must be a JSON object")
+        return {}
     users: dict[str, dict[str, str]] = {}
     for username, data in payload.items():
         if isinstance(data, dict):

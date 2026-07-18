@@ -1,5 +1,8 @@
+import asyncio
 import json
 import shutil
+import subprocess
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -32,6 +35,42 @@ def export_profile(fps: int = 30, bitrate: str = "8M", embed_subtitles: bool = T
         "embed_subtitles": embed_subtitles,
         "safe_area": safe_area_profile(),
     }
+
+
+def _render_placeholder_video(
+    ffmpeg_path: str,
+    output_path: Path,
+    duration_seconds: int,
+    fps: int,
+    bitrate: str,
+) -> str:
+    duration = max(1, duration_seconds)
+    command = [
+        ffmpeg_path,
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        f"color=c=black:s=1080x1920:r={fps}:d={duration}",
+        "-f",
+        "lavfi",
+        "-i",
+        "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-t",
+        str(duration),
+        "-shortest",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-b:v",
+        bitrate,
+        "-c:a",
+        "aac",
+        str(output_path),
+    ]
+    completed = subprocess.run(command, check=True, capture_output=True, text=True)
+    return completed.stderr[-2000:]
 
 
 async def _create_artifact(
@@ -295,7 +334,7 @@ async def export_timeline(
     export_dir = settings.local_storage_path / "exports" / str(project_id)
     export_dir.mkdir(parents=True, exist_ok=True)
     ffmpeg_path = shutil.which("ffmpeg")
-    status = "MOCK_RENDERED"
+    status = "MANIFEST_ONLY"
     output_path = export_dir / f"export_{uuid4().hex[:8]}.json"
     render_log = "FFmpeg not found; wrote structured export manifest."
     manifest = {
@@ -305,7 +344,36 @@ async def export_timeline(
         "duration_seconds": timeline.duration_seconds,
         "ffmpeg_path": ffmpeg_path,
     }
-    output_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=True), encoding="utf-8")
+    asset_kind = AssetKind.DOCUMENT
+    content_type = "application/json"
+    if ffmpeg_path:
+        mp4_path = export_dir / f"export_{uuid4().hex[:8]}.mp4"
+        try:
+            ffmpeg_log = await asyncio.to_thread(
+                _render_placeholder_video,
+                ffmpeg_path,
+                mp4_path,
+                timeline.duration_seconds,
+                fps,
+                bitrate,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            render_log = f"FFmpeg render failed; wrote structured export manifest. {exc}"
+            output_path.write_text(
+                json.dumps(manifest, indent=2, ensure_ascii=True), encoding="utf-8"
+            )
+        else:
+            status = "RENDERED"
+            output_path = mp4_path
+            asset_kind = AssetKind.VIDEO
+            content_type = "video/mp4"
+            render_log = (
+                "FFmpeg rendered a vertical placeholder assembly from timeline metadata."
+                if not ffmpeg_log
+                else f"FFmpeg rendered a vertical placeholder assembly. {ffmpeg_log}"
+            )
+    else:
+        output_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=True), encoding="utf-8")
 
     artifact = await _create_artifact(
         session,
@@ -322,10 +390,10 @@ async def export_timeline(
     asset = Asset(
         project_id=project_id,
         artifact_id=artifact.id,
-        kind=AssetKind.DOCUMENT,
-        name="Exportacao final manifest",
+        kind=asset_kind,
+        name="Exportacao final",
         storage_uri=output_path.as_posix(),
-        content_type="application/json",
+        content_type=content_type,
         sha256=None,
         metadata_json={"status": status, "ffmpeg_available": ffmpeg_path is not None},
     )

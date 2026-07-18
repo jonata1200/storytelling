@@ -239,6 +239,16 @@ async def generate_video_clips(
             job.response_payload = result.metadata
             job.completed_at = datetime.now(UTC)
 
+            selected = False
+            if variant_index == 1:
+                selected_result = await session.execute(
+                    select(VideoClip.id).where(
+                        VideoClip.storyboard_frame_id == frame.id,
+                        VideoClip.selected.is_(True),
+                    )
+                )
+                selected = selected_result.scalar_one_or_none() is None
+
             clip = VideoClip(
                 project_id=project_id,
                 artifact_id=artifact.id,
@@ -249,7 +259,7 @@ async def generate_video_clips(
                 model=result.model,
                 duration_seconds=frame.duration_seconds,
                 variant_index=variant_index,
-                selected=variant_index == 1,
+                selected=selected,
                 metadata_json=clip_payload,
             )
             session.add(clip)
@@ -281,6 +291,9 @@ async def generate_video_clips(
 
 
 async def list_video_clips(session: AsyncSession, project_id: UUID) -> list[VideoClip]:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return []
     result = await session.execute(
         select(VideoClip).where(VideoClip.project_id == project_id).order_by(VideoClip.created_at)
     )
@@ -288,7 +301,13 @@ async def list_video_clips(session: AsyncSession, project_id: UUID) -> list[Vide
 
 
 async def get_job_status(session: AsyncSession, job_id: UUID) -> GenerationJob | None:
-    return await session.get(GenerationJob, job_id)
+    job = await session.get(GenerationJob, job_id)
+    if job is None:
+        return None
+    project = await ProjectRepository(session).get_project(job.project_id)
+    if project is None:
+        return None
+    return job
 
 
 async def review_clip(
@@ -299,6 +318,9 @@ async def review_clip(
     notes: str | None = None,
     selected: bool = False,
 ) -> ClipReview | None:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return None
     clip = await session.get(VideoClip, clip_id)
     if clip is None or clip.project_id != project_id:
         return None

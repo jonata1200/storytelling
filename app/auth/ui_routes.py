@@ -67,6 +67,10 @@ def _auth_page(mode: str, message: str = "") -> HTMLResponse:
     )
 
 
+def _secure_cookie_enabled() -> bool:
+    return get_settings().app_env.lower() not in {"local", "development", "test"}
+
+
 @router.get("/login")
 async def login_page() -> HTMLResponse:
     return _auth_page("login")
@@ -87,6 +91,7 @@ async def login(username: str = Form(...), password: str = Form(...)) -> Respons
         create_session_token(username.strip().lower()),
         httponly=True,
         samesite="lax",
+        secure=_secure_cookie_enabled(),
         max_age=60 * 60 * 24 * 7,
     )
     return response
@@ -106,6 +111,7 @@ async def register(
         create_session_token(user.username),
         httponly=True,
         samesite="lax",
+        secure=_secure_cookie_enabled(),
         max_age=60 * 60 * 24 * 7,
     )
     return response

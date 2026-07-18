@@ -268,6 +268,9 @@ async def generate_visual_references(
     target_id: UUID,
     view_types: list[str] | None = None,
 ) -> list[VisualReference] | None:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return None
     target = await _get_visual_target(session, project_id, target_kind, target_id)
     if target is None:
         return None
@@ -363,6 +366,9 @@ async def generate_visual_references(
 async def check_visual_consistency(
     session: AsyncSession, project_id: UUID, target_kind: str, target_id: UUID
 ) -> list[ConsistencyIssue] | None:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return None
     target = await _get_visual_target(session, project_id, target_kind, target_id)
     if target is None:
         return None

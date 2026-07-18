@@ -184,6 +184,9 @@ async def generate_storyboard_frames(
 async def list_storyboard_frames(
     session: AsyncSession, project_id: UUID, script_id: UUID | None = None
 ) -> list[StoryboardFrame]:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return []
     statement = (
         select(StoryboardFrame)
         .where(StoryboardFrame.project_id == project_id)
