@@ -9,6 +9,12 @@ def test_openrouter_provider_parses_json_content() -> None:
     assert provider._parse_json_content('{"ok": true}') == {"ok": True}
 
 
+def test_openrouter_provider_parses_markdown_json_block() -> None:
+    provider = OpenRouterLLMProvider()
+
+    assert provider._parse_json_content('```json\n{"ideas": []}\n```') == {"ideas": []}
+
+
 def test_openrouter_provider_rejects_non_json_content() -> None:
     provider = OpenRouterLLMProvider()
 

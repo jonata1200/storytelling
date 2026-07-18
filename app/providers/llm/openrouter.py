@@ -16,7 +16,7 @@ class OpenRouterLLMProvider:
         if not settings.openrouter_api_key:
             raise RuntimeError("OPENROUTER_API_KEY nao configurada")
 
-        response = await asyncio.to_thread(self._send_request, request)
+        response = await asyncio.to_thread(self._send_request, request, True)
         content_text = response["choices"][0]["message"]["content"]
         content = self._parse_json_content(content_text)
         usage = response.get("usage", {})
@@ -29,7 +29,7 @@ class OpenRouterLLMProvider:
             estimated_cost="0.000000",
         )
 
-    def _send_request(self, request: LLMRequest) -> dict[str, Any]:
+    def _send_request(self, request: LLMRequest, use_response_format: bool) -> dict[str, Any]:
         settings = get_settings()
         url = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
         body = {
@@ -44,9 +44,10 @@ class OpenRouterLLMProvider:
                 },
                 {"role": "user", "content": request.prompt},
             ],
-            "response_format": {"type": "json_object"},
             "temperature": 0.7,
         }
+        if use_response_format:
+            body["response_format"] = {"type": "json_object"}
         data = json.dumps(body).encode("utf-8")
         http_request = urllib.request.Request(
             url,
@@ -64,14 +65,20 @@ class OpenRouterLLMProvider:
                 parsed = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
+            if use_response_format and exc.code in {400, 422}:
+                return self._send_request(request, False)
             raise RuntimeError(f"OpenRouter HTTP {exc.code}: {detail}") from exc
         if not isinstance(parsed, dict):
             raise RuntimeError("OpenRouter retornou resposta fora do formato esperado")
         return parsed
 
     def _parse_json_content(self, content_text: str) -> dict[str, Any]:
+        stripped = content_text.strip()
+        if stripped.startswith("```"):
+            stripped = stripped.removeprefix("```json").removeprefix("```").strip()
+            stripped = stripped.removesuffix("```").strip()
         try:
-            parsed = json.loads(content_text)
+            parsed = json.loads(stripped)
         except json.JSONDecodeError as exc:
             raise RuntimeError("OpenRouter retornou conteudo que nao e JSON valido") from exc
         if not isinstance(parsed, dict):

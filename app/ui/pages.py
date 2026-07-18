@@ -256,9 +256,12 @@ async def _latest_many(
 
 
 async def _project_cards() -> list[Project]:
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(select(Project).order_by(Project.created_at.desc()))
-        return list(result.scalars())
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(Project).order_by(Project.created_at.desc()))
+            return list(result.scalars())
+    except Exception:
+        return []
 
 
 async def _dashboard_metrics() -> dict[str, str]:
@@ -1252,7 +1255,7 @@ def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
 def register_ui_pages() -> None:
     settings = get_settings()
 
-    @ui.page("/")
+    @ui.page("/dashboard", response_timeout=15)
     async def dashboard() -> None:
         _body_style()
         projects = await _project_cards()
@@ -1383,7 +1386,7 @@ def register_ui_pages() -> None:
                                 ui.icon("add_circle_outline").classes("text-4xl acid")
                                 ui.label("Criar novo projeto").classes("mt-2 font-semibold")
 
-    @ui.page("/projects")
+    @ui.page("/projects", response_timeout=15)
     async def projects_page() -> None:
         _body_style()
         projects = await _project_cards()
@@ -1439,7 +1442,8 @@ def register_ui_pages() -> None:
                                         project.description or "Projeto em desenvolvimento"
                                     ).classes("text-sm text-[#8d938e] line-clamp-2")
 
-    @ui.page("/ideas")
+    @ui.page("/", response_timeout=15)
+    @ui.page("/ideas", response_timeout=15)
     async def ideas_page() -> None:
         _body_style()
         _home_sidebar()
@@ -1458,7 +1462,7 @@ def register_ui_pages() -> None:
                             "Explore histórias livremente, sem criar um projeto de vídeo."
                         ).classes("text-[#8f9590]")
                     ui.button(
-                        "Voltar", icon="arrow_back", on_click=lambda: ui.navigate.to("/")
+                        "Voltar", icon="arrow_back", on_click=lambda: ui.navigate.to("/dashboard")
                     ).props("flat no-caps")
                     _theme_toggle()
 
@@ -1498,7 +1502,17 @@ def register_ui_pages() -> None:
                             value="Esperança",
                         ).props("outlined")
 
+                    with ui.dialog() as loading_dialog, ui.card().classes(
+                        "entity-card rounded-2xl p-6 min-w-80 items-center text-center"
+                    ):
+                        ui.spinner("dots", size="lg", color="primary")
+                        ui.label("Gerando ideias").classes("brand-type text-xl font-bold mt-3")
+                        ui.label("A IA esta criando temas, generos e emocoes.").classes(
+                            "text-sm text-[#8f9590]"
+                        )
+
                     async def generate() -> None:
+                        loading_dialog.open()
                         try:
                             generated = await generate_freeform_ideas("", count=10)
                             ideas.clear()
@@ -1506,6 +1520,8 @@ def register_ui_pages() -> None:
                             idea_results.refresh()
                         except Exception as exc:
                             ui.notify(f"Não foi possível gerar ideias: {exc}", color="negative")
+                        finally:
+                            loading_dialog.close()
 
                     ui.button("Gerar 10 ideias", icon="auto_awesome", on_click=generate).props(
                         "unelevated no-caps"
@@ -1643,7 +1659,7 @@ def register_ui_pages() -> None:
 
                 saved_results()
 
-    @ui.page("/settings")
+    @ui.page("/settings", response_timeout=15)
     async def settings_page() -> None:
         _body_style()
         current = get_settings()
@@ -1840,7 +1856,7 @@ def register_ui_pages() -> None:
                                     "Salvar configurações", icon="save", on_click=save_ai
                                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
 
-    @ui.page("/new")
+    @ui.page("/new", response_timeout=15)
     async def new_project() -> None:
         _body_style()
         ai_defaults = get_settings()
@@ -1954,7 +1970,7 @@ def register_ui_pages() -> None:
                     on_click=submit,
                 ).classes(_button_classes())
 
-    @ui.page("/projects/{project_id}")
+    @ui.page("/projects/{project_id}", response_timeout=15)
     async def project_workspace(project_id: str) -> None:
         ui.navigate.to(f"/projects/{project_id}/script")
         return
@@ -2036,7 +2052,7 @@ def register_ui_pages() -> None:
                             f"/api/v1/quality/projects/{project_id}/observability",
                         ).classes("text-cyan-200")
 
-    @ui.page("/projects/{project_id}/{section}")
+    @ui.page("/projects/{project_id}/{section}", response_timeout=15)
     async def project_studio(project_id: str, section: str) -> None:
         _body_style()
         if section not in {"script", "assets", "storyboard", "video"}:
