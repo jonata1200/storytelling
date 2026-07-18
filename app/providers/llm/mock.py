@@ -51,6 +51,7 @@ class MockLLMProvider:
         audience = str(variables.get("audience") or "publico geral")
         emotion = str(variables.get("primary_emotion") or "esperanca")
         count = int(variables.get("count") or 3)
+        selected_genre = str(variables.get("genre") or "").strip()
         genres = ["Drama", "Suspense", "Ficcao cientifica", "Romance", "Documentario"]
         emotions = ["Esperanca", "Curiosidade", "Tensao", "Melancolia", "Surpresa"]
         themes = [
@@ -74,8 +75,13 @@ class MockLLMProvider:
                         if base_theme == "tema livre criado pela IA"
                         else f"{base_theme} por um angulo {index}"
                     ),
-                    "genre": genres[(index - 1) % len(genres)],
+                    "genre": (
+                        selected_genre
+                        if selected_genre and selected_genre != "genero livre criado pela IA"
+                        else genres[(index - 1) % len(genres)]
+                    ),
                     "primary_emotion": emotions[(index - 1) % len(emotions)],
+                    "duration_minutes": 3 + ((index - 1) % 6),
                     "hook": "Ela encontra uma mensagem que muda tudo nos primeiros segundos.",
                     "premise": (
                         "Uma pessoa comum precisa encarar uma revelacao inesperada "

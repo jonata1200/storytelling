@@ -56,9 +56,12 @@ from app.storyboards.models import (
 )
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
 from app.storytelling.idea_lab import (
+    delete_generated_idea,
     delete_saved_idea,
     generate_freeform_ideas,
+    load_generated_ideas,
     load_saved_ideas,
+    replace_generated_ideas,
     save_idea,
 )
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryBible, StoryIdea
@@ -76,6 +79,21 @@ from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import generate_visual_bible, generate_visual_references
 
 BRAND_MARK_URL = "/ui-assets/favicon.png"
+
+IDEA_GENRES = [
+    "Ação",
+    "Animação",
+    "Aventura",
+    "Comédia",
+    "Documentário",
+    "Drama",
+    "Fantasia",
+    "Ficção Científica",
+    "Histórias familiares emocionantes",
+    "Romance",
+    "Suspense (Thriller)",
+    "Terror (ou Horror)",
+]
 
 
 @dataclass(frozen=True)
@@ -170,15 +188,57 @@ def _body_style() -> None:
           body:not(.body--dark).studio-body { background:#f4f5ef; color:#171a17; }
           body:not(.body--dark) .glass,
           body:not(.body--dark) .entity-card { background:#ffffff; border-color:#d9ded7; }
+          body:not(.body--dark) .chat-shell { box-shadow:0 20px 60px rgba(25,35,25,.12); }
+          body:not(.body--dark) .desktop-nav,
+          body:not(.body--dark) .right-assistant,
+          body:not(.body--dark) .bg-slate-900,
+          body:not(.body--dark) .bg-slate-800,
+          body:not(.body--dark) .bg-\[\#0b0d0c\],
+          body:not(.body--dark) .bg-\[\#090b0a\],
+          body:not(.body--dark) .bg-\[\#0d0f0e\],
+          body:not(.body--dark) .bg-\[\#0d100e\] { background:#f8faf6!important; }
+          body:not(.body--dark) .border-slate-800,
+          body:not(.body--dark) .border-\[\#222622\],
+          body:not(.body--dark) .border-\[\#242824\],
+          body:not(.body--dark) .border-\[\#252925\],
+          body:not(.body--dark) .border-\[\#343934\],
+          body:not(.body--dark) .border-\[\#363b36\] { border-color:#d9ded7!important; }
+          body:not(.body--dark) .text-slate-100,
+          body:not(.body--dark) .text-slate-300,
+          body:not(.body--dark) .text-\[\#b8bdb8\],
+          body:not(.body--dark) .text-\[\#c8ccc8\],
+          body:not(.body--dark) .text-\[\#d1d4d1\],
+          body:not(.body--dark) .text-\[\#d4d8d4\],
+          body:not(.body--dark) .text-\[\#d7dbd7\],
+          body:not(.body--dark) .text-\[\#d8dbd8\],
+          body:not(.body--dark) .text-\[\#d9dcd9\] { color:#20261f!important; }
+          body:not(.body--dark) .text-slate-400,
+          body:not(.body--dark) .text-\[\#747a75\],
+          body:not(.body--dark) .text-\[\#777d78\],
+          body:not(.body--dark) .text-\[\#7f8580\],
+          body:not(.body--dark) .text-\[\#858b86\],
+          body:not(.body--dark) .text-\[\#878d88\],
+          body:not(.body--dark) .text-\[\#8d938e\],
+          body:not(.body--dark) .text-\[\#8e948f\],
+          body:not(.body--dark) .text-\[\#8f9590\],
+          body:not(.body--dark) .text-\[\#939994\],
+          body:not(.body--dark) .text-\[\#969c97\],
+          body:not(.body--dark) .text-\[\#999f9a\],
+          body:not(.body--dark) .text-\[\#9aa29b\] { color:#626b62!important; }
+          body:not(.body--dark) .bg-\[\#243342\] { background:#e8f3ff!important; }
+          body:not(.body--dark) .bg-\[\#2f3321\],
+          body:not(.body--dark) .bg-\[\#30362b\],
+          body:not(.body--dark) .bg-\[\#26301f\] { background:#eff5dc!important; }
+          body:not(.body--dark) .text-\[\#bfe2ff\] { color:#24577c!important; }
+          body:not(.body--dark) .text-\[\#dff57b\],
+          body:not(.body--dark) .text-\[\#e6f59b\],
+          body:not(.body--dark) .text-\[\#eaf878\] { color:#4f6417!important; }
           body:not(.body--dark) .visual-placeholder { background:radial-gradient(circle at 70% 15%,#e6e9c9 0,#d9ddcf 42%,#eef0e9 80%); }
           body:not(.body--dark) .q-field__control { background:#ffffff!important; }
           body:not(.body--dark) .q-field__native,
           body:not(.body--dark) .q-field__input,
           body:not(.body--dark) .q-textarea textarea { color:#171a17!important; }
           body:not(.body--dark) .q-menu { background:#ffffff!important; color:#171a17!important; }
-          body:not(.body--dark) .bg-\[\#0b0d0c\],
-          body:not(.body--dark) .bg-\[\#090b0a\],
-          body:not(.body--dark) .bg-\[\#0d0f0e\] { background:#f8faf6!important; }
           .studio-body .nicegui-content { padding:0; }
           .brand-type { font-family:'Manrope',sans-serif; letter-spacing:-.04em; }
           .glass { background:rgba(17,20,18,.88); border:1px solid var(--line); }
@@ -380,9 +440,9 @@ def _render_header(title: str, subtitle: str) -> None:
                 ui.label(subtitle).classes("text-sm text-slate-400")
         with ui.row().classes("gap-2"):
             _theme_toggle()
-            ui.button("Projetos", icon="dashboard", on_click=lambda: ui.navigate.to("/")).classes(
-                "bg-slate-800 hover:bg-slate-700 rounded-md"
-            )
+            ui.button(
+                "Projetos", icon="dashboard", on_click=lambda: ui.navigate.to("/projects")
+            ).classes("bg-slate-800 hover:bg-slate-700 rounded-md")
             ui.link("API docs", "/docs").classes(
                 "text-slate-100 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-md"
             )
@@ -431,6 +491,39 @@ async def _create_project_from_form(form: dict[str, Any]) -> None:
         ui.navigate.to(f"/projects/{project.id}")
     except Exception as exc:
         ui.notify(f"Nao foi possivel criar o projeto: {exc}", color="negative")
+
+
+async def _create_project_from_chat_prompt(prompt: str) -> None:
+    cleaned_prompt = prompt.strip()
+    if not cleaned_prompt:
+        ui.notify("Descreva a ideia ou cole um roteiro antes de criar o projeto.", color="warning")
+        return
+    title_seed = cleaned_prompt.splitlines()[0].strip()
+    form = {
+        "title": title_seed[:80] or "Novo projeto de storytelling",
+        "description": cleaned_prompt[:240],
+        "theme": cleaned_prompt[:220],
+        "audience": "publico geral",
+        "genre": "drama emocional",
+        "emotion": "curiosidade",
+        "intensity": 8,
+        "ending": "final com revelacao afetiva",
+        "duration": 3.0,
+        "visual_style": "cinematico realista vertical",
+        "objective": "reter audiencia com historia curta",
+        "cta": "",
+        "constraints": "evitar violencia grafica\nmanter tom familiar",
+        "one_line_idea": cleaned_prompt,
+        "content_type": "short_drama",
+        "aspect_ratio": "9:16",
+        "workflow_mode": "keyframes_i2v",
+        "image_resolution": "1080x1920",
+        "video_resolution": "1080x1920",
+        "motion_intensity": 5,
+        "image_model": get_settings().openrouter_image_model,
+        "video_model": get_settings().openrouter_video_model,
+    }
+    await _create_project_from_form(form)
 
 
 async def _save_model_setting(
@@ -630,9 +723,9 @@ def _render_step_card(project_id: UUID, step: ProductionStep, counts: dict[str, 
         ui.label(step.description).classes("text-sm text-slate-400 min-h-10")
         if step.key == "briefing":
             ui.button(
-                "Editar novo projeto",
-                icon="add",
-                on_click=lambda: ui.navigate.to("/new"),
+                "Criar via chat",
+                icon="chat_bubble_outline",
+                on_click=lambda: ui.navigate.to("/dashboard"),
             ).classes(_button_classes())
         else:
             ui.button(
@@ -932,20 +1025,24 @@ def _user_avatar(size: str = "44px", navigate: bool = True) -> Any:
     return avatar
 
 
-def _home_sidebar() -> None:
+def _home_sidebar(active: str = "") -> None:
     with ui.column().classes(
         "desktop-nav fixed left-0 top-0 bottom-0 w-24 border-r border-[#222622] items-center py-6 gap-6 bg-[#0b0d0c] z-20"
     ):
         _studio_logo(compact=True)
-        for icon, label, target in [
-            ("lightbulb_outline", "Ideias", "/ideas"),
-            ("chat_bubble_outline", "Criar", "/"),
-            ("folder_open", "Projetos", "/projects"),
-            ("settings", "Ajustes", "/settings"),
+        for key, icon, label, target in [
+            ("ideas", "lightbulb_outline", "Ideias", "/"),
+            ("create", "chat_bubble_outline", "Criar", "/dashboard"),
+            ("projects", "folder_open", "Projetos", "/projects"),
+            ("settings", "settings", "Ajustes", "/settings"),
         ]:
+            active_classes = "acid bg-[#101923]" if key == active else "text-[#8d928e]"
             with (
                 ui.column()
-                .classes("items-center gap-1 cursor-pointer text-[#8d928e] hover:text-white")
+                .classes(
+                    "items-center gap-1 cursor-pointer rounded-xl px-3 py-2 "
+                    f"{active_classes} hover:text-white"
+                )
                 .on("click", lambda t=target: ui.navigate.to(t))
             ):
                 ui.icon(icon).classes("text-2xl")
@@ -1259,7 +1356,7 @@ def register_ui_pages() -> None:
     async def dashboard() -> None:
         _body_style()
         projects = await _project_cards()
-        _home_sidebar()
+        _home_sidebar("create")
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
             with ui.column().classes("w-full px-5 md:px-10 lg:px-14 py-6 gap-9"):
                 with ui.row().classes(
@@ -1292,7 +1389,9 @@ def register_ui_pages() -> None:
                             ui.space()
                             ui.button(
                                 icon="arrow_upward",
-                                on_click=lambda: ui.navigate.to(f"/new?idea={idea.value or ''}"),
+                                on_click=lambda: _create_project_from_chat_prompt(
+                                    str(idea.value or "")
+                                ),
                             ).props("round unelevated").classes("acid-bg")
 
                         async def upload_script(event: Any) -> None:
@@ -1331,7 +1430,7 @@ def register_ui_pages() -> None:
                                 "text-sm text-[#7f8580]"
                             )
                         ui.button(
-                            "Novo projeto", icon="add", on_click=lambda: ui.navigate.to("/new")
+                            "Novo projeto", icon="add", on_click=lambda: ui.navigate.to("/dashboard")
                         ).props("flat no-caps").classes("acid")
                     if not projects:
                         with (
@@ -1339,7 +1438,7 @@ def register_ui_pages() -> None:
                             .classes(
                                 "w-full border border-dashed border-[#363b36] rounded-2xl min-h-48 flex flex-col items-center justify-center cursor-pointer text-[#969c97] bg-[#0d100e]"
                             )
-                            .on("click", lambda: ui.navigate.to("/new"))
+                            .on("click", lambda: ui.navigate.to("/dashboard"))
                         ):
                             ui.icon("add_circle_outline").classes("text-4xl acid")
                             ui.label("Crie seu primeiro projeto").classes(
@@ -1381,7 +1480,7 @@ def register_ui_pages() -> None:
                                 .classes(
                                     "border border-dashed border-[#363b36] rounded-2xl min-h-52 flex flex-col items-center justify-center cursor-pointer text-[#969c97]"
                                 )
-                                .on("click", lambda: ui.navigate.to("/new"))
+                                .on("click", lambda: ui.navigate.to("/dashboard"))
                             ):
                                 ui.icon("add_circle_outline").classes("text-4xl acid")
                                 ui.label("Criar novo projeto").classes("mt-2 font-semibold")
@@ -1390,7 +1489,7 @@ def register_ui_pages() -> None:
     async def projects_page() -> None:
         _body_style()
         projects = await _project_cards()
-        _home_sidebar()
+        _home_sidebar("projects")
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
             with ui.column().classes("w-full max-w-6xl mx-auto px-6 py-8 gap-7"):
                 with ui.row().classes("w-full items-center justify-between"):
@@ -1404,7 +1503,7 @@ def register_ui_pages() -> None:
                         ui.button(
                             "Novo projeto",
                             icon="add",
-                            on_click=lambda: ui.navigate.to("/"),
+                            on_click=lambda: ui.navigate.to("/dashboard"),
                         ).props("unelevated no-caps").classes("acid-bg rounded-xl")
                 if not projects:
                     with ui.element("div").classes(
@@ -1417,7 +1516,7 @@ def register_ui_pages() -> None:
                         ui.button(
                             "Começar uma criação",
                             icon="auto_awesome",
-                            on_click=lambda: ui.navigate.to("/"),
+                            on_click=lambda: ui.navigate.to("/dashboard"),
                         ).props("flat no-caps").classes("acid mt-2")
                 else:
                     with ui.grid().classes(
@@ -1446,8 +1545,8 @@ def register_ui_pages() -> None:
     @ui.page("/ideas", response_timeout=15)
     async def ideas_page() -> None:
         _body_style()
-        _home_sidebar()
-        ideas: list[dict[str, Any]] = []
+        _home_sidebar("ideas")
+        ideas: list[dict[str, Any]] = load_generated_ideas()
         saved_ideas = load_saved_ideas()
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
             with ui.column().classes("w-full max-w-6xl mx-auto px-6 py-8 gap-7"):
@@ -1461,12 +1560,9 @@ def register_ui_pages() -> None:
                         ui.label(
                             "Explore histórias livremente, sem criar um projeto de vídeo."
                         ).classes("text-[#8f9590]")
-                    ui.button(
-                        "Voltar", icon="arrow_back", on_click=lambda: ui.navigate.to("/dashboard")
-                    ).props("flat no-caps")
                     _theme_toggle()
 
-                with ui.element("div").classes("glass rounded-2xl p-5 w-full"):
+                with ui.element("div").classes("hidden"):
                     _ = (
                         ui.textarea(
                             "Sobre o que você quer contar?",
@@ -1514,22 +1610,33 @@ def register_ui_pages() -> None:
                     async def generate() -> None:
                         loading_dialog.open()
                         try:
-                            generated = await generate_freeform_ideas("", count=10)
+                            generated = await generate_freeform_ideas(
+                                "",
+                                count=10,
+                                genre=str(genre_select.value or ""),
+                            )
                             ideas.clear()
-                            ideas.extend(generated)
+                            ideas.extend(replace_generated_ideas(generated))
                             idea_results.refresh()
                         except Exception as exc:
                             ui.notify(f"Não foi possível gerar ideias: {exc}", color="negative")
                         finally:
                             loading_dialog.close()
 
+                with ui.column().classes("w-full items-center gap-4 py-8"):
+                    genre_select = (
+                        ui.select(IDEA_GENRES, label="Gênero", value=IDEA_GENRES[0])
+                        .props("outlined")
+                        .classes("w-full max-w-md")
+                    )
                     ui.button("Gerar 10 ideias", icon="auto_awesome", on_click=generate).props(
-                        "unelevated no-caps"
-                    ).classes("acid-bg rounded-xl mt-4")
+                        "unelevated no-caps size=lg"
+                    ).classes("acid-bg rounded-2xl px-10 py-5 text-lg font-bold")
 
                 def discard_generated(idea: dict[str, Any]) -> None:
                     if idea in ideas:
                         ideas.remove(idea)
+                    delete_generated_idea(str(idea.get("id") or ""))
                     idea_results.refresh()
 
                 def save_generated(idea: dict[str, Any]) -> None:
@@ -1540,6 +1647,7 @@ def register_ui_pages() -> None:
                     saved_ideas.insert(0, saved)
                     if idea in ideas:
                         ideas.remove(idea)
+                    delete_generated_idea(str(idea.get("id") or saved["id"]))
                     idea_results.refresh()
                     saved_results.refresh()
                     ui.notify("Ideia salva.", color="positive")
@@ -1604,7 +1712,7 @@ def register_ui_pages() -> None:
                                     ui.button(
                                         "Desenvolver",
                                         icon="arrow_forward",
-                                        on_click=lambda: ui.navigate.to("/new"),
+                                        on_click=lambda: ui.navigate.to("/dashboard"),
                                     ).props("flat no-caps").classes("acid")
 
                 idea_results()
@@ -1654,7 +1762,7 @@ def register_ui_pages() -> None:
                                     ui.button(
                                         "Desenvolver",
                                         icon="arrow_forward",
-                                        on_click=lambda: ui.navigate.to("/new"),
+                                        on_click=lambda: ui.navigate.to("/dashboard"),
                                     ).props("flat no-caps").classes("acid")
 
                 saved_results()
@@ -1663,7 +1771,7 @@ def register_ui_pages() -> None:
     async def settings_page() -> None:
         _body_style()
         current = get_settings()
-        _home_sidebar()
+        _home_sidebar("settings")
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
             with ui.column().classes("w-full max-w-5xl mx-auto px-6 py-8 gap-7"):
                 with ui.row().classes("w-full items-center justify-between"):
@@ -1855,120 +1963,6 @@ def register_ui_pages() -> None:
                                 ui.button(
                                     "Salvar configurações", icon="save", on_click=save_ai
                                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-
-    @ui.page("/new", response_timeout=15)
-    async def new_project() -> None:
-        _body_style()
-        ai_defaults = get_settings()
-        _render_header(settings.app_name, "Novo projeto guiado")
-        form: dict[str, Any] = {}
-        with ui.column().classes("w-full max-w-5xl mx-auto px-6 py-6 gap-5"):
-            ui.label("Briefing inicial").classes("text-3xl font-bold")
-            _muted("Preencha o essencial. Depois o workspace conduz as geracoes.")
-            with ui.card().classes(_card_classes("w-full")):
-                one_line_idea = ui.textarea(
-                    "Ideia em linguagem natural",
-                    value=(
-                        "Um drama emocional de 3 minutos sobre uma pessoa que encontra "
-                        "uma carta antiga e descobre uma verdade familiar."
-                    ),
-                ).classes("w-full")
-                with ui.grid(columns=2).classes("w-full gap-4"):
-                    title = ui.input("Titulo do projeto", value="Historia emocional vertical")
-                    description = ui.textarea("Descricao", value="Video curto emocional para reels")
-                    theme = ui.input("Tema", value="uma lembranca familiar reencontrada")
-                    audience = ui.input(
-                        "Publico",
-                        value="adultos que gostam de historias emocionais",
-                    )
-                    genre = ui.input("Genero", value="drama emocional")
-                    emotion = ui.input("Emocao principal", value="esperanca")
-                    intensity = ui.number("Intensidade emocional", value=8, min=1, max=10)
-                    ending = ui.input("Tipo de final", value="final com revelacao afetiva")
-                    duration = ui.number(
-                        "Duracao em minutos",
-                        value=3.0,
-                        min=3.0,
-                        max=8.0,
-                        step=0.5,
-                    )
-                    visual_style = ui.input("Estilo visual", value="cinematico realista vertical")
-                    objective = ui.input("Objetivo", value="reter audiencia com historia curta")
-                    cta = ui.input("Chamada para acao", value="comentar uma lembranca parecida")
-                ui.label("Core Setup").classes("text-lg font-semibold")
-                with ui.grid(columns=3).classes("w-full gap-4"):
-                    content_type = ui.select(
-                        CONTENT_TYPES,
-                        label="Tipo de conteudo",
-                        value="short_drama",
-                    )
-                    aspect_ratio = ui.select(ASPECT_RATIOS, label="Aspect ratio", value="9:16")
-                    workflow_mode = ui.select(
-                        WORKFLOW_MODES,
-                        label="Workflow",
-                        value="keyframes_i2v",
-                    )
-                    image_resolution = ui.select(
-                        RESOLUTIONS,
-                        label="Resolucao de imagem",
-                        value="1080x1920",
-                    )
-                    video_resolution = ui.select(
-                        RESOLUTIONS,
-                        label="Resolucao de video",
-                        value="1080x1920",
-                    )
-                    motion_intensity = ui.number(
-                        "Intensidade de movimento",
-                        value=5,
-                        min=1,
-                        max=10,
-                    )
-                    image_model = ui.input(
-                        "Modelo de imagem", value=ai_defaults.openrouter_image_model
-                    )
-                    video_model = ui.input(
-                        "Modelo de video", value=ai_defaults.openrouter_video_model
-                    )
-                constraints = ui.textarea(
-                    "Restricoes",
-                    value="evitar violencia grafica\nmanter tom familiar",
-                ).classes("w-full")
-
-                async def submit() -> None:
-                    form.update(
-                        {
-                            "title": title.value,
-                            "description": description.value,
-                            "theme": theme.value,
-                            "audience": audience.value,
-                            "genre": genre.value,
-                            "emotion": emotion.value,
-                            "intensity": intensity.value,
-                            "ending": ending.value,
-                            "duration": duration.value,
-                            "visual_style": visual_style.value,
-                            "objective": objective.value,
-                            "cta": cta.value,
-                            "constraints": constraints.value,
-                            "one_line_idea": one_line_idea.value,
-                            "content_type": content_type.value,
-                            "aspect_ratio": aspect_ratio.value,
-                            "workflow_mode": workflow_mode.value,
-                            "image_resolution": image_resolution.value,
-                            "video_resolution": video_resolution.value,
-                            "motion_intensity": motion_intensity.value,
-                            "image_model": image_model.value,
-                            "video_model": video_model.value,
-                        }
-                    )
-                    await _create_project_from_form(form)
-
-                ui.button(
-                    "Criar projeto e abrir workspace",
-                    icon="rocket_launch",
-                    on_click=submit,
-                ).classes(_button_classes())
 
     @ui.page("/projects/{project_id}", response_timeout=15)
     async def project_workspace(project_id: str) -> None:
