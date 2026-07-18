@@ -1,4 +1,8 @@
-from app.visual_bible.service import default_views_for, initial_view_for
+from app.visual_bible.service import (
+    default_views_for,
+    initial_view_for,
+    visual_reference_prompt,
+)
 
 
 def test_default_character_views_include_required_reference_sheet_items() -> None:
@@ -21,3 +25,15 @@ def test_initial_visual_reference_is_single_canonical_view() -> None:
 
     for target_kind in ["character", "location", "prop"]:
         assert initial_view_for(target_kind) in default_views_for(target_kind)
+
+
+def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
+    profile = {
+        "name": "Helena",
+        "canonical_prompt": "Helena, 35, expressive detective, rainy noir lighting",
+    }
+
+    assert (
+        visual_reference_prompt(profile, "front_portrait")
+        == "Helena, 35, expressive detective, rainy noir lighting. View: front_portrait."
+    )

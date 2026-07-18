@@ -289,6 +289,10 @@ def initial_view_for(target_kind: str) -> str:
     }[target_kind]
 
 
+def visual_reference_prompt(profile: dict, view_type: str) -> str:
+    return f"{profile.get('canonical_prompt', profile.get('name'))}. View: {view_type}."
+
+
 async def _existing_visual_reference_views(
     session: AsyncSession, project_id: UUID, target_kind: str, target_id: UUID
 ) -> set[str]:
@@ -307,6 +311,7 @@ async def approve_visual_target_and_generate_views(
     project_id: UUID,
     target_kind: str,
     target_id: UUID,
+    view_types: list[str] | None = None,
 ) -> list[VisualReference] | None:
     project = await ProjectRepository(session).get_project(project_id)
     target = await _get_visual_target(session, project_id, target_kind, target_id)
@@ -339,8 +344,9 @@ async def approve_visual_target_and_generate_views(
     existing_views = await _existing_visual_reference_views(
         session, project_id, target_kind, target_id
     )
+    requested_views = view_types or default_views_for(target_kind)
     missing_views = [
-        view for view in default_views_for(target_kind) if view not in existing_views
+        view for view in requested_views if view not in existing_views
     ]
     if not missing_views:
         await session.commit()
@@ -380,7 +386,7 @@ async def generate_visual_references(
     output_dir = get_settings().local_storage_path / image_dir_name / str(project_id)
 
     for view_type in views:
-        prompt = f"{profile.get('canonical_prompt', profile.get('name'))}. View: {view_type}."
+        prompt = visual_reference_prompt(profile, view_type)
         image_result = await provider.generate(
             ImageGenerationRequest(
                 prompt=prompt,

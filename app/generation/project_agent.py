@@ -20,13 +20,8 @@ from app.storytelling.service import (
     revise_script,
 )
 from app.video_generation.models import VideoClip
-from app.video_generation.service import generate_video_clips
 from app.visual_bible.models import Character, Location, Prop, VisualReference
-from app.visual_bible.service import (
-    generate_visual_bible,
-    generate_visual_references,
-    initial_view_for,
-)
+from app.visual_bible.service import generate_visual_bible
 
 ProjectChatAction = Literal[
     "chat",
@@ -342,35 +337,14 @@ async def _ensure_visual_pipeline(
                 "generate_assets",
             )
 
-    characters = await _latest_many(session, Character, project_id, 6)
-    locations = await _latest_many(session, Location, project_id, 4)
-    props = await _latest_many(session, Prop, project_id, 4)
-    if await _count(session, VisualReference, project_id) == 0:
-        for character in characters:
-            await generate_visual_references(
-                session,
-                project_id,
-                "character",
-                character.id,
-                [initial_view_for("character")],
-            )
-        for location in locations:
-            await generate_visual_references(
-                session,
-                project_id,
-                "location",
-                location.id,
-                [initial_view_for("location")],
-            )
-        for prop in props:
-            await generate_visual_references(
-                session,
-                project_id,
-                "prop",
-                prop.id,
-                [initial_view_for("prop")],
-            )
-        changed = True
+    visual_refs = await _count(session, VisualReference, project_id)
+    if visual_refs == 0:
+        return ProjectChatResult(
+            "Personagens, locais e objetos foram preparados. "
+            "Revise e aprove os prompts na aba Biblioteca visual para criar as imagens.",
+            "generate_assets",
+            changed,
+        )
     return ProjectChatResult(
         "Personagens, locais, objetos e referencias visuais estao prontos.",
         "generate_assets",
@@ -428,22 +402,14 @@ async def _ensure_video_pipeline(
         )
 
     clips = await _count(session, VideoClip, project_id)
-    if force or clips == 0:
-        generated = await generate_video_clips(
-            session,
-            project_id,
-            frame_ids=[frame.id for frame in frames],
-            variants_per_frame=2 if force else 1,
+    if not force and clips > 0:
+        return ProjectChatResult(
+            "Os clipes de video ja existem para este storyboard.",
+            "generate_video",
+            changed,
         )
-        if generated is None:
-            return ProjectChatResult(
-                "Nao consegui gerar os clipes de video.",
-                "generate_video",
-                changed,
-            )
-        changed = True
     return ProjectChatResult(
-        "Clipes de video gerados para o storyboard atual.",
+        "Storyboard pronto. Revise e aprove os prompts na aba Video para gerar os clipes.",
         "generate_video",
         changed,
     )

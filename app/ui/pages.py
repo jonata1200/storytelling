@@ -90,9 +90,10 @@ from app.video_generation.service import generate_video_clips
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (
     approve_visual_target_and_generate_views,
+    default_views_for,
     generate_visual_bible,
-    generate_visual_references,
     initial_view_for,
+    visual_reference_prompt,
 )
 
 BRAND_MARK_URL = "/ui-assets/favicon.png"
@@ -469,9 +470,9 @@ async def _project_summary(project_id: UUID) -> dict[str, Any] | None:
             "characters": await _latest_many(session, Character, project_id, 4),
             "locations": await _latest_many(session, Location, project_id, 4),
             "props": await _latest_many(session, Prop, project_id, 4),
-            "visual_refs": await _latest_many(session, VisualReference, project_id, 6),
-            "frames": await _latest_many(session, StoryboardFrame, project_id, 9),
-            "clips": await _latest_many(session, VideoClip, project_id, 6),
+            "visual_refs": await _latest_many(session, VisualReference, project_id, 100),
+            "frames": await _latest_many(session, StoryboardFrame, project_id, 100),
+            "clips": await _latest_many(session, VideoClip, project_id, 100),
             "timeline": latest_timeline,
             "timeline_items": timeline_items,
         }
@@ -1188,33 +1189,12 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 if bible is None:
                     raise ValueError("gere a Story Bible primeiro")
                 await generate_visual_bible(session, project_id, bible.id)
-                character = await _latest(session, Character, project_id)
-                location = await _latest(session, Location, project_id)
-                prop = await _latest(session, Prop, project_id)
-                if character is not None:
-                    await generate_visual_references(
-                        session,
-                        project_id,
-                        "character",
-                        character.id,
-                        [initial_view_for("character")],
-                    )
-                if location is not None:
-                    await generate_visual_references(
-                        session,
-                        project_id,
-                        "location",
-                        location.id,
-                        [initial_view_for("location")],
-                    )
-                if prop is not None:
-                    await generate_visual_references(
-                        session,
-                        project_id,
-                        "prop",
-                        prop.id,
-                        [initial_view_for("prop")],
-                    )
+                ui.notify(
+                    "Ativos preparados. Aprove os prompts na Biblioteca visual para criar as imagens.",
+                    color="info",
+                )
+                ui.navigate.reload()
+                return
             elif step_key == "storyboard":
                 script = await _latest(session, Script, project_id)
                 if script is None:
@@ -1230,12 +1210,12 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 frames = list(result.scalars())
                 if not frames:
                     raise ValueError("gere o storyboard primeiro")
-                await generate_video_clips(
-                    session,
-                    project_id,
-                    frame_ids=[frame.id for frame in frames[:3]],
-                    variants_per_frame=1,
+                ui.notify(
+                    "Prompts de video prontos. Aprove-os na aba Video para gerar os clipes.",
+                    color="info",
                 )
+                ui.navigate.reload()
+                return
             elif step_key == "finalization":
                 source_audio = await _latest(session, AudioTrack, project_id)
                 if source_audio is None:
@@ -1269,7 +1249,10 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
 
 
 async def _approve_visual_target_from_ui(
-    project_id: UUID, target_kind: str, target_id: UUID
+    project_id: UUID,
+    target_kind: str,
+    target_id: UUID,
+    view_types: list[str],
 ) -> None:
     try:
         async with AsyncSessionLocal() as session:
@@ -1278,6 +1261,7 @@ async def _approve_visual_target_from_ui(
                 project_id,
                 target_kind,
                 target_id,
+                view_types,
             )
         if references is None:
             ui.notify("Nao encontrei o ativo visual para aprovar.", color="negative")
@@ -1292,6 +1276,33 @@ async def _approve_visual_target_from_ui(
         ui.navigate.reload()
     except Exception as exc:
         ui.notify(f"Nao foi possivel aprovar o ativo: {exc}", color="negative")
+
+
+async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await generate_video_clips(
+                session,
+                project_id,
+                frame_ids=frame_ids,
+                variants_per_frame=1,
+            )
+        if result is None:
+            ui.notify("Nao encontrei o projeto para gerar os clipes.", color="negative")
+            return
+        jobs, clips = result
+        if clips:
+            ui.notify(f"Prompts aprovados. {len(clips)} clipe(s) criado(s).", color="positive")
+        elif jobs:
+            ui.notify(
+                "Prompts aprovados, mas a geracao de video ficou pendente de nova tentativa.",
+                color="warning",
+            )
+        else:
+            ui.notify("Todos os clipes selecionados ja estavam criados.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        ui.notify(f"Nao foi possivel gerar os clipes: {exc}", color="negative")
 
 
 def _render_step_card(project_id: UUID, step: ProductionStep, counts: dict[str, int]) -> None:
@@ -1939,15 +1950,40 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                 ui.label("Nenhuma cena criada.").classes("text-sm text-[#777d78]")
 
 
+def _visual_reference_views_for(
+    summary: dict[str, Any], target_kind: str, target_id: UUID
+) -> set[str]:
+    return {
+        reference.view_type
+        for reference in summary["visual_refs"]
+        if reference.target_kind == target_kind and reference.target_id == target_id
+    }
+
+
 def _entity_card(
     project_id: UUID,
     target_kind: str,
     target_id: UUID,
+    profile: dict,
+    existing_views: set[str],
     icon: str,
     title: str,
     subtitle: str,
     detail: str,
 ) -> None:
+    if not existing_views:
+        requested_views = [initial_view_for(target_kind)]
+        approval_label = "Aprovar prompt"
+    else:
+        requested_views = [
+            view for view in default_views_for(target_kind) if view not in existing_views
+        ]
+        approval_label = "Aprovar vistas"
+    prompt_previews = [
+        (view_type, visual_reference_prompt(profile, view_type))
+        for view_type in requested_views
+    ]
+
     with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
         with ui.element("div").classes("visual-placeholder h-44 p-5 flex items-end"):
             ui.icon(icon).classes("text-6xl text-[#eefa83]")
@@ -1955,16 +1991,56 @@ def _entity_card(
             ui.label(title).classes("brand-type text-xl font-bold")
             ui.label(subtitle).classes("text-xs acid uppercase tracking-wide")
             ui.label(detail).classes("text-sm text-[#999f9a] line-clamp-2")
-            with ui.row().classes("w-full pt-2 border-t border-[#292d29]"):
-                ui.button(
-                    "Aprovar vistas",
-                    icon="check_circle",
-                    on_click=lambda: _approve_visual_target_from_ui(
+            with ui.dialog().props(BLOCKING_DIALOG_PROPS) as prompt_dialog, ui.card().classes(
+                "entity-card rounded-2xl p-6 w-[min(760px,92vw)] max-h-[82vh]"
+            ):
+                ui.label("Aprovar prompts de imagem").classes("brand-type text-2xl font-bold")
+                ui.label(
+                    "Confira os prompts antes de criar as imagens deste ativo."
+                ).classes("text-sm text-[#8d938e]")
+                with ui.scroll_area().classes("w-full max-h-[52vh] pr-2"):
+                    with ui.column().classes("w-full gap-3"):
+                        for view_type, prompt in prompt_previews:
+                            with ui.element("div").classes(
+                                "border border-[#343934] rounded-xl p-4"
+                            ):
+                                ui.label(view_type).classes("text-xs acid uppercase")
+                                ui.label(prompt).classes(
+                                    "text-sm text-[#d8dbd8] whitespace-pre-wrap"
+                                )
+                        if not prompt_previews:
+                            ui.label("Todas as vistas deste ativo ja foram criadas.").classes(
+                                "text-sm text-[#8d938e]"
+                            )
+
+                async def confirm_visual_prompts(
+                    views: list[str] = requested_views,
+                ) -> None:
+                    prompt_dialog.close()
+                    await _approve_visual_target_from_ui(
                         project_id,
                         target_kind,
                         target_id,
-                    ),
+                        views,
+                    )
+
+                with ui.row().classes("w-full justify-end gap-2 mt-3"):
+                    ui.button("Cancelar", on_click=prompt_dialog.close).props("flat no-caps")
+                    confirm_button = ui.button(
+                        "Aprovar e gerar",
+                        icon="check_circle",
+                        on_click=confirm_visual_prompts,
+                    ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                    if not prompt_previews:
+                        confirm_button.props("disable")
+            with ui.row().classes("w-full pt-2 border-t border-[#292d29]"):
+                approval_button = ui.button(
+                    approval_label,
+                    icon="check_circle",
+                    on_click=prompt_dialog.open,
                 ).props("flat dense no-caps").classes("text-[#d8dbd8]")
+                if not prompt_previews:
+                    approval_button.props("disable")
                 ui.button("Editar", icon="edit").props("flat dense no-caps").classes(
                     "text-[#d8dbd8]"
                 )
@@ -2011,6 +2087,8 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
                             project_id,
                             target_kind,
                             item.id,
+                            getattr(item, "canonical_profile", {}) or {},
+                            _visual_reference_views_for(summary, target_kind, item.id),
                             icon,
                             item.name,
                             subtitle,
@@ -2066,6 +2144,48 @@ def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
         None,
         None,
     )
+    sorted_frames = sorted(summary["frames"], key=lambda frame: frame.frame_number)
+    clip_frame_ids = {clip.storyboard_frame_id for clip in summary["clips"]}
+    pending_frames = [frame for frame in sorted_frames if frame.id not in clip_frame_ids]
+    if pending_frames:
+        pending_frame_ids = [frame.id for frame in pending_frames]
+        with ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_dialog, ui.card().classes(
+            "entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"
+        ):
+            ui.label("Aprovar prompts de video").classes("brand-type text-2xl font-bold")
+            ui.label(
+                "Confira os prompts antes de gerar os clipes a partir do storyboard."
+            ).classes("text-sm text-[#8d938e]")
+            with ui.scroll_area().classes("w-full max-h-[52vh] pr-2"):
+                with ui.column().classes("w-full gap-3"):
+                    for frame in pending_frames:
+                        with ui.element("div").classes("border border-[#343934] rounded-xl p-4"):
+                            ui.label(
+                                f"PLANO {frame.frame_number:02d} - {frame.duration_seconds}s"
+                            ).classes("text-xs acid font-semibold")
+                            ui.label(frame.prompt).classes(
+                                "text-sm text-[#d8dbd8] whitespace-pre-wrap"
+                            )
+
+            async def confirm_video_prompts(
+                frame_ids: list[UUID] = pending_frame_ids,
+            ) -> None:
+                video_prompt_dialog.close()
+                await _approve_video_prompts_from_ui(project_id, frame_ids)
+
+            with ui.row().classes("w-full justify-end gap-2 mt-3"):
+                ui.button("Cancelar", on_click=video_prompt_dialog.close).props("flat no-caps")
+                ui.button(
+                    "Aprovar e gerar clipes",
+                    icon="check_circle",
+                    on_click=confirm_video_prompts,
+                ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+        with ui.row().classes("w-full justify-end mb-3"):
+            ui.button(
+                f"Aprovar prompts pendentes ({len(pending_frames)})",
+                icon="check_circle",
+                on_click=video_prompt_dialog.open,
+            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
     with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
         for i, clip in enumerate(summary["clips"], 1):
             with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
@@ -2082,9 +2202,13 @@ def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
                     ui.label(f"{clip.duration_seconds}s · {clip.model}").classes(
                         "text-xs text-[#878d88]"
                     )
-        if not summary["clips"]:
+        if not summary["clips"] and not pending_frames:
             ui.label(
                 "O Diretor IA pode criar os clipes quando o storyboard estiver pronto."
+            ).classes("text-[#858b86]")
+        elif not summary["clips"]:
+            ui.label(
+                "Aprove os prompts pendentes acima para criar os primeiros clipes."
             ).classes("text-[#858b86]")
     ui.label("Timeline").classes("brand-type text-2xl font-bold mt-6")
     _render_timeline_strip(summary["timeline"], summary["timeline_items"])
