@@ -92,6 +92,7 @@ from app.visual_bible.service import generate_visual_bible, generate_visual_refe
 BRAND_MARK_URL = "/ui-assets/favicon.png"
 DEFAULT_STORY_DURATION_MINUTES = 5.0
 STORY_DURATION_OPTIONS = [3, 4, 5, 6, 7, 8]
+BLOCKING_DIALOG_PROPS = "persistent no-esc-dismiss no-backdrop-dismiss"
 logger = logging.getLogger(__name__)
 
 IDEA_GENRES = [
@@ -1578,16 +1579,17 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             "fortalecer o gancho inicial ou ajustar diálogos."
         ),
         "assets": (
-            "Sugestões que posso ajudar agora: aprofundar personagens, criar locais "
-            "recorrentes ou alinhar objetos importantes com o roteiro."
+            "Sugestões que posso ajudar agora: criar personagens, locais e objetos "
+            "a partir do roteiro, aprofundar perfis visuais ou gerar variações "
+            "mantendo a continuidade do projeto."
         ),
         "storyboard": (
-            "Sugestões que posso ajudar agora: melhorar enquadramentos, ritmo visual "
-            "ou continuidade entre cenas."
+            "Sugestões que posso ajudar agora: criar o storyboard a partir do roteiro, "
+            "melhorar enquadramentos, ajustar ritmo visual ou revisar continuidade entre cenas."
         ),
         "video": (
-            "Sugestões que posso ajudar agora: orientar movimento de câmera, ritmo "
-            "dos clipes ou ajustes de montagem."
+            "Sugestões que posso ajudar agora: criar clipes a partir do storyboard, "
+            "orientar movimento de câmera, ajustar ritmo ou propor variações de montagem."
         ),
     }
     messages: list[dict[str, str]] = [
@@ -1718,7 +1720,7 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     with ui.row().classes("w-full gap-4 items-start"):
         with ui.column().classes("flex-1 gap-4"):
             if generation_in_progress:
-                with ui.dialog() as generation_dialog, ui.card().classes(
+                with ui.dialog().props(BLOCKING_DIALOG_PROPS) as generation_dialog, ui.card().classes(
                     "entity-card rounded-2xl p-6 min-w-96 items-center text-center"
                 ):
                     ui.spinner("dots", size="lg", color="primary")
@@ -1782,8 +1784,8 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
     _section_title(
         "Biblioteca visual",
         "Personagens, locais e objetos canônicos do seu universo.",
-        "Gerar ativos",
-        lambda: _run_step(project_id, "visual"),
+        None,
+        None,
     )
     with (
         ui.tabs()
@@ -1817,17 +1819,17 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
                         with ui.element("div").classes("entity-card rounded-2xl p-8"):
                             ui.icon(kind).classes("text-4xl acid")
                             ui.label("Nada criado ainda").classes("text-lg font-semibold")
-                            ui.label("Use Gerar ativos para montar esta coleção.").classes(
-                                "text-sm text-[#888e89]"
-                            )
+                            ui.label(
+                                "O Diretor IA pode criar esta coleção a partir do roteiro."
+                            ).classes("text-sm text-[#888e89]")
 
 
 def _render_storyboard_area(project_id: UUID, summary: dict[str, Any]) -> None:
     _section_title(
         "Storyboard",
         "Planeje enquadramentos e ritmo antes de gerar os clipes.",
-        "Gerar storyboard",
-        lambda: _run_step(project_id, "storyboard"),
+        None,
+        None,
     )
     with ui.row().classes("w-full gap-3 mb-3"):
         for label, value in [
@@ -1851,17 +1853,17 @@ def _render_storyboard_area(project_id: UUID, summary: dict[str, Any]) -> None:
                     )
                     ui.label(frame.prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
         if not summary["frames"]:
-            ui.label("Gere o roteiro e os ativos antes de criar os quadros.").classes(
-                "text-[#858b86]"
-            )
+            ui.label(
+                "O Diretor IA pode criar os quadros quando roteiro e ativos estiverem prontos."
+            ).classes("text-[#858b86]")
 
 
 def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
     _section_title(
         "Produção de vídeo",
         "Gere clipes, escolha variações e finalize sua montagem.",
-        "Gerar clipes",
-        lambda: _run_step(project_id, "video"),
+        None,
+        None,
     )
     with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
         for i, clip in enumerate(summary["clips"], 1):
@@ -1880,7 +1882,9 @@ def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
                         "text-xs text-[#878d88]"
                     )
         if not summary["clips"]:
-            ui.label("Seus clipes aparecerão aqui depois do storyboard.").classes("text-[#858b86]")
+            ui.label(
+                "O Diretor IA pode criar os clipes quando o storyboard estiver pronto."
+            ).classes("text-[#858b86]")
     ui.label("Timeline").classes("brand-type text-2xl font-bold mt-6")
     _render_timeline_strip(summary["timeline"], summary["timeline_items"])
 
@@ -2058,7 +2062,7 @@ def register_ui_pages() -> None:
                             value="Esperança",
                         ).props("outlined")
 
-                    with ui.dialog() as loading_dialog, ui.card().classes(
+                    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as loading_dialog, ui.card().classes(
                         "entity-card rounded-2xl p-6 min-w-80 items-center text-center"
                     ):
                         ui.spinner("dots", size="lg", color="primary")

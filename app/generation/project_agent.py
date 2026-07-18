@@ -40,6 +40,8 @@ REVISION_TERMS = (
     "alterar",
     "melhore",
     "melhorar",
+    "mude",
+    "mudar",
     "modifique",
     "modificar",
     "refaça",
@@ -192,6 +194,9 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "gerar",
         "desenvolva",
         "desenvolver",
+        "faca",
+        "fazer",
+        "faça",
         "monte",
         "montar",
         "produza",
@@ -234,6 +239,13 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         return "generate_assets"
     if wants_revision and (active == "script" or any(term in normalized for term in script_terms)):
         return "revise_script"
+    if wants_revision:
+        if active == "assets":
+            return "generate_assets"
+        if active == "storyboard":
+            return "generate_storyboard"
+        if active == "video":
+            return "generate_video"
     if wants_generation and (
         active == "script" or any(term in normalized for term in script_terms)
     ):

@@ -26,6 +26,15 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("melhore o gancho do roteiro", "script") == (
         "revise_script"
     )
+    assert classify_project_chat_action("ajuste o ritmo e a camera", "video") == (
+        "generate_video"
+    )
+    assert classify_project_chat_action("faca o video final", "video") == (
+        "generate_video"
+    )
+    assert classify_project_chat_action("mude os enquadramentos", "storyboard") == (
+        "generate_storyboard"
+    )
 
 
 @pytest.mark.asyncio

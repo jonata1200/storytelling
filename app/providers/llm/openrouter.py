@@ -17,7 +17,7 @@ class OpenRouterLLMProvider:
             raise RuntimeError("OPENROUTER_API_KEY nao configurada")
 
         response = await asyncio.to_thread(self._send_request, request, True)
-        content_text = response["choices"][0]["message"]["content"]
+        content_text = self._extract_message_content(response)
         content = self._parse_json_content(content_text)
         usage = response.get("usage", {})
         return LLMResult(
@@ -71,6 +71,35 @@ class OpenRouterLLMProvider:
         if not isinstance(parsed, dict):
             raise RuntimeError("OpenRouter retornou resposta fora do formato esperado")
         return parsed
+
+    def _extract_message_content(self, response: dict[str, Any]) -> str:
+        if error := response.get("error"):
+            if isinstance(error, dict):
+                message = error.get("message") or error.get("code") or error
+            else:
+                message = error
+            raise RuntimeError(f"OpenRouter retornou erro: {message}")
+
+        choices = response.get("choices")
+        if not isinstance(choices, list) or not choices:
+            keys = ", ".join(sorted(response.keys())) or "nenhuma chave"
+            raise RuntimeError(
+                "OpenRouter retornou resposta sem choices. "
+                f"Chaves recebidas: {keys}"
+            )
+
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            raise RuntimeError("OpenRouter retornou choices fora do formato esperado")
+
+        message = first_choice.get("message")
+        if not isinstance(message, dict):
+            raise RuntimeError("OpenRouter retornou message fora do formato esperado")
+
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("OpenRouter retornou content vazio ou fora do formato esperado")
+        return content
 
     def _parse_json_content(self, content_text: str) -> dict[str, Any]:
         stripped = content_text.strip()
