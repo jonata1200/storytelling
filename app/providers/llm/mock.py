@@ -10,6 +10,7 @@ class MockLLMProvider:
             "generate_story_bible": self._story_bible,
             "generate_script": self._script,
             "generate_scenes_and_shots": self._scenes_and_shots,
+            "revise_script": self._revise_script,
             "director_agent_chat": self._director_agent_chat,
         }
         generator = generators.get(request.task)
@@ -161,6 +162,24 @@ class MockLLMProvider:
             "title": title,
             "language": language,
             "target_duration_seconds": int(variables.get("target_duration_seconds") or 240),
+            "word_count": len(content.split()),
+            "content": content,
+        }
+
+    def _revise_script(self, variables: dict) -> dict:
+        current_script = str(variables.get("current_script") or "")
+        instruction = str(variables.get("instruction") or "ajuste solicitado")
+        language = str(variables.get("language") or "pt-BR")
+        target_duration_seconds = int(variables.get("target_duration_seconds") or 300)
+        content = (
+            current_script.strip()
+            + "\n\nRevisao aplicada pelo Diretor IA: "
+            + instruction.strip().capitalize()
+        ).strip()
+        return {
+            "title": str(variables.get("title") or "Roteiro revisado"),
+            "language": language,
+            "target_duration_seconds": target_duration_seconds,
             "word_count": len(content.split()),
             "content": content,
         }

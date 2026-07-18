@@ -10,6 +10,7 @@ from app.generation.model_settings import llm_provider_for_task
 from app.generation.service import run_structured_generation
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
+from app.projects.versioning import create_artifact_version
 from app.storytelling.models import (
     Briefing,
     Scene,
@@ -459,6 +460,77 @@ async def generate_script(
             payload=payload,
         )
     )
+    advance_project_status(project, ProjectStatus.SCRIPT_APPROVAL)
+    await session.commit()
+    await session.refresh(script)
+    return script
+
+
+async def revise_script(
+    session: AsyncSession,
+    project_id: UUID,
+    script_id: UUID,
+    instruction: str,
+    project_context: dict | None = None,
+) -> Script | None:
+    project = await ProjectRepository(session).get_project(project_id)
+    script = await session.get(Script, script_id)
+    briefing = await get_latest_briefing(session, project_id)
+    if project is None or script is None or script.project_id != project_id or briefing is None:
+        return None
+    artifact = await session.get(Artifact, script.artifact_id)
+    if artifact is None:
+        return None
+
+    variables = {
+        "title": script.title,
+        "language": script.language,
+        "target_duration_seconds": script.target_duration_seconds,
+        "current_script": script.content,
+        "instruction": instruction,
+        "project_context": project_context or {},
+    }
+    provider, model = await llm_provider_for_task(session, project_id, "revise_script")
+    result, execution = await run_structured_generation(
+        session,
+        provider,
+        project_id,
+        "revise_script",
+        variables,
+        artifact_id=script.artifact_id,
+        model=model,
+    )
+    payload = normalize_script_payload(
+        _required_mapping(result.content, "revise_script"),
+        default_title=script.title,
+        language=script.language,
+        target_duration_seconds=script.target_duration_seconds,
+    )
+    title = _required_str(payload, "title", "revise_script")
+    content = _required_str(payload, "content", "revise_script")
+    script.title = title
+    script.language = _required_str(payload, "language", "revise_script")
+    script.target_duration_seconds = _required_int(
+        payload, "target_duration_seconds", "revise_script"
+    )
+    script.word_count = _required_int(payload, "word_count", "revise_script")
+    script.content = content
+    await create_artifact_version(
+        session,
+        artifact,
+        payload,
+        change_note=f"Revisao por chat: {instruction[:160]}",
+    )
+    session.add(
+        ScriptVersion(
+            script_id=script.id,
+            version_number=artifact.current_version,
+            content=script.content,
+            word_count=script.word_count,
+            payload=payload,
+        )
+    )
+    execution.response = result.content
     advance_project_status(project, ProjectStatus.SCRIPT_APPROVAL)
     await session.commit()
     await session.refresh(script)

@@ -13,6 +13,7 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
     "generate_story_bible": "Generate Story Bible",
     "generate_script": "Generate Script",
     "generate_scenes_and_shots": "Generate Scenes And Shots",
+    "revise_script": "Revise Script",
 }
 
 DEFAULT_TEMPLATES: dict[str, str] = {
@@ -48,6 +49,15 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         '"duration_seconds":75,"shots":[{"shot_number":1,"duration_seconds":25,'
         '"narration_text":"...","dialogue_text":"","action":"...","emotion":"...",'
         '"visual_composition":"...","camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}]}]}'
+    ),
+    "revise_script": (
+        "Revise o roteiro existente atendendo ao pedido do usuario. "
+        "Preserve a continuidade da Story Bible e mantenha a duracao alvo de "
+        "{target_duration_seconds}s. Pedido do usuario: {instruction}. "
+        "Contexto do projeto: {project_context}. Roteiro atual: {current_script}. "
+        "Responda somente JSON neste formato exato: "
+        '{"title":"...","language":"pt-BR","target_duration_seconds":300,'
+        '"word_count":650,"content":"ROTEIRO REVISADO COMPLETO AQUI"}'
     ),
 }
 

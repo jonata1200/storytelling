@@ -149,6 +149,8 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
         "genre": "Drama",
         "primary_emotion": "Esperanca",
         "premise": "Uma familia revive o mesmo minuto ate dizer a verdade.",
+        "obstacles": ["culpa antiga", "silencio familiar"],
+        "twist": "O segredo protegeu a protagonista.",
         "duration_minutes": 7,
     }
 
@@ -159,6 +161,9 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
     assert captured["form"]["duration"] == 7
     assert "7 minutos" in captured["form"]["objective"]
     assert "adequar para 7 minutos" in captured["form"]["constraints"]
+    assert captured["form"]["source_idea_payload"] == idea
+    assert "Obstaculos: culpa antiga, silencio familiar" in captured["form"]["one_line_idea"]
+    assert "Virada: O segredo protegeu a protagonista." in captured["form"]["one_line_idea"]
 
 
 @pytest.mark.asyncio

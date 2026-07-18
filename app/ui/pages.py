@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.preferences import save_preferences
 from app.config.settings import get_settings
+from app.core.enums import ArtifactStatus
 from app.costs.models import CostEntry
 from app.database.session import AsyncSessionLocal
 from app.finalization.models import Export, SubtitleTrack
@@ -24,7 +25,6 @@ from app.finalization.service import (
     generate_subtitles,
     synthesize_narration,
 )
-from app.generation.director_agent import ask_director_agent
 from app.generation.model_settings import (
     NARRATIVE_TASKS,
     TASK_LABELS,
@@ -32,6 +32,7 @@ from app.generation.model_settings import (
     set_model_setting,
 )
 from app.generation.models import ProjectModelSetting
+from app.generation.project_agent import handle_project_chat
 from app.production.models import ProjectProductionSettings
 from app.production.service import (
     ASPECT_RATIOS,
@@ -426,6 +427,17 @@ async def _project_summary(project_id: UUID) -> dict[str, Any] | None:
                 "subtitles": await _scalar_count(session, SubtitleTrack, project_id),
                 "exports": await _scalar_count(session, Export, project_id),
                 "qa_issues": await _scalar_count(session, ContinuityIssue, project_id),
+                "stale_artifacts": int(
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(Artifact)
+                        .where(
+                            Artifact.project_id == project_id,
+                            Artifact.status == ArtifactStatus.STALE,
+                        )
+                    )
+                    or 0
+                ),
             },
             "cost_total": str(cost_total or Decimal("0.000000")),
             "quality": latest_quality,
@@ -595,6 +607,48 @@ def _compact_project_title(text: str) -> str:
     return first_sentence[:80].strip(" ,;:-") or "Novo projeto de storytelling"
 
 
+def _format_idea_payload_for_project(idea: dict[str, Any]) -> str:
+    labels = {
+        "title": "Titulo",
+        "theme": "Tema",
+        "genre": "Genero",
+        "primary_emotion": "Emocao principal",
+        "final_emotion": "Emocao final",
+        "hook": "Gancho",
+        "premise": "Premissa",
+        "protagonist": "Protagonista",
+        "protagonist_desire": "Desejo do protagonista",
+        "emotional_need": "Necessidade emocional",
+        "conflict": "Conflito",
+        "obstacles": "Obstaculos",
+        "stakes": "Riscos narrativos",
+        "twist": "Virada",
+        "climax": "Climax",
+        "resolution": "Resolucao",
+        "duration_minutes": "Duracao",
+        "retention_potential": "Potencial de retencao",
+        "cliche_risk": "Risco de cliche",
+        "production_complexity": "Complexidade de producao",
+    }
+    ordered_keys = [key for key in labels if key in idea]
+    ordered_keys.extend(key for key in idea if key not in labels and not key.startswith("_"))
+    lines: list[str] = []
+    for key in ordered_keys:
+        value = idea.get(key)
+        if value in (None, "", [], {}):
+            continue
+        if isinstance(value, list):
+            value_text = ", ".join(str(item) for item in value if str(item).strip())
+        elif isinstance(value, dict):
+            value_text = "; ".join(f"{item_key}: {item_value}" for item_key, item_value in value.items())
+        else:
+            value_text = str(value)
+        if key == "duration_minutes":
+            value_text = f"{coerce_duration_minutes(value):g} minutos"
+        lines.append(f"{labels.get(key, key)}: {value_text}")
+    return "\n".join(lines)
+
+
 async def _generate_initial_script(
     session: AsyncSession,
     project_id: UUID,
@@ -708,7 +762,10 @@ async def _create_project_from_form(
                     "image_model": form["image_model"],
                     "video_model": form["video_model"],
                     "motion_intensity": int(form["motion_intensity"]),
-                    "metadata_json": {"one_line_idea": form["one_line_idea"]},
+                    "metadata_json": {
+                        "one_line_idea": form["one_line_idea"],
+                        "source_idea": form.get("source_idea_payload"),
+                    },
                 },
             )
             briefing = BriefingCreate(
@@ -803,19 +860,8 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
             "criar ganchos claros\n"
             f"adequar para {duration:g} minutos"
         ),
-        "one_line_idea": "\n".join(
-            part
-            for part in [
-                title,
-                f"Tema: {theme}",
-                f"Genero: {genre}",
-                f"Emocao principal: {emotion}",
-                f"Premissa: {premise}",
-                f"Gancho: {idea.get('hook') or ''}",
-                f"Protagonista: {idea.get('protagonist') or ''}",
-            ]
-            if part.strip()
-        ),
+        "one_line_idea": _format_idea_payload_for_project(idea),
+        "source_idea_payload": dict(idea),
         "content_type": "short_drama",
         "aspect_ratio": "9:16",
         "workflow_mode": "keyframes_i2v",
@@ -1398,6 +1444,10 @@ def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> 
         with ui.column().classes("gap-0 min-w-40"):
             ui.label(project.title).classes("font-semibold truncate max-w-56")
         ui.label("Episódio 1").classes("text-[11px] text-[#818681]")
+        if counts.get("stale_artifacts", 0):
+            ui.badge(f"{counts['stale_artifacts']} desatualizado(s)").classes(
+                "bg-amber-900 text-amber-100"
+            ).tooltip("Alguns artefatos derivados precisam ser regenerados.")
         with ui.row().classes("desktop-nav flex-1 justify-center gap-2"):
             for label, key in tabs:
                 allowed, reason = _workspace_section_access(key, counts)
@@ -1454,17 +1504,6 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             ),
         }
     ]
-    context = {
-        "project": summary["project"].title,
-        "section": active,
-        "summary": (
-            f"{summary['counts']['scripts']} roteiro(s), "
-            f"{summary['counts']['characters']} personagem(ns), "
-            f"{summary['counts']['frames']} quadro(s) e "
-            f"{summary['counts']['clips']} clipe(s)"
-        ),
-    }
-
     with ui.column().classes(
         "right-assistant w-[340px] min-w-[340px] border-l border-[#252925] bg-[#0d0f0e] h-[calc(100vh-64px)] p-4 gap-4 sticky top-16"
     ):
@@ -1502,19 +1541,15 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             should_reload = False
             try:
                 async with AsyncSessionLocal() as session:
-                    if _requests_script_generation(user_message, active):
-                        response, should_reload = await _develop_script_for_existing_project(
-                            session, project_id
-                        )
-                    else:
-                        response = await ask_director_agent(
-                            session,
-                            project_id,
-                            active,
-                            user_message,
-                            context,
-                            messages,
-                        )
+                    result = await handle_project_chat(
+                        session,
+                        project_id,
+                        active,
+                        user_message,
+                        messages,
+                    )
+                    response = result.message
+                    should_reload = result.changed
             except Exception as exc:
                 response = f"Não consegui responder agora ({type(exc).__name__}). Tente novamente."
             messages.append({"role": "assistant", "content": response})
