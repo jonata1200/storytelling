@@ -30,6 +30,8 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         for task, template in DEFAULT_TEMPLATES.items()
     }
 
-    assert '"content":"ROTEIRO COMPLETO AQUI"' in compiled["generate_script"]
+    assert '"content":"ROTEIRO DE PRODUCAO COMPLETO AQUI"' in compiled["generate_script"]
+    assert "indicacao para storyboard" in compiled["generate_script"]
+    assert "indicacao para video" in compiled["revise_script"]
     assert '"scenes"' in compiled["generate_scenes_and_shots"]
     assert '"ideas"' in compiled["generate_story_ideas"]

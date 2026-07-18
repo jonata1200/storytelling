@@ -7,9 +7,10 @@ import mimetypes
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
+from nicegui import app as nicegui_app
 from nicegui import background_tasks, ui
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -748,14 +749,66 @@ async def _generate_initial_script_in_background(
             )
 
 
+async def _generate_missing_scenes_in_background(project_id: UUID, script_id: UUID) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            settings = await get_or_create_production_settings(session, project_id)
+            metadata = settings.metadata_json or {}
+            action = metadata.get("ai_action") if isinstance(metadata, dict) else None
+            status = str(action.get("status") or "") if isinstance(action, dict) else ""
+            if status in {"queued", "running"}:
+                return
+
+            scene_count = await _scalar_count(session, Scene, project_id)
+            if scene_count > 0:
+                await _set_project_ai_action_status(
+                    session,
+                    project_id,
+                    status="completed",
+                    message="Cenas e planos ja estavam criados.",
+                    action="create_script_scenes",
+                )
+                return
+
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="running",
+                message="A IA esta criando cenas e planos para o roteiro.",
+                action="create_script_scenes",
+            )
+            scenes = await generate_scenes_and_shots(session, project_id, script_id)
+            if scenes is None:
+                raise ValueError("nao foi possivel gerar cenas e planos")
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="completed",
+                message="Cenas e planos criados para o roteiro.",
+                action="create_script_scenes",
+            )
+    except Exception:
+        logger.exception("Nao foi possivel gerar cenas do roteiro %s", script_id)
+        async with AsyncSessionLocal() as session:
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="failed",
+                message="A IA nao conseguiu criar cenas e planos.",
+                action="create_script_scenes",
+                error="Consulte o terminal para ver o erro completo.",
+            )
+
+
 async def _reload_project_when_script_ready(project_id: UUID) -> None:
     async with AsyncSessionLocal() as session:
         script = await _latest(session, Script, project_id)
+        scene_count = await _scalar_count(session, Scene, project_id)
         settings = await get_or_create_production_settings(session, project_id)
         metadata = settings.metadata_json or {}
         action = metadata.get("ai_action") if isinstance(metadata, dict) else None
         status = str(action.get("status") or "") if isinstance(action, dict) else ""
-    if script is not None or status == "failed":
+    if status in {"completed", "failed"} or (script is not None and scene_count > 0):
         ui.navigate.reload()
 
 
@@ -1566,6 +1619,54 @@ def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> 
         )
 
 
+def _assistant_initial_message(active: str, assistant_suggestions: dict[str, str]) -> dict[str, str]:
+    return {
+        "role": "assistant",
+        "content": (
+            "Estou acompanhando esta etapa. Posso revisar, propor variações "
+            "e orientar a próxima ação mantendo a continuidade do projeto.\n\n"
+            f"{assistant_suggestions.get(active, '')}"
+        ),
+    }
+
+
+def _assistant_chat_store() -> dict[str, list[dict[str, str]]]:
+    raw_store = nicegui_app.storage.user.get("project_assistant_messages")
+    if not isinstance(raw_store, dict):
+        raw_store = {}
+    return cast(dict[str, list[dict[str, str]]], raw_store)
+
+
+def _load_assistant_messages(
+    project_id: UUID, active: str, assistant_suggestions: dict[str, str]
+) -> list[dict[str, str]]:
+    store = _assistant_chat_store()
+    raw_messages = store.get(str(project_id), [])
+    messages: list[dict[str, str]] = []
+    for item in raw_messages:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "")
+        content = str(item.get("content") or "")
+        if role == "assistant_pending":
+            continue
+        if role and content:
+            messages.append({"role": role, "content": content})
+    if not messages:
+        messages = [_assistant_initial_message(active, assistant_suggestions)]
+    store[str(project_id)] = messages
+    nicegui_app.storage.user["project_assistant_messages"] = store
+    return messages
+
+
+def _save_assistant_messages(project_id: UUID, messages: list[dict[str, str]]) -> None:
+    store = _assistant_chat_store()
+    store[str(project_id)] = [
+        item for item in messages[-80:] if item["role"] != "assistant_pending"
+    ]
+    nicegui_app.storage.user["project_assistant_messages"] = store
+
+
 def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> None:
     prompts = {
         "script": "Peça ajustes de tom, diálogo ou estrutura.",
@@ -1592,16 +1693,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             "orientar movimento de câmera, ajustar ritmo ou propor variações de montagem."
         ),
     }
-    messages: list[dict[str, str]] = [
-        {
-            "role": "assistant",
-            "content": (
-                "Estou acompanhando esta etapa. Posso revisar, propor variações "
-                "e orientar a próxima ação mantendo a continuidade do projeto.\n\n"
-                f"{assistant_suggestions.get(active, '')}"
-            ),
-        }
-    ]
+    messages = _load_assistant_messages(project_id, active, assistant_suggestions)
     with ui.column().classes(
         "right-assistant w-[340px] min-w-[340px] border-l border-[#252925] "
         "bg-[#0d0f0e] h-[calc(100vh-64px)] min-h-0 p-4 gap-4 sticky top-16"
@@ -1617,16 +1709,26 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             with ui.column().classes("w-full gap-3"):
                 for item in messages:
                     sent = item["role"] == "user"
+                    pending = item["role"] == "assistant_pending"
                     with ui.row().classes(f"w-full {'justify-end' if sent else 'justify-start'}"):
-                        ui.label(item["content"]).classes(
-                            "assistant-chat-bubble w-fit rounded-2xl px-4 py-3 text-sm leading-5 "
-                            + ("max-w-[88%] " if sent else "max-w-full ")
-                            + (
-                                "acid-bg rounded-br-sm"
-                                if sent
-                                else "glass text-[#c8ccc8] rounded-bl-sm"
+                        if pending:
+                            with ui.row().classes(
+                                "assistant-chat-bubble glass text-[#c8ccc8] rounded-2xl "
+                                "rounded-bl-sm px-4 py-3 text-sm leading-5 max-w-full "
+                                "items-center gap-2"
+                            ):
+                                ui.spinner("dots", size="sm", color="primary")
+                                ui.label(item["content"])
+                        else:
+                            ui.label(item["content"]).classes(
+                                "assistant-chat-bubble w-fit rounded-2xl px-4 py-3 text-sm leading-5 "
+                                + ("max-w-[88%] " if sent else "max-w-full ")
+                                + (
+                                    "acid-bg rounded-br-sm"
+                                    if sent
+                                    else "glass text-[#c8ccc8] rounded-bl-sm"
+                                )
                             )
-                        )
 
         with ui.column().classes(
             "assistant-chat-messages w-full flex-1 min-h-0 overflow-y-auto pr-1"
@@ -1638,6 +1740,12 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             if not user_message:
                 return
             messages.append({"role": "user", "content": user_message})
+            pending_message = {
+                "role": "assistant_pending",
+                "content": "Diretor IA esta buscando a melhor resposta...",
+            }
+            messages.append(pending_message)
+            _save_assistant_messages(project_id, messages)
             prompt.value = ""
             conversation.refresh()
             should_reload = False
@@ -1648,13 +1756,16 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                         project_id,
                         active,
                         user_message,
-                        messages,
+                        [item for item in messages if item["role"] != "assistant_pending"],
                     )
                     response = result.message
                     should_reload = result.changed
             except Exception as exc:
                 response = f"Não consegui responder agora ({type(exc).__name__}). Tente novamente."
+            if pending_message in messages:
+                messages.remove(pending_message)
             messages.append({"role": "assistant", "content": response})
+            _save_assistant_messages(project_id, messages)
             conversation.refresh()
             if should_reload:
                 ui.notify(response, color="positive")
@@ -1708,7 +1819,20 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     script = summary["script"]
     ai_action = _project_ai_action(summary)
     ai_status = str(ai_action.get("status") or "")
-    generation_in_progress = script is None and ai_status in {"queued", "running"}
+    ai_action_name = str(ai_action.get("action") or "")
+    missing_scenes = script is not None and not summary["scenes"]
+    scene_generation_failed = ai_action_name == "create_script_scenes" and ai_status == "failed"
+    should_recover_missing_scenes = (
+        missing_scenes and ai_status not in {"queued", "running"} and not scene_generation_failed
+    )
+    if should_recover_missing_scenes:
+        background_tasks.create(
+            _generate_missing_scenes_in_background(project_id, script.id),
+            name=f"generate missing scenes {project_id}",
+        )
+    generation_in_progress = (
+        ai_status in {"queued", "running"} or should_recover_missing_scenes
+    )
     if generation_in_progress:
         ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
     _section_title(
@@ -1724,9 +1848,13 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                     "entity-card rounded-2xl p-6 min-w-96 items-center text-center"
                 ):
                     ui.spinner("dots", size="lg", color="primary")
-                    ui.label("IA criando o roteiro").classes("brand-type text-xl font-bold mt-3")
                     ui.label(
-                        str(
+                        "IA criando cenas" if missing_scenes else "IA criando o roteiro"
+                    ).classes("brand-type text-xl font-bold mt-3")
+                    ui.label(
+                        "A IA esta criando cenas e planos para o roteiro."
+                        if missing_scenes
+                        else str(
                             ai_action.get("message")
                             or "A IA esta desenvolvendo o roteiro com base na ideia."
                         )

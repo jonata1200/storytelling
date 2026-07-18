@@ -35,19 +35,28 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "timeline, relationships, continuity_rules, audio_style e export_profile."
     ),
     "generate_script": (
-        "Crie um roteiro cinematografico completo em {language} para uma historia vertical com "
+        "Crie um roteiro de producao audiovisual em {language} para uma historia vertical com "
         "duracao alvo de {target_duration_seconds}s. Use a Story Bible em {story_bible}. "
-        "Formate como roteiro de cinema: cabecalho de cena INT./EXT., local e periodo, "
-        "linhas de acao no presente, nomes de personagens em caixa alta antes das falas, "
-        "dialogos curtos, indicacoes visuais e transicoes discretas. O texto deve ter "
-        "gancho inicial, desenvolvimento, virada, climax e payoff emocional. "
+        "O roteiro deve servir diretamente para personagens, storyboard e video. "
+        "Organize em 4 a 6 cenas numeradas, cada uma com duracao aproximada, cabecalho "
+        "INT./EXT. + local + periodo, objetivo dramatico, personagens em cena, local, "
+        "objetos importantes, elementos visuais, acao filmavel no presente, narracao separada "
+        "de dialogos, dialogos curtos com nomes em caixa alta, indicacao para storyboard "
+        "e indicacao para video com movimento de camera e ritmo. "
+        "Evite descricoes abstratas sem acao visual. Inclua gancho inicial, virada, climax "
+        "e payoff emocional. "
         "Responda somente JSON neste formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
-        '"word_count":650,"content":"ROTEIRO COMPLETO AQUI"}}'
+        '"word_count":650,"content":"ROTEIRO DE PRODUCAO COMPLETO AQUI"}}'
     ),
     "generate_scenes_and_shots": (
-        "Divida o roteiro em {script} em cenas e planos para duracao total de "
-        "{target_duration_seconds}s. Responda somente JSON neste formato exato: "
+        "Divida o roteiro de producao em {script} em cenas e planos para duracao total de "
+        "{target_duration_seconds}s. Extraia de cada cena personagens, locais, objetos, "
+        "acao filmavel, narracao, dialogo, indicacoes de storyboard e indicacoes de video. "
+        "Cada plano deve ser util para gerar imagem/video: visual_composition deve descrever "
+        "enquadramento vertical, personagem/objeto principal, ambiente e luz; camera_movement "
+        "deve orientar movimento realista; action deve ser visivel e especifica. "
+        "Responda somente JSON neste formato exato: "
         '{{"scenes":[{{"scene_number":1,"title":"...","summary":"...",'
         '"duration_seconds":75,"shots":[{{"shot_number":1,"duration_seconds":25,'
         '"narration_text":"...","dialogue_text":"","action":"...","emotion":"...",'
@@ -58,11 +67,14 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "Preserve a continuidade da Story Bible e mantenha a duracao alvo de "
         "{target_duration_seconds}s. Pedido do usuario: {instruction}. "
         "Contexto do projeto: {project_context}. Roteiro atual: {current_script}. "
-        "Mantenha formato de roteiro de cinema com cabecalhos INT./EXT., acao no presente, "
-        "personagens em caixa alta antes dos dialogos e transicoes discretas. "
+        "Mantenha formato de roteiro de producao audiovisual com cenas numeradas, duracao "
+        "aproximada, cabecalhos INT./EXT., objetivo dramatico, personagens, local, objetos, "
+        "elementos visuais, acao filmavel no presente, narracao separada de dialogos, "
+        "personagens em caixa alta antes dos dialogos, indicacao para storyboard e indicacao "
+        "para video com movimento de camera e ritmo. "
         "Responda somente JSON neste formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
-        '"word_count":650,"content":"ROTEIRO REVISADO COMPLETO AQUI"}}'
+        '"word_count":650,"content":"ROTEIRO DE PRODUCAO REVISADO COMPLETO AQUI"}}'
     ),
 }
 
