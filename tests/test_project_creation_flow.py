@@ -33,6 +33,25 @@ def test_chat_prompt_title_uses_first_sentence() -> None:
     assert _compact_project_title(prompt) == "A chave perdida"
 
 
+def test_project_ai_action_reads_production_metadata() -> None:
+    summary = {
+        "production_settings": SimpleNamespace(
+            metadata_json={
+                "ai_action": {
+                    "action": "create_initial_script",
+                    "status": "running",
+                    "message": "Criando roteiro",
+                }
+            }
+        )
+    }
+
+    action = pages._project_ai_action(summary)
+
+    assert action["status"] == "running"
+    assert action["message"] == "Criando roteiro"
+
+
 def test_story_idea_payload_is_normalized_for_pipeline() -> None:
     payload = normalize_story_idea_payload(
         {

@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import logging
 import mimetypes
 from dataclasses import dataclass
 from decimal import Decimal
@@ -9,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from nicegui import ui
+from nicegui import background_tasks, ui
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,6 +92,7 @@ from app.visual_bible.service import generate_visual_bible, generate_visual_refe
 BRAND_MARK_URL = "/ui-assets/favicon.png"
 DEFAULT_STORY_DURATION_MINUTES = 5.0
 STORY_DURATION_OPTIONS = [3, 4, 5, 6, 7, 8]
+logger = logging.getLogger(__name__)
 
 IDEA_GENRES = [
     "Ação",
@@ -676,6 +678,65 @@ async def _generate_initial_script(
     return script
 
 
+async def _set_project_ai_action_status(
+    session: AsyncSession,
+    project_id: UUID,
+    *,
+    status: str,
+    message: str,
+    action: str = "create_initial_script",
+    error: str | None = None,
+) -> None:
+    settings = await get_or_create_production_settings(session, project_id)
+    metadata = dict(settings.metadata_json or {})
+    metadata["ai_action"] = {
+        "action": action,
+        "status": status,
+        "message": message,
+        "error": error,
+    }
+    settings.metadata_json = metadata
+    await session.commit()
+
+
+async def _generate_initial_script_in_background(
+    project_id: UUID,
+    source_idea: dict[str, Any] | None = None,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="running",
+                message="A IA esta criando o roteiro inicial com base na ideia.",
+            )
+            await _generate_initial_script(session, project_id, source_idea)
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="completed",
+                message="Roteiro inicial criado.",
+            )
+    except Exception:
+        logger.exception("Nao foi possivel gerar roteiro inicial do projeto %s", project_id)
+        async with AsyncSessionLocal() as session:
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="failed",
+                message="A IA nao conseguiu criar o roteiro inicial.",
+                error="Consulte o terminal para ver o erro completo.",
+            )
+
+
+async def _reload_project_when_script_ready(project_id: UUID) -> None:
+    async with AsyncSessionLocal() as session:
+        script = await _latest(session, Script, project_id)
+    if script is not None:
+        ui.navigate.reload()
+
+
 def _requests_script_generation(message: str, active: str) -> bool:
     normalized = message.lower()
     generation_terms = (
@@ -744,11 +805,13 @@ async def _create_project_from_form(
 ) -> None:
     try:
         duration = coerce_duration_minutes(form["duration"])
+        project_id: UUID
         async with AsyncSessionLocal() as session:
             project = await create_project(
                 session,
                 ProjectCreate(title=form["title"], description=form["description"]),
             )
+            project_id = project.id
             await ensure_default_model_settings(session, project.id)
             await update_production_settings(
                 session,
@@ -785,15 +848,28 @@ async def _create_project_from_form(
             )
             await create_briefing(session, project.id, briefing)
             if generate_initial_script:
-                await _generate_initial_script(session, project.id, source_idea)
+                await _set_project_ai_action_status(
+                    session,
+                    project.id,
+                    status="queued",
+                    message="A IA vai iniciar a criacao do roteiro inicial.",
+                )
+        if generate_initial_script:
+            background_tasks.create(
+                _generate_initial_script_in_background(
+                    project_id,
+                    dict(source_idea) if source_idea is not None else None,
+                ),
+                name=f"initial-script-{project_id}",
+            )
         message = (
-            f"Projeto criado com roteiro e cenas iniciais de {duration:g} minutos."
+            f"Projeto criado. A IA ja iniciou o roteiro de {duration:g} minutos."
             if generate_initial_script
             else "Projeto criado com briefing inicial."
         )
         ui.notify(message, color="positive")
         destination = (
-            f"/projects/{project.id}/script" if generate_initial_script else f"/projects/{project.id}"
+            f"/projects/{project_id}/script" if generate_initial_script else f"/projects/{project_id}"
         )
         ui.navigate.to(destination)
     except Exception as exc:
@@ -1580,8 +1656,20 @@ def _section_title(title: str, subtitle: str, action: str, callback: Any) -> Non
         ).classes("acid-bg rounded-xl font-semibold")
 
 
+def _project_ai_action(summary: dict[str, Any]) -> dict[str, Any]:
+    settings = summary.get("production_settings")
+    metadata = getattr(settings, "metadata_json", {}) or {}
+    action = metadata.get("ai_action")
+    return action if isinstance(action, dict) else {}
+
+
 def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     script = summary["script"]
+    ai_action = _project_ai_action(summary)
+    ai_status = str(ai_action.get("status") or "")
+    generation_in_progress = script is None and ai_status in {"queued", "running"}
+    if generation_in_progress:
+        ui.timer(12.0, lambda: _reload_project_when_script_ready(project_id), once=True)
     _section_title(
         "Roteiro",
         "Estruture a narrativa e transforme o texto em cenas e planos.",
@@ -1590,6 +1678,38 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     )
     with ui.row().classes("w-full gap-4 items-start"):
         with ui.column().classes("flex-1 gap-4"):
+            if generation_in_progress:
+                with ui.dialog() as generation_dialog, ui.card().classes(
+                    "entity-card rounded-2xl p-6 min-w-96 items-center text-center"
+                ):
+                    ui.spinner("dots", size="lg", color="primary")
+                    ui.label("IA criando o roteiro").classes("brand-type text-xl font-bold mt-3")
+                    ui.label(
+                        str(
+                            ai_action.get("message")
+                            or "A IA esta desenvolvendo o roteiro com base na ideia."
+                        )
+                    ).classes("text-sm text-[#858b86]")
+                    with ui.row().classes("w-full justify-center gap-2 mt-4"):
+                        ui.button(
+                            "Verificar agora",
+                            icon="refresh",
+                            on_click=lambda: _reload_project_when_script_ready(project_id),
+                        ).props("outline no-caps")
+                        ui.button("Continuar", on_click=generation_dialog.close).props(
+                            "flat no-caps"
+                        )
+                generation_dialog.open()
+            elif script is None and ai_status == "failed":
+                with ui.element("div").classes(
+                    "border border-red-900 bg-red-950/40 rounded-2xl p-4 text-red-100"
+                ):
+                    ui.label("A IA nao conseguiu criar o roteiro inicial.").classes(
+                        "font-semibold"
+                    )
+                    ui.label(str(ai_action.get("error") or ai_action.get("message") or "")).classes(
+                        "text-sm opacity-80"
+                    )
             with ui.element("div").classes("entity-card rounded-2xl p-7 min-h-[520px] w-full"):
                 ui.label(script.title if script else "Seu roteiro começa aqui").classes(
                     "brand-type text-2xl font-bold mb-5"
@@ -1597,7 +1717,7 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                 content = (
                     script.content
                     if script
-                    else "Conte a ideia do seu filme no chat inicial ou use o Diretor IA. Quando o roteiro for gerado, ele aparecerá neste editor organizado em cenas, ações e diálogos."
+                    else "A IA esta desenvolvendo o roteiro com base na ideia do projeto. Use o pop-up para verificar quando estiver pronto."
                 )
                 ui.label(content).classes("whitespace-pre-wrap leading-8 text-[#d9dcd9]")
         with ui.column().classes("w-64 gap-3"):

@@ -22,10 +22,10 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "minutos. Cada ideia precisa sustentar a duracao escolhida com conflito, virada e payoff. "
         "Tema: {theme}. Publico: {audience}. Emocao: {primary_emotion}. "
         "Responda somente JSON neste formato: "
-        '{"ideas":[{"title":"...","genre":"...","primary_emotion":"...",'
+        '{{"ideas":[{{"title":"...","genre":"...","primary_emotion":"...",'
         '"theme":"...","hook":"...","premise":"...","protagonist":"...",'
         '"duration_minutes":5,"retention_potential":80,"cliche_risk":20,'
-        '"production_complexity":35}]}'
+        '"production_complexity":35}}]}}'
     ),
     "generate_story_bible": (
         "Crie uma Story Bible estruturada usando a ideia aprovada: {idea_title}. "
@@ -39,16 +39,16 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "duracao alvo de {target_duration_seconds}s. Use a Story Bible em {story_bible}. "
         "O texto deve ter gancho inicial, desenvolvimento, virada, climax e payoff emocional. "
         "Responda somente JSON neste formato exato: "
-        '{"title":"...","language":"pt-BR","target_duration_seconds":300,'
-        '"word_count":650,"content":"ROTEIRO COMPLETO AQUI"}'
+        '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
+        '"word_count":650,"content":"ROTEIRO COMPLETO AQUI"}}'
     ),
     "generate_scenes_and_shots": (
         "Divida o roteiro em {script} em cenas e planos para duracao total de "
         "{target_duration_seconds}s. Responda somente JSON neste formato exato: "
-        '{"scenes":[{"scene_number":1,"title":"...","summary":"...",'
-        '"duration_seconds":75,"shots":[{"shot_number":1,"duration_seconds":25,'
+        '{{"scenes":[{{"scene_number":1,"title":"...","summary":"...",'
+        '"duration_seconds":75,"shots":[{{"shot_number":1,"duration_seconds":25,'
         '"narration_text":"...","dialogue_text":"","action":"...","emotion":"...",'
-        '"visual_composition":"...","camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}]}]}'
+        '"visual_composition":"...","camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}}]}}]}}'
     ),
     "revise_script": (
         "Revise o roteiro existente atendendo ao pedido do usuario. "
@@ -56,8 +56,8 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "{target_duration_seconds}s. Pedido do usuario: {instruction}. "
         "Contexto do projeto: {project_context}. Roteiro atual: {current_script}. "
         "Responda somente JSON neste formato exato: "
-        '{"title":"...","language":"pt-BR","target_duration_seconds":300,'
-        '"word_count":650,"content":"ROTEIRO REVISADO COMPLETO AQUI"}'
+        '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
+        '"word_count":650,"content":"ROTEIRO REVISADO COMPLETO AQUI"}}'
     ),
 }
 
