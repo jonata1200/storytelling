@@ -55,7 +55,12 @@ from app.storyboards.models import (
     TimelineItem,
 )
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
-from app.storytelling.idea_lab import generate_freeform_ideas
+from app.storytelling.idea_lab import (
+    delete_saved_idea,
+    generate_freeform_ideas,
+    load_saved_ideas,
+    save_idea,
+)
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryBible, StoryIdea
 from app.storytelling.schemas import BriefingCreate
 from app.storytelling.service import (
@@ -889,6 +894,25 @@ def _save_avatar_file(filename: str, content: bytes) -> Path:
     return target
 
 
+def _save_script_upload(filename: str, content: bytes) -> Path:
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".docx", ".pdf"}:
+        raise ValueError("Formato de roteiro nao permitido.")
+    safe_stem = "".join(
+        character if character.isalnum() or character in {"-", "_"} else "_"
+        for character in Path(filename).stem
+    ).strip("_")
+    target_dir = Path("storage/uploads/scripts")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{safe_stem or 'roteiro'}{suffix}"
+    counter = 1
+    while target.exists():
+        target = target_dir / f"{safe_stem or 'roteiro'}-{counter}{suffix}"
+        counter += 1
+    target.write_bytes(content)
+    return target
+
+
 def _user_avatar(size: str = "44px", navigate: bool = True) -> Any:
     current = get_settings()
     image_source = _avatar_data_uri(current.user_avatar_path)
@@ -1255,28 +1279,43 @@ def register_ui_pages() -> None:
                             .classes("w-full text-lg flex-1 text-left")
                         )
                         with ui.row().classes("w-full items-center px-2 pb-1 gap-2"):
-                            ui.button(icon="add").props("flat round").classes("text-[#a4aaa5]")
-                            ui.button("Enviar roteiro", icon="description").props(
-                                "flat no-caps"
-                            ).classes("text-[#b8bdb8]")
+                            ui.button(
+                                "Enviar roteiro",
+                                icon="description",
+                                on_click=lambda: ui.run_javascript(
+                                    "document.querySelector('#script-upload input[type=file]').click()"
+                                ),
+                            ).props("flat no-caps").classes("text-[#b8bdb8]")
                             ui.space()
-                            ui.select(
-                                ["Filme narrativo", "Clipe musical", "Vídeo de produto"],
-                                value="Filme narrativo",
-                            ).props("borderless dense").classes("w-44")
                             ui.button(
                                 icon="arrow_upward",
                                 on_click=lambda: ui.navigate.to(f"/new?idea={idea.value or ''}"),
                             ).props("round unelevated").classes("acid-bg")
-                    with ui.row().classes("w-full justify-center gap-2 flex-wrap"):
-                        for suggestion in [
-                            "Uma ficção científica intimista",
-                            "Documentário de marca",
-                            "Terror em 60 segundos",
-                        ]:
-                            ui.button(suggestion).props("outline rounded no-caps").classes(
-                                "border-[#343934] text-[#aeb3ae]"
+
+                        async def upload_script(event: Any) -> None:
+                            suffix = Path(event.file.name).suffix.lower()
+                            if suffix not in {".docx", ".pdf"}:
+                                ui.notify(
+                                    "Envie apenas arquivos .docx ou .pdf.",
+                                    color="negative",
+                                )
+                                return
+                            content = await event.file.read()
+                            target = await asyncio.to_thread(
+                                _save_script_upload, event.file.name, content
                             )
+                            ui.notify(f"Roteiro enviado: {target.name}", color="positive")
+
+                        ui.upload(
+                            label="Enviar roteiro",
+                            on_upload=upload_script,
+                            on_rejected=lambda: ui.notify(
+                                "Envie apenas arquivos .docx ou .pdf com ate 20 MB.",
+                                color="warning",
+                            ),
+                            auto_upload=True,
+                            max_file_size=20_000_000,
+                        ).props("id=script-upload accept=.docx,.pdf").classes("hidden")
                 with (
                     ui.column().props("id=projects").classes("w-full max-w-6xl mx-auto gap-4 pt-3")
                 ):
@@ -1405,6 +1444,7 @@ def register_ui_pages() -> None:
         _body_style()
         _home_sidebar()
         ideas: list[dict[str, Any]] = []
+        saved_ideas = load_saved_ideas()
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
             with ui.column().classes("w-full max-w-6xl mx-auto px-6 py-8 gap-7"):
                 with ui.row().classes("w-full items-center justify-between"):
@@ -1423,16 +1463,16 @@ def register_ui_pages() -> None:
                     _theme_toggle()
 
                 with ui.element("div").classes("glass rounded-2xl p-5 w-full"):
-                    theme = (
+                    _ = (
                         ui.textarea(
                             "Sobre o que você quer contar?",
                             placeholder="Ex.: uma astronauta encontra uma mensagem enviada por ela mesma...",
                         )
                         .props("outlined autogrow stack-label")
-                        .classes("w-full")
+                        .classes("hidden")
                     )
-                    with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
-                        genre = ui.select(
+                    with ui.grid().classes("hidden"):
+                        _ = ui.select(
                             [
                                 "Drama",
                                 "Ficção científica",
@@ -1445,7 +1485,7 @@ def register_ui_pages() -> None:
                             label="Gênero",
                             value="Drama",
                         ).props("outlined")
-                        emotion = ui.select(
+                        _ = ui.select(
                             [
                                 "Esperança",
                                 "Curiosidade",
@@ -1459,22 +1499,42 @@ def register_ui_pages() -> None:
                         ).props("outlined")
 
                     async def generate() -> None:
-                        if not (theme.value or "").strip():
-                            ui.notify("Descreva um tema para começar.", color="warning")
-                            return
                         try:
-                            generated = await generate_freeform_ideas(
-                                theme.value, genre.value, emotion.value
-                            )
+                            generated = await generate_freeform_ideas("", count=10)
                             ideas.clear()
                             ideas.extend(generated)
                             idea_results.refresh()
                         except Exception as exc:
                             ui.notify(f"Não foi possível gerar ideias: {exc}", color="negative")
 
-                    ui.button("Gerar três ideias", icon="auto_awesome", on_click=generate).props(
+                    ui.button("Gerar 10 ideias", icon="auto_awesome", on_click=generate).props(
                         "unelevated no-caps"
                     ).classes("acid-bg rounded-xl mt-4")
+
+                def discard_generated(idea: dict[str, Any]) -> None:
+                    if idea in ideas:
+                        ideas.remove(idea)
+                    idea_results.refresh()
+
+                def save_generated(idea: dict[str, Any]) -> None:
+                    saved = save_idea(idea)
+                    saved_ideas[:] = [
+                        existing for existing in saved_ideas if existing.get("id") != saved["id"]
+                    ]
+                    saved_ideas.insert(0, saved)
+                    if idea in ideas:
+                        ideas.remove(idea)
+                    idea_results.refresh()
+                    saved_results.refresh()
+                    ui.notify("Ideia salva.", color="positive")
+
+                def delete_saved(idea_id: str) -> None:
+                    delete_saved_idea(idea_id)
+                    saved_ideas[:] = [
+                        idea for idea in saved_ideas if str(idea.get("id")) != idea_id
+                    ]
+                    saved_results.refresh()
+                    ui.notify("Ideia descartada.", color="warning")
 
                 @ui.refreshable
                 def idea_results() -> None:
@@ -1496,6 +1556,17 @@ def register_ui_pages() -> None:
                                 ui.label(str(idea.get("title") or "História sem título")).classes(
                                     "brand-type text-2xl font-bold mt-2"
                                 )
+                                with ui.row().classes("gap-2 mt-3 flex-wrap"):
+                                    ui.badge(str(idea.get("genre") or "Genero sugerido")).classes(
+                                        "bg-[#243342] text-[#bfe2ff]"
+                                    )
+                                    ui.badge(
+                                        str(idea.get("primary_emotion") or "Emocao sugerida")
+                                    ).classes("bg-[#2f3321] text-[#e6f59b]")
+                                if idea.get("theme"):
+                                    ui.label(f"Tema: {idea['theme']}").classes(
+                                        "text-xs text-[#9aa29b] mt-3"
+                                    )
                                 ui.label(str(idea.get("hook") or "")).classes(
                                     "text-sm text-[#d4d8d4] mt-3 font-medium"
                                 )
@@ -1503,13 +1574,74 @@ def register_ui_pages() -> None:
                                     "text-sm text-[#8d938e] mt-3 leading-6"
                                 )
                                 ui.space()
-                                ui.button(
-                                    "Desenvolver como projeto",
-                                    icon="arrow_forward",
-                                    on_click=lambda: ui.navigate.to("/new"),
-                                ).props("flat no-caps").classes("acid mt-4")
+                                with ui.row().classes("gap-2 mt-4"):
+                                    ui.button(
+                                        "Salvar",
+                                        icon="bookmark_add",
+                                        on_click=lambda item=idea: save_generated(item),
+                                    ).props("flat no-caps").classes("acid")
+                                    ui.button(
+                                        "Descartar",
+                                        icon="close",
+                                        on_click=lambda item=idea: discard_generated(item),
+                                    ).props("flat no-caps").classes("text-[#aeb3ae]")
+                                    ui.button(
+                                        "Desenvolver",
+                                        icon="arrow_forward",
+                                        on_click=lambda: ui.navigate.to("/new"),
+                                    ).props("flat no-caps").classes("acid")
 
                 idea_results()
+
+                @ui.refreshable
+                def saved_results() -> None:
+                    ui.label("Ideias salvas").classes("brand-type text-2xl font-bold")
+                    if not saved_ideas:
+                        ui.label("Nenhuma ideia salva ainda.").classes("text-sm text-[#777d78]")
+                        return
+                    with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-3 gap-4"):
+                        for index, idea in enumerate(saved_ideas, 1):
+                            with ui.element("article").classes(
+                                "entity-card rounded-2xl p-5 flex flex-col min-h-80"
+                            ):
+                                ui.label(f"SALVA {index:02d}").classes(
+                                    "text-xs acid font-semibold tracking-widest"
+                                )
+                                ui.label(str(idea.get("title") or "Historia sem titulo")).classes(
+                                    "brand-type text-2xl font-bold mt-2"
+                                )
+                                with ui.row().classes("gap-2 mt-3 flex-wrap"):
+                                    ui.badge(str(idea.get("genre") or "Genero sugerido")).classes(
+                                        "bg-[#243342] text-[#bfe2ff]"
+                                    )
+                                    ui.badge(
+                                        str(idea.get("primary_emotion") or "Emocao sugerida")
+                                    ).classes("bg-[#2f3321] text-[#e6f59b]")
+                                if idea.get("theme"):
+                                    ui.label(f"Tema: {idea['theme']}").classes(
+                                        "text-xs text-[#9aa29b] mt-3"
+                                    )
+                                ui.label(str(idea.get("hook") or "")).classes(
+                                    "text-sm text-[#d4d8d4] mt-3 font-medium"
+                                )
+                                ui.label(str(idea.get("premise") or "")).classes(
+                                    "text-sm text-[#8d938e] mt-3 leading-6"
+                                )
+                                ui.space()
+                                with ui.row().classes("gap-2 mt-4"):
+                                    saved_idea_id = str(idea.get("id"))
+                                    ui.button(
+                                        "Descartar",
+                                        icon="delete",
+                                        on_click=lambda idea_id=saved_idea_id: delete_saved(idea_id),
+                                    ).props("flat no-caps").classes("text-red-300")
+                                    ui.button(
+                                        "Desenvolver",
+                                        icon="arrow_forward",
+                                        on_click=lambda: ui.navigate.to("/new"),
+                                    ).props("flat no-caps").classes("acid")
+
+                saved_results()
 
     @ui.page("/settings")
     async def settings_page() -> None:

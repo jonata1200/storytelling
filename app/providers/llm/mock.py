@@ -47,15 +47,40 @@ class MockLLMProvider:
         }
 
     def _story_ideas(self, variables: dict) -> dict:
-        theme = str(variables.get("theme") or "uma segunda chance")
+        base_theme = str(variables.get("theme") or "tema livre criado pela IA")
         audience = str(variables.get("audience") or "publico geral")
         emotion = str(variables.get("primary_emotion") or "esperanca")
+        count = int(variables.get("count") or 3)
+        genres = ["Drama", "Suspense", "Ficcao cientifica", "Romance", "Documentario"]
+        emotions = ["Esperanca", "Curiosidade", "Tensao", "Melancolia", "Surpresa"]
+        themes = [
+            "uma promessa esquecida numa cidade pequena",
+            "um sinal vindo de uma missao espacial perdida",
+            "a verdade por tras de uma foto de familia",
+            "um amor interrompido por uma escolha impossivel",
+            "a ultima entrevista de uma artista anonima",
+            "uma comunidade que decide apagar suas memorias",
+            "um objeto herdado que muda de dono a cada mentira",
+            "uma crianca que reconhece uma casa onde nunca esteve",
+            "um restaurante que so abre para despedidas",
+            "uma mensagem de voz entregue dez anos tarde demais",
+        ]
         return {
             "ideas": [
                 {
-                    "title": f"O Ultimo Pedido sobre {theme}",
+                    "title": f"Ideia {index:02d}: {themes[(index - 1) % len(themes)].title()}",
+                    "theme": (
+                        themes[(index - 1) % len(themes)]
+                        if base_theme == "tema livre criado pela IA"
+                        else f"{base_theme} por um angulo {index}"
+                    ),
+                    "genre": genres[(index - 1) % len(genres)],
+                    "primary_emotion": emotions[(index - 1) % len(emotions)],
                     "hook": "Ela encontra uma mensagem que muda tudo nos primeiros segundos.",
-                    "premise": f"Uma pessoa comum precisa encarar {theme} diante de {audience}.",
+                    "premise": (
+                        "Uma pessoa comum precisa encarar uma revelacao inesperada "
+                        f"diante de {audience}."
+                    ),
                     "protagonist": "Clara, uma cuidadora exausta mas resiliente",
                     "protagonist_desire": "Consertar uma promessa quebrada",
                     "emotional_need": "Perdoar a si mesma",
@@ -66,49 +91,12 @@ class MockLLMProvider:
                     "climax": "Clara escolhe contar a verdade em publico",
                     "resolution": "A familia se reconcilia sem apagar a dor",
                     "final_emotion": emotion,
-                    "retention_potential": 86,
-                    "cliche_risk": 28,
-                    "production_complexity": 34,
+                    "retention_potential": min(95, 75 + index),
+                    "cliche_risk": 20 + index,
+                    "production_complexity": 25 + index,
                     "estimated_production_cost": "low",
-                },
-                {
-                    "title": f"A Foto Esquecida de {theme}",
-                    "hook": "Um detalhe no fundo de uma foto revela uma injustica.",
-                    "premise": "Uma revelacao visual simples abre uma ferida familiar escondida.",
-                    "protagonist": "Mateus, entregador que cuida da avo",
-                    "protagonist_desire": "Provar que a avo nao mentiu",
-                    "emotional_need": "Aprender a confiar na memoria dos outros",
-                    "conflict": "Todos tratam a historia como confusao",
-                    "obstacles": ["documentos perdidos", "preconceito", "medo de expor a familia"],
-                    "stakes": "A avo morrer sem ser acreditada",
-                    "twist": "O antagonista guardava a prova por vergonha",
-                    "climax": "Mateus mostra a foto restaurada para todos",
-                    "resolution": "A avo recebe um pedido de desculpas tardio",
-                    "final_emotion": emotion,
-                    "retention_potential": 79,
-                    "cliche_risk": 22,
-                    "production_complexity": 26,
-                    "estimated_production_cost": "low",
-                },
-                {
-                    "title": f"Quando a Porta Abriu para {theme}",
-                    "hook": "No velorio, uma crianca entrega uma chave que ninguem conhecia.",
-                    "premise": "Uma chave pequena revela o sacrificio secreto de uma mae.",
-                    "protagonist": "Helena, filha que se afastou da familia",
-                    "protagonist_desire": "Entender por que foi abandonada",
-                    "emotional_need": "Aceitar amor imperfeito",
-                    "conflict": "A resposta contradiz tudo o que ela acreditava",
-                    "obstacles": ["ressentimento", "silencio familiar", "um quarto trancado"],
-                    "stakes": "Viver presa a uma mentira",
-                    "twist": "O abandono foi uma protecao",
-                    "climax": "Helena abre o quarto e encontra cartas nunca enviadas",
-                    "resolution": "Ela narra a historia da mae sem rancor",
-                    "final_emotion": emotion,
-                    "retention_potential": 91,
-                    "cliche_risk": 35,
-                    "production_complexity": 42,
-                    "estimated_production_cost": "medium",
-                },
+                }
+                for index in range(1, count + 1)
             ]
         }
 

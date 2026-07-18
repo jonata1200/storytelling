@@ -22,29 +22,38 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-Depois da primeira configuracao, voce pode usar os scripts da pasta `scripts`:
+Depois da primeira configuracao, voce pode usar o script unificado da pasta `scripts`:
 
 ```powershell
-.\scripts\executar.ps1
+.\scripts\app.ps1 start
 ```
 
 Para iniciar a API em segundo plano:
 
 ```powershell
-.\scripts\executar.ps1 -Background
+.\scripts\app.ps1 start -Background
 ```
 
 Para finalizar a API e parar os containers:
 
 ```powershell
-.\scripts\finalizar.ps1
+.\scripts\app.ps1 stop
+```
+
+Para reiniciar tudo em um unico comando:
+
+```powershell
+.\scripts\app.ps1 restart
 ```
 
 Se o PowerShell bloquear scripts locais, use:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\executar.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\app.ps1 start
 ```
+
+Os atalhos `.\scripts\executar.ps1` e `.\scripts\finalizar.ps1` continuam
+existindo por compatibilidade e chamam o script unificado.
 
 ## OpenRouter
 
