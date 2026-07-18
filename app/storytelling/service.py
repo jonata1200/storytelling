@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 from uuid import UUID
 
@@ -58,6 +59,89 @@ def _required_int(payload: dict, key: str, context: str) -> int:
         return int(value)
     except (TypeError, ValueError) as exc:
         raise GenerationOutputError(f"{context}: invalid integer field '{key}'") from exc
+
+
+def _coerce_score(value: object, default: int) -> int:
+    if isinstance(value, bool) or value is None:
+        return default
+    if isinstance(value, int):
+        return max(0, min(100, value))
+    if isinstance(value, float):
+        return max(0, min(100, int(round(value))))
+    text = str(value).strip().lower()
+    if not text:
+        return default
+    labels = {
+        "baixo": 25,
+        "baixa": 25,
+        "low": 25,
+        "medio": 50,
+        "médio": 50,
+        "media": 50,
+        "média": 50,
+        "medium": 50,
+        "alto": 80,
+        "alta": 80,
+        "high": 80,
+    }
+    if text in labels:
+        return labels[text]
+    match = re.search(r"-?\d+(?:[,.]\d+)?", text)
+    if match is None:
+        return default
+    number = float(match.group(0).replace(",", "."))
+    if "/" in text and number <= 10:
+        number *= 10
+    return max(0, min(100, int(round(number))))
+
+
+def coerce_duration_minutes(value: object, default: float = 5.0) -> float:
+    if isinstance(value, bool) or value is None:
+        return default
+    try:
+        duration = float(str(value).replace(",", "."))
+    except ValueError:
+        return default
+    return max(3.0, min(8.0, duration))
+
+
+def normalize_script_payload(
+    payload: dict,
+    *,
+    default_title: str,
+    language: str,
+    target_duration_seconds: int,
+) -> dict:
+    normalized = dict(payload)
+    normalized.setdefault("title", default_title)
+    normalized.setdefault("language", language)
+    normalized["target_duration_seconds"] = _coerce_positive_int(
+        normalized.get("target_duration_seconds"), target_duration_seconds
+    )
+    content = (
+        normalized.get("content")
+        or normalized.get("script")
+        or normalized.get("roteiro")
+        or normalized.get("text")
+        or normalized.get("texto")
+    )
+    if isinstance(content, list):
+        content = "\n\n".join(str(item) for item in content if str(item).strip())
+    normalized["content"] = str(content or "").strip()
+    normalized["word_count"] = _coerce_positive_int(
+        normalized.get("word_count"), len(normalized["content"].split())
+    )
+    return normalized
+
+
+def _coerce_positive_int(value: object, default: int) -> int:
+    if isinstance(value, bool) or value is None:
+        return max(1, default)
+    try:
+        number = int(float(str(value).replace(",", ".")))
+    except ValueError:
+        return max(1, default)
+    return max(1, number)
 
 
 async def _create_artifact(
@@ -157,6 +241,60 @@ async def get_latest_briefing(session: AsyncSession, project_id: UUID) -> Briefi
     return result.scalars().first()
 
 
+def normalize_story_idea_payload(payload: dict) -> dict:
+    normalized = dict(payload)
+    title = _required_str(normalized, "title", "story_idea")
+    normalized.setdefault("hook", normalized.get("premise") or title)
+    normalized.setdefault("premise", normalized.get("hook") or title)
+    normalized.setdefault("protagonist", "Protagonista a definir")
+    normalized["duration_minutes"] = coerce_duration_minutes(normalized.get("duration_minutes"))
+    normalized["retention_potential"] = _coerce_score(
+        normalized.get("retention_potential"), 75
+    )
+    normalized["cliche_risk"] = _coerce_score(normalized.get("cliche_risk"), 25)
+    normalized["production_complexity"] = _coerce_score(
+        normalized.get("production_complexity"), 35
+    )
+    normalized["title"] = title
+    return normalized
+
+
+async def create_story_idea_from_payload(
+    session: AsyncSession, project_id: UUID, payload: dict
+) -> StoryIdea | None:
+    project = await ProjectRepository(session).get_project(project_id)
+    briefing = await get_latest_briefing(session, project_id)
+    if project is None or briefing is None:
+        return None
+
+    item = normalize_story_idea_payload(payload)
+    artifact = await _create_artifact(
+        session,
+        project_id,
+        ArtifactType.STORY_IDEA,
+        _required_str(item, "title", "story_idea"),
+        item,
+    )
+    await _add_dependency(session, briefing.artifact_id, artifact.id)
+    idea = StoryIdea(
+        project_id=project_id,
+        artifact_id=artifact.id,
+        title=_required_str(item, "title", "story_idea"),
+        hook=_required_str(item, "hook", "story_idea"),
+        premise=_required_str(item, "premise", "story_idea"),
+        protagonist=_required_str(item, "protagonist", "story_idea"),
+        retention_potential=_required_int(item, "retention_potential", "story_idea"),
+        cliche_risk=_required_int(item, "cliche_risk", "story_idea"),
+        production_complexity=_required_int(item, "production_complexity", "story_idea"),
+        payload=item,
+    )
+    session.add(idea)
+    advance_project_status(project, ProjectStatus.IDEA_APPROVAL)
+    await session.commit()
+    await session.refresh(idea)
+    return idea
+
+
 async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[StoryIdea] | None:
     project = await ProjectRepository(session).get_project(project_id)
     briefing = await get_latest_briefing(session, project_id)
@@ -168,6 +306,7 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
         "audience": briefing.audience,
         "primary_emotion": briefing.primary_emotion,
         "genre": briefing.genre,
+        "target_duration_minutes": float(briefing.desired_duration_minutes),
     }
     provider, model = await llm_provider_for_task(session, project_id, "generate_story_ideas")
     result, execution = await run_structured_generation(
@@ -176,7 +315,9 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
     ideas: list[StoryIdea] = []
     content = _required_mapping(result.content, "generate_story_ideas")
     for index, raw_item in enumerate(_required_list(content, "ideas", "generate_story_ideas"), 1):
-        item = _required_mapping(raw_item, f"generate_story_ideas.ideas[{index}]")
+        item = normalize_story_idea_payload(
+            _required_mapping(raw_item, f"generate_story_ideas.ideas[{index}]")
+        )
         artifact = await _create_artifact(
             session,
             project_id,
@@ -284,7 +425,12 @@ async def generate_script(
     result, _execution = await run_structured_generation(
         session, provider, project_id, "generate_script", variables, model=model
     )
-    payload = _required_mapping(result.content, "generate_script")
+    payload = normalize_script_payload(
+        _required_mapping(result.content, "generate_script"),
+        default_title=story_bible.title,
+        language=briefing.language,
+        target_duration_seconds=target_duration_seconds,
+    )
     title = _required_str(payload, "title", "generate_script")
     artifact = await _create_artifact(
         session, project_id, ArtifactType.SCRIPT, title, payload

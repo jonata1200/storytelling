@@ -51,6 +51,7 @@ class MockLLMProvider:
         audience = str(variables.get("audience") or "publico geral")
         emotion = str(variables.get("primary_emotion") or "esperanca")
         count = int(variables.get("count") or 3)
+        target_duration = float(variables.get("target_duration_minutes") or 5)
         selected_genre = str(variables.get("genre") or "").strip()
         genres = ["Drama", "Suspense", "Ficcao cientifica", "Romance", "Documentario"]
         emotions = ["Esperanca", "Curiosidade", "Tensao", "Melancolia", "Surpresa"]
@@ -81,7 +82,7 @@ class MockLLMProvider:
                         else genres[(index - 1) % len(genres)]
                     ),
                     "primary_emotion": emotions[(index - 1) % len(emotions)],
-                    "duration_minutes": 3 + ((index - 1) % 6),
+                    "duration_minutes": max(3, min(8, target_duration)),
                     "hook": "Ela encontra uma mensagem que muda tudo nos primeiros segundos.",
                     "premise": (
                         "Uma pessoa comum precisa encarar uma revelacao inesperada "

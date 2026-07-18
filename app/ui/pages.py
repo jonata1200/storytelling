@@ -67,7 +67,9 @@ from app.storytelling.idea_lab import (
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryBible, StoryIdea
 from app.storytelling.schemas import BriefingCreate
 from app.storytelling.service import (
+    coerce_duration_minutes,
     create_briefing,
+    create_story_idea_from_payload,
     generate_scenes_and_shots,
     generate_script,
     generate_story_bible,
@@ -79,6 +81,8 @@ from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import generate_visual_bible, generate_visual_references
 
 BRAND_MARK_URL = "/ui-assets/favicon.png"
+DEFAULT_STORY_DURATION_MINUTES = 5.0
+STORY_DURATION_OPTIONS = [3, 4, 5, 6, 7, 8]
 
 IDEA_GENRES = [
     "Ação",
@@ -262,8 +266,10 @@ def _body_style() -> None:
           body:not(.body--dark) .nav-locked:hover { color:#6aa4d8!important; background:transparent!important; border-color:transparent!important; }
           .idea-badge-genre { background:#243342!important; color:#d9efff!important; }
           .idea-badge-emotion { background:#2f3321!important; color:#f1ff9f!important; }
+          .idea-badge-duration { background:#2d2636!important; color:#eadfff!important; }
           body:not(.body--dark) .idea-badge-genre { background:#d7ebff!important; color:#164b77!important; }
           body:not(.body--dark) .idea-badge-emotion { background:#eaf5c6!important; color:#40540e!important; }
+          body:not(.body--dark) .idea-badge-duration { background:#eee4ff!important; color:#54358a!important; }
           .entity-card { background:#151816; border:1px solid #252a26; transition:.2s ease; }
           .entity-card:hover { transform:translateY(-2px); border-color:#555d4c; }
           .visual-placeholder { background:radial-gradient(circle at 70% 15%,#4e5531 0,#24281e 32%,#141614 70%); }
@@ -549,8 +555,134 @@ def _render_header(title: str, subtitle: str) -> None:
             )
 
 
-async def _create_project_from_form(form: dict[str, Any]) -> None:
+def _compact_project_title(text: str) -> str:
+    first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    cleaned = " ".join((first_line or text).strip().split())
+    if not cleaned:
+        return "Novo projeto de storytelling"
+    common_prefixes = [
+        "quero criar uma historia sobre ",
+        "quero criar uma história sobre ",
+        "quero desenvolver uma historia sobre ",
+        "quero desenvolver uma história sobre ",
+        "crie uma historia sobre ",
+        "crie uma história sobre ",
+        "uma historia sobre ",
+        "uma história sobre ",
+    ]
+    lower_cleaned = cleaned.lower()
+    for prefix in common_prefixes:
+        if lower_cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix) :].strip(" ,;:-")
+            if cleaned:
+                cleaned = cleaned[:1].upper() + cleaned[1:]
+            break
+    first_sentence = cleaned
+    for separator in [".", "!", "?"]:
+        if separator in first_sentence:
+            first_sentence = first_sentence.split(separator, 1)[0].strip()
+            break
+    words = first_sentence.split()
+    if len(words) > 9:
+        first_sentence = " ".join(words[:9])
+    return first_sentence[:80].strip(" ,;:-") or "Novo projeto de storytelling"
+
+
+async def _generate_initial_script(
+    session: AsyncSession,
+    project_id: UUID,
+    source_idea: dict[str, Any] | None = None,
+) -> Script:
+    if source_idea is not None:
+        idea = await create_story_idea_from_payload(session, project_id, source_idea)
+        if idea is None:
+            raise ValueError("nao foi possivel registrar a ideia selecionada")
+    else:
+        generated_ideas = await generate_story_ideas(session, project_id)
+        if not generated_ideas:
+            raise ValueError("nao foi possivel gerar ideias iniciais")
+        idea = generated_ideas[0]
+
+    story_bible = await generate_story_bible(session, project_id, idea.id)
+    if story_bible is None:
+        raise ValueError("nao foi possivel gerar a Story Bible")
+    script = await generate_script(session, project_id, story_bible.id)
+    if script is None:
+        raise ValueError("nao foi possivel gerar roteiro")
+    scenes = await generate_scenes_and_shots(session, project_id, script.id)
+    if scenes is None:
+        raise ValueError("nao foi possivel gerar cenas e planos")
+    return script
+
+
+def _requests_script_generation(message: str, active: str) -> bool:
+    normalized = message.lower()
+    generation_terms = (
+        "crie",
+        "criar",
+        "gere",
+        "gerar",
+        "desenvolva",
+        "desenvolver",
+        "monte",
+        "montar",
+        "produza",
+        "produzir",
+    )
+    script_terms = ("roteiro", "cena", "cenas", "historia", "história")
+    if not any(term in normalized for term in generation_terms):
+        return False
+    return active == "script" or any(term in normalized for term in script_terms)
+
+
+async def _develop_script_for_existing_project(
+    session: AsyncSession, project_id: UUID
+) -> tuple[str, bool]:
+    briefing = await _latest(session, Briefing, project_id)
+    if briefing is None:
+        return (
+            "Este projeto ainda nao tem briefing. Crie o projeto pelo chat inicial ou preencha o briefing primeiro.",
+            False,
+        )
+
+    script = await _latest(session, Script, project_id)
+    if script is not None:
+        scenes_count = await _scalar_count(session, Scene, project_id)
+        if scenes_count == 0:
+            await generate_scenes_and_shots(session, project_id, script.id)
+            return "O roteiro ja existia; criei as cenas e planos para ele.", True
+        return "Este projeto ja tem roteiro e cenas. Posso ajudar a revisar ou ajustar a estrutura.", False
+
+    idea = await _latest(session, StoryIdea, project_id)
+    if idea is None:
+        ideas = await generate_story_ideas(session, project_id)
+        if not ideas:
+            return "Nao consegui gerar uma ideia base para este projeto.", False
+        idea = ideas[0]
+
+    bible = await _latest(session, StoryBible, project_id)
+    if bible is None:
+        bible = await generate_story_bible(session, project_id, idea.id)
+        if bible is None:
+            return "Nao consegui gerar a Story Bible antes do roteiro.", False
+
+    script = await generate_script(session, project_id, bible.id)
+    if script is None:
+        return "Nao consegui gerar o roteiro para este projeto.", False
+    scenes = await generate_scenes_and_shots(session, project_id, script.id)
+    if scenes is None:
+        return "O roteiro foi criado, mas nao consegui gerar as cenas e planos.", True
+    return "Roteiro criado e dividido em cenas e planos.", True
+
+
+async def _create_project_from_form(
+    form: dict[str, Any],
+    *,
+    generate_initial_script: bool = False,
+    source_idea: dict[str, Any] | None = None,
+) -> None:
     try:
+        duration = coerce_duration_minutes(form["duration"])
         async with AsyncSessionLocal() as session:
             project = await create_project(
                 session,
@@ -579,7 +711,7 @@ async def _create_project_from_form(form: dict[str, Any]) -> None:
                 primary_emotion=form["emotion"],
                 emotional_intensity=int(form["intensity"]),
                 ending_type=form["ending"],
-                desired_duration_minutes=Decimal(str(form["duration"])),
+                desired_duration_minutes=Decimal(str(duration)),
                 visual_style=form["visual_style"],
                 content_objective=form["objective"],
                 call_to_action=form["cta"] or None,
@@ -588,8 +720,18 @@ async def _create_project_from_form(form: dict[str, Any]) -> None:
                 ],
             )
             await create_briefing(session, project.id, briefing)
-        ui.notify("Projeto criado com briefing inicial.", color="positive")
-        ui.navigate.to(f"/projects/{project.id}")
+            if generate_initial_script:
+                await _generate_initial_script(session, project.id, source_idea)
+        message = (
+            f"Projeto criado com roteiro e cenas iniciais de {duration:g} minutos."
+            if generate_initial_script
+            else "Projeto criado com briefing inicial."
+        )
+        ui.notify(message, color="positive")
+        destination = (
+            f"/projects/{project.id}/script" if generate_initial_script else f"/projects/{project.id}"
+        )
+        ui.navigate.to(destination)
     except Exception as exc:
         ui.notify(f"Nao foi possivel criar o projeto: {exc}", color="negative")
 
@@ -599,9 +741,8 @@ async def _create_project_from_chat_prompt(prompt: str) -> None:
     if not cleaned_prompt:
         ui.notify("Descreva a ideia ou cole um roteiro antes de criar o projeto.", color="warning")
         return
-    title_seed = cleaned_prompt.splitlines()[0].strip()
     form = {
-        "title": title_seed[:80] or "Novo projeto de storytelling",
+        "title": _compact_project_title(cleaned_prompt),
         "description": cleaned_prompt[:240],
         "theme": cleaned_prompt[:220],
         "audience": "publico geral",
@@ -609,9 +750,12 @@ async def _create_project_from_chat_prompt(prompt: str) -> None:
         "emotion": "curiosidade",
         "intensity": 8,
         "ending": "final com revelacao afetiva",
-        "duration": 3.0,
+        "duration": DEFAULT_STORY_DURATION_MINUTES,
         "visual_style": "cinematico realista vertical",
-        "objective": "reter audiencia com historia curta",
+        "objective": (
+            f"reter audiencia com uma historia completa de "
+            f"{DEFAULT_STORY_DURATION_MINUTES:g} minutos"
+        ),
         "cta": "",
         "constraints": "evitar violencia grafica\nmanter tom familiar",
         "one_line_idea": cleaned_prompt,
@@ -624,7 +768,7 @@ async def _create_project_from_chat_prompt(prompt: str) -> None:
         "image_model": get_settings().openrouter_image_model,
         "video_model": get_settings().openrouter_video_model,
     }
-    await _create_project_from_form(form)
+    await _create_project_from_form(form, generate_initial_script=True)
 
 
 async def _create_project_from_idea(idea: dict[str, Any]) -> None:
@@ -633,8 +777,7 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
     premise = str(idea.get("premise") or idea.get("hook") or theme).strip()
     genre = str(idea.get("genre") or "drama emocional").strip()
     emotion = str(idea.get("primary_emotion") or idea.get("final_emotion") or "curiosidade").strip()
-    duration = float(idea.get("duration_minutes") or 5)
-    duration = min(8.0, max(3.0, duration))
+    duration = coerce_duration_minutes(idea.get("duration_minutes"), DEFAULT_STORY_DURATION_MINUTES)
     form = {
         "title": title[:80] or "Novo projeto de storytelling",
         "description": premise[:240],
@@ -646,9 +789,13 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
         "ending": "final com payoff emocional",
         "duration": duration,
         "visual_style": "cinematico realista vertical",
-        "objective": "desenvolver uma historia curta de 3 a 8 minutos",
+        "objective": f"desenvolver uma historia completa de {duration:g} minutos",
         "cta": "",
-        "constraints": "manter ritmo forte\ncriar ganchos claros\nadequar para historia curta",
+        "constraints": (
+            "manter ritmo forte\n"
+            "criar ganchos claros\n"
+            f"adequar para {duration:g} minutos"
+        ),
         "one_line_idea": "\n".join(
             part
             for part in [
@@ -671,7 +818,7 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
         "image_model": get_settings().openrouter_image_model,
         "video_model": get_settings().openrouter_video_model,
     }
-    await _create_project_from_form(form)
+    await _create_project_from_form(form, generate_initial_script=True, source_idea=idea)
 
 
 async def _rename_project_from_ui(project_id: UUID, title: str, redirect_to: str) -> None:
@@ -1326,20 +1473,29 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             messages.append({"role": "user", "content": user_message})
             prompt.value = ""
             conversation.refresh()
+            should_reload = False
             try:
                 async with AsyncSessionLocal() as session:
-                    response = await ask_director_agent(
-                        session,
-                        project_id,
-                        active,
-                        user_message,
-                        context,
-                        messages,
-                    )
+                    if _requests_script_generation(user_message, active):
+                        response, should_reload = await _develop_script_for_existing_project(
+                            session, project_id
+                        )
+                    else:
+                        response = await ask_director_agent(
+                            session,
+                            project_id,
+                            active,
+                            user_message,
+                            context,
+                            messages,
+                        )
             except Exception as exc:
                 response = f"Não consegui responder agora ({type(exc).__name__}). Tente novamente."
             messages.append({"role": "assistant", "content": response})
             conversation.refresh()
+            if should_reload:
+                ui.notify(response, color="positive")
+                ui.navigate.reload()
 
         with ui.row().classes("w-full items-end gap-2"):
             prompt = (
@@ -1707,6 +1863,9 @@ def register_ui_pages() -> None:
                                 "",
                                 count=10,
                                 genre=str(genre_select.value or ""),
+                                target_duration_minutes=coerce_duration_minutes(
+                                    duration_select.value
+                                ),
                             )
                             ideas.clear()
                             ideas.extend(replace_generated_ideas(generated))
@@ -1717,14 +1876,28 @@ def register_ui_pages() -> None:
                             loading_dialog.close()
 
                 with ui.column().classes("w-full items-center gap-4 py-8"):
-                    genre_select = (
-                        ui.select(IDEA_GENRES, label="Gênero", value=IDEA_GENRES[0])
-                        .props("outlined")
-                        .classes("w-full max-w-md")
+                    with ui.row().classes("w-full max-w-2xl gap-3 items-end justify-center"):
+                        genre_select = (
+                            ui.select(IDEA_GENRES, label="Gênero", value=IDEA_GENRES[0])
+                            .props("outlined")
+                            .classes("flex-1 min-w-64")
+                        )
+                        duration_select = (
+                            ui.select(
+                                STORY_DURATION_OPTIONS,
+                                label="Duração",
+                                value=int(DEFAULT_STORY_DURATION_MINUTES),
+                            )
+                            .props("outlined suffix='min'")
+                            .classes("w-36")
+                        )
+                    ui.button(
+                        "Gerar 10 ideias",
+                        icon="auto_awesome",
+                        on_click=generate,
+                    ).props("unelevated no-caps size=lg").classes(
+                        "acid-bg rounded-2xl px-10 py-5 text-lg font-bold"
                     )
-                    ui.button("Gerar 10 ideias", icon="auto_awesome", on_click=generate).props(
-                        "unelevated no-caps size=lg"
-                    ).classes("acid-bg rounded-2xl px-10 py-5 text-lg font-bold")
 
                 def discard_generated(idea: dict[str, Any]) -> None:
                     if idea in ideas:
@@ -1782,6 +1955,11 @@ def register_ui_pages() -> None:
                                     ).classes(
                                         "idea-badge-emotion rounded-md px-2 py-0.5 text-xs font-medium"
                                     )
+                                    ui.label(
+                                        f"{coerce_duration_minutes(idea.get('duration_minutes')):g} min"
+                                    ).classes(
+                                        "idea-badge-duration rounded-md px-2 py-0.5 text-xs font-medium"
+                                    )
                                 if idea.get("theme"):
                                     ui.label(f"Tema: {idea['theme']}").classes(
                                         "text-xs text-[#9aa29b] mt-3"
@@ -1837,6 +2015,11 @@ def register_ui_pages() -> None:
                                         str(idea.get("primary_emotion") or "Emocao sugerida")
                                     ).classes(
                                         "idea-badge-emotion rounded-md px-2 py-0.5 text-xs font-medium"
+                                    )
+                                    ui.label(
+                                        f"{coerce_duration_minutes(idea.get('duration_minutes')):g} min"
+                                    ).classes(
+                                        "idea-badge-duration rounded-md px-2 py-0.5 text-xs font-medium"
                                     )
                                 if idea.get("theme"):
                                     ui.label(f"Tema: {idea['theme']}").classes(

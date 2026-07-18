@@ -16,6 +16,7 @@ async def test_mock_llm_generates_three_story_ideas() -> None:
                 "theme": "perdao",
                 "audience": "adultos",
                 "primary_emotion": "esperanca",
+                "target_duration_minutes": 7,
             },
         )
     )
@@ -23,6 +24,7 @@ async def test_mock_llm_generates_three_story_ideas() -> None:
     assert result.provider == "mock"
     assert len(result.content["ideas"]) == 3
     assert result.content["ideas"][0]["retention_potential"] > 0
+    assert {idea["duration_minutes"] for idea in result.content["ideas"]} == {7}
 
 
 @pytest.mark.asyncio

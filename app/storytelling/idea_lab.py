@@ -9,6 +9,7 @@ from app.config.settings import get_settings
 from app.providers.llm.mock import MockLLMProvider
 from app.providers.llm.openrouter import OpenRouterLLMProvider
 from app.providers.llm.types import LLMRequest
+from app.storytelling.service import coerce_duration_minutes
 
 SAVED_IDEAS_PATH = Path(".runtime/idea_lab_saved.json")
 GENERATED_IDEAS_PATH = Path(".runtime/idea_lab_generated.json")
@@ -18,9 +19,11 @@ async def generate_freeform_ideas(
     theme: str = "",
     count: int = 10,
     genre: str = "",
+    target_duration_minutes: float = 5.0,
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     provider = OpenRouterLLMProvider() if settings.openrouter_api_key else MockLLMProvider()
+    duration = coerce_duration_minutes(target_duration_minutes)
     genre_instruction = (
         f"Todas as ideias devem pertencer ao genero selecionado: {genre}. "
         if genre
@@ -32,7 +35,8 @@ async def generate_freeform_ideas(
             model=settings.openrouter_default_model,
             prompt=(
                 f"Gere exatamente {count} ideias de historias originais em portugues do Brasil. "
-                "As ideias devem ser pensadas para historias curtas de 3 a 8 minutos. "
+                f"Todas as ideias devem ter potencial narrativo para exatamente {duration:g} "
+                "minutos de historia, com conflito, virada e payoff adequados para esse tempo. "
                 f"{genre_instruction}"
                 "A IA deve criar tambem temas diferentes para cada historia, sem depender "
                 "de um tema informado pelo usuario. "
@@ -41,20 +45,22 @@ async def generate_freeform_ideas(
                 "Retorne JSON com a chave ideas; cada ideia deve ter title, genre, "
                 "primary_emotion, theme, hook, premise, protagonist, duration_minutes, "
                 "retention_potential, cliche_risk e production_complexity. "
+                f"Use duration_minutes igual a {duration:g} em todas as ideias. "
                 f"Contexto opcional do usuario: {theme or 'nenhum'}."
             ),
             variables={
                 "theme": theme or "tema livre criado pela IA",
                 "count": count,
                 "genre": genre or "genero livre criado pela IA",
-                "duration_range_minutes": "3-8",
+                "duration_range_minutes": f"{duration:g}",
+                "target_duration_minutes": duration,
                 "audience": "publico geral",
             },
             output_schema={"type": "object", "properties": {"ideas": {"type": "array"}}},
         )
     )
     ideas = list(result.content.get("ideas") or [])[:count]
-    return [_normalize_idea(idea) for idea in ideas if isinstance(idea, dict)]
+    return [_normalize_idea(idea, duration) for idea in ideas if isinstance(idea, dict)]
 
 
 def load_saved_ideas(path: Path = SAVED_IDEAS_PATH) -> list[dict[str, Any]]:
@@ -104,12 +110,14 @@ def delete_saved_idea(idea_id: str, path: Path = SAVED_IDEAS_PATH) -> None:
     _write_ideas(ideas, path)
 
 
-def _normalize_idea(idea: dict[str, Any]) -> dict[str, Any]:
+def _normalize_idea(idea: dict[str, Any], default_duration_minutes: float = 5.0) -> dict[str, Any]:
     normalized = dict(idea)
     normalized.setdefault("id", uuid.uuid4().hex)
     normalized.setdefault("genre", "Drama")
     normalized.setdefault("primary_emotion", normalized.get("final_emotion") or "Curiosidade")
-    normalized.setdefault("duration_minutes", 5)
+    normalized["duration_minutes"] = coerce_duration_minutes(
+        normalized.get("duration_minutes"), default_duration_minutes
+    )
     return normalized
 
 

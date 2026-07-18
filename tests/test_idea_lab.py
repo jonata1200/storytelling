@@ -20,12 +20,14 @@ async def test_generate_freeform_ideas_returns_ten_ai_suggested_ideas(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(idea_lab, "get_settings", lambda: Settings(openrouter_api_key=None))
-    ideas = await generate_freeform_ideas("uma memoria de infancia", count=10)
+    ideas = await generate_freeform_ideas(
+        "uma memoria de infancia", count=10, target_duration_minutes=6
+    )
 
     assert len(ideas) == 10
     assert all(idea.get("genre") for idea in ideas)
     assert all(idea.get("primary_emotion") for idea in ideas)
-    assert all(3 <= int(idea.get("duration_minutes", 0)) <= 8 for idea in ideas)
+    assert {int(idea.get("duration_minutes", 0)) for idea in ideas} == {6}
 
 
 @pytest.mark.asyncio
@@ -68,12 +70,14 @@ def test_generated_ideas_can_be_persisted_and_discarded(tmp_path: Path) -> None:
                 "title": "A ponte azul",
                 "genre": "Aventura",
                 "primary_emotion": "Coragem",
+                "duration_minutes": 7,
             }
         ],
         path,
     )
 
     assert ideas[0]["id"] == "idea-pending-1"
+    assert ideas[0]["duration_minutes"] == 7
     assert load_generated_ideas(path)[0]["title"] == "A ponte azul"
 
     delete_generated_idea("idea-pending-1", path)

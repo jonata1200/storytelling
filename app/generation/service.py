@@ -8,19 +8,46 @@ from app.generation.models import PromptExecution, PromptTemplate
 from app.generation.prompt_compiler import compile_prompt
 from app.providers.llm.types import LLMProvider, LLMRequest, LLMResult
 
+DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
+    "generate_story_ideas": "Generate Story Ideas",
+    "generate_story_bible": "Generate Story Bible",
+    "generate_script": "Generate Script",
+    "generate_scenes_and_shots": "Generate Scenes And Shots",
+}
+
 DEFAULT_TEMPLATES: dict[str, str] = {
     "generate_story_ideas": (
-        "Gere tres ideias estruturadas para um video vertical. "
-        "Tema: {theme}. Publico: {audience}. Emocao: {primary_emotion}."
+        "Gere tres ideias estruturadas para uma historia vertical de {target_duration_minutes} "
+        "minutos. Cada ideia precisa sustentar a duracao escolhida com conflito, virada e payoff. "
+        "Tema: {theme}. Publico: {audience}. Emocao: {primary_emotion}. "
+        "Responda somente JSON neste formato: "
+        '{"ideas":[{"title":"...","genre":"...","primary_emotion":"...",'
+        '"theme":"...","hook":"...","premise":"...","protagonist":"...",'
+        '"duration_minutes":5,"retention_potential":80,"cliche_risk":20,'
+        '"production_complexity":35}]}'
     ),
     "generate_story_bible": (
-        "Crie uma Story Bible estruturada usando a ideia aprovada: {idea_title}."
+        "Crie uma Story Bible estruturada usando a ideia aprovada: {idea_title}. "
+        "Use o briefing completo e a ideia em {idea}. Responda somente JSON com estes campos: "
+        "title, logline, theme, genre, tone, target_emotion, audience, world_rules, "
+        "visual_style, narrative_rules, forbidden_elements, characters, locations, props, "
+        "timeline, relationships, continuity_rules, audio_style e export_profile."
     ),
     "generate_script": (
-        "Crie um roteiro em {language} para duracao alvo de {target_duration_seconds}s."
+        "Crie um roteiro narrativo completo em {language} para uma historia vertical com "
+        "duracao alvo de {target_duration_seconds}s. Use a Story Bible em {story_bible}. "
+        "O texto deve ter gancho inicial, desenvolvimento, virada, climax e payoff emocional. "
+        "Responda somente JSON neste formato exato: "
+        '{"title":"...","language":"pt-BR","target_duration_seconds":300,'
+        '"word_count":650,"content":"ROTEIRO COMPLETO AQUI"}'
     ),
     "generate_scenes_and_shots": (
-        "Divida o roteiro em cenas e planos com duracao total de {target_duration_seconds}s."
+        "Divida o roteiro em {script} em cenas e planos para duracao total de "
+        "{target_duration_seconds}s. Responda somente JSON neste formato exato: "
+        '{"scenes":[{"scene_number":1,"title":"...","summary":"...",'
+        '"duration_seconds":75,"shots":[{"shot_number":1,"duration_seconds":25,'
+        '"narration_text":"...","dialogue_text":"","action":"...","emotion":"...",'
+        '"visual_composition":"...","camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}]}]}'
     ),
 }
 
@@ -33,10 +60,16 @@ async def get_or_create_prompt_template(session: AsyncSession, task: str) -> Pro
     )
     template = result.scalars().first()
     if template is not None:
+        default_name = DEFAULT_TEMPLATE_NAMES.get(task, task.replace("_", " ").title())
+        if template.name == default_name and template.template_text != DEFAULT_TEMPLATES[task]:
+            template.template_text = DEFAULT_TEMPLATES[task]
+            template.output_schema = {}
+            template.version += 1
+            await session.flush()
         return template
 
     template = PromptTemplate(
-        name=task.replace("_", " ").title(),
+        name=DEFAULT_TEMPLATE_NAMES.get(task, task.replace("_", " ").title()),
         task=task,
         version=1,
         template_text=DEFAULT_TEMPLATES[task],
