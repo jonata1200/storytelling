@@ -42,3 +42,25 @@ async def test_mock_llm_generates_scenes_with_shots() -> None:
     scenes = result.content["scenes"]
     assert len(scenes) == 4
     assert all(len(scene["shots"]) == 3 for scene in scenes)
+
+
+@pytest.mark.asyncio
+async def test_mock_llm_generates_cinematic_script_format() -> None:
+    provider = MockLLMProvider()
+
+    result = await provider.generate_structured(
+        LLMRequest(
+            task="generate_script",
+            prompt="",
+            variables={
+                "story_bible": {"title": "A promessa"},
+                "language": "pt-BR",
+                "target_duration_seconds": 300,
+            },
+        )
+    )
+
+    content = result.content["content"]
+    assert "INT. CASA DA FAMILIA" in content
+    assert "EXT. RUA ESTREITA" in content
+    assert "CLARA\n" in content

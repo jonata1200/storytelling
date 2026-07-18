@@ -52,6 +52,41 @@ def test_project_ai_action_reads_production_metadata() -> None:
     assert action["message"] == "Criando roteiro"
 
 
+def test_scenes_are_ordered_by_scene_number_for_display() -> None:
+    scenes = [
+        SimpleNamespace(scene_number=3),
+        SimpleNamespace(scene_number=1),
+        SimpleNamespace(scene_number=2),
+    ]
+
+    ordered = pages._ordered_scenes(scenes)
+
+    assert [scene.scene_number for scene in ordered] == [1, 2, 3]
+
+
+def test_characters_section_unlocks_when_script_exists_without_shots() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "bibles": 1,
+        "scripts": 1,
+        "scenes": 0,
+        "shots": 0,
+        "characters": 0,
+        "frames": 0,
+        "animatics": 0,
+        "clips": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    allowed, reason = pages._workspace_section_access("assets", counts)
+
+    assert pages._step_ready("script", counts) is True
+    assert allowed is True
+    assert reason == ""
+
+
 def test_story_idea_payload_is_normalized_for_pipeline() -> None:
     payload = normalize_story_idea_payload(
         {

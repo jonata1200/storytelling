@@ -151,12 +151,22 @@ class MockLLMProvider:
         title = str(bible.get("title") or "Historia")
         language = str(variables.get("language") or "pt-BR")
         content = (
-            f"Titulo: {title}\n\n"
-            "Gancho: Ela encontra uma pista que ninguem deveria ter deixado para tras.\n\n"
-            "Ato 1: O cotidiano parece simples, ate que uma lembranca interrompe tudo.\n"
-            "Ato 2: A busca por respostas revela escolhas dolorosas e uma promessa esquecida.\n"
-            "Ato 3: A verdade aparece no momento de maior perda, transformando culpa em perdao.\n\n"
-            "Encerramento: A personagem entende que amar tambem pode ter sido proteger em silencio."
+            f"TITULO: {title}\n\n"
+            "FADE IN:\n\n"
+            "INT. CASA DA FAMILIA - FIM DE TARDE\n\n"
+            "CLARA encontra uma pista escondida entre fotografias antigas. "
+            "O silencio da casa parece responder antes dela.\n\n"
+            "CLARA\n"
+            "Isso nao podia estar aqui.\n\n"
+            "EXT. RUA ESTREITA - NOITE\n\n"
+            "Clara segue os rastros da promessa esquecida. Cada porta fechada "
+            "revela uma nova versao da mesma culpa.\n\n"
+            "INT. SALA DA FAMILIA - MADRUGADA\n\n"
+            "A verdade surge no momento de maior perda. Clara entende que o "
+            "abandono tambem foi uma tentativa torta de protecao.\n\n"
+            "CLARA\n"
+            "Eu passei anos odiando a pessoa errada.\n\n"
+            "FADE OUT."
         )
         return {
             "title": title,

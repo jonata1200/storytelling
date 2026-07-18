@@ -35,9 +35,12 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "timeline, relationships, continuity_rules, audio_style e export_profile."
     ),
     "generate_script": (
-        "Crie um roteiro narrativo completo em {language} para uma historia vertical com "
+        "Crie um roteiro cinematografico completo em {language} para uma historia vertical com "
         "duracao alvo de {target_duration_seconds}s. Use a Story Bible em {story_bible}. "
-        "O texto deve ter gancho inicial, desenvolvimento, virada, climax e payoff emocional. "
+        "Formate como roteiro de cinema: cabecalho de cena INT./EXT., local e periodo, "
+        "linhas de acao no presente, nomes de personagens em caixa alta antes das falas, "
+        "dialogos curtos, indicacoes visuais e transicoes discretas. O texto deve ter "
+        "gancho inicial, desenvolvimento, virada, climax e payoff emocional. "
         "Responda somente JSON neste formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
         '"word_count":650,"content":"ROTEIRO COMPLETO AQUI"}}'
@@ -55,6 +58,8 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "Preserve a continuidade da Story Bible e mantenha a duracao alvo de "
         "{target_duration_seconds}s. Pedido do usuario: {instruction}. "
         "Contexto do projeto: {project_context}. Roteiro atual: {current_script}. "
+        "Mantenha formato de roteiro de cinema com cabecalhos INT./EXT., acao no presente, "
+        "personagens em caixa alta antes dos dialogos e transicoes discretas. "
         "Responda somente JSON neste formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
         '"word_count":650,"content":"ROTEIRO REVISADO COMPLETO AQUI"}}'

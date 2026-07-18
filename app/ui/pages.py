@@ -292,8 +292,19 @@ def _body_style() -> None:
             background: #181b19 !important;
             border-radius: 14px !important;
           }
-          .assistant-chat-input .q-field__control { min-height:48px!important; height:48px!important; }
-          .assistant-chat-input .q-field__native { min-height:48px!important; line-height:48px!important; padding-top:0!important; padding-bottom:0!important; }
+          .assistant-chat-messages { overscroll-behavior:contain; }
+          .assistant-chat-bubble { white-space:pre-wrap; overflow-wrap:anywhere; }
+          .assistant-chat-input .q-field__control { min-height:48px!important; height:auto!important; max-height:132px!important; }
+          .assistant-chat-input .q-field__native,
+          .assistant-chat-input.q-textarea textarea {
+            min-height:24px!important;
+            max-height:96px!important;
+            line-height:20px!important;
+            padding-top:12px!important;
+            padding-bottom:12px!important;
+            resize:none!important;
+            overflow-y:auto!important;
+          }
           .q-field__control::before { border-color: #303530 !important; }
           .q-field__control::after { color: var(--acid) !important; }
           .q-field--focused .q-field__label { color: var(--acid) !important; }
@@ -464,7 +475,7 @@ def _step_ready(step_key: str, counts: dict[str, int]) -> bool:
         "briefing": counts["briefings"] > 0,
         "ideas": counts["ideas"] > 0,
         "bible": counts["bibles"] > 0,
-        "script": counts["scripts"] > 0 and counts["shots"] > 0,
+        "script": counts["scripts"] > 0,
         "visual": counts["characters"] > 0,
         "storyboard": counts["frames"] > 0 and counts["animatics"] > 0,
         "video": counts["clips"] > 0,
@@ -535,17 +546,23 @@ def _workspace_section_access(section: str, counts: dict[str, int]) -> tuple[boo
     if section == "script":
         return True, ""
     if section == "assets":
-        return script_ready, "Crie o roteiro antes de acessar personagens."
+        if not script_ready:
+            return False, "Crie o roteiro antes de acessar personagens."
+        return True, ""
     if section == "storyboard":
         if not script_ready:
             return False, "Crie o roteiro antes de acessar o storyboard."
-        return assets_ready, "Crie os personagens antes de acessar o storyboard."
+        if not assets_ready:
+            return False, "Crie os personagens antes de acessar o storyboard."
+        return True, ""
     if section == "video":
         if not script_ready:
             return False, "Crie o roteiro antes de acessar video."
         if not assets_ready:
             return False, "Crie os personagens antes de acessar video."
-        return storyboard_ready, "Crie o storyboard antes de acessar video."
+        if not storyboard_ready:
+            return False, "Crie o storyboard antes de acessar video."
+        return True, ""
     return False, "Etapa desconhecida."
 
 
@@ -733,7 +750,11 @@ async def _generate_initial_script_in_background(
 async def _reload_project_when_script_ready(project_id: UUID) -> None:
     async with AsyncSessionLocal() as session:
         script = await _latest(session, Script, project_id)
-    if script is not None:
+        settings = await get_or_create_production_settings(session, project_id)
+        metadata = settings.metadata_json or {}
+        action = metadata.get("ai_action") if isinstance(metadata, dict) else None
+        status = str(action.get("status") or "") if isinstance(action, dict) else ""
+    if script is not None or status == "failed":
         ui.navigate.reload()
 
 
@@ -1539,7 +1560,6 @@ def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> 
                     button.tooltip(reason)
         ui.label("PT-BR").classes("desktop-nav text-sm text-[#a9aea9]")
         _theme_toggle()
-        _logout_button()
         ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
             "acid-bg rounded-xl font-semibold"
         )
@@ -1581,7 +1601,8 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
         }
     ]
     with ui.column().classes(
-        "right-assistant w-[340px] min-w-[340px] border-l border-[#252925] bg-[#0d0f0e] h-[calc(100vh-64px)] p-4 gap-4 sticky top-16"
+        "right-assistant w-[340px] min-w-[340px] border-l border-[#252925] "
+        "bg-[#0d0f0e] h-[calc(100vh-64px)] min-h-0 p-4 gap-4 sticky top-16"
     ):
         with ui.row().classes("w-full items-center justify-between"):
             with ui.row().classes("items-center gap-2"):
@@ -1591,12 +1612,13 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
 
         @ui.refreshable
         def conversation() -> None:
-            with ui.column().classes("w-full gap-3 overflow-y-auto flex-1"):
+            with ui.column().classes("w-full gap-3"):
                 for item in messages:
                     sent = item["role"] == "user"
                     with ui.row().classes(f"w-full {'justify-end' if sent else 'justify-start'}"):
                         ui.label(item["content"]).classes(
-                            "max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-5 "
+                            "assistant-chat-bubble w-fit rounded-2xl px-4 py-3 text-sm leading-5 "
+                            + ("max-w-[88%] " if sent else "max-w-full ")
                             + (
                                 "acid-bg rounded-br-sm"
                                 if sent
@@ -1604,8 +1626,10 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                             )
                         )
 
-        conversation()
-        ui.space()
+        with ui.column().classes(
+            "assistant-chat-messages w-full flex-1 min-h-0 overflow-y-auto pr-1"
+        ):
+            conversation()
 
         async def send_message(text: str | None = None) -> None:
             user_message = (text or prompt.value or "").strip()
@@ -1634,11 +1658,21 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                 ui.notify(response, color="positive")
                 ui.navigate.reload()
 
-        with ui.row().classes("w-full items-end gap-2"):
+        with ui.row().classes("w-full items-end gap-2 shrink-0"):
             prompt = (
-                ui.input(placeholder=prompts[active])
-                .props("outlined dense")
+                ui.textarea(placeholder=prompts[active])
+                .props("outlined dense autogrow rows=1")
                 .classes("flex-1 assistant-chat-input")
+            )
+            prompt.on(
+                "keydown",
+                lambda: send_message(),
+                js_handler="""(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        emit();
+                    }
+                }""",
             )
             ui.button(
                 icon="arrow_upward",
@@ -1646,14 +1680,15 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             ).props("round unelevated").classes("acid-bg shrink-0 mb-1")
 
 
-def _section_title(title: str, subtitle: str, action: str, callback: Any) -> None:
+def _section_title(title: str, subtitle: str, action: str | None, callback: Any | None) -> None:
     with ui.row().classes("w-full items-end justify-between mb-2"):
         with ui.column().classes("gap-1"):
             ui.label(title).classes("brand-type text-3xl font-bold")
             ui.label(subtitle).classes("text-sm text-[#8e948f]")
-        ui.button(action, icon="auto_awesome", on_click=callback).props(
-            "unelevated no-caps"
-        ).classes("acid-bg rounded-xl font-semibold")
+        if action and callback:
+            ui.button(action, icon="auto_awesome", on_click=callback).props(
+                "unelevated no-caps"
+            ).classes("acid-bg rounded-xl font-semibold")
 
 
 def _project_ai_action(summary: dict[str, Any]) -> dict[str, Any]:
@@ -1663,18 +1698,22 @@ def _project_ai_action(summary: dict[str, Any]) -> dict[str, Any]:
     return action if isinstance(action, dict) else {}
 
 
+def _ordered_scenes(scenes: list[Any]) -> list[Any]:
+    return sorted(scenes, key=lambda scene: int(getattr(scene, "scene_number", 0) or 0))
+
+
 def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     script = summary["script"]
     ai_action = _project_ai_action(summary)
     ai_status = str(ai_action.get("status") or "")
     generation_in_progress = script is None and ai_status in {"queued", "running"}
     if generation_in_progress:
-        ui.timer(12.0, lambda: _reload_project_when_script_ready(project_id), once=True)
+        ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
     _section_title(
         "Roteiro",
         "Estruture a narrativa e transforme o texto em cenas e planos.",
-        "Gerar roteiro",
-        lambda: _run_step(project_id, "script"),
+        None,
+        None,
     )
     with ui.row().classes("w-full gap-4 items-start"):
         with ui.column().classes("flex-1 gap-4"):
@@ -1690,15 +1729,6 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                             or "A IA esta desenvolvendo o roteiro com base na ideia."
                         )
                     ).classes("text-sm text-[#858b86]")
-                    with ui.row().classes("w-full justify-center gap-2 mt-4"):
-                        ui.button(
-                            "Verificar agora",
-                            icon="refresh",
-                            on_click=lambda: _reload_project_when_script_ready(project_id),
-                        ).props("outline no-caps")
-                        ui.button("Continuar", on_click=generation_dialog.close).props(
-                            "flat no-caps"
-                        )
                 generation_dialog.open()
             elif script is None and ai_status == "failed":
                 with ui.element("div").classes(
@@ -1722,7 +1752,7 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                 ui.label(content).classes("whitespace-pre-wrap leading-8 text-[#d9dcd9]")
         with ui.column().classes("w-64 gap-3"):
             ui.label("Cenas").classes("font-semibold")
-            for scene in summary["scenes"]:
+            for scene in _ordered_scenes(summary["scenes"]):
                 with ui.element("div").classes("entity-card rounded-xl p-3 w-full"):
                     ui.label(f"Cena {scene.scene_number}").classes("text-xs acid uppercase")
                     ui.label(scene.title).classes("font-medium")
