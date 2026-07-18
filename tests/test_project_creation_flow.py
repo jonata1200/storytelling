@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.storytelling.service import (
     GenerationOutputError,
+    _shot_narration_text,
     coerce_duration_minutes,
     normalize_script_payload,
     normalize_story_idea_payload,
@@ -50,6 +51,27 @@ def test_project_ai_action_reads_production_metadata() -> None:
 
     assert action["status"] == "running"
     assert action["message"] == "Criando roteiro"
+
+
+def test_legacy_assistant_greeting_is_removed_from_chat_history() -> None:
+    assert (
+        pages._is_legacy_assistant_greeting(
+            "assistant",
+            "Estou acompanhando esta etapa. Posso revisar, propor variações.",
+        )
+        is True
+    )
+    assert pages._is_legacy_assistant_greeting("assistant", "Resposta real do agente.") is False
+
+
+def test_shot_narration_falls_back_to_action_when_empty() -> None:
+    payload = {
+        "narration_text": "",
+        "dialogue_text": "",
+        "action": "Clara abre a carta diante da janela.",
+    }
+
+    assert _shot_narration_text(payload, "shot") == "Clara abre a carta diante da janela."
 
 
 def test_scenes_are_ordered_by_scene_number_for_display() -> None:

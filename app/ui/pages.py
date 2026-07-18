@@ -1637,6 +1637,10 @@ def _assistant_chat_store() -> dict[str, list[dict[str, str]]]:
     return cast(dict[str, list[dict[str, str]]], raw_store)
 
 
+def _is_legacy_assistant_greeting(role: str, content: str) -> bool:
+    return role == "assistant" and content.startswith("Estou acompanhando esta etapa.")
+
+
 def _load_assistant_messages(
     project_id: UUID, active: str, assistant_suggestions: dict[str, str]
 ) -> list[dict[str, str]]:
@@ -1650,10 +1654,11 @@ def _load_assistant_messages(
         content = str(item.get("content") or "")
         if role == "assistant_pending":
             continue
+        if _is_legacy_assistant_greeting(role, content):
+            continue
         if role and content:
             messages.append({"role": role, "content": content})
-    if not messages:
-        messages = [_assistant_initial_message(active, assistant_suggestions)]
+    _ = active, assistant_suggestions
     store[str(project_id)] = messages
     nicegui_app.storage.user["project_assistant_messages"] = store
     return messages
@@ -1844,22 +1849,22 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     with ui.row().classes("w-full gap-4 items-start"):
         with ui.column().classes("flex-1 gap-4"):
             if generation_in_progress:
-                with ui.dialog().props(BLOCKING_DIALOG_PROPS) as generation_dialog, ui.card().classes(
-                    "entity-card rounded-2xl p-6 min-w-96 items-center text-center"
+                with ui.element("div").classes(
+                    "entity-card rounded-2xl p-4 w-full flex items-center gap-3"
                 ):
-                    ui.spinner("dots", size="lg", color="primary")
-                    ui.label(
-                        "IA criando cenas" if missing_scenes else "IA criando o roteiro"
-                    ).classes("brand-type text-xl font-bold mt-3")
-                    ui.label(
-                        "A IA esta criando cenas e planos para o roteiro."
-                        if missing_scenes
-                        else str(
-                            ai_action.get("message")
-                            or "A IA esta desenvolvendo o roteiro com base na ideia."
-                        )
-                    ).classes("text-sm text-[#858b86]")
-                generation_dialog.open()
+                    ui.spinner("dots", size="md", color="primary")
+                    with ui.column().classes("gap-0"):
+                        ui.label(
+                            "IA criando cenas" if missing_scenes else "IA criando o roteiro"
+                        ).classes("font-semibold")
+                        ui.label(
+                            "A IA esta criando cenas e planos para o roteiro."
+                            if missing_scenes
+                            else str(
+                                ai_action.get("message")
+                                or "A IA esta desenvolvendo o roteiro com base na ideia."
+                            )
+                        ).classes("text-sm text-[#858b86]")
             elif script is None and ai_status == "failed":
                 with ui.element("div").classes(
                     "border border-red-900 bg-red-950/40 rounded-2xl p-4 text-red-100"
@@ -1877,7 +1882,7 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                 content = (
                     script.content
                     if script
-                    else "A IA esta desenvolvendo o roteiro com base na ideia do projeto. Use o pop-up para verificar quando estiver pronto."
+                    else "A IA esta desenvolvendo o roteiro com base na ideia do projeto."
                 )
                 ui.label(content).classes("whitespace-pre-wrap leading-8 text-[#d9dcd9]")
         with ui.column().classes("w-64 gap-3"):

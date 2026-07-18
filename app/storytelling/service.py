@@ -52,6 +52,16 @@ def _required_str(payload: dict, key: str, context: str) -> str:
     return text
 
 
+def _shot_narration_text(payload: dict, context: str) -> str:
+    narration = str(payload.get("narration_text") or "").strip()
+    if narration:
+        return narration
+    dialogue = str(payload.get("dialogue_text") or "").strip()
+    if dialogue:
+        return dialogue
+    return _required_str(payload, "action", context)
+
+
 def _required_int(payload: dict, key: str, context: str) -> int:
     value = payload.get(key)
     if value is None:
@@ -622,7 +632,7 @@ async def generate_scenes_and_shots(
                     scene_id=scene.id,
                     shot_number=_required_int(shot_payload, "shot_number", shot_context),
                     duration_seconds=_required_int(shot_payload, "duration_seconds", shot_context),
-                    narration_text=_required_str(shot_payload, "narration_text", shot_context),
+                    narration_text=_shot_narration_text(shot_payload, shot_context),
                     dialogue_text=str(shot_payload.get("dialogue_text") or ""),
                     action=_required_str(shot_payload, "action", shot_context),
                     emotion=_required_str(shot_payload, "emotion", shot_context),

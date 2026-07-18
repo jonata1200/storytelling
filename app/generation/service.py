@@ -56,6 +56,8 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "Cada plano deve ser util para gerar imagem/video: visual_composition deve descrever "
         "enquadramento vertical, personagem/objeto principal, ambiente e luz; camera_movement "
         "deve orientar movimento realista; action deve ser visivel e especifica. "
+        "narration_text deve ser sempre uma string nao vazia; se nao houver narrador, use "
+        "uma descricao curta da acao visual do plano. dialogue_text pode ser string vazia. "
         "Responda somente JSON neste formato exato: "
         '{{"scenes":[{{"scene_number":1,"title":"...","summary":"...",'
         '"duration_seconds":75,"shots":[{{"shot_number":1,"duration_seconds":25,'
