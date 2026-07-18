@@ -245,8 +245,21 @@ def _body_style() -> None:
           .acid { color:var(--acid); }
           .acid-bg { background:var(--acid)!important; color:#10120d!important; }
           .nav-pill { border:1px solid transparent; color:#8c918d; transition:.2s ease; }
-          .nav-pill:hover { color:white; background:#171a18; }
-          .nav-active { color:#111!important; background:var(--acid)!important; border-color:#fff!important; }
+          .nav-pill:hover { color:#eaf3ff; background:#171a18; }
+          .nav-active { color:#ffffff!important; background:var(--acid)!important; border-color:rgba(255,255,255,.45)!important; min-width:92px; }
+          .nav-active .q-btn__content,
+          .nav-active .q-btn__content span,
+          .nav-active .q-icon { color:#ffffff!important; opacity:1!important; }
+          .nav-locked { color:#78a8d5!important; background:transparent!important; border-color:transparent!important; }
+          .nav-locked:hover { color:#78a8d5!important; background:transparent!important; }
+          body:not(.body--dark) .nav-pill { color:#6d756f; }
+          body:not(.body--dark) .nav-pill:hover { color:#2c6da7; background:#edf6ff; }
+          body:not(.body--dark) .nav-active { color:#ffffff!important; background:var(--acid)!important; border-color:transparent!important; }
+          body:not(.body--dark) .nav-active .q-btn__content,
+          body:not(.body--dark) .nav-active .q-btn__content span,
+          body:not(.body--dark) .nav-active .q-icon { color:#ffffff!important; opacity:1!important; }
+          body:not(.body--dark) .nav-locked,
+          body:not(.body--dark) .nav-locked:hover { color:#6aa4d8!important; background:transparent!important; border-color:transparent!important; }
           .entity-card { background:#151816; border:1px solid #252a26; transition:.2s ease; }
           .entity-card:hover { transform:translateY(-2px); border-color:#555d4c; }
           .visual-placeholder { background:radial-gradient(circle at 70% 15%,#4e5531 0,#24281e 32%,#141614 70%); }
@@ -259,6 +272,8 @@ def _body_style() -> None:
             background: #181b19 !important;
             border-radius: 14px !important;
           }
+          .assistant-chat-input .q-field__control { min-height:48px!important; height:48px!important; }
+          .assistant-chat-input .q-field__native { min-height:48px!important; line-height:48px!important; padding-top:0!important; padding-bottom:0!important; }
           .q-field__control::before { border-color: #303530 !important; }
           .q-field__control::after { color: var(--acid) !important; }
           .q-field--focused .q-field__label { color: var(--acid) !important; }
@@ -1136,7 +1151,7 @@ def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> 
                     on_click=lambda k=key: ui.navigate.to(f"/projects/{project.id}/{k}"),
                 ).props("flat no-caps" if allowed else "flat no-caps disable").classes(
                     f"nav-pill rounded-full px-4 {'nav-active' if active == key else ''} "
-                    f"{'opacity-45 cursor-not-allowed' if not allowed else ''}"
+                    f"{'nav-locked cursor-not-allowed' if not allowed else ''}"
                 )
                 if not allowed:
                     button.tooltip(reason)
@@ -1201,7 +1216,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             with ui.row().classes("items-center gap-2"):
                 ui.icon("auto_awesome").classes("acid")
                 ui.label("Diretor IA").classes("font-semibold")
-            ui.badge("online").classes("bg-[#26301f] text-[#dff57b]")
+            ui.badge("online").classes("bg-[#26301f] text-white")
 
         @ui.refreshable
         def conversation() -> None:
@@ -1220,9 +1235,6 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
 
         conversation()
         ui.space()
-        prompt = (
-            ui.textarea(placeholder=prompts[active]).props("outlined autogrow").classes("w-full")
-        )
 
         async def send_message(text: str | None = None) -> None:
             user_message = (text or prompt.value or "").strip()
@@ -1246,11 +1258,16 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             messages.append({"role": "assistant", "content": response})
             conversation.refresh()
 
-        with ui.row().classes("w-full items-center justify-end"):
+        with ui.row().classes("w-full items-end gap-2"):
+            prompt = (
+                ui.input(placeholder=prompts[active])
+                .props("outlined dense")
+                .classes("flex-1 assistant-chat-input")
+            )
             ui.button(
                 icon="arrow_upward",
                 on_click=send_message,
-            ).props("round unelevated").classes("acid-bg")
+            ).props("round unelevated").classes("acid-bg shrink-0 mb-1")
 
 
 def _section_title(title: str, subtitle: str, action: str, callback: Any) -> None:
