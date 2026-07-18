@@ -429,6 +429,35 @@ def _step_ready(step_key: str, counts: dict[str, int]) -> bool:
     return readiness[step_key]
 
 
+def _workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool, str]:
+    script_ready = _step_ready("script", counts)
+    assets_ready = _step_ready("visual", counts)
+    storyboard_ready = _step_ready("storyboard", counts)
+    if section == "script":
+        return True, ""
+    if section == "assets":
+        return script_ready, "Crie o roteiro antes de acessar personagens."
+    if section == "storyboard":
+        if not script_ready:
+            return False, "Crie o roteiro antes de acessar o storyboard."
+        return assets_ready, "Crie os personagens antes de acessar o storyboard."
+    if section == "video":
+        if not script_ready:
+            return False, "Crie o roteiro antes de acessar video."
+        if not assets_ready:
+            return False, "Crie os personagens antes de acessar video."
+        return storyboard_ready, "Crie o storyboard antes de acessar video."
+    return False, "Etapa desconhecida."
+
+
+def _first_available_workspace_section(counts: dict[str, int]) -> str:
+    for section in ["video", "storyboard", "assets", "script"]:
+        allowed, _ = _workspace_section_access(section, counts)
+        if allowed:
+            return section
+    return "script"
+
+
 def _render_header(title: str, subtitle: str) -> None:
     with ui.row().classes(
         "w-full items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800"
@@ -514,6 +543,53 @@ async def _create_project_from_chat_prompt(prompt: str) -> None:
         "cta": "",
         "constraints": "evitar violencia grafica\nmanter tom familiar",
         "one_line_idea": cleaned_prompt,
+        "content_type": "short_drama",
+        "aspect_ratio": "9:16",
+        "workflow_mode": "keyframes_i2v",
+        "image_resolution": "1080x1920",
+        "video_resolution": "1080x1920",
+        "motion_intensity": 5,
+        "image_model": get_settings().openrouter_image_model,
+        "video_model": get_settings().openrouter_video_model,
+    }
+    await _create_project_from_form(form)
+
+
+async def _create_project_from_idea(idea: dict[str, Any]) -> None:
+    title = str(idea.get("title") or "Ideia de storytelling").strip()
+    theme = str(idea.get("theme") or idea.get("premise") or title).strip()
+    premise = str(idea.get("premise") or idea.get("hook") or theme).strip()
+    genre = str(idea.get("genre") or "drama emocional").strip()
+    emotion = str(idea.get("primary_emotion") or idea.get("final_emotion") or "curiosidade").strip()
+    duration = float(idea.get("duration_minutes") or 5)
+    duration = min(8.0, max(3.0, duration))
+    form = {
+        "title": title[:80] or "Novo projeto de storytelling",
+        "description": premise[:240],
+        "theme": theme[:220],
+        "audience": "publico geral",
+        "genre": genre,
+        "emotion": emotion,
+        "intensity": 8,
+        "ending": "final com payoff emocional",
+        "duration": duration,
+        "visual_style": "cinematico realista vertical",
+        "objective": "desenvolver uma historia curta de 3 a 8 minutos",
+        "cta": "",
+        "constraints": "manter ritmo forte\ncriar ganchos claros\nadequar para historia curta",
+        "one_line_idea": "\n".join(
+            part
+            for part in [
+                title,
+                f"Tema: {theme}",
+                f"Genero: {genre}",
+                f"Emocao principal: {emotion}",
+                f"Premissa: {premise}",
+                f"Gancho: {idea.get('hook') or ''}",
+                f"Protagonista: {idea.get('protagonist') or ''}",
+            ]
+            if part.strip()
+        ),
         "content_type": "short_drama",
         "aspect_ratio": "9:16",
         "workflow_mode": "keyframes_i2v",
@@ -990,25 +1066,6 @@ def _save_avatar_file(filename: str, content: bytes) -> Path:
     return target
 
 
-def _save_script_upload(filename: str, content: bytes) -> Path:
-    suffix = Path(filename).suffix.lower()
-    if suffix not in {".docx", ".pdf"}:
-        raise ValueError("Formato de roteiro nao permitido.")
-    safe_stem = "".join(
-        character if character.isalnum() or character in {"-", "_"} else "_"
-        for character in Path(filename).stem
-    ).strip("_")
-    target_dir = Path("storage/uploads/scripts")
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / f"{safe_stem or 'roteiro'}{suffix}"
-    counter = 1
-    while target.exists():
-        target = target_dir / f"{safe_stem or 'roteiro'}-{counter}{suffix}"
-        counter += 1
-    target.write_bytes(content)
-    return target
-
-
 def _user_avatar(size: str = "44px", navigate: bool = True) -> Any:
     current = get_settings()
     image_source = _avatar_data_uri(current.user_avatar_path)
@@ -1036,7 +1093,7 @@ def _home_sidebar(active: str = "") -> None:
             ("projects", "folder_open", "Projetos", "/projects"),
             ("settings", "settings", "Ajustes", "/settings"),
         ]:
-            active_classes = "acid bg-[#101923]" if key == active else "text-[#8d928e]"
+            active_classes = "acid" if key == active else "text-[#8d928e]"
             with (
                 ui.column()
                 .classes(
@@ -1053,7 +1110,7 @@ def _home_sidebar(active: str = "") -> None:
         _logout_button()
 
 
-def _workspace_header(project: Project, active: str) -> None:
+def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> None:
     tabs = [
         ("Roteiro", "script"),
         ("Personagens", "assets"),
@@ -1069,14 +1126,20 @@ def _workspace_header(project: Project, active: str) -> None:
         ).classes("text-[#9da29d]")
         with ui.column().classes("gap-0 min-w-40"):
             ui.label(project.title).classes("font-semibold truncate max-w-56")
-            ui.label("Episódio 1").classes("text-[11px] text-[#818681]")
+        ui.label("Episódio 1").classes("text-[11px] text-[#818681]")
         with ui.row().classes("desktop-nav flex-1 justify-center gap-2"):
             for label, key in tabs:
-                ui.button(
-                    label, on_click=lambda k=key: ui.navigate.to(f"/projects/{project.id}/{k}")
-                ).props("flat no-caps").classes(
-                    f"nav-pill rounded-full px-4 {'nav-active' if active == key else ''}"
+                allowed, reason = _workspace_section_access(key, counts)
+                button = ui.button(
+                    label,
+                    icon=None if allowed else "lock",
+                    on_click=lambda k=key: ui.navigate.to(f"/projects/{project.id}/{k}"),
+                ).props("flat no-caps" if allowed else "flat no-caps disable").classes(
+                    f"nav-pill rounded-full px-4 {'nav-active' if active == key else ''} "
+                    f"{'opacity-45 cursor-not-allowed' if not allowed else ''}"
                 )
+                if not allowed:
+                    button.tooltip(reason)
         ui.label("PT-BR").classes("desktop-nav text-sm text-[#a9aea9]")
         _theme_toggle()
         _logout_button()
@@ -1092,12 +1155,31 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
         "storyboard": "Diga ao diretor o que enquadrar.",
         "video": "Descreva movimento, câmera ou ritmo.",
     }
+    assistant_suggestions = {
+        "script": (
+            "Sugestões que posso ajudar agora: revisar a estrutura do roteiro, "
+            "fortalecer o gancho inicial ou ajustar diálogos."
+        ),
+        "assets": (
+            "Sugestões que posso ajudar agora: aprofundar personagens, criar locais "
+            "recorrentes ou alinhar objetos importantes com o roteiro."
+        ),
+        "storyboard": (
+            "Sugestões que posso ajudar agora: melhorar enquadramentos, ritmo visual "
+            "ou continuidade entre cenas."
+        ),
+        "video": (
+            "Sugestões que posso ajudar agora: orientar movimento de câmera, ritmo "
+            "dos clipes ou ajustes de montagem."
+        ),
+    }
     messages: list[dict[str, str]] = [
         {
             "role": "assistant",
             "content": (
                 "Estou acompanhando esta etapa. Posso revisar, propor variações "
-                "e orientar a próxima ação mantendo a continuidade do projeto."
+                "e orientar a próxima ação mantendo a continuidade do projeto.\n\n"
+                f"{assistant_suggestions.get(active, '')}"
             ),
         }
     ]
@@ -1137,12 +1219,6 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                         )
 
         conversation()
-        ui.label("Sugestões").classes("text-xs uppercase tracking-widest text-[#747a75]")
-        suggestions = [
-            "Deixe a cena mais cinematográfica",
-            "Crie uma segunda versão",
-            "Verifique a continuidade visual",
-        ]
         ui.space()
         prompt = (
             ui.textarea(placeholder=prompts[active]).props("outlined autogrow").classes("w-full")
@@ -1170,14 +1246,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             messages.append({"role": "assistant", "content": response})
             conversation.refresh()
 
-        with ui.row().classes("w-full gap-2 overflow-x-auto flex-nowrap"):
-            for text in suggestions:
-                ui.button(text, on_click=lambda value=text: send_message(value)).props(
-                    "outline no-caps dense"
-                ).classes("border-[#303530] text-[#b8bdb8] rounded-full whitespace-nowrap")
-        with ui.row().classes("w-full items-center"):
-            ui.button(icon="add").props("flat round").classes("text-[#aeb3ae]")
-            ui.space()
+        with ui.row().classes("w-full items-center justify-end"):
             ui.button(
                 icon="arrow_upward",
                 on_click=send_message,
@@ -1379,13 +1448,6 @@ def register_ui_pages() -> None:
                             .classes("w-full text-lg flex-1 text-left")
                         )
                         with ui.row().classes("w-full items-center px-2 pb-1 gap-2"):
-                            ui.button(
-                                "Enviar roteiro",
-                                icon="description",
-                                on_click=lambda: ui.run_javascript(
-                                    "document.querySelector('#script-upload input[type=file]').click()"
-                                ),
-                            ).props("flat no-caps").classes("text-[#b8bdb8]")
                             ui.space()
                             ui.button(
                                 icon="arrow_upward",
@@ -1393,31 +1455,6 @@ def register_ui_pages() -> None:
                                     str(idea.value or "")
                                 ),
                             ).props("round unelevated").classes("acid-bg")
-
-                        async def upload_script(event: Any) -> None:
-                            suffix = Path(event.file.name).suffix.lower()
-                            if suffix not in {".docx", ".pdf"}:
-                                ui.notify(
-                                    "Envie apenas arquivos .docx ou .pdf.",
-                                    color="negative",
-                                )
-                                return
-                            content = await event.file.read()
-                            target = await asyncio.to_thread(
-                                _save_script_upload, event.file.name, content
-                            )
-                            ui.notify(f"Roteiro enviado: {target.name}", color="positive")
-
-                        ui.upload(
-                            label="Enviar roteiro",
-                            on_upload=upload_script,
-                            on_rejected=lambda: ui.notify(
-                                "Envie apenas arquivos .docx ou .pdf com ate 20 MB.",
-                                color="warning",
-                            ),
-                            auto_upload=True,
-                            max_file_size=20_000_000,
-                        ).props("id=script-upload accept=.docx,.pdf").classes("hidden")
                 with (
                     ui.column().props("id=projects").classes("w-full max-w-6xl mx-auto gap-4 pt-3")
                 ):
@@ -1429,9 +1466,6 @@ def register_ui_pages() -> None:
                             ui.label("Continue de onde parou ou comece uma nova produção.").classes(
                                 "text-sm text-[#7f8580]"
                             )
-                        ui.button(
-                            "Novo projeto", icon="add", on_click=lambda: ui.navigate.to("/dashboard")
-                        ).props("flat no-caps").classes("acid")
                     if not projects:
                         with (
                             ui.element("div")
@@ -1712,7 +1746,7 @@ def register_ui_pages() -> None:
                                     ui.button(
                                         "Desenvolver",
                                         icon="arrow_forward",
-                                        on_click=lambda: ui.navigate.to("/dashboard"),
+                                        on_click=lambda item=idea: _create_project_from_idea(item),
                                     ).props("flat no-caps").classes("acid")
 
                 idea_results()
@@ -1762,7 +1796,7 @@ def register_ui_pages() -> None:
                                     ui.button(
                                         "Desenvolver",
                                         icon="arrow_forward",
-                                        on_click=lambda: ui.navigate.to("/dashboard"),
+                                        on_click=lambda item=idea: _create_project_from_idea(item),
                                     ).props("flat no-caps").classes("acid")
 
                 saved_results()
@@ -2066,7 +2100,14 @@ def register_ui_pages() -> None:
                 )
             return
         project: Project = summary["project"]
-        _workspace_header(project, section)
+        counts: dict[str, int] = summary["counts"]
+        allowed, reason = _workspace_section_access(section, counts)
+        if not allowed:
+            fallback = _first_available_workspace_section(counts)
+            ui.notify(reason, color="warning")
+            ui.navigate.to(f"/projects/{project_id}/{fallback}")
+            return
+        _workspace_header(project, section, counts)
         with ui.row().classes("w-full items-start flex-nowrap"):
             with ui.column().classes(
                 "workspace-main flex-1 min-w-0 p-8 lg:p-10 gap-4 h-[calc(100vh-64px)] overflow-y-auto"
