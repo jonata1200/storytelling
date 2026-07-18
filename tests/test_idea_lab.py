@@ -5,6 +5,7 @@ import pytest
 from app.config.settings import Settings
 from app.storytelling import idea_lab
 from app.storytelling.idea_lab import (
+    delete_all_ideas,
     delete_generated_idea,
     delete_saved_idea,
     generate_freeform_ideas,
@@ -83,3 +84,16 @@ def test_generated_ideas_can_be_persisted_and_discarded(tmp_path: Path) -> None:
     delete_generated_idea("idea-pending-1", path)
 
     assert load_generated_ideas(path) == []
+
+
+def test_all_ideas_can_be_deleted_at_once(tmp_path: Path) -> None:
+    saved_path = tmp_path / "saved-ideas.json"
+    generated_path = tmp_path / "generated-ideas.json"
+    save_idea({"id": "saved-1", "title": "A ideia salva"}, saved_path)
+    replace_generated_ideas([{"id": "generated-1", "title": "A ideia gerada"}], generated_path)
+
+    deleted_count = delete_all_ideas(saved_path, generated_path)
+
+    assert deleted_count == 2
+    assert load_saved_ideas(saved_path) == []
+    assert load_generated_ideas(generated_path) == []

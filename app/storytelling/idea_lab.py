@@ -85,6 +85,17 @@ def delete_generated_idea(idea_id: str, path: Path = GENERATED_IDEAS_PATH) -> No
     _write_ideas(ideas, path)
 
 
+def delete_all_ideas(
+    saved_path: Path = SAVED_IDEAS_PATH,
+    generated_path: Path = GENERATED_IDEAS_PATH,
+) -> int:
+    saved_count = len(load_saved_ideas(saved_path))
+    generated_count = len(load_generated_ideas(generated_path))
+    _write_ideas([], saved_path)
+    _write_ideas([], generated_path)
+    return saved_count + generated_count
+
+
 def _load_ideas(path: Path, label: str) -> list[dict[str, Any]]:
     if not path.is_file():
         return []

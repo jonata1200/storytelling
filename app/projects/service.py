@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ArtifactStatus, DependencyKind, ProjectStatus
@@ -62,6 +63,16 @@ async def delete_project(session: AsyncSession, project_id: UUID) -> bool:
     project.deleted_at = datetime.now(UTC)
     await session.commit()
     return True
+
+
+async def delete_all_projects(session: AsyncSession) -> int:
+    result = await session.execute(select(Project).where(Project.deleted_at.is_(None)))
+    projects = list(result.scalars())
+    deleted_at = datetime.now(UTC)
+    for project in projects:
+        project.deleted_at = deleted_at
+    await session.commit()
+    return len(projects)
 
 
 async def create_artifact(

@@ -13,7 +13,7 @@ from nicegui import ui
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config.preferences import openrouter_models, save_preferences
+from app.config.preferences import save_preferences
 from app.config.settings import get_settings
 from app.costs.models import CostEntry
 from app.database.session import AsyncSessionLocal
@@ -44,7 +44,13 @@ from app.production.service import (
 from app.projects.models import Artifact, Project
 from app.projects.repository import ProjectRepository
 from app.projects.schemas import ProjectCreate
-from app.projects.service import create_project, delete_project, list_projects, rename_project
+from app.projects.service import (
+    create_project,
+    delete_all_projects,
+    delete_project,
+    list_projects,
+    rename_project,
+)
 from app.quality.models import ContinuityIssue, QualityCheck
 from app.quality.service import run_quality_check
 from app.storyboards.models import (
@@ -56,6 +62,7 @@ from app.storyboards.models import (
 )
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
 from app.storytelling.idea_lab import (
+    delete_all_ideas,
     delete_generated_idea,
     delete_saved_idea,
     generate_freeform_ideas,
@@ -845,6 +852,25 @@ async def _delete_project_from_ui(project_id: UUID, redirect_to: str) -> None:
         ui.navigate.to(redirect_to)
     except Exception as exc:
         ui.notify(f"Não foi possível excluir o projeto: {exc}", color="negative")
+
+
+async def _delete_all_projects_from_ui() -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            deleted_count = await delete_all_projects(session)
+        ui.notify(f"{deleted_count} projeto(s) apagado(s).", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        ui.notify(f"Nao foi possivel apagar os projetos: {exc}", color="negative")
+
+
+def _delete_all_ideas_from_ui() -> None:
+    try:
+        deleted_count = delete_all_ideas()
+        ui.notify(f"{deleted_count} ideia(s) apagada(s).", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        ui.notify(f"Nao foi possivel apagar as ideias: {exc}", color="negative")
 
 
 async def _save_model_setting(
@@ -2051,6 +2077,9 @@ def register_ui_pages() -> None:
     async def settings_page() -> None:
         _body_style()
         current = get_settings()
+        saved_idea_count = len(load_saved_ideas())
+        generated_idea_count = len(load_generated_ideas())
+        project_count = len(await _project_cards())
         _home_sidebar("settings")
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
             with ui.column().classes("w-full max-w-5xl mx-auto px-6 py-8 gap-7"):
@@ -2069,6 +2098,7 @@ def register_ui_pages() -> None:
                 ):
                     profile_tab = ui.tab("Perfil", icon="person")
                     ai_tab = ui.tab("Inteligência artificial", icon="auto_awesome")
+                    data_tab = ui.tab("Dados", icon="delete_sweep")
                 with ui.tab_panels(settings_tabs, value=profile_tab).classes(
                     "w-full bg-transparent p-0"
                 ):
@@ -2196,32 +2226,6 @@ def register_ui_pages() -> None:
                                 .classes("w-full mt-3")
                             )
 
-                            async def load_catalog() -> None:
-                                key = api_key.value or current.openrouter_api_key
-                                if not key:
-                                    ui.notify("Informe uma chave OpenRouter.", color="warning")
-                                    return
-                                try:
-                                    text_items, image_items, video_items = await asyncio.gather(
-                                        openrouter_models(key, "text"),
-                                        openrouter_models(key, "image"),
-                                        openrouter_models(key, "video"),
-                                    )
-                                    ui.notify(
-                                        (
-                                            "Catalogo OpenRouter acessivel: "
-                                            f"{len(text_items)} texto, "
-                                            f"{len(image_items)} imagem, "
-                                            f"{len(video_items)} video."
-                                        ),
-                                        color="positive",
-                                    )
-                                except Exception as exc:
-                                    ui.notify(
-                                        f"Não foi possível carregar modelos: {exc}",
-                                        color="negative",
-                                    )
-
                             def save_ai() -> None:
                                 values = {
                                     "OPENROUTER_DEFAULT_MODEL": text_model.value or "",
@@ -2235,11 +2239,100 @@ def register_ui_pages() -> None:
 
                             with ui.row().classes("mt-5 gap-3"):
                                 ui.button(
-                                    "Carregar modelos", icon="sync", on_click=load_catalog
-                                ).props("outline no-caps")
-                                ui.button(
                                     "Salvar configurações", icon="save", on_click=save_ai
                                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                    with ui.tab_panel(data_tab).classes("px-0"):
+                        with ui.element("div").classes("entity-card rounded-2xl p-6"):
+                            ui.label("Gerenciamento de dados").classes("text-xl font-semibold")
+                            ui.label(
+                                "Ações destrutivas para limpar ideias e projetos do estúdio."
+                            ).classes("text-sm text-[#858b86] mb-4")
+
+                            def confirm_delete_ideas() -> None:
+                                ideas_dialog.close()
+                                _delete_all_ideas_from_ui()
+
+                            async def confirm_delete_projects() -> None:
+                                projects_dialog.close()
+                                await _delete_all_projects_from_ui()
+
+                            with ui.dialog() as ideas_dialog, ui.card().classes(
+                                "entity-card rounded-2xl p-6 min-w-96"
+                            ):
+                                ui.label("Apagar todas as ideias?").classes(
+                                    "text-xl font-semibold"
+                                )
+                                ui.label(
+                                    "Isso remove ideias salvas e ideias geradas na página "
+                                    "de ideias. Projetos já criados não serão apagados."
+                                ).classes("text-sm text-[#858b86]")
+                                with ui.row().classes("w-full justify-end gap-2 mt-4"):
+                                    ui.button("Cancelar", on_click=ideas_dialog.close).props(
+                                        "flat no-caps"
+                                    )
+                                    ui.button(
+                                        "Apagar ideias",
+                                        icon="delete",
+                                        on_click=confirm_delete_ideas,
+                                    ).props("unelevated no-caps").classes(
+                                        "bg-red-600 text-white rounded-xl"
+                                    )
+
+                            with ui.dialog() as projects_dialog, ui.card().classes(
+                                "entity-card rounded-2xl p-6 min-w-96"
+                            ):
+                                ui.label("Apagar todos os projetos?").classes(
+                                    "text-xl font-semibold"
+                                )
+                                ui.label(
+                                    "Isso remove todos os projetos da lista principal. "
+                                    "Ideias salvas na página de ideias não serão apagadas."
+                                ).classes("text-sm text-[#858b86]")
+                                with ui.row().classes("w-full justify-end gap-2 mt-4"):
+                                    ui.button("Cancelar", on_click=projects_dialog.close).props(
+                                        "flat no-caps"
+                                    )
+                                    ui.button(
+                                        "Apagar projetos",
+                                        icon="delete_forever",
+                                        on_click=confirm_delete_projects,
+                                    ).props("unelevated no-caps").classes(
+                                        "bg-red-600 text-white rounded-xl"
+                                    )
+
+                            with ui.column().classes("w-full gap-3"):
+                                with ui.element("div").classes(
+                                    "border border-[#343934] rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+                                ):
+                                    with ui.column().classes("gap-1"):
+                                        ui.label("Ideias").classes("font-semibold")
+                                        ui.label(
+                                            f"{saved_idea_count} salva(s) e "
+                                            f"{generated_idea_count} gerada(s)."
+                                        ).classes("text-sm text-[#858b86]")
+                                    ui.button(
+                                        "Apagar todas as ideias",
+                                        icon="delete_sweep",
+                                        on_click=ideas_dialog.open,
+                                    ).props("outline no-caps").classes(
+                                        "text-red-300 border-red-900 rounded-xl"
+                                    )
+
+                                with ui.element("div").classes(
+                                    "border border-[#343934] rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+                                ):
+                                    with ui.column().classes("gap-1"):
+                                        ui.label("Projetos").classes("font-semibold")
+                                        ui.label(
+                                            f"{project_count} projeto(s) ativo(s) no estúdio."
+                                        ).classes("text-sm text-[#858b86]")
+                                    ui.button(
+                                        "Apagar todos os projetos",
+                                        icon="delete_forever",
+                                        on_click=projects_dialog.open,
+                                    ).props("outline no-caps").classes(
+                                        "text-red-300 border-red-900 rounded-xl"
+                                    )
 
     @ui.page("/projects/{project_id}", response_timeout=15)
     async def project_workspace(project_id: str) -> None:
