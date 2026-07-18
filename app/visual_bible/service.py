@@ -6,14 +6,23 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.approvals.service import record_approval
 from app.assets.models import Asset, AssetVersion
 from app.config.settings import get_settings
-from app.core.enums import ArtifactStatus, ArtifactType, AssetKind, DependencyKind
+from app.core.enums import (
+    ApprovalDecision,
+    ArtifactStatus,
+    ArtifactType,
+    AssetKind,
+    DependencyKind,
+)
 from app.generation.models import PromptExecution
+from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.providers.image.mock import MockImageProvider
-from app.providers.image.types import ImageGenerationRequest
+from app.providers.image.openrouter import OpenRouterImageProvider
+from app.providers.image.types import ImageGenerationRequest, ImageProvider
 from app.storytelling.models import StoryBible
 from app.visual_bible.models import (
     Character,
@@ -39,6 +48,17 @@ CHARACTER_VIEWS = [
 ]
 LOCATION_VIEWS = ["establishing", "floor_plan", "camera_points"]
 PROP_VIEWS = ["front", "side", "top", "scale_reference"]
+
+
+async def _image_provider_for_project(
+    session: AsyncSession, project_id: UUID
+) -> tuple[ImageProvider, str, str]:
+    app_settings = get_settings()
+    production_settings = await get_or_create_production_settings(session, project_id)
+    model = production_settings.image_model or app_settings.openrouter_image_model
+    if app_settings.openrouter_api_key and model != "mock-image":
+        return OpenRouterImageProvider(), model, "openrouter_images"
+    return MockImageProvider(), "mock-image", "mock_images"
 
 
 async def _create_artifact(
@@ -261,6 +281,79 @@ def default_views_for(target_kind: str) -> list[str]:
     }[target_kind]
 
 
+def initial_view_for(target_kind: str) -> str:
+    return {
+        "character": "front_portrait",
+        "location": "establishing",
+        "prop": "front",
+    }[target_kind]
+
+
+async def _existing_visual_reference_views(
+    session: AsyncSession, project_id: UUID, target_kind: str, target_id: UUID
+) -> set[str]:
+    result = await session.execute(
+        select(VisualReference.view_type).where(
+            VisualReference.project_id == project_id,
+            VisualReference.target_kind == target_kind,
+            VisualReference.target_id == target_id,
+        )
+    )
+    return set(result.scalars())
+
+
+async def approve_visual_target_and_generate_views(
+    session: AsyncSession,
+    project_id: UUID,
+    target_kind: str,
+    target_id: UUID,
+) -> list[VisualReference] | None:
+    project = await ProjectRepository(session).get_project(project_id)
+    target = await _get_visual_target(session, project_id, target_kind, target_id)
+    if project is None or target is None:
+        return None
+
+    _profile, target_artifact_id = target
+    artifact = await session.get(Artifact, target_artifact_id)
+    if artifact is None:
+        return None
+    version_result = await session.execute(
+        select(ArtifactVersion)
+        .where(
+            ArtifactVersion.artifact_id == artifact.id,
+            ArtifactVersion.version_number == artifact.current_version,
+        )
+        .limit(1)
+    )
+    artifact_version = version_result.scalars().first()
+    if artifact_version is None:
+        return None
+
+    await record_approval(
+        session,
+        artifact,
+        artifact_version,
+        ApprovalDecision.APPROVED,
+        notes="Perfil visual aprovado para criacao de vistas multiplas.",
+    )
+    existing_views = await _existing_visual_reference_views(
+        session, project_id, target_kind, target_id
+    )
+    missing_views = [
+        view for view in default_views_for(target_kind) if view not in existing_views
+    ]
+    if not missing_views:
+        await session.commit()
+        return []
+    return await generate_visual_references(
+        session,
+        project_id,
+        target_kind,
+        target_id,
+        missing_views,
+    )
+
+
 async def generate_visual_references(
     session: AsyncSession,
     project_id: UUID,
@@ -275,11 +368,16 @@ async def generate_visual_references(
     if target is None:
         return None
     profile, target_artifact_id = target
-    settings = get_settings()
-    provider = MockImageProvider()
-    views = view_types or default_views_for(target_kind)
+    provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
+    requested_views = view_types or default_views_for(target_kind)
+    existing_views = await _existing_visual_reference_views(
+        session, project_id, target_kind, target_id
+    )
+    views = [view for view in requested_views if view not in existing_views]
+    if not views:
+        return []
     references: list[VisualReference] = []
-    output_dir = settings.local_storage_path / "mock_images" / str(project_id)
+    output_dir = get_settings().local_storage_path / image_dir_name / str(project_id)
 
     for view_type in views:
         prompt = f"{profile.get('canonical_prompt', profile.get('name'))}. View: {view_type}."
@@ -289,6 +387,7 @@ async def generate_visual_references(
                 target_id=str(target_id),
                 view_type=view_type,
                 output_dir=output_dir,
+                model=image_model,
             )
         )
         asset = Asset(

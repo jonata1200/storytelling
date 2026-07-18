@@ -22,7 +22,11 @@ from app.storytelling.service import (
 from app.video_generation.models import VideoClip
 from app.video_generation.service import generate_video_clips
 from app.visual_bible.models import Character, Location, Prop, VisualReference
-from app.visual_bible.service import generate_visual_bible, generate_visual_references
+from app.visual_bible.service import (
+    generate_visual_bible,
+    generate_visual_references,
+    initial_view_for,
+)
 
 ProjectChatAction = Literal[
     "chat",
@@ -348,7 +352,7 @@ async def _ensure_visual_pipeline(
                 project_id,
                 "character",
                 character.id,
-                ["front_portrait"],
+                [initial_view_for("character")],
             )
         for location in locations:
             await generate_visual_references(
@@ -356,10 +360,16 @@ async def _ensure_visual_pipeline(
                 project_id,
                 "location",
                 location.id,
-                ["establishing"],
+                [initial_view_for("location")],
             )
         for prop in props:
-            await generate_visual_references(session, project_id, "prop", prop.id, ["front"])
+            await generate_visual_references(
+                session,
+                project_id,
+                "prop",
+                prop.id,
+                [initial_view_for("prop")],
+            )
         changed = True
     return ProjectChatResult(
         "Personagens, locais, objetos e referencias visuais estao prontos.",

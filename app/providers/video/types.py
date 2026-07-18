@@ -23,6 +23,8 @@ class VideoRequest(BaseModel):
     prompt: str
     duration_seconds: int
     aspect_ratio: str = "9:16"
+    resolution: str | None = None
+    size: str | None = None
     source_image_uri: str | None = None
     reference_uris: list[str] = Field(default_factory=list)
     output_dir: Path

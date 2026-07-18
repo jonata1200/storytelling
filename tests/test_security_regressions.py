@@ -142,9 +142,9 @@ def test_generation_payload_validation_rejects_missing_lists() -> None:
         _required_list({}, "ideas", "generate_story_ideas")
 
 
-def test_video_schema_rejects_unimplemented_provider() -> None:
+def test_video_schema_rejects_unknown_provider() -> None:
     with pytest.raises(ValidationError):
-        GenerateVideoClipsRequest.model_validate({"provider": "openrouter"})
+        GenerateVideoClipsRequest.model_validate({"provider": "unknown"})
 
 
 def test_project_status_advances_only_through_valid_transitions() -> None:

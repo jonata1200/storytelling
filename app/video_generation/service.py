@@ -21,10 +21,12 @@ from app.core.enums import (
 )
 from app.costs.models import CostEntry
 from app.costs.service import calculate_total_cost, estimate_batch_cost
+from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.providers.video.mock import MockVideoProvider
-from app.providers.video.types import VideoRequest
+from app.providers.video.openrouter import OpenRouterVideoProvider
+from app.providers.video.types import VideoProvider, VideoRequest
 from app.storyboards.models import StoryboardFrame
 from app.video_generation.models import ClipReview, GenerationJob, VideoClip
 from app.video_generation.retry import exponential_backoff_seconds
@@ -104,34 +106,92 @@ async def _storyboard_frames(
     return list(result.scalars())
 
 
+async def _video_provider_for_project(
+    session: AsyncSession,
+    project_id: UUID,
+    provider_name: str,
+    model: str | None,
+) -> tuple[VideoProvider, str, str, str, str, str]:
+    app_settings = get_settings()
+    production_settings = await get_or_create_production_settings(session, project_id)
+    requested_provider = provider_name or "auto"
+    requested_model = (
+        model or production_settings.video_model or app_settings.openrouter_video_model
+    )
+    if requested_provider == "auto":
+        if app_settings.openrouter_api_key and requested_model != "mock-video":
+            return (
+                OpenRouterVideoProvider(),
+                "openrouter",
+                requested_model,
+                "openrouter_videos",
+                production_settings.aspect_ratio,
+                production_settings.video_resolution,
+            )
+        return (
+            MockVideoProvider(),
+            "mock",
+            "mock-video",
+            "mock_videos",
+            production_settings.aspect_ratio,
+            production_settings.video_resolution,
+        )
+    if requested_provider == "openrouter":
+        if not app_settings.openrouter_api_key:
+            raise ValueError("OPENROUTER_API_KEY nao configurada")
+        return (
+            OpenRouterVideoProvider(),
+            "openrouter",
+            requested_model,
+            "openrouter_videos",
+            production_settings.aspect_ratio,
+            production_settings.video_resolution,
+        )
+    if requested_provider == "mock":
+        return (
+            MockVideoProvider(),
+            "mock",
+            "mock-video" if requested_model == "auto" else requested_model,
+            "mock_videos",
+            production_settings.aspect_ratio,
+            production_settings.video_resolution,
+        )
+    raise ValueError(f"Unsupported video provider: {provider_name}")
+
+
+async def _asset_storage_uri(session: AsyncSession, asset_id: UUID) -> str | None:
+    asset = await session.get(Asset, asset_id)
+    return asset.storage_uri if asset is not None else None
+
+
 async def generate_video_clips(
     session: AsyncSession,
     project_id: UUID,
     frame_ids: list[UUID] | None = None,
     variants_per_frame: int = 1,
-    provider_name: str = "mock",
-    model: str = "mock-video",
+    provider_name: str = "auto",
+    model: str | None = None,
 ) -> tuple[list[GenerationJob], list[VideoClip]] | None:
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         return None
-    if provider_name != "mock":
-        raise ValueError(f"Unsupported video provider: {provider_name}")
 
     frames = await _storyboard_frames(session, project_id, frame_ids)
     if not frames:
         return [], []
 
-    provider = MockVideoProvider()
-    settings = get_settings()
-    video_dir = settings.local_storage_path / "mock_videos" / str(project_id)
+    provider, resolved_provider, resolved_model, video_dir_name, aspect_ratio, video_size = (
+        await _video_provider_for_project(session, project_id, provider_name, model)
+    )
+    video_dir = get_settings().local_storage_path / video_dir_name / str(project_id)
     jobs: list[GenerationJob] = []
     clips: list[VideoClip] = []
 
     for frame in frames:
+        source_image_uri = await _asset_storage_uri(session, frame.asset_id)
         for variant_index in range(1, variants_per_frame + 1):
             idempotency_key = video_idempotency_key(
-                frame.id, variant_index, provider_name, model
+                frame.id, variant_index, resolved_provider, resolved_model
             )
             existing = await session.execute(
                 select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
@@ -153,6 +213,9 @@ async def generate_video_clips(
                 "prompt": frame.prompt,
                 "variant_index": variant_index,
                 "source_image_asset_id": str(frame.asset_id),
+                "source_image_uri": source_image_uri,
+                "provider": resolved_provider,
+                "model": resolved_model,
             }
             job = GenerationJob(
                 project_id=project_id,
@@ -162,8 +225,8 @@ async def generate_video_clips(
                 progress=5,
                 attempts=1,
                 max_attempts=3,
-                provider=provider_name,
-                model=model,
+                provider=resolved_provider,
+                model=resolved_model,
                 idempotency_key=idempotency_key,
                 request_payload=request_payload,
                 response_payload={},
@@ -180,9 +243,11 @@ async def generate_video_clips(
                     VideoRequest(
                         prompt=frame.prompt,
                         duration_seconds=frame.duration_seconds,
-                        source_image_uri=str(frame.asset_id),
+                        aspect_ratio=aspect_ratio,
+                        size=video_size,
+                        source_image_uri=source_image_uri,
                         output_dir=video_dir,
-                        model=model,
+                        model=resolved_model,
                     )
                 )
             except Exception as exc:
@@ -237,6 +302,7 @@ async def generate_video_clips(
             job.external_job_id = result.external_job_id
             job.result_artifact_id = artifact.id
             job.response_payload = result.metadata
+            job.cost_estimate = Decimal(result.estimated_cost)
             job.completed_at = datetime.now(UTC)
 
             selected = False
@@ -277,9 +343,13 @@ async def generate_video_clips(
                     quantity=Decimal(frame.duration_seconds),
                     unit="second",
                     unit_cost=MOCK_VIDEO_UNIT_COST_PER_SECOND,
-                    total_cost=job.cost_estimate,
+                    total_cost=Decimal(result.estimated_cost),
                     currency="USD",
-                    metadata_json={"job_id": str(job.id), "mock": True},
+                    metadata_json={
+                        "job_id": str(job.id),
+                        "provider": result.provider,
+                        "external_job_id": result.external_job_id,
+                    },
                 )
             )
 

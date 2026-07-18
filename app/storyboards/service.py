@@ -9,15 +9,28 @@ from app.assets.models import Asset, AssetVersion
 from app.config.settings import get_settings
 from app.core.enums import ArtifactStatus, ArtifactType, AssetKind, DependencyKind, ProjectStatus
 from app.generation.models import PromptExecution
+from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.providers.image.mock import MockImageProvider
-from app.providers.image.types import ImageGenerationRequest
+from app.providers.image.openrouter import OpenRouterImageProvider
+from app.providers.image.types import ImageGenerationRequest, ImageProvider
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.timeline import build_visual_timeline_items, build_word_alignment
 from app.storytelling.models import Scene, Script, Shot
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
+
+
+async def _image_provider_for_project(
+    session: AsyncSession, project_id: UUID
+) -> tuple[ImageProvider, str, str]:
+    app_settings = get_settings()
+    production_settings = await get_or_create_production_settings(session, project_id)
+    model = production_settings.image_model or app_settings.openrouter_image_model
+    if app_settings.openrouter_api_key and model != "mock-image":
+        return OpenRouterImageProvider(), model, "openrouter_storyboards"
+    return MockImageProvider(), "mock-image", "mock_storyboards"
 
 
 async def _create_artifact(
@@ -91,9 +104,8 @@ async def generate_storyboard_frames(
     if not shot_rows:
         return []
 
-    settings = get_settings()
-    provider = MockImageProvider()
-    output_dir = settings.local_storage_path / "mock_storyboards" / str(project_id)
+    provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
+    output_dir = get_settings().local_storage_path / image_dir_name / str(project_id)
     frames: list[StoryboardFrame] = []
 
     for frame_number, (shot, scene) in enumerate(shot_rows, start=1):
@@ -104,6 +116,7 @@ async def generate_storyboard_frames(
                 target_id=str(shot.id),
                 view_type=f"storyboard_{frame_number:03d}",
                 output_dir=output_dir,
+                model=image_model,
             )
         )
         asset = Asset(

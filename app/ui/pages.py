@@ -88,7 +88,12 @@ from app.storytelling.service import (
 from app.video_generation.models import GenerationJob, VideoClip
 from app.video_generation.service import generate_video_clips
 from app.visual_bible.models import Character, Location, Prop, VisualReference
-from app.visual_bible.service import generate_visual_bible, generate_visual_references
+from app.visual_bible.service import (
+    approve_visual_target_and_generate_views,
+    generate_visual_bible,
+    generate_visual_references,
+    initial_view_for,
+)
 
 BRAND_MARK_URL = "/ui-assets/favicon.png"
 DEFAULT_STORY_DURATION_MINUTES = 5.0
@@ -1188,15 +1193,27 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 prop = await _latest(session, Prop, project_id)
                 if character is not None:
                     await generate_visual_references(
-                        session, project_id, "character", character.id, ["front_portrait"]
+                        session,
+                        project_id,
+                        "character",
+                        character.id,
+                        [initial_view_for("character")],
                     )
                 if location is not None:
                     await generate_visual_references(
-                        session, project_id, "location", location.id, ["establishing"]
+                        session,
+                        project_id,
+                        "location",
+                        location.id,
+                        [initial_view_for("location")],
                     )
                 if prop is not None:
                     await generate_visual_references(
-                        session, project_id, "prop", prop.id, ["front"]
+                        session,
+                        project_id,
+                        "prop",
+                        prop.id,
+                        [initial_view_for("prop")],
                     )
             elif step_key == "storyboard":
                 script = await _latest(session, Script, project_id)
@@ -1249,6 +1266,32 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
         ui.navigate.reload()
     except Exception as exc:
         ui.notify(f"Acao interrompida: {exc}", color="warning")
+
+
+async def _approve_visual_target_from_ui(
+    project_id: UUID, target_kind: str, target_id: UUID
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            references = await approve_visual_target_and_generate_views(
+                session,
+                project_id,
+                target_kind,
+                target_id,
+            )
+        if references is None:
+            ui.notify("Nao encontrei o ativo visual para aprovar.", color="negative")
+            return
+        if references:
+            ui.notify(
+                f"Ativo aprovado. {len(references)} vista(s) complementar(es) criada(s).",
+                color="positive",
+            )
+        else:
+            ui.notify("Ativo aprovado. Todas as vistas ja estavam criadas.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        ui.notify(f"Nao foi possivel aprovar o ativo: {exc}", color="negative")
 
 
 def _render_step_card(project_id: UUID, step: ProductionStep, counts: dict[str, int]) -> None:
@@ -1896,7 +1939,15 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                 ui.label("Nenhuma cena criada.").classes("text-sm text-[#777d78]")
 
 
-def _entity_card(icon: str, title: str, subtitle: str, detail: str) -> None:
+def _entity_card(
+    project_id: UUID,
+    target_kind: str,
+    target_id: UUID,
+    icon: str,
+    title: str,
+    subtitle: str,
+    detail: str,
+) -> None:
     with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
         with ui.element("div").classes("visual-placeholder h-44 p-5 flex items-end"):
             ui.icon(icon).classes("text-6xl text-[#eefa83]")
@@ -1905,6 +1956,15 @@ def _entity_card(icon: str, title: str, subtitle: str, detail: str) -> None:
             ui.label(subtitle).classes("text-xs acid uppercase tracking-wide")
             ui.label(detail).classes("text-sm text-[#999f9a] line-clamp-2")
             with ui.row().classes("w-full pt-2 border-t border-[#292d29]"):
+                ui.button(
+                    "Aprovar vistas",
+                    icon="check_circle",
+                    on_click=lambda: _approve_visual_target_from_ui(
+                        project_id,
+                        target_kind,
+                        target_id,
+                    ),
+                ).props("flat dense no-caps").classes("text-[#d8dbd8]")
                 ui.button("Editar", icon="edit").props("flat dense no-caps").classes(
                     "text-[#d8dbd8]"
                 )
@@ -1929,28 +1989,36 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
         places = ui.tab("Locais")
         props = ui.tab("Objetos")
     with ui.tab_panels(tabs, value=people).classes("w-full bg-transparent p-0"):
-        for tab, items, kind in [
-            (people, summary["characters"], "person"),
-            (places, summary["locations"], "location_on"),
-            (props, summary["props"], "category"),
+        for tab, items, icon, target_kind in [
+            (people, summary["characters"], "person", "character"),
+            (places, summary["locations"], "location_on", "location"),
+            (props, summary["props"], "category", "prop"),
         ]:
             with ui.tab_panel(tab).classes("px-0"):
                 with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
                     for item in items:
                         subtitle = (
                             getattr(item, "role", "Local")
-                            if kind == "person"
-                            else ("Objeto narrativo" if kind == "category" else "Cenário")
+                            if target_kind == "character"
+                            else ("Objeto narrativo" if target_kind == "prop" else "Cenário")
                         )
                         detail = (
                             getattr(item, "description", None)
                             or getattr(item, "narrative_importance", None)
                             or str(getattr(item, "canonical_profile", {}))[:150]
                         )
-                        _entity_card(kind, item.name, subtitle, detail)
+                        _entity_card(
+                            project_id,
+                            target_kind,
+                            item.id,
+                            icon,
+                            item.name,
+                            subtitle,
+                            detail,
+                        )
                     if not items:
                         with ui.element("div").classes("entity-card rounded-2xl p-8"):
-                            ui.icon(kind).classes("text-4xl acid")
+                            ui.icon(icon).classes("text-4xl acid")
                             ui.label("Nada criado ainda").classes("text-lg font-semibold")
                             ui.label(
                                 "O Diretor IA pode criar esta coleção a partir do roteiro."

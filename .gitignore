@@ -14,5 +14,6 @@ build/
 storage/
 logs/
 *.log
+*.json
 .idea/
 .vscode/
