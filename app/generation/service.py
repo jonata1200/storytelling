@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.generation.models import PromptExecution, PromptTemplate
 from app.generation.prompt_compiler import compile_prompt
+from app.providers.llm.mock import MockLLMProvider
 from app.providers.llm.types import LLMProvider, LLMRequest, LLMResult
 
 DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
@@ -14,6 +15,7 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
     "generate_script": "Generate Script",
     "generate_scenes_and_shots": "Generate Scenes And Shots",
     "revise_script": "Revise Script",
+    "director_agent_chat": "Director Agent Chat",
 }
 
 DEFAULT_TEMPLATES: dict[str, str] = {
@@ -78,7 +80,40 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
         '"word_count":650,"content":"ROTEIRO DE PRODUCAO REVISADO COMPLETO AQUI"}}'
     ),
+    "director_agent_chat": "{prompt}",
 }
+
+
+def should_fallback_to_mock(exc: Exception) -> bool:
+    message = str(exc).lower()
+    transient_terms = (
+        "resourceexhausted",
+        "resource exhausted",
+        "request limit",
+        "rate limit",
+        "limite",
+        "429",
+        "upstream error",
+        "worker local total request limit",
+        "temporarily unavailable",
+        "overloaded",
+        "timeout",
+        "timed out",
+        "urlerror",
+        "network",
+        "connection",
+        "dns",
+        "temporary failure",
+        "remote end closed",
+        "openrouter retornou resposta fora",
+        "openrouter retornou resposta sem choices",
+        "openrouter retornou choices fora",
+        "openrouter retornou message fora",
+        "openrouter retornou content vazio",
+        "openrouter retornou conteudo que nao e json valido",
+        "openrouter retornou json fora",
+    )
+    return any(term in message for term in transient_terms)
 
 
 async def get_or_create_prompt_template(session: AsyncSession, task: str) -> PromptTemplate:
@@ -118,19 +153,35 @@ async def run_structured_generation(
     variables: dict,
     artifact_id: UUID | None = None,
     model: str | None = None,
+    fallback_on_runtime_error: bool = False,
 ) -> tuple[LLMResult, PromptExecution]:
     template = await get_or_create_prompt_template(session, task)
     prompt = compile_prompt(template.template_text, variables)
     started = perf_counter()
-    result = await provider.generate_structured(
-        LLMRequest(
-            task=task,
-            prompt=prompt,
-            variables=variables,
-            output_schema=template.output_schema,
-            model=model or "mock-llm",
-        )
+    request = LLMRequest(
+        task=task,
+        prompt=prompt,
+        variables=variables,
+        output_schema=template.output_schema,
+        model=model or "mock-llm",
     )
+    fallback_error: str | None = None
+    try:
+        result = await provider.generate_structured(request)
+    except RuntimeError as exc:
+        should_fallback = fallback_on_runtime_error or should_fallback_to_mock(exc)
+        if getattr(provider, "provider_name", "") == "mock" or not should_fallback:
+            raise
+        fallback_error = str(exc)
+        result = await MockLLMProvider().generate_structured(
+            LLMRequest(
+                task=task,
+                prompt=prompt,
+                variables=variables,
+                output_schema=template.output_schema,
+                model="mock-llm",
+            )
+        )
     duration_ms = int((perf_counter() - started) * 1000)
     execution = PromptExecution(
         project_id=project_id,
@@ -142,7 +193,9 @@ async def run_structured_generation(
         prompt=prompt,
         variables=variables,
         response=result.content,
-        parameters={},
+        parameters={"fallback_from": model, "fallback_error": fallback_error}
+        if fallback_error
+        else {},
         estimated_cost=result.estimated_cost,
         duration_ms=duration_ms,
     )

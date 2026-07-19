@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.generation.model_settings import llm_provider_for_task
-from app.providers.llm.types import LLMRequest
+from app.generation.service import run_structured_generation
 
 SECTION_TASKS = {
     "script": "generate_script",
@@ -41,19 +41,21 @@ async def ask_director_agent(
         f"Estado do projeto: {project_context}. "
         f"Conversa recente: {recent_history}. Pedido atual: {message}"
     )
-    result = await provider.generate_structured(
-        LLMRequest(
-            task="director_agent_chat",
-            prompt=prompt,
-            variables={
-                "section": section,
-                "message": message,
-                "project_context": project_context,
-                "history": recent_history,
-            },
-            output_schema={"type": "object", "properties": {"message": {"type": "string"}}},
-            model=model,
-        )
+    result, _execution = await run_structured_generation(
+        session,
+        provider,
+        project_id,
+        "director_agent_chat",
+        {
+            "prompt": prompt,
+            "section": section,
+            "message": message,
+            "project_context": project_context,
+            "history": recent_history,
+        },
+        model=model,
+        fallback_on_runtime_error=True,
     )
+    await session.commit()
     response = result.content.get("message")
     return str(response or "Posso ajudar a desenvolver esta etapa. O que deseja ajustar?")

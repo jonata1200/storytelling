@@ -68,6 +68,14 @@ class OpenRouterLLMProvider:
             if use_response_format and exc.code in {400, 422}:
                 return self._send_request(request, False)
             raise RuntimeError(f"OpenRouter HTTP {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"OpenRouter network error: {exc.reason}") from exc
+        except TimeoutError as exc:
+            raise RuntimeError("OpenRouter timeout ao aguardar resposta") from exc
+        except OSError as exc:
+            raise RuntimeError(f"OpenRouter connection error: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("OpenRouter retornou resposta HTTP que nao e JSON valido") from exc
         if not isinstance(parsed, dict):
             raise RuntimeError("OpenRouter retornou resposta fora do formato esperado")
         return parsed

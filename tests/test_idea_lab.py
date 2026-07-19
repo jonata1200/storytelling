@@ -42,6 +42,29 @@ async def test_generate_freeform_ideas_respects_selected_genre(
     assert {idea.get("genre") for idea in ideas} == {"Aventura"}
 
 
+@pytest.mark.asyncio
+async def test_generate_freeform_ideas_falls_back_when_openrouter_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingOpenRouterProvider:
+        provider_name = "openrouter"
+
+        async def generate_structured(self, request: object):
+            raise RuntimeError("OpenRouter HTTP 429: rate limit")
+
+    monkeypatch.setattr(
+        idea_lab,
+        "get_settings",
+        lambda: Settings(openrouter_api_key="key", openrouter_default_model="free-model"),
+    )
+    monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", FailingOpenRouterProvider)
+
+    ideas = await generate_freeform_ideas(count=3, genre="Suspense")
+
+    assert len(ideas) == 3
+    assert {idea.get("genre") for idea in ideas} == {"Suspense"}
+
+
 def test_saved_ideas_can_be_saved_and_deleted(tmp_path: Path) -> None:
     path = tmp_path / "saved-ideas.json"
     saved = save_idea(

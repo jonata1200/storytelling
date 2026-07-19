@@ -29,36 +29,42 @@ async def generate_freeform_ideas(
         if genre
         else "A IA pode escolher generos variados. "
     )
-    result = await provider.generate_structured(
-        LLMRequest(
-            task="generate_story_ideas",
-            model=settings.openrouter_default_model,
-            prompt=(
-                f"Gere exatamente {count} ideias de historias originais em portugues do Brasil. "
-                f"Todas as ideias devem ter potencial narrativo para exatamente {duration:g} "
-                "minutos de historia, com conflito, virada e payoff adequados para esse tempo. "
-                f"{genre_instruction}"
-                "A IA deve criar tambem temas diferentes para cada historia, sem depender "
-                "de um tema informado pelo usuario. "
-                "Cada ideia deve ser claramente diferente das outras em tema, genero, "
-                "conflito, protagonista e emocao principal. "
-                "Retorne JSON com a chave ideas; cada ideia deve ter title, genre, "
-                "primary_emotion, theme, hook, premise, protagonist, duration_minutes, "
-                "retention_potential, cliche_risk e production_complexity. "
-                f"Use duration_minutes igual a {duration:g} em todas as ideias. "
-                f"Contexto opcional do usuario: {theme or 'nenhum'}."
-            ),
-            variables={
-                "theme": theme or "tema livre criado pela IA",
-                "count": count,
-                "genre": genre or "genero livre criado pela IA",
-                "duration_range_minutes": f"{duration:g}",
-                "target_duration_minutes": duration,
-                "audience": "publico geral",
-            },
-            output_schema={"type": "object", "properties": {"ideas": {"type": "array"}}},
-        )
+    request = LLMRequest(
+        task="generate_story_ideas",
+        model=settings.openrouter_default_model,
+        prompt=(
+            f"Gere exatamente {count} ideias de historias originais em portugues do Brasil. "
+            f"Todas as ideias devem ter potencial narrativo para exatamente {duration:g} "
+            "minutos de historia, com conflito, virada e payoff adequados para esse tempo. "
+            f"{genre_instruction}"
+            "A IA deve criar tambem temas diferentes para cada historia, sem depender "
+            "de um tema informado pelo usuario. "
+            "Cada ideia deve ser claramente diferente das outras em tema, genero, "
+            "conflito, protagonista e emocao principal. "
+            "Retorne JSON com a chave ideas; cada ideia deve ter title, genre, "
+            "primary_emotion, theme, hook, premise, protagonist, duration_minutes, "
+            "retention_potential, cliche_risk e production_complexity. "
+            f"Use duration_minutes igual a {duration:g} em todas as ideias. "
+            f"Contexto opcional do usuario: {theme or 'nenhum'}."
+        ),
+        variables={
+            "theme": theme or "tema livre criado pela IA",
+            "count": count,
+            "genre": genre or "genero livre criado pela IA",
+            "duration_range_minutes": f"{duration:g}",
+            "target_duration_minutes": duration,
+            "audience": "publico geral",
+        },
+        output_schema={"type": "object", "properties": {"ideas": {"type": "array"}}},
     )
+    try:
+        result = await provider.generate_structured(request)
+    except RuntimeError:
+        if getattr(provider, "provider_name", "") == "mock":
+            raise
+        result = await MockLLMProvider().generate_structured(
+            request.model_copy(update={"model": "mock-llm"})
+        )
     ideas = list(result.content.get("ideas") or [])[:count]
     return [_normalize_idea(idea, duration) for idea in ideas if isinstance(idea, dict)]
 
