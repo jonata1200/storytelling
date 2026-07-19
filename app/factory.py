@@ -31,10 +31,16 @@ def create_app(include_ui: bool = True) -> FastAPI:
 
         from app.ui.pages import register_ui_pages
 
+        settings.local_storage_path.mkdir(parents=True, exist_ok=True)
         app.mount(
             "/ui-assets",
             StaticFiles(directory=Path(__file__).parent / "ui"),
             name="ui-assets",
+        )
+        app.mount(
+            "/storage",
+            StaticFiles(directory=settings.local_storage_path),
+            name="storage",
         )
         register_ui_pages()
         ui.run_with(

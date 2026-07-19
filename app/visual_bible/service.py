@@ -20,6 +20,7 @@ from app.generation.models import PromptExecution
 from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
+from app.projects.versioning import create_artifact_version
 from app.providers.image.mock import MockImageProvider
 from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider
@@ -48,6 +49,24 @@ CHARACTER_VIEWS = [
 ]
 LOCATION_VIEWS = ["establishing", "floor_plan", "camera_points"]
 PROP_VIEWS = ["front", "side", "top", "scale_reference"]
+VIEW_PROMPT_DETAILS = {
+    "front_portrait": "front portrait, face centered, neutral expression, eye-level camera",
+    "left_profile": "left side profile, same face and hair, clean silhouette",
+    "right_profile": "right side profile, same face and hair, clean silhouette",
+    "back_view": "back view, same outfit, hair and body proportions visible",
+    "full_body": "full body reference, head to toe, posture and base outfit visible",
+    "expression_sheet": "expression sheet with 4 emotions, same identity in every expression",
+    "pose_sheet": "pose sheet with 3 practical poses, consistent anatomy and outfit",
+    "scale_reference": "scale reference, neutral stance, clear proportions against simple backdrop",
+    "establishing": (
+        "wide establishing shot, spatial layout, lighting, entrances and main props visible"
+    ),
+    "floor_plan": "top-down floor plan, room geometry, doors, windows and camera-safe areas",
+    "camera_points": "camera point reference, 3 vertical framing positions inside the location",
+    "front": "front view, object centered, material, color and recognizable details visible",
+    "side": "side view, object thickness, silhouette and construction visible",
+    "top": "top view, shape, texture and readable details visible",
+}
 
 
 async def _image_provider_for_project(
@@ -333,7 +352,87 @@ def initial_view_for(target_kind: str) -> str:
 
 
 def visual_reference_prompt(profile: dict, view_type: str) -> str:
-    return f"{profile.get('canonical_prompt', profile.get('name'))}. View: {view_type}."
+    base_prompt = str(profile.get("canonical_prompt") or profile.get("name") or "").strip()
+    view_detail = VIEW_PROMPT_DETAILS.get(view_type, view_type.replace("_", " "))
+    return (
+        f"{base_prompt}. Reference view: {view_type}. {view_detail}. "
+        "Vertical 9:16 production reference, clean background, consistent visual identity."
+    )
+
+
+async def update_visual_target_prompt(
+    session: AsyncSession,
+    project_id: UUID,
+    target_kind: str,
+    target_id: UUID,
+    canonical_prompt: str,
+    change_note: str | None = None,
+) -> Character | Location | Prop | None:
+    prompt = canonical_prompt.strip()
+    if not prompt:
+        raise ValueError("O prompt nao pode ficar vazio")
+
+    target: Character | Location | Prop | None
+    if target_kind == "character":
+        target = await session.get(Character, target_id)
+    elif target_kind == "location":
+        target = await session.get(Location, target_id)
+    elif target_kind == "prop":
+        target = await session.get(Prop, target_id)
+    else:
+        return None
+    if target is None or target.project_id != project_id:
+        return None
+
+    profile = dict(target.canonical_profile or {})
+    if profile.get("canonical_prompt") == prompt:
+        return target
+    profile["canonical_prompt"] = prompt
+    target.canonical_profile = profile
+    target.current_version += 1
+
+    if isinstance(target, Character):
+        target.character_fingerprint = _fingerprint(profile)
+        session.add(
+            CharacterVersion(
+                character_id=target.id,
+                version_number=target.current_version,
+                canonical_profile=profile,
+                change_note=change_note or "Canonical prompt edited",
+            )
+        )
+    elif isinstance(target, Location):
+        session.add(
+            LocationVersion(
+                location_id=target.id,
+                version_number=target.current_version,
+                canonical_profile=profile,
+                change_note=change_note or "Canonical prompt edited",
+            )
+        )
+    else:
+        session.add(
+            PropVersion(
+                prop_id=target.id,
+                version_number=target.current_version,
+                canonical_profile=profile,
+                change_note=change_note or "Canonical prompt edited",
+            )
+        )
+
+    artifact = await session.get(Artifact, target.artifact_id)
+    if artifact is not None:
+        artifact.status = ArtifactStatus.READY_FOR_REVIEW
+        await create_artifact_version(
+            session,
+            artifact,
+            profile,
+            change_note=change_note or "Canonical visual prompt edited",
+        )
+
+    await session.commit()
+    await session.refresh(target)
+    return target
 
 
 async def _existing_visual_reference_views(
@@ -409,6 +508,7 @@ async def generate_visual_references(
     target_kind: str,
     target_id: UUID,
     view_types: list[str] | None = None,
+    force: bool = False,
 ) -> list[VisualReference] | None:
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
@@ -419,10 +519,13 @@ async def generate_visual_references(
     profile, target_artifact_id = target
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
     requested_views = view_types or default_views_for(target_kind)
-    existing_views = await _existing_visual_reference_views(
-        session, project_id, target_kind, target_id
-    )
-    views = [view for view in requested_views if view not in existing_views]
+    if force:
+        views = requested_views
+    else:
+        existing_views = await _existing_visual_reference_views(
+            session, project_id, target_kind, target_id
+        )
+        views = [view for view in requested_views if view not in existing_views]
     if not views:
         return []
     references: list[VisualReference] = []
@@ -509,6 +612,26 @@ async def generate_visual_references(
     for reference in references:
         await session.refresh(reference)
     return references
+
+
+async def regenerate_visual_reference(
+    session: AsyncSession,
+    project_id: UUID,
+    target_kind: str,
+    target_id: UUID,
+    view_type: str,
+) -> VisualReference | None:
+    references = await generate_visual_references(
+        session,
+        project_id,
+        target_kind,
+        target_id,
+        [view_type],
+        force=True,
+    )
+    if references is None:
+        return None
+    return references[0] if references else None
 
 
 async def check_visual_consistency(

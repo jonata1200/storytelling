@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import quote
 from uuid import UUID
 
 from nicegui import app as nicegui_app
@@ -16,6 +17,7 @@ from nicegui import background_tasks, ui
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.assets.models import Asset
 from app.config.preferences import save_preferences
 from app.config.settings import get_settings
 from app.core.enums import ArtifactStatus
@@ -94,6 +96,8 @@ from app.visual_bible.service import (
     default_views_for,
     generate_visual_bible,
     initial_view_for,
+    regenerate_visual_reference,
+    update_visual_target_prompt,
     visual_reference_prompt,
 )
 
@@ -430,6 +434,18 @@ async def _project_summary(project_id: UUID) -> dict[str, Any] | None:
                 .limit(12)
             )
             timeline_items = list(item_result.scalars())
+        visual_refs = await _latest_many(session, VisualReference, project_id, 100)
+        visual_asset_ids = {reference.asset_id for reference in visual_refs}
+        if visual_asset_ids:
+            asset_result = await session.execute(
+                select(Asset).where(
+                    Asset.project_id == project_id,
+                    Asset.id.in_(visual_asset_ids),
+                )
+            )
+            visual_assets = list(asset_result.scalars())
+        else:
+            visual_assets = []
         return {
             "project": project,
             "production_settings": production_settings,
@@ -471,7 +487,8 @@ async def _project_summary(project_id: UUID) -> dict[str, Any] | None:
             "characters": await _latest_many(session, Character, project_id, 4),
             "locations": await _latest_many(session, Location, project_id, 4),
             "props": await _latest_many(session, Prop, project_id, 4),
-            "visual_refs": await _latest_many(session, VisualReference, project_id, 100),
+            "visual_refs": visual_refs,
+            "assets": visual_assets,
             "frames": await _latest_many(session, StoryboardFrame, project_id, 100),
             "clips": await _latest_many(session, VideoClip, project_id, 100),
             "timeline": latest_timeline,
@@ -1368,6 +1385,55 @@ async def _approve_visual_target_from_ui(
         ui.notify(f"Nao foi possivel aprovar o ativo: {exc}", color="negative")
 
 
+async def _update_visual_prompt_from_ui(
+    project_id: UUID,
+    target_kind: str,
+    target_id: UUID,
+    canonical_prompt: str,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            target = await update_visual_target_prompt(
+                session,
+                project_id,
+                target_kind,
+                target_id,
+                canonical_prompt,
+                change_note="Prompt editado pela interface",
+            )
+        if target is None:
+            ui.notify("Nao encontrei o ativo visual para editar.", color="negative")
+            return
+        ui.notify("Prompt visual salvo.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        ui.notify(f"Nao foi possivel salvar o prompt: {exc}", color="negative")
+
+
+async def _regenerate_visual_reference_from_ui(
+    project_id: UUID,
+    target_kind: str,
+    target_id: UUID,
+    view_type: str,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            reference = await regenerate_visual_reference(
+                session,
+                project_id,
+                target_kind,
+                target_id,
+                view_type,
+            )
+        if reference is None:
+            ui.notify("Nao encontrei a referencia visual para gerar novamente.", color="negative")
+            return
+        ui.notify("Imagem gerada novamente.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        ui.notify(f"Nao foi possivel gerar novamente: {exc}", color="negative")
+
+
 async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]) -> None:
     try:
         async with AsyncSessionLocal() as session:
@@ -2225,12 +2291,101 @@ def _visual_reference_views_for(
     }
 
 
+def _visual_references_for(
+    summary: dict[str, Any], target_kind: str, target_id: UUID
+) -> list[VisualReference]:
+    view_order = {view: index for index, view in enumerate(default_views_for(target_kind))}
+    references = [
+        reference
+        for reference in summary["visual_refs"]
+        if reference.target_kind == target_kind and reference.target_id == target_id
+    ]
+    return sorted(
+        references,
+        key=lambda reference: (
+            view_order.get(reference.view_type, len(view_order)),
+            -reference.created_at.timestamp(),
+        ),
+    )
+
+
+def _asset_url(storage_uri: str) -> str:
+    if not storage_uri:
+        return ""
+    storage_root = get_settings().local_storage_path.resolve()
+    candidate = Path(storage_uri)
+    if not candidate.is_absolute():
+        candidate = candidate.resolve()
+    try:
+        relative = candidate.relative_to(storage_root)
+    except ValueError:
+        return ""
+    return "/storage/" + "/".join(quote(part) for part in relative.parts)
+
+
+def _visual_reference_asset(
+    asset_map: dict[UUID, Asset], reference: VisualReference
+) -> Asset | None:
+    return asset_map.get(reference.asset_id)
+
+
+def _clean_profile_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return ", ".join(str(item).strip() for item in value if str(item).strip())
+    if isinstance(value, dict):
+        return ""
+    return str(value).strip()
+
+
+def _visual_card_detail(target_kind: str, profile: dict, fallback: str = "") -> str:
+    explicit = _clean_profile_text(
+        profile.get("description")
+        or profile.get("summary")
+        or profile.get("visual_description")
+        or profile.get("mood")
+    )
+    if explicit:
+        return explicit
+
+    if target_kind == "character":
+        parts = [
+            _clean_profile_text(profile.get("apparent_age")),
+            _clean_profile_text(profile.get("eyes")),
+            _clean_profile_text(profile.get("hair")),
+            _clean_profile_text(profile.get("base_outfit")),
+        ]
+        text = ", ".join(part for part in parts if part)
+        return text or fallback or "Perfil visual pronto para revisar e gerar imagens."
+
+    if target_kind == "location":
+        parts = [
+            _clean_profile_text(profile.get("lighting")),
+            _clean_profile_text(profile.get("materials")),
+            _clean_profile_text(profile.get("layout")),
+        ]
+        text = ", ".join(part for part in parts if part)
+        return text or fallback or "Cenario pronto para revisar e gerar referencias."
+
+    parts = [
+        _clean_profile_text(profile.get("narrative_importance")),
+        _clean_profile_text(profile.get("material")),
+        _clean_profile_text(profile.get("color")),
+        _clean_profile_text(profile.get("state")),
+    ]
+    text = ", ".join(part for part in parts if part)
+    return text or fallback or "Objeto pronto para revisar e gerar referencias."
+
+
 def _entity_card(
     project_id: UUID,
     target_kind: str,
     target_id: UUID,
     profile: dict,
     existing_views: set[str],
+    references: list[VisualReference],
+    asset_map: dict[UUID, Asset],
     icon: str,
     title: str,
     subtitle: str,
@@ -2248,10 +2403,73 @@ def _entity_card(
         (view_type, visual_reference_prompt(profile, view_type))
         for view_type in requested_views
     ]
+    current_prompt = str(profile.get("canonical_prompt") or title).strip()
+    reference_assets = [
+        (reference, asset, _asset_url(asset.storage_uri))
+        for reference in references
+        if (asset := _visual_reference_asset(asset_map, reference)) is not None
+    ]
+    reference_assets = [
+        (reference, asset, image_url)
+        for reference, asset, image_url in reference_assets
+        if image_url
+    ]
+    hero_reference = reference_assets[0] if reference_assets else None
 
     with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
-        with ui.element("div").classes("visual-placeholder h-44 p-5 flex items-end"):
-            ui.icon(icon).classes("text-6xl text-[#eefa83]")
+        with ui.dialog().props(BLOCKING_DIALOG_PROPS) as gallery_dialog, ui.card().classes(
+            "entity-card rounded-2xl p-6 w-[min(980px,94vw)] max-h-[90vh]"
+        ):
+            ui.label(f"Referencias visuais - {title}").classes("brand-type text-2xl font-bold")
+            if reference_assets:
+                with ui.scroll_area().classes("w-full max-h-[72vh] pr-2"):
+                    with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-4"):
+                        for reference, asset, image_url in reference_assets:
+                            with ui.element("div").classes(
+                                "border border-[#343934] rounded-xl overflow-hidden"
+                            ):
+                                ui.image(image_url).classes(
+                                    "w-full aspect-[9/16] object-contain bg-black"
+                                ).props("fit=contain")
+                                with ui.column().classes("p-3 gap-1"):
+                                    ui.label(reference.view_type).classes(
+                                        "text-xs acid uppercase"
+                                    )
+                                    ui.label(asset.name).classes("text-sm text-[#d8dbd8]")
+                                    ui.label(reference.prompt).classes(
+                                        "text-xs text-[#8d938e] line-clamp-3"
+                                    )
+                                    async def regenerate_gallery_reference(
+                                        view_type: str = reference.view_type,
+                                    ) -> None:
+                                        gallery_dialog.close()
+                                        await _regenerate_visual_reference_from_ui(
+                                            project_id,
+                                            target_kind,
+                                            target_id,
+                                            view_type,
+                                        )
+
+                                    ui.button(
+                                        "Gerar novamente",
+                                        icon="refresh",
+                                        on_click=regenerate_gallery_reference,
+                                    ).props("flat dense no-caps").classes("text-[#d8dbd8]")
+            else:
+                ui.label("Nenhuma imagem gerada para este ativo.").classes(
+                    "text-sm text-[#8d938e]"
+                )
+            with ui.row().classes("w-full justify-end mt-3"):
+                ui.button("Fechar", on_click=gallery_dialog.close).props("flat no-caps")
+        with ui.element("div").classes(
+            "visual-placeholder h-44 p-0 flex items-stretch cursor-pointer"
+        ).on("click", gallery_dialog.open):
+            if hero_reference is not None:
+                _reference, _asset, hero_url = hero_reference
+                ui.image(hero_url).classes("w-full h-full object-cover").props("fit=cover")
+            else:
+                with ui.element("div").classes("w-full h-full p-5 flex items-end"):
+                    ui.icon(icon).classes("text-6xl text-[#eefa83]")
         with ui.column().classes("p-4 gap-2"):
             ui.label(title).classes("brand-type text-xl font-bold")
             ui.label(subtitle).classes("text-xs acid uppercase tracking-wide")
@@ -2298,6 +2516,36 @@ def _entity_card(
                     ).props("unelevated no-caps").classes("acid-bg rounded-xl")
                     if not prompt_previews:
                         confirm_button.props("disable")
+            with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_prompt_dialog, ui.card().classes(
+                "entity-card rounded-2xl p-6 w-[min(760px,92vw)]"
+            ):
+                ui.label("Editar prompt visual").classes("brand-type text-2xl font-bold")
+                prompt_input = (
+                    ui.textarea("Prompt canonico", value=current_prompt)
+                    .props("outlined autogrow")
+                    .classes("w-full")
+                )
+
+                async def save_visual_prompt() -> None:
+                    new_prompt = str(prompt_input.value or "").strip()
+                    if not new_prompt:
+                        ui.notify("Informe um prompt antes de salvar.", color="warning")
+                        return
+                    edit_prompt_dialog.close()
+                    await _update_visual_prompt_from_ui(
+                        project_id,
+                        target_kind,
+                        target_id,
+                        new_prompt,
+                    )
+
+                with ui.row().classes("w-full justify-end gap-2 mt-3"):
+                    ui.button("Cancelar", on_click=edit_prompt_dialog.close).props("flat no-caps")
+                    ui.button(
+                        "Salvar",
+                        icon="save",
+                        on_click=save_visual_prompt,
+                    ).props("unelevated no-caps").classes("acid-bg rounded-xl")
             with ui.row().classes("w-full pt-2 border-t border-[#292d29]"):
                 approval_button = ui.button(
                     approval_label,
@@ -2306,15 +2554,31 @@ def _entity_card(
                 ).props("flat dense no-caps").classes("text-[#d8dbd8]")
                 if not prompt_previews:
                     approval_button.props("disable")
-                ui.button("Editar", icon="edit").props("flat dense no-caps").classes(
-                    "text-[#d8dbd8]"
-                )
-                ui.button("Variações", icon="refresh").props("flat dense no-caps").classes(
-                    "text-[#d8dbd8]"
-                )
+                ui.button("Editar", icon="edit", on_click=edit_prompt_dialog.open).props(
+                    "flat dense no-caps"
+                ).classes("text-[#d8dbd8]")
+                if hero_reference is not None:
+                    hero_view_type = hero_reference[0].view_type
+
+                    async def regenerate_hero_reference(
+                        view_type: str = hero_view_type,
+                    ) -> None:
+                        await _regenerate_visual_reference_from_ui(
+                            project_id,
+                            target_kind,
+                            target_id,
+                            view_type,
+                        )
+
+                    ui.button(
+                        "Gerar novamente",
+                        icon="refresh",
+                        on_click=regenerate_hero_reference,
+                    ).props("flat dense no-caps").classes("text-[#d8dbd8]")
 
 
 def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
+    asset_map = {asset.id: asset for asset in summary.get("assets", [])}
     _section_title(
         "Biblioteca visual",
         "Personagens, locais e objetos canônicos do seu universo.",
@@ -2343,17 +2607,22 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
                             if target_kind == "character"
                             else ("Objeto narrativo" if target_kind == "prop" else "Cenário")
                         )
-                        detail = (
+                        profile = getattr(item, "canonical_profile", {}) or {}
+                        detail = _visual_card_detail(
+                            target_kind,
+                            profile,
                             getattr(item, "description", None)
                             or getattr(item, "narrative_importance", None)
-                            or str(getattr(item, "canonical_profile", {}))[:150]
+                            or "",
                         )
                         _entity_card(
                             project_id,
                             target_kind,
                             item.id,
-                            getattr(item, "canonical_profile", {}) or {},
+                            profile,
                             _visual_reference_views_for(summary, target_kind, item.id),
+                            _visual_references_for(summary, target_kind, item.id),
+                            asset_map,
                             icon,
                             item.name,
                             subtitle,

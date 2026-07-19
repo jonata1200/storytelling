@@ -1,3 +1,10 @@
+from uuid import uuid4
+
+import pytest
+
+from app.projects.models import Artifact
+from app.visual_bible import service as visual_bible_service
+from app.visual_bible.models import Character, CharacterVersion
 from app.visual_bible.service import (
     _character_profile,
     _location_profile,
@@ -5,6 +12,8 @@ from app.visual_bible.service import (
     _prop_profile,
     default_views_for,
     initial_view_for,
+    regenerate_visual_reference,
+    update_visual_target_prompt,
     visual_reference_prompt,
 )
 
@@ -39,8 +48,21 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
 
     assert (
         visual_reference_prompt(profile, "front_portrait")
-        == "Helena, 35, expressive detective, rainy noir lighting. View: front_portrait."
+        == "Helena, 35, expressive detective, rainy noir lighting. Reference view: "
+        "front_portrait. front portrait, face centered, neutral expression, eye-level camera. "
+        "Vertical 9:16 production reference, clean background, consistent visual identity."
     )
+
+
+def test_visual_reference_prompts_are_distinct_by_view_type() -> None:
+    profile = {"name": "Carta azul", "canonical_prompt": "Carta azul antiga, papel gasto"}
+
+    front = visual_reference_prompt(profile, "front")
+    side = visual_reference_prompt(profile, "side")
+
+    assert front != side
+    assert "front view" in front
+    assert "side view" in side
 
 
 def test_visual_profiles_accept_text_items_from_story_bible() -> None:
@@ -66,3 +88,102 @@ def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:
         {"nome": "Clara", "funcao": "filha", "name": "Clara"},
         {"name": "Mae de Clara", "description": "Mae de Clara"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_update_visual_target_prompt_versions_character_profile() -> None:
+    project_id = uuid4()
+    character_id = uuid4()
+    artifact_id = uuid4()
+    character = Character(
+        id=character_id,
+        project_id=project_id,
+        artifact_id=artifact_id,
+        name="Clara",
+        role="protagonista",
+        canonical_profile={"name": "Clara", "canonical_prompt": "Clara original"},
+        character_fingerprint={},
+        current_version=1,
+    )
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.added: list[object] = []
+            self.committed = False
+            self.refreshed: object | None = None
+
+        async def get(self, model: type[object], item_id: object) -> object | None:
+            if model is Character and item_id == character_id:
+                return character
+            if model is Artifact and item_id == artifact_id:
+                return None
+            return None
+
+        def add(self, item: object) -> None:
+            self.added.append(item)
+
+        async def commit(self) -> None:
+            self.committed = True
+
+        async def refresh(self, item: object) -> None:
+            self.refreshed = item
+
+    session = FakeSession()
+
+    updated = await update_visual_target_prompt(
+        session,  # type: ignore[arg-type]
+        project_id,
+        "character",
+        character_id,
+        "Clara com jaqueta vermelha, rosto consistente",
+    )
+
+    assert updated is character
+    assert character.current_version == 2
+    assert character.canonical_profile["canonical_prompt"] == (
+        "Clara com jaqueta vermelha, rosto consistente"
+    )
+    assert character.character_fingerprint["canonical_prompt"] == (
+        "Clara com jaqueta vermelha, rosto consistente"
+    )
+    assert any(isinstance(item, CharacterVersion) for item in session.added)
+    assert session.committed is True
+    assert session.refreshed is character
+
+
+@pytest.mark.asyncio
+async def test_regenerate_visual_reference_forces_existing_view(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    target_id = uuid4()
+    reference = object()
+    captured: dict[str, object] = {}
+
+    async def fake_generate_visual_references(*args: object, **kwargs: object) -> list[object]:
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return [reference]
+
+    monkeypatch.setattr(
+        visual_bible_service,
+        "generate_visual_references",
+        fake_generate_visual_references,
+    )
+
+    result = await regenerate_visual_reference(
+        object(),  # type: ignore[arg-type]
+        project_id,
+        "character",
+        target_id,
+        "front_portrait",
+    )
+
+    assert result is reference
+    assert captured["args"][1:5] == (
+        project_id,
+        "character",
+        target_id,
+        ["front_portrait"],
+    )
+    assert captured["kwargs"] == {"force": True}

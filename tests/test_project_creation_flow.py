@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
@@ -15,7 +16,7 @@ from app.storytelling.service import (
     normalize_story_idea_payload,
 )
 from app.ui import pages
-from app.ui.pages import DEFAULT_STORY_DURATION_MINUTES, _compact_project_title
+from app.ui.pages import DEFAULT_STORY_DURATION_MINUTES, _asset_url, _compact_project_title
 
 
 def test_chat_prompt_title_is_compact() -> None:
@@ -64,6 +65,137 @@ def test_legacy_assistant_greeting_is_removed_from_chat_history() -> None:
         is True
     )
     assert pages._is_legacy_assistant_greeting("assistant", "Resposta real do agente.") is False
+
+
+def test_asset_url_maps_local_storage_file_to_public_storage_route(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    storage_root = tmp_path / "storage"
+    image_path = storage_root / "mock_images" / "project 1" / "front view.svg"
+    image_path.parent.mkdir(parents=True)
+    image_path.write_text("<svg />", encoding="utf-8")
+    monkeypatch.setattr(
+        pages,
+        "get_settings",
+        lambda: SimpleNamespace(local_storage_path=storage_root),
+    )
+
+    assert _asset_url(image_path.as_posix()) == (
+        "/storage/mock_images/project%201/front%20view.svg"
+    )
+
+
+def test_asset_url_rejects_files_outside_configured_storage(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    storage_root = tmp_path / "storage"
+    outside_file = tmp_path / "outside.svg"
+    monkeypatch.setattr(
+        pages,
+        "get_settings",
+        lambda: SimpleNamespace(local_storage_path=storage_root),
+    )
+
+    assert _asset_url(outside_file.as_posix()) == ""
+
+
+def test_visual_references_are_sorted_by_expected_view_order() -> None:
+    target_id = uuid4()
+    project_id = uuid4()
+    now = datetime.now()
+    back = SimpleNamespace(
+        project_id=project_id,
+        target_kind="character",
+        target_id=target_id,
+        view_type="back_view",
+        created_at=now,
+    )
+    front = SimpleNamespace(
+        project_id=project_id,
+        target_kind="character",
+        target_id=target_id,
+        view_type="front_portrait",
+        created_at=now + timedelta(seconds=1),
+    )
+
+    references = pages._visual_references_for(
+        {"visual_refs": [back, front]},
+        "character",
+        target_id,
+    )
+
+    assert references == [front, back]
+
+
+def test_visual_references_prefer_newest_image_for_same_view() -> None:
+    target_id = uuid4()
+    project_id = uuid4()
+    now = datetime.now()
+    older = SimpleNamespace(
+        project_id=project_id,
+        target_kind="prop",
+        target_id=target_id,
+        view_type="front",
+        created_at=now,
+    )
+    newer = SimpleNamespace(
+        project_id=project_id,
+        target_kind="prop",
+        target_id=target_id,
+        view_type="front",
+        created_at=now + timedelta(minutes=1),
+    )
+
+    references = pages._visual_references_for(
+        {"visual_refs": [older, newer]},
+        "prop",
+        target_id,
+    )
+
+    assert references == [newer, older]
+
+
+def test_visual_card_detail_formats_character_profile_without_raw_dict() -> None:
+    detail = pages._visual_card_detail(
+        "character",
+        {
+            "arc": "",
+            "eyes": "olhos expressivos",
+            "hair": "cabelo grisalho preso",
+            "base_outfit": "xale de retalhos",
+        },
+    )
+
+    assert detail == "olhos expressivos, cabelo grisalho preso, xale de retalhos"
+    assert "{" not in detail
+    assert "'arc'" not in detail
+
+
+def test_visual_card_detail_formats_location_profile() -> None:
+    detail = pages._visual_card_detail(
+        "location",
+        {
+            "lighting": "luz natural suave",
+            "materials": ["madeira", "tecidos simples"],
+            "layout": "sala pequena com janela lateral",
+        },
+    )
+
+    assert detail == "luz natural suave, madeira, tecidos simples, sala pequena com janela lateral"
+
+
+def test_visual_card_detail_prefers_explicit_description() -> None:
+    detail = pages._visual_card_detail(
+        "prop",
+        {
+            "description": "Objeto afetivo de payoff narrativo.",
+            "material": "papel",
+        },
+    )
+
+    assert detail == "Objeto afetivo de payoff narrativo."
 
 
 def test_shot_narration_falls_back_to_action_when_empty() -> None:
