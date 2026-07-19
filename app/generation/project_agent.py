@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
@@ -57,6 +58,14 @@ class ProjectChatResult:
     message: str
     action: ProjectChatAction
     changed: bool = False
+
+
+ProgressCallback = Callable[[str], Awaitable[None]]
+
+
+async def _emit_progress(progress: ProgressCallback | None, message: str) -> None:
+    if progress is not None:
+        await progress(message)
 
 
 async def _latest(
@@ -268,6 +277,7 @@ def _requests_regeneration(message: str) -> bool:
 async def _ensure_script_pipeline(
     session: AsyncSession,
     project_id: UUID,
+    progress: ProgressCallback | None = None,
 ) -> tuple[Script | None, str, bool]:
     briefing = await _latest(session, Briefing, project_id)
     if briefing is None:
@@ -277,6 +287,7 @@ async def _ensure_script_pipeline(
     if script is not None:
         scene_count = await _count(session, Scene, project_id)
         if scene_count == 0:
+            await _emit_progress(progress, "O roteiro ja existe. Vou dividir em cenas e planos.")
             scenes = await generate_scenes_and_shots(session, project_id, script.id)
             if scenes is None:
                 return script, "O roteiro existe, mas nao consegui criar cenas e planos.", True
@@ -285,6 +296,7 @@ async def _ensure_script_pipeline(
 
     idea = await _latest(session, StoryIdea, project_id)
     if idea is None:
+        await _emit_progress(progress, "Vou criar uma ideia base para orientar o roteiro.")
         ideas = await generate_story_ideas(session, project_id)
         if not ideas:
             return None, "Nao consegui gerar uma ideia base para este projeto.", False
@@ -292,13 +304,19 @@ async def _ensure_script_pipeline(
 
     bible = await _latest(session, StoryBible, project_id)
     if bible is None:
+        await _emit_progress(progress, "Vou montar a Story Bible com personagens, mundo e arco.")
         bible = await generate_story_bible(session, project_id, idea.id)
         if bible is None:
             return None, "Nao consegui gerar a Story Bible antes do roteiro.", False
 
+    await _emit_progress(
+        progress,
+        "Vou escrever o roteiro cinematografico a partir da Story Bible.",
+    )
     script = await generate_script(session, project_id, bible.id)
     if script is None:
         return None, "Nao consegui gerar o roteiro para este projeto.", False
+    await _emit_progress(progress, "Roteiro criado. Agora vou separar em cenas e planos.")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
         return script, "Roteiro criado, mas as cenas e planos nao foram gerados.", True
@@ -306,9 +324,12 @@ async def _ensure_script_pipeline(
 
 
 async def _ensure_visual_pipeline(
-    session: AsyncSession, project_id: UUID, force: bool = False
+    session: AsyncSession,
+    project_id: UUID,
+    force: bool = False,
+    progress: ProgressCallback | None = None,
 ) -> ProjectChatResult:
-    script, message, changed = await _ensure_script_pipeline(session, project_id)
+    script, message, changed = await _ensure_script_pipeline(session, project_id, progress)
     if script is None:
         return ProjectChatResult(message, "generate_assets", changed)
 
@@ -330,6 +351,10 @@ async def _ensure_visual_pipeline(
     )
     changed = changed or needs_visual
     if needs_visual:
+        await _emit_progress(
+            progress,
+            "Vou extrair personagens, locais e objetos do roteiro para a biblioteca visual.",
+        )
         visual = await generate_visual_bible(session, project_id, bible.id)
         if visual is None:
             return ProjectChatResult(
@@ -353,14 +378,18 @@ async def _ensure_visual_pipeline(
 
 
 async def _ensure_storyboard_pipeline(
-    session: AsyncSession, project_id: UUID, force: bool = False
+    session: AsyncSession,
+    project_id: UUID,
+    force: bool = False,
+    progress: ProgressCallback | None = None,
 ) -> ProjectChatResult:
-    script, message, changed = await _ensure_script_pipeline(session, project_id)
+    script, message, changed = await _ensure_script_pipeline(session, project_id, progress)
     if script is None:
         return ProjectChatResult(message, "generate_storyboard", changed)
 
     frames = await _count(session, StoryboardFrame, project_id)
     if force or frames == 0:
+        await _emit_progress(progress, "Vou transformar as cenas em frames de storyboard.")
         generated_frames = await generate_storyboard_frames(session, project_id, script.id)
         if generated_frames is None:
             return ProjectChatResult(
@@ -372,6 +401,7 @@ async def _ensure_storyboard_pipeline(
 
     animatics = await _count(session, Animatic, project_id)
     if force or animatics == 0:
+        await _emit_progress(progress, "Vou montar o animatic para validar ritmo e continuidade.")
         bundle = await generate_animatic_bundle(session, project_id, script.id)
         if bundle is None:
             return ProjectChatResult(
@@ -389,9 +419,14 @@ async def _ensure_storyboard_pipeline(
 
 
 async def _ensure_video_pipeline(
-    session: AsyncSession, project_id: UUID, force: bool = False
+    session: AsyncSession,
+    project_id: UUID,
+    force: bool = False,
+    progress: ProgressCallback | None = None,
 ) -> ProjectChatResult:
-    storyboard_result = await _ensure_storyboard_pipeline(session, project_id, force=force)
+    storyboard_result = await _ensure_storyboard_pipeline(
+        session, project_id, force=force, progress=progress
+    )
     changed = storyboard_result.changed
     frames = await _latest_many(session, StoryboardFrame, project_id, 100)
     if not frames:
@@ -421,29 +456,41 @@ async def handle_project_chat(
     active: str,
     message: str,
     history: list[dict[str, str]],
+    progress: ProgressCallback | None = None,
 ) -> ProjectChatResult:
     action = classify_project_chat_action(message, active)
     force = _requests_regeneration(message)
     project_context = await build_project_context(session, project_id)
 
     if action == "generate_script":
-        _script, result_message, changed = await _ensure_script_pipeline(session, project_id)
+        _script, result_message, changed = await _ensure_script_pipeline(
+            session, project_id, progress
+        )
         return ProjectChatResult(result_message, action, changed)
     if action == "revise_script":
-        script, result_message, changed = await _ensure_script_pipeline(session, project_id)
+        script, result_message, changed = await _ensure_script_pipeline(
+            session, project_id, progress
+        )
         if script is None:
             return ProjectChatResult(result_message, action, changed)
+        await _emit_progress(progress, "Vou revisar o roteiro mantendo a continuidade do projeto.")
         revised = await revise_script(session, project_id, script.id, message, project_context)
         if revised is None:
             return ProjectChatResult("Nao consegui aplicar a revisao no roteiro.", action, changed)
         return ProjectChatResult("Roteiro revisado e nova versao salva no projeto.", action, True)
     if action == "generate_assets":
-        return await _ensure_visual_pipeline(session, project_id, force=force)
+        return await _ensure_visual_pipeline(
+            session, project_id, force=force, progress=progress
+        )
     if action == "generate_storyboard":
-        return await _ensure_storyboard_pipeline(session, project_id, force=force)
+        return await _ensure_storyboard_pipeline(
+            session, project_id, force=force, progress=progress
+        )
     if action == "generate_video":
-        return await _ensure_video_pipeline(session, project_id, force=force)
+        await _emit_progress(progress, "Vou preparar o storyboard para a etapa de video.")
+        return await _ensure_video_pipeline(session, project_id, force=force, progress=progress)
 
+    await _emit_progress(progress, "Vou analisar o projeto e responder como Diretor IA.")
     response = await ask_director_agent(
         session,
         project_id,

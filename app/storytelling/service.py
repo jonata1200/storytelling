@@ -52,6 +52,15 @@ def _required_str(payload: dict, key: str, context: str) -> str:
     return text
 
 
+def _bounded_required_str(payload: dict, key: str, context: str, max_length: int) -> str:
+    text = _required_str(payload, key, context)
+    if len(text) <= max_length:
+        return text
+    if max_length <= 3:
+        return text[:max_length]
+    return f"{text[: max_length - 3].rstrip()}..."
+
+
 def _shot_narration_text(payload: dict, context: str) -> str:
     narration = str(payload.get("narration_text") or "").strip()
     if narration:
@@ -635,12 +644,16 @@ async def generate_scenes_and_shots(
                     narration_text=_shot_narration_text(shot_payload, shot_context),
                     dialogue_text=str(shot_payload.get("dialogue_text") or ""),
                     action=_required_str(shot_payload, "action", shot_context),
-                    emotion=_required_str(shot_payload, "emotion", shot_context),
+                    emotion=_bounded_required_str(shot_payload, "emotion", shot_context, 120),
                     visual_composition=_required_str(
                         shot_payload, "visual_composition", shot_context
                     ),
-                    camera_movement=_required_str(shot_payload, "camera_movement", shot_context),
-                    generation_type=_required_str(shot_payload, "generation_type", shot_context),
+                    camera_movement=_bounded_required_str(
+                        shot_payload, "camera_movement", shot_context, 120
+                    ),
+                    generation_type=_bounded_required_str(
+                        shot_payload, "generation_type", shot_context, 80
+                    ),
                     payload=shot_payload,
                 )
             )

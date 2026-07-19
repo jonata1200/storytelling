@@ -48,7 +48,7 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
         return {"project": {"title": "Teste"}}
 
     async def fake_ensure_script(
-        session: AsyncSession, requested_project_id: Any
+        session: AsyncSession, requested_project_id: Any, progress: Any = None
     ) -> tuple[SimpleNamespace, str, bool]:
         calls.append("ensure_script")
         assert requested_project_id == project_id
@@ -92,7 +92,10 @@ async def test_project_chat_routes_assets_storyboard_and_video(
         return {"project_id": str(requested_project_id)}
 
     async def fake_assets(
-        session: AsyncSession, requested_project_id: Any, force: bool = False
+        session: AsyncSession,
+        requested_project_id: Any,
+        force: bool = False,
+        progress: Any = None,
     ) -> ProjectChatResult:
         calls.append("assets")
         assert requested_project_id == project_id
@@ -100,7 +103,10 @@ async def test_project_chat_routes_assets_storyboard_and_video(
         return ProjectChatResult("assets ok", "generate_assets", True)
 
     async def fake_storyboard(
-        session: AsyncSession, requested_project_id: Any, force: bool = False
+        session: AsyncSession,
+        requested_project_id: Any,
+        force: bool = False,
+        progress: Any = None,
     ) -> ProjectChatResult:
         calls.append("storyboard")
         assert requested_project_id == project_id
@@ -108,7 +114,10 @@ async def test_project_chat_routes_assets_storyboard_and_video(
         return ProjectChatResult("storyboard ok", "generate_storyboard", True)
 
     async def fake_video(
-        session: AsyncSession, requested_project_id: Any, force: bool = False
+        session: AsyncSession,
+        requested_project_id: Any,
+        force: bool = False,
+        progress: Any = None,
     ) -> ProjectChatResult:
         calls.append("video")
         assert requested_project_id == project_id
@@ -147,7 +156,10 @@ async def test_project_chat_forces_regeneration_for_visual_requests(
         return {"project_id": str(requested_project_id)}
 
     async def fake_assets(
-        session: AsyncSession, requested_project_id: Any, force: bool = False
+        session: AsyncSession,
+        requested_project_id: Any,
+        force: bool = False,
+        progress: Any = None,
     ) -> ProjectChatResult:
         captured_force.append(force)
         return ProjectChatResult("assets revisados", "generate_assets", True)
@@ -165,3 +177,41 @@ async def test_project_chat_forces_regeneration_for_visual_requests(
 
     assert result.action == "generate_assets"
     assert captured_force == [True]
+
+
+@pytest.mark.asyncio
+async def test_project_chat_reports_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    progress_messages: list[str] = []
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        return {"project_id": str(requested_project_id)}
+
+    async def fake_ensure_script(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+    ) -> tuple[SimpleNamespace, str, bool]:
+        if progress is not None:
+            await progress("Vou escrever o roteiro.")
+        return SimpleNamespace(id=uuid4()), "Roteiro criado.", True
+
+    async def collect_progress(message: str) -> None:
+        progress_messages.append(message)
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "script",
+        "gere o roteiro",
+        [],
+        progress=collect_progress,
+    )
+
+    assert result == ProjectChatResult("Roteiro criado.", "generate_script", True)
+    assert progress_messages == ["Vou escrever o roteiro."]

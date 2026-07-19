@@ -4,6 +4,7 @@ import asyncio
 import base64
 import logging
 import mimetypes
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -680,23 +681,34 @@ async def _generate_initial_script(
     session: AsyncSession,
     project_id: UUID,
     source_idea: dict[str, Any] | None = None,
+    progress: Callable[[str], Awaitable[None]] | None = None,
 ) -> Script:
     if source_idea is not None:
+        if progress is not None:
+            await progress("Vou registrar a ideia escolhida dentro deste projeto.")
         idea = await create_story_idea_from_payload(session, project_id, source_idea)
         if idea is None:
             raise ValueError("nao foi possivel registrar a ideia selecionada")
     else:
+        if progress is not None:
+            await progress("Vou criar uma ideia base para orientar o roteiro.")
         generated_ideas = await generate_story_ideas(session, project_id)
         if not generated_ideas:
             raise ValueError("nao foi possivel gerar ideias iniciais")
         idea = generated_ideas[0]
 
+    if progress is not None:
+        await progress("Vou montar a Story Bible com personagens, mundo e arco narrativo.")
     story_bible = await generate_story_bible(session, project_id, idea.id)
     if story_bible is None:
         raise ValueError("nao foi possivel gerar a Story Bible")
+    if progress is not None:
+        await progress("Vou escrever o roteiro cinematografico a partir da Story Bible.")
     script = await generate_script(session, project_id, story_bible.id)
     if script is None:
         raise ValueError("nao foi possivel gerar roteiro")
+    if progress is not None:
+        await progress("Roteiro criado. Agora vou separar a historia em cenas e planos.")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
         raise ValueError("nao foi possivel gerar cenas e planos")
@@ -714,11 +726,26 @@ async def _set_project_ai_action_status(
 ) -> None:
     settings = await get_or_create_production_settings(session, project_id)
     metadata = dict(settings.metadata_json or {})
+    previous_action = metadata.get("ai_action")
+    previous_events = (
+        previous_action.get("events", []) if isinstance(previous_action, dict) else []
+    )
+    events = [event for event in previous_events if isinstance(event, dict)]
+    if not events or events[-1].get("message") != message or events[-1].get("status") != status:
+        events.append(
+            {
+                "id": f"{action}:{len(events) + 1}",
+                "action": action,
+                "status": status,
+                "message": message,
+            }
+        )
     metadata["ai_action"] = {
         "action": action,
         "status": status,
         "message": message,
         "error": error,
+        "events": events[-60:],
     }
     settings.metadata_json = metadata
     await session.commit()
@@ -736,7 +763,16 @@ async def _generate_initial_script_in_background(
                 status="running",
                 message="A IA esta criando o roteiro inicial com base na ideia.",
             )
-            await _generate_initial_script(session, project_id, source_idea)
+
+            async def report_progress(message: str) -> None:
+                await _set_project_ai_action_status(
+                    session,
+                    project_id,
+                    status="running",
+                    message=message,
+                )
+
+            await _generate_initial_script(session, project_id, source_idea, report_progress)
             await _set_project_ai_action_status(
                 session,
                 project_id,
@@ -1170,28 +1206,52 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
     try:
         async with AsyncSessionLocal() as session:
             if step_key == "ideas":
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Vou gerar novas ideias alinhadas ao briefing do projeto.",
+                )
                 await generate_story_ideas(session, project_id)
             elif step_key == "bible":
                 idea = await _latest(session, StoryIdea, project_id)
                 if idea is None:
                     raise ValueError("gere ideias primeiro")
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Vou transformar a ideia selecionada em uma Story Bible.",
+                )
                 await generate_story_bible(session, project_id, idea.id)
             elif step_key == "script":
                 bible = await _latest(session, StoryBible, project_id)
                 if bible is None:
                     raise ValueError("gere a Story Bible primeiro")
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Vou criar o roteiro cinematografico a partir da Story Bible.",
+                )
                 script = await generate_script(session, project_id, bible.id)
                 if script is None:
                     raise ValueError("nao foi possivel gerar roteiro")
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Roteiro criado. Agora vou separar a historia em cenas e planos.",
+                )
                 await generate_scenes_and_shots(session, project_id, script.id)
             elif step_key == "visual":
                 bible = await _latest(session, StoryBible, project_id)
                 if bible is None:
                     raise ValueError("gere a Story Bible primeiro")
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Vou criar os perfis de personagens, locais e objetos para aprovacao visual.",
+                )
                 await generate_visual_bible(session, project_id, bible.id)
                 ui.notify(
                     "Ativos preparados. Aprove os prompts na Biblioteca visual para criar as imagens.",
                     color="info",
+                )
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Perfis visuais preparados. Revise e aprove os prompts antes de criar imagens.",
                 )
                 ui.navigate.reload()
                 return
@@ -1199,7 +1259,15 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 script = await _latest(session, Script, project_id)
                 if script is None:
                     raise ValueError("gere o roteiro primeiro")
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Vou transformar as cenas em frames de storyboard.",
+                )
                 await generate_storyboard_frames(session, project_id, script.id)
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Storyboard criado. Agora vou montar o animatic.",
+                )
                 await generate_animatic_bundle(session, project_id, script.id)
             elif step_key == "video":
                 result = await session.execute(
@@ -1210,9 +1278,17 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 frames = list(result.scalars())
                 if not frames:
                     raise ValueError("gere o storyboard primeiro")
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Vou preparar os prompts de video para sua aprovacao antes de gerar clipes.",
+                )
                 ui.notify(
                     "Prompts de video prontos. Aprove-os na aba Video para gerar os clipes.",
                     color="info",
+                )
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Prompts de video preparados. Revise-os na aba Video antes de gerar clipes.",
                 )
                 ui.navigate.reload()
                 return
@@ -1220,6 +1296,10 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 source_audio = await _latest(session, AudioTrack, project_id)
                 if source_audio is None:
                     raise ValueError("gere o animatic primeiro")
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Vou sintetizar a narracao final e preparar legendas.",
+                )
                 final_audio = await synthesize_narration(
                     session, project_id, source_audio.id, "pt-br-warm-narrator"
                 )
@@ -1227,6 +1307,10 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                     raise ValueError("nao foi possivel gerar narracao")
                 subtitle = await generate_subtitles(session, project_id, final_audio.id)
                 animatic = await _latest(session, Animatic, project_id)
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Narracao e legendas prontas. Vou montar a timeline final.",
+                )
                 timeline = await create_final_timeline(
                     session, project_id, animatic.id if animatic else None
                 )
@@ -1239,12 +1323,18 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                     subtitle.id if subtitle else None,
                 )
             elif step_key == "quality":
+                _append_assistant_message_to_chat(
+                    project_id,
+                    "Vou revisar continuidade, estrutura e possiveis inconsistencias.",
+                )
                 await run_quality_check(session, project_id)
             else:
                 raise ValueError("etapa sem acao automatica")
+        _append_assistant_message_to_chat(project_id, "Etapa concluida com sucesso.")
         ui.notify("Etapa executada com sucesso.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
+        _append_assistant_message_to_chat(project_id, f"Nao consegui concluir a etapa: {exc}")
         ui.notify(f"Acao interrompida: {exc}", color="warning")
 
 
@@ -1711,7 +1801,11 @@ def _load_assistant_messages(
         if _is_legacy_assistant_greeting(role, content):
             continue
         if role and content:
-            messages.append({"role": role, "content": content})
+            message = {"role": role, "content": content}
+            event_id = item.get("event_id")
+            if event_id:
+                message["event_id"] = str(event_id)
+            messages.append(message)
     _ = active, assistant_suggestions
     store[str(project_id)] = messages
     nicegui_app.storage.user["project_assistant_messages"] = store
@@ -1724,6 +1818,107 @@ def _save_assistant_messages(project_id: UUID, messages: list[dict[str, str]]) -
         item for item in messages[-80:] if item["role"] != "assistant_pending"
     ]
     nicegui_app.storage.user["project_assistant_messages"] = store
+
+
+def _append_assistant_message_to_chat(project_id: UUID, content: str) -> None:
+    message = content.strip()
+    if not message:
+        return
+    store = _assistant_chat_store()
+    raw_messages = store.get(str(project_id), [])
+    messages = [
+        {"role": str(item.get("role") or ""), "content": str(item.get("content") or "")}
+        for item in raw_messages
+        if isinstance(item, dict)
+    ]
+    if messages and messages[-1].get("role") == "assistant" and messages[-1].get("content") == message:
+        return
+    messages.append({"role": "assistant", "content": message})
+    store[str(project_id)] = messages[-80:]
+    nicegui_app.storage.user["project_assistant_messages"] = store
+
+
+def _sync_ai_action_events_to_chat(project_id: UUID, summary: dict[str, Any]) -> None:
+    ai_action = _project_ai_action(summary)
+    raw_events = ai_action.get("events", [])
+    if not isinstance(raw_events, list):
+        return
+    store = _assistant_chat_store()
+    raw_messages = store.get(str(project_id), [])
+    messages = [item for item in raw_messages if isinstance(item, dict)]
+    known_event_ids = {
+        str(item.get("event_id"))
+        for item in messages
+        if item.get("event_id") is not None
+    }
+    changed = False
+    for event in raw_events:
+        if not isinstance(event, dict):
+            continue
+        event_id = str(event.get("id") or "")
+        message = str(event.get("message") or "").strip()
+        if not event_id or not message or event_id in known_event_ids:
+            continue
+        messages.append({"role": "assistant", "content": message, "event_id": event_id})
+        known_event_ids.add(event_id)
+        changed = True
+    if changed:
+        store[str(project_id)] = cast(list[dict[str, str]], messages[-80:])
+        nicegui_app.storage.user["project_assistant_messages"] = store
+
+
+def _assistant_flow_actions(active: str, counts: dict[str, int]) -> dict[str, str] | None:
+    if active not in {"assets", "storyboard", "video"}:
+        return None
+    review = {
+        "review_label": "Revisar esta etapa",
+        "review_user_message": "Quero revisar esta etapa antes de seguir.",
+        "review_response": (
+            "Combinado. Vamos manter o fluxo nesta etapa para revisar, ajustar e aprovar "
+            "as informacoes antes de avancar."
+        ),
+    }
+    if active == "assets":
+        if not _step_ready("visual", counts):
+            return {
+                **review,
+                "continue_label": "Criar ativos",
+                "continue_prompt": "Pode criar personagens, locais e objetos da historia.",
+                "continue_target": "assets",
+            }
+        return {
+            **review,
+            "continue_label": "Seguir para storyboard",
+            "continue_prompt": "Pode gerar o storyboard completo a partir dos ativos criados.",
+            "continue_target": "storyboard",
+        }
+    if active == "storyboard":
+        if not _step_ready("storyboard", counts):
+            return {
+                **review,
+                "continue_label": "Criar storyboard",
+                "continue_prompt": "Pode criar o storyboard completo a partir do roteiro.",
+                "continue_target": "storyboard",
+            }
+        return {
+            **review,
+            "continue_label": "Seguir para video",
+            "continue_prompt": "Pode preparar os prompts de video a partir do storyboard.",
+            "continue_target": "video",
+        }
+    if not _step_ready("video", counts):
+        return {
+            **review,
+            "continue_label": "Preparar video",
+            "continue_prompt": "Pode preparar os prompts de video a partir do storyboard.",
+            "continue_target": "video",
+        }
+    return {
+        **review,
+        "continue_label": "Revisar montagem",
+        "continue_prompt": "Pode revisar a montagem de video e orientar os proximos ajustes.",
+        "continue_target": "video",
+    }
 
 
 def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> None:
@@ -1752,7 +1947,9 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             "orientar movimento de câmera, ajustar ritmo ou propor variações de montagem."
         ),
     }
+    _sync_ai_action_events_to_chat(project_id, summary)
     messages = _load_assistant_messages(project_id, active, assistant_suggestions)
+    flow_actions = _assistant_flow_actions(active, summary["counts"])
     with ui.column().classes(
         "right-assistant w-[340px] min-w-[340px] border-l border-[#252925] "
         "bg-[#0d0f0e] h-[calc(100vh-64px)] min-h-0 p-4 gap-4 sticky top-16"
@@ -1794,7 +1991,9 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
         ):
             conversation()
 
-        async def send_message(text: str | None = None) -> None:
+        async def send_message(
+            text: str | None = None, next_section: str | None = None
+        ) -> None:
             user_message = (text or prompt.value or "").strip()
             if not user_message:
                 return
@@ -1808,6 +2007,27 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             prompt.value = ""
             conversation.refresh()
             should_reload = False
+
+            async def report_progress(content: str) -> None:
+                progress_message = content.strip()
+                if not progress_message:
+                    return
+                pending_index = (
+                    messages.index(pending_message)
+                    if pending_message in messages
+                    else len(messages)
+                )
+                previous = messages[pending_index - 1] if pending_index > 0 else {}
+                if previous.get("role") == "assistant" and previous.get("content") == progress_message:
+                    return
+                messages.insert(
+                    pending_index,
+                    {"role": "assistant", "content": progress_message},
+                )
+                _save_assistant_messages(project_id, messages)
+                conversation.refresh()
+                await asyncio.sleep(0)
+
             try:
                 async with AsyncSessionLocal() as session:
                     result = await handle_project_chat(
@@ -1816,6 +2036,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                         active,
                         user_message,
                         [item for item in messages if item["role"] != "assistant_pending"],
+                        progress=report_progress,
                     )
                     response = result.message
                     should_reload = result.changed
@@ -1828,7 +2049,46 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             conversation.refresh()
             if should_reload:
                 ui.notify(response, color="positive")
-                ui.navigate.reload()
+                if next_section:
+                    ui.navigate.to(f"/projects/{project_id}/{next_section}")
+                else:
+                    ui.navigate.reload()
+            elif next_section:
+                ui.navigate.to(f"/projects/{project_id}/{next_section}")
+
+        async def keep_reviewing_current_step() -> None:
+            if flow_actions is None:
+                return
+            messages.append(
+                {"role": "user", "content": flow_actions["review_user_message"]}
+            )
+            messages.append(
+                {"role": "assistant", "content": flow_actions["review_response"]}
+            )
+            _save_assistant_messages(project_id, messages)
+            conversation.refresh()
+
+        if flow_actions is not None:
+            with ui.element("div").classes(
+                "glass rounded-2xl p-3 w-full shrink-0 border border-[#30362b]"
+            ):
+                ui.label("Decisao de fluxo").classes("text-xs acid uppercase font-semibold")
+                with ui.column().classes("w-full gap-2 mt-2"):
+                    ui.button(
+                        flow_actions["continue_label"],
+                        icon="arrow_forward",
+                        on_click=lambda: send_message(
+                            flow_actions["continue_prompt"],
+                            flow_actions["continue_target"],
+                        ),
+                    ).props("unelevated no-caps").classes("acid-bg rounded-xl w-full")
+                    ui.button(
+                        flow_actions["review_label"],
+                        icon="rate_review",
+                        on_click=keep_reviewing_current_step,
+                    ).props("outline no-caps").classes(
+                        "rounded-xl w-full text-[#d8dbd8] border-[#3a403a]"
+                    )
 
         with ui.row().classes("w-full items-end gap-2 shrink-0"):
             prompt = (

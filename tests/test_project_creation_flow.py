@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.storytelling.service import (
     GenerationOutputError,
+    _bounded_required_str,
     _shot_narration_text,
     coerce_duration_minutes,
     normalize_script_payload,
@@ -74,6 +75,14 @@ def test_shot_narration_falls_back_to_action_when_empty() -> None:
     assert _shot_narration_text(payload, "shot") == "Clara abre a carta diante da janela."
 
 
+def test_bounded_required_str_preserves_database_limits() -> None:
+    payload = {"camera_movement": "Camera em travelling lateral com zoom suave e muito detalhe"}
+
+    assert _bounded_required_str(payload, "camera_movement", "shot", 24) == (
+        "Camera em travelling..."
+    )
+
+
 def test_scenes_are_ordered_by_scene_number_for_display() -> None:
     scenes = [
         SimpleNamespace(scene_number=3),
@@ -107,6 +116,60 @@ def test_characters_section_unlocks_when_script_exists_without_shots() -> None:
     assert pages._step_ready("script", counts) is True
     assert allowed is True
     assert reason == ""
+
+
+def test_assistant_flow_actions_start_at_assets_stage() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "bibles": 1,
+        "scripts": 1,
+        "scenes": 1,
+        "shots": 1,
+        "characters": 0,
+        "frames": 0,
+        "animatics": 0,
+        "clips": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    assert pages._assistant_flow_actions("script", counts) is None
+
+    assets_actions = pages._assistant_flow_actions("assets", counts)
+
+    assert assets_actions is not None
+    assert assets_actions["continue_label"] == "Criar ativos"
+    assert assets_actions["continue_target"] == "assets"
+    assert "revisar" in assets_actions["review_user_message"]
+
+
+def test_assistant_flow_actions_advance_when_stage_is_ready() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "bibles": 1,
+        "scripts": 1,
+        "scenes": 1,
+        "shots": 1,
+        "characters": 3,
+        "frames": 6,
+        "animatics": 1,
+        "clips": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    assets_actions = pages._assistant_flow_actions("assets", counts)
+    storyboard_actions = pages._assistant_flow_actions("storyboard", counts)
+    video_actions = pages._assistant_flow_actions("video", counts)
+
+    assert assets_actions is not None
+    assert storyboard_actions is not None
+    assert video_actions is not None
+    assert assets_actions["continue_target"] == "storyboard"
+    assert storyboard_actions["continue_target"] == "video"
+    assert video_actions["continue_label"] == "Preparar video"
 
 
 def test_story_idea_payload_is_normalized_for_pipeline() -> None:
