@@ -125,6 +125,162 @@ def coerce_duration_minutes(value: object, default: float = 5.0) -> float:
     return max(3.0, min(8.0, duration))
 
 
+def _script_block_to_text(value: object) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return "\n\n".join(
+            text for item in value if (text := _script_block_to_text(item))
+        )
+    if not isinstance(value, dict):
+        return str(value).strip() if value is not None else ""
+
+    label_order = [
+        "scene_number",
+        "number",
+        "title",
+        "heading",
+        "duration_seconds",
+        "summary",
+        "objective",
+        "characters",
+        "location",
+        "setting",
+        "action",
+        "narration",
+        "narration_text",
+        "dialogue",
+        "dialogue_text",
+        "storyboard",
+        "storyboard_direction",
+        "video",
+        "video_direction",
+        "camera_movement",
+    ]
+    labels = {
+        "scene_number": "Cena",
+        "number": "Numero",
+        "title": "Titulo",
+        "heading": "Cabecalho",
+        "duration_seconds": "Duracao",
+        "summary": "Resumo",
+        "objective": "Objetivo dramatico",
+        "characters": "Personagens",
+        "location": "Local",
+        "setting": "Ambiente",
+        "action": "Acao",
+        "narration": "Narracao",
+        "narration_text": "Narracao",
+        "dialogue": "Dialogo",
+        "dialogue_text": "Dialogo",
+        "storyboard": "Indicacao para storyboard",
+        "storyboard_direction": "Indicacao para storyboard",
+        "video": "Indicacao para video",
+        "video_direction": "Indicacao para video",
+        "camera_movement": "Movimento de camera",
+    }
+    lines: list[str] = []
+    for key in label_order:
+        if key not in value:
+            continue
+        text = _script_block_to_text(value[key])
+        if text:
+            lines.append(f"{labels[key]}: {text}")
+    return "\n".join(lines)
+
+
+def _script_content_from_payload(payload: dict) -> str:
+    direct_content = (
+        payload.get("content")
+        or payload.get("script")
+        or payload.get("roteiro")
+        or payload.get("text")
+        or payload.get("texto")
+    )
+    if text := _script_block_to_text(direct_content):
+        return text
+
+    for key in (
+        "scenes",
+        "cenas",
+        "acts",
+        "atos",
+        "beats",
+        "sequencias",
+        "sequences",
+        "structure",
+        "outline",
+        "roteiro_cenas",
+    ):
+        if key in payload and (text := _script_block_to_text(payload[key])):
+            return text
+    return ""
+
+
+def _fallback_script_content_from_bible(
+    story_bible_payload: dict, title: str, target_duration_seconds: int
+) -> str:
+    logline = str(story_bible_payload.get("logline") or "").strip()
+    theme = str(story_bible_payload.get("theme") or "").strip()
+    tone = str(story_bible_payload.get("tone") or "").strip()
+    visual_style = str(story_bible_payload.get("visual_style") or "").strip()
+    characters = _script_block_to_text(story_bible_payload.get("characters"))
+    locations = _script_block_to_text(story_bible_payload.get("locations"))
+    props = _script_block_to_text(story_bible_payload.get("props"))
+    scene_duration = max(30, target_duration_seconds // 5)
+    return "\n\n".join(
+        [
+            f"ROTEIRO DE PRODUCAO - {title}",
+            f"Duracao alvo: {target_duration_seconds}s",
+            f"Logline: {logline or title}",
+            f"Tema: {theme or 'transformacao emocional'}",
+            f"Tom: {tone or 'cinematico e emocional'}",
+            f"Estilo visual: {visual_style or 'cinematico vertical'}",
+            f"Personagens principais:\n{characters or 'Definir a partir da Story Bible.'}",
+            f"Locais:\n{locations or 'Local principal definido pela Story Bible.'}",
+            f"Objetos importantes:\n{props or 'Objetos narrativos definidos pela Story Bible.'}",
+            (
+                f"CENA 1 - GANCHO INICIAL - {scene_duration}s\n"
+                "Objetivo dramatico: apresentar conflito visual imediato.\n"
+                "Acao: o protagonista encontra um sinal, objeto ou decisao que muda a rotina.\n"
+                "Narracao: uma frase curta introduz a promessa emocional.\n"
+                "Indicacao para storyboard: plano vertical forte com foco no rosto e no objeto.\n"
+                "Indicacao para video: camera lenta suave, ritmo de descoberta."
+            ),
+            (
+                f"CENA 2 - CONTEXTO E DESEJO - {scene_duration}s\n"
+                "Objetivo dramatico: mostrar o que o protagonista quer proteger ou conquistar.\n"
+                "Acao: interacoes revelam relacoes, limites e stakes emocionais.\n"
+                "Dialogo: falas curtas, com nomes em caixa alta quando houver personagem falando.\n"
+                "Indicacao para storyboard: alternar plano medio e detalhe significativo.\n"
+                "Indicacao para video: movimento discreto acompanhando a decisao."
+            ),
+            (
+                f"CENA 3 - VIRADA - {scene_duration}s\n"
+                "Objetivo dramatico: colocar o protagonista diante de uma escolha irreversivel.\n"
+                "Acao: uma descoberta muda o sentido da historia.\n"
+                "Indicacao para storyboard: composicao vertical com contraste de luz e sombra.\n"
+                "Indicacao para video: aproximacao gradual ate o momento da virada."
+            ),
+            (
+                f"CENA 4 - CLIMAX - {scene_duration}s\n"
+                "Objetivo dramatico: resolver a escolha com acao clara e filmavel.\n"
+                "Acao: o protagonista age, perde algo ou revela uma verdade.\n"
+                "Indicacao para storyboard: planos de reacao e gesto decisivo.\n"
+                "Indicacao para video: ritmo mais intenso, cortes curtos e camera firme."
+            ),
+            (
+                f"CENA 5 - PAYOFF EMOCIONAL - {scene_duration}s\n"
+                "Objetivo dramatico: entregar consequencia emocional e imagem final memoravel.\n"
+                "Acao: o mundo da historia mostra a mudanca causada pela decisao.\n"
+                "Narracao: frase final curta com fechamento emocional.\n"
+                "Indicacao para storyboard: plano aberto ou detalhe final simbolico.\n"
+                "Indicacao para video: movimento suave de encerramento e pausa final."
+            ),
+        ]
+    )
+
+
 def normalize_script_payload(
     payload: dict,
     *,
@@ -138,16 +294,7 @@ def normalize_script_payload(
     normalized["target_duration_seconds"] = _coerce_positive_int(
         normalized.get("target_duration_seconds"), target_duration_seconds
     )
-    content = (
-        normalized.get("content")
-        or normalized.get("script")
-        or normalized.get("roteiro")
-        or normalized.get("text")
-        or normalized.get("texto")
-    )
-    if isinstance(content, list):
-        content = "\n\n".join(str(item) for item in content if str(item).strip())
-    normalized["content"] = str(content or "").strip()
+    normalized["content"] = _script_content_from_payload(normalized)
     normalized["word_count"] = _coerce_positive_int(
         normalized.get("word_count"), len(normalized["content"].split())
     )
@@ -452,6 +599,13 @@ async def generate_script(
         target_duration_seconds=target_duration_seconds,
     )
     title = _required_str(payload, "title", "generate_script")
+    if not str(payload.get("content") or "").strip():
+        payload["content"] = _fallback_script_content_from_bible(
+            story_bible.payload,
+            title,
+            target_duration_seconds,
+        )
+        payload["word_count"] = len(payload["content"].split())
     artifact = await _create_artifact(
         session, project_id, ArtifactType.SCRIPT, title, payload
     )

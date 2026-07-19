@@ -2041,6 +2041,11 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                     response = result.message
                     should_reload = result.changed
             except Exception as exc:
+                logger.exception(
+                    "Nao foi possivel responder ao chat do projeto %s na etapa %s",
+                    project_id,
+                    active,
+                )
                 response = f"Não consegui responder agora ({type(exc).__name__}). Tente novamente."
             if pending_message in messages:
                 messages.remove(pending_message)

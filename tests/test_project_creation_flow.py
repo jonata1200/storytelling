@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.storytelling.service import (
     GenerationOutputError,
     _bounded_required_str,
+    _fallback_script_content_from_bible,
     _shot_narration_text,
     coerce_duration_minutes,
     normalize_script_payload,
@@ -255,6 +256,45 @@ def test_script_payload_accepts_common_ai_field_names() -> None:
     assert payload["target_duration_seconds"] == 420
     assert payload["word_count"] == 8
     assert payload["content"] == "Cena 1: Uma carta chega tarde demais."
+
+
+def test_script_payload_builds_content_from_scene_list_when_content_is_empty() -> None:
+    payload = normalize_script_payload(
+        {
+            "content": "",
+            "scenes": [
+                {
+                    "scene_number": 1,
+                    "title": "A chegada",
+                    "action": "Clara encontra a carta na porta.",
+                    "video_direction": "Dolly in lento ate a mao dela.",
+                }
+            ],
+        },
+        default_title="A carta azul",
+        language="pt-BR",
+        target_duration_seconds=300,
+    )
+
+    assert "Cena: 1" in payload["content"]
+    assert "Titulo: A chegada" in payload["content"]
+    assert "Acao: Clara encontra a carta na porta." in payload["content"]
+
+
+def test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_script() -> None:
+    content = _fallback_script_content_from_bible(
+        {
+            "logline": "Uma filha recebe uma mensagem atrasada do pai.",
+            "characters": [{"name": "Clara", "role": "filha"}],
+            "locations": [{"name": "Casa da familia"}],
+        },
+        "A mensagem atrasada",
+        300,
+    )
+
+    assert "ROTEIRO DE PRODUCAO - A mensagem atrasada" in content
+    assert "CENA 1 - GANCHO INICIAL" in content
+    assert "Indicacao para video" in content
 
 
 @pytest.mark.asyncio

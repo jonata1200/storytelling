@@ -108,12 +108,49 @@ def _fingerprint(payload: dict) -> dict:
     }
 
 
-def _character_profile(raw: dict) -> dict:
+def _profile_items(value: object) -> list[dict]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [_profile_mapping(item) for item in value]
+    if isinstance(value, dict):
+        if any(key in value for key in ("name", "nome", "title", "titulo", "description")):
+            return [_profile_mapping(value)]
+        return [_profile_mapping(item) for item in value.values()]
+    return [_profile_mapping(value)]
+
+
+def _profile_mapping(raw: object) -> dict:
+    if isinstance(raw, dict):
+        normalized = dict(raw)
+        if "name" not in normalized:
+            normalized["name"] = (
+                normalized.get("nome")
+                or normalized.get("title")
+                or normalized.get("titulo")
+            )
+        return normalized
+    text = str(raw or "").strip()
+    return {"name": text or "Item", "description": text}
+
+
+def _short_text(value: object, fallback: str, max_length: int) -> str:
+    text = str(value or fallback).strip() or fallback
+    if len(text) <= max_length:
+        return text
+    if max_length <= 3:
+        return text[:max_length]
+    return f"{text[: max_length - 3].rstrip()}..."
+
+
+def _character_profile(raw: object) -> dict:
+    raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Personagem")
+    role = _short_text(raw.get("role") or raw.get("funcao"), "personagem", 120)
     return {
         "permanent_id": raw.get("id", f"char_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
-        "role": raw.get("role", "personagem"),
+        "role": role,
         "apparent_age": raw.get("apparent_age", "adulto"),
         "body_type": raw.get("body_type", "tipo fisico comum e realista"),
         "face_shape": raw.get("face_shape", "rosto oval"),
@@ -127,13 +164,14 @@ def _character_profile(raw: dict) -> dict:
         "arc": raw.get("arc", ""),
         "visual_constraints": ["manter idade aparente", "manter cabelo", "manter roupa base"],
         "canonical_prompt": (
-            f"{name}, {raw.get('role', 'personagem')}, drama emocional realista, "
+            f"{name}, {role}, drama emocional realista, "
             "vertical video reference sheet, consistent face, consistent outfit"
         ),
     }
 
 
-def _location_profile(raw: dict) -> dict:
+def _location_profile(raw: object) -> dict:
+    raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Local")
     return {
         "permanent_id": raw.get("id", f"loc_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
@@ -148,7 +186,8 @@ def _location_profile(raw: dict) -> dict:
     }
 
 
-def _prop_profile(raw: dict) -> dict:
+def _prop_profile(raw: object) -> dict:
+    raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Objeto")
     return {
         "permanent_id": raw.get("id", f"prop_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
@@ -158,7 +197,11 @@ def _prop_profile(raw: dict) -> dict:
         "color": raw.get("color", "neutro com detalhe reconhecivel"),
         "state": raw.get("state", "usado mas preservado"),
         "owner": raw.get("owner", "protagonista"),
-        "narrative_importance": raw.get("importance", "objeto de payoff narrativo"),
+        "narrative_importance": _short_text(
+            raw.get("importance") or raw.get("narrative_importance"),
+            "objeto de payoff narrativo",
+            220,
+        ),
         "canonical_prompt": (
             f"{name}, objeto importante de drama emocional, multiple angle reference"
         ),
@@ -174,7 +217,7 @@ async def generate_visual_bible(
         return None
 
     characters: list[Character] = []
-    for raw in story_bible.payload.get("characters", []):
+    for raw in _profile_items(story_bible.payload.get("characters")):
         profile = _character_profile(raw)
         artifact = await _create_artifact(
             session, project_id, ArtifactType.CHARACTER, profile["name"], profile
@@ -201,7 +244,7 @@ async def generate_visual_bible(
         characters.append(character)
 
     locations: list[Location] = []
-    for raw in story_bible.payload.get("locations", []):
+    for raw in _profile_items(story_bible.payload.get("locations")):
         profile = _location_profile(raw)
         artifact = await _create_artifact(
             session, project_id, ArtifactType.LOCATION, profile["name"], profile
@@ -227,7 +270,7 @@ async def generate_visual_bible(
         locations.append(location)
 
     props: list[Prop] = []
-    for raw in story_bible.payload.get("props", []):
+    for raw in _profile_items(story_bible.payload.get("props")):
         profile = _prop_profile(raw)
         artifact = await _create_artifact(
             session, project_id, ArtifactType.PROP, profile["name"], profile

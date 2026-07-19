@@ -1,4 +1,8 @@
 from app.visual_bible.service import (
+    _character_profile,
+    _location_profile,
+    _profile_items,
+    _prop_profile,
     default_views_for,
     initial_view_for,
     visual_reference_prompt,
@@ -37,3 +41,28 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
         visual_reference_prompt(profile, "front_portrait")
         == "Helena, 35, expressive detective, rainy noir lighting. View: front_portrait."
     )
+
+
+def test_visual_profiles_accept_text_items_from_story_bible() -> None:
+    character = _character_profile("Clara")
+    location = _location_profile("Casa da familia")
+    prop = _prop_profile("Carta azul")
+
+    assert character["name"] == "Clara"
+    assert character["role"] == "personagem"
+    assert location["name"] == "Casa da familia"
+    assert prop["name"] == "Carta azul"
+
+
+def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:
+    items = _profile_items(
+        {
+            "protagonist": {"nome": "Clara", "funcao": "filha"},
+            "mentor": "Mae de Clara",
+        }
+    )
+
+    assert items == [
+        {"nome": "Clara", "funcao": "filha", "name": "Clara"},
+        {"name": "Mae de Clara", "description": "Mae de Clara"},
+    ]
