@@ -307,6 +307,7 @@ def _body_style() -> None:
           }
           .assistant-chat-messages { overscroll-behavior:contain; }
           .assistant-chat-bubble { white-space:pre-wrap; overflow-wrap:anywhere; }
+          .assistant-chat-user-bubble { color:#ffffff!important; }
           .assistant-chat-input .q-field__control { min-height:48px!important; height:auto!important; max-height:132px!important; }
           .assistant-chat-input .q-field__native,
           .assistant-chat-input.q-textarea textarea {
@@ -1434,6 +1435,55 @@ async def _regenerate_visual_reference_from_ui(
         ui.notify(f"Nao foi possivel gerar novamente: {exc}", color="negative")
 
 
+def _visual_library_cards_ready(summary: dict[str, Any]) -> bool:
+    return bool(summary["characters"] and summary["locations"] and summary["props"])
+
+
+def _visual_batch_requests(summary: dict[str, Any]) -> list[tuple[str, UUID, list[str]]]:
+    requests: list[tuple[str, UUID, list[str]]] = []
+    for target_kind, items in [
+        ("character", summary["characters"]),
+        ("location", summary["locations"]),
+        ("prop", summary["props"]),
+    ]:
+        for item in items:
+            existing_views = _visual_reference_views_for(summary, target_kind, item.id)
+            initial_view = initial_view_for(target_kind)
+            if initial_view not in existing_views:
+                requests.append((target_kind, item.id, [initial_view]))
+    return requests
+
+
+async def _approve_all_visual_targets_from_ui(
+    project_id: UUID,
+    requests: list[tuple[str, UUID, list[str]]],
+) -> None:
+    try:
+        created_count = 0
+        async with AsyncSessionLocal() as session:
+            for target_kind, target_id, view_types in requests:
+                references = await approve_visual_target_and_generate_views(
+                    session,
+                    project_id,
+                    target_kind,
+                    target_id,
+                    view_types,
+                )
+                if references is None:
+                    raise ValueError("um ativo visual nao foi encontrado")
+                created_count += len(references)
+        if created_count:
+            ui.notify(
+                f"{created_count} imagem(ns) criada(s) em fila para a Biblioteca Visual.",
+                color="positive",
+            )
+        else:
+            ui.notify("Todas as imagens iniciais ja estavam criadas.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        ui.notify(f"Nao foi possivel gerar as imagens em lote: {exc}", color="negative")
+
+
 async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]) -> None:
     try:
         async with AsyncSessionLocal() as session:
@@ -2046,7 +2096,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                                 "assistant-chat-bubble w-fit rounded-2xl px-4 py-3 text-sm leading-5 "
                                 + ("max-w-[88%] " if sent else "max-w-full ")
                                 + (
-                                    "acid-bg rounded-br-sm"
+                                    "acid-bg assistant-chat-user-bubble rounded-br-sm"
                                     if sent
                                     else "glass text-[#c8ccc8] rounded-bl-sm"
                                 )
@@ -2117,14 +2167,14 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                 messages.remove(pending_message)
             messages.append({"role": "assistant", "content": response})
             _save_assistant_messages(project_id, messages)
-            conversation.refresh()
             if should_reload:
-                ui.notify(response, color="positive")
                 if next_section:
                     ui.navigate.to(f"/projects/{project_id}/{next_section}")
                 else:
                     ui.navigate.reload()
-            elif next_section:
+                return
+            conversation.refresh()
+            if next_section:
                 ui.navigate.to(f"/projects/{project_id}/{next_section}")
 
         async def keep_reviewing_current_step() -> None:
@@ -2579,12 +2629,48 @@ def _entity_card(
 
 def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
     asset_map = {asset.id: asset for asset in summary.get("assets", [])}
+    cards_ready = _visual_library_cards_ready(summary)
+    batch_requests = _visual_batch_requests(summary)
     _section_title(
         "Biblioteca visual",
         "Personagens, locais e objetos canônicos do seu universo.",
         None,
         None,
     )
+    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_dialog, ui.card().classes(
+        "entity-card rounded-2xl p-7 w-[min(520px,92vw)]"
+    ):
+        with ui.row().classes("items-center gap-4"):
+            ui.spinner(size="lg").classes("acid")
+            with ui.column().classes("gap-1"):
+                ui.label("IA gerando imagens").classes("brand-type text-xl font-bold")
+                ui.label(
+                    "Os ativos estao entrando em fila, um por vez, para evitar sobrecarga da API."
+                ).classes("text-sm text-[#8d938e]")
+
+    async def approve_all_visuals() -> None:
+        batch_dialog.open()
+        await _approve_all_visual_targets_from_ui(project_id, batch_requests)
+        batch_dialog.close()
+
+    with ui.row().classes("w-full items-center justify-between gap-3"):
+        helper_text = (
+            "Crie personagens, locais e objetos antes de gerar tudo em lote."
+            if not cards_ready
+            else (
+                "Todas as imagens iniciais ja foram criadas."
+                if not batch_requests
+                else f"{len(batch_requests)} ativo(s) aguardando imagem inicial."
+            )
+        )
+        ui.label(helper_text).classes("text-sm text-[#8d938e]")
+        batch_button = ui.button(
+            "Aprovar todos e gerar imagens",
+            icon="auto_awesome",
+            on_click=approve_all_visuals,
+        ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+        if not cards_ready or not batch_requests:
+            batch_button.props("disable")
     with (
         ui.tabs()
         .classes("text-[#8d938e]")

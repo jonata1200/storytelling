@@ -50,22 +50,26 @@ CHARACTER_VIEWS = [
 LOCATION_VIEWS = ["establishing", "floor_plan", "camera_points"]
 PROP_VIEWS = ["front", "side", "top", "scale_reference"]
 VIEW_PROMPT_DETAILS = {
-    "front_portrait": "front portrait, face centered, neutral expression, eye-level camera",
-    "left_profile": "left side profile, same face and hair, clean silhouette",
-    "right_profile": "right side profile, same face and hair, clean silhouette",
-    "back_view": "back view, same outfit, hair and body proportions visible",
-    "full_body": "full body reference, head to toe, posture and base outfit visible",
-    "expression_sheet": "expression sheet with 4 emotions, same identity in every expression",
-    "pose_sheet": "pose sheet with 3 practical poses, consistent anatomy and outfit",
-    "scale_reference": "scale reference, neutral stance, clear proportions against simple backdrop",
-    "establishing": (
-        "wide establishing shot, spatial layout, lighting, entrances and main props visible"
+    "front_portrait": (
+        "retrato frontal, rosto centralizado, expressao neutra, camera na altura dos olhos"
     ),
-    "floor_plan": "top-down floor plan, room geometry, doors, windows and camera-safe areas",
-    "camera_points": "camera point reference, 3 vertical framing positions inside the location",
-    "front": "front view, object centered, material, color and recognizable details visible",
-    "side": "side view, object thickness, silhouette and construction visible",
-    "top": "top view, shape, texture and readable details visible",
+    "left_profile": "perfil esquerdo, mesmo rosto e cabelo, silhueta limpa e reconhecivel",
+    "right_profile": "perfil direito, mesmo rosto e cabelo, silhueta limpa e reconhecivel",
+    "back_view": "vista de costas, mesma roupa, cabelo e proporcoes corporais visiveis",
+    "full_body": "referencia de corpo inteiro, da cabeca aos pes, postura e figurino base visiveis",
+    "expression_sheet": "folha de expressoes com 4 emocoes, mesma identidade em todas as variacoes",
+    "pose_sheet": "folha de poses com 3 poses praticas, anatomia e figurino consistentes",
+    "scale_reference": "referencia de escala, postura neutra, proporcoes claras em fundo simples",
+    "establishing": (
+        "plano geral de apresentacao, layout espacial, luz, entradas e objetos principais visiveis"
+    ),
+    "floor_plan": (
+        "planta vista de cima, geometria do ambiente, portas, janelas e areas seguras para camera"
+    ),
+    "camera_points": "referencia de pontos de camera, 3 enquadramentos verticais dentro do local",
+    "front": "vista frontal, objeto centralizado, material, cor e detalhes reconheciveis visiveis",
+    "side": "vista lateral, espessura, silhueta e construcao do objeto visiveis",
+    "top": "vista superior, forma, textura e detalhes legiveis visiveis",
 }
 
 
@@ -139,6 +143,20 @@ def _profile_items(value: object) -> list[dict]:
     return [_profile_mapping(value)]
 
 
+def _payload_section(payload: dict, keys: tuple[str, ...]) -> object:
+    for key in keys:
+        value = payload.get(key)
+        if value:
+            return value
+    for container_key in ("visual_bible", "story_bible", "bible", "universo_visual"):
+        container = payload.get(container_key)
+        if isinstance(container, dict):
+            value = _payload_section(container, keys)
+            if value:
+                return value
+    return None
+
+
 def _profile_mapping(raw: object) -> dict:
     if isinstance(raw, dict):
         normalized = dict(raw)
@@ -192,13 +210,14 @@ def _character_profile(raw: object) -> dict:
         "arc": raw.get("arc", ""),
         "visual_constraints": ["manter idade aparente", "manter cabelo", "manter roupa base"],
         "canonical_prompt": (
-            f"Professional cinematic character design reference for {name}, {role}. "
-            f"Apparent age: {apparent_age}; body: {body_type}; face: {face_shape}; "
-            f"skin: {skin_tone}; eyes: {eyes}; hair: {hair}; base outfit: {base_outfit}; "
-            f"personality signal: {personality}; color palette: {palette}. "
-            "Realistic emotional drama, vertical 9:16 production asset, consistent identity, "
-            "repeatable face geometry, wardrobe continuity, natural skin texture, expressive "
-            "but not exaggerated acting, cinematic lighting, high-detail reference quality."
+            f"Referencia profissional de design cinematografico de personagem para {name}, {role}. "
+            f"Idade aparente: {apparent_age}; corpo: {body_type}; rosto: {face_shape}; "
+            f"pele: {skin_tone}; olhos: {eyes}; cabelo: {hair}; figurino base: {base_outfit}; "
+            f"sinal de personalidade: {personality}; paleta de cores: {palette}. "
+            "Drama emocional realista, ativo de producao vertical 9:16, identidade consistente, "
+            "geometria facial repetivel, continuidade de figurino, textura natural de pele, "
+            "atuacao expressiva sem exagero, iluminacao cinematografica, "
+            "qualidade alta de referencia."
         ),
     }
 
@@ -221,13 +240,13 @@ def _location_profile(raw: object) -> dict:
         "lighting": lighting,
         "spatial_rules": ["manter portas, janelas e moveis na mesma posicao"],
         "canonical_prompt": (
-            f"Professional cinematic location design reference for {name}. "
-            f"Story function: {description}; layout: {layout}; materials: {materials}; "
-            f"lighting plan: {lighting}; color palette: {palette}. "
-            "Realistic vertical 9:16 production environment, clear entrances and exits, "
-            "camera-safe geography, consistent furniture placement, visible depth layers, "
-            "motivated practical light sources, textured surfaces, emotionally grounded "
-            "atmosphere, ready for establishing shots and repeatable scene continuity."
+            f"Referencia profissional de design cinematografico de cenario para {name}. "
+            f"Funcao narrativa: {description}; layout: {layout}; materiais: {materials}; "
+            f"plano de iluminacao: {lighting}; paleta de cores: {palette}. "
+            "Ambiente de producao realista em vertical 9:16, entradas e saidas claras, "
+            "geografia segura para camera, posicao consistente de moveis, camadas de profundidade "
+            "visiveis, fontes de luz praticas e motivadas, superficies com textura, atmosfera "
+            "emocionalmente coerente, pronto para planos de apresentacao e continuidade de cena."
         ),
     }
 
@@ -255,13 +274,13 @@ def _prop_profile(raw: object) -> dict:
         "owner": owner,
         "narrative_importance": narrative_importance,
         "canonical_prompt": (
-            f"Professional cinematic prop design reference for {name}. "
-            f"Narrative importance: {narrative_importance}; dimensions: {dimensions}; "
-            f"material: {material}; color: {color}; condition: {state}; owner: {owner}. "
-            "Hero prop for realistic emotional drama, vertical 9:16 production reference, "
-            "recognizable silhouette, tactile surface detail, consistent markings, readable "
-            "scale in human hands, clean multi-angle asset quality, designed for close-ups "
-            "and continuity across generated images and video clips."
+            f"Referencia profissional de design cinematografico de objeto para {name}. "
+            f"Importancia narrativa: {narrative_importance}; dimensoes: {dimensions}; "
+            f"material: {material}; cor: {color}; estado: {state}; dono: {owner}. "
+            "Objeto heroico para drama emocional realista, referencia de producao vertical 9:16, "
+            "silhueta reconhecivel, detalhe tatil de superficie, marcas consistentes, escala "
+            "legivel em maos humanas, qualidade limpa de ativo multiangulo, projetado para "
+            "close-ups e continuidade entre imagens geradas e clipes de video."
         ),
     }
 
@@ -275,7 +294,13 @@ async def generate_visual_bible(
         return None
 
     characters: list[Character] = []
-    for raw in _profile_items(story_bible.payload.get("characters")):
+    character_items = _profile_items(
+        _payload_section(
+            story_bible.payload,
+            ("characters", "personagens", "cast", "personas"),
+        )
+    )
+    for raw in character_items:
         profile = _character_profile(raw)
         artifact = await _create_artifact(
             session, project_id, ArtifactType.CHARACTER, profile["name"], profile
@@ -302,7 +327,13 @@ async def generate_visual_bible(
         characters.append(character)
 
     locations: list[Location] = []
-    for raw in _profile_items(story_bible.payload.get("locations")):
+    location_items = _profile_items(
+        _payload_section(
+            story_bible.payload,
+            ("locations", "locais", "lugares", "settings", "places", "cenarios", "cenários"),
+        )
+    )
+    for raw in location_items:
         profile = _location_profile(raw)
         artifact = await _create_artifact(
             session, project_id, ArtifactType.LOCATION, profile["name"], profile
@@ -328,7 +359,21 @@ async def generate_visual_bible(
         locations.append(location)
 
     props: list[Prop] = []
-    for raw in _profile_items(story_bible.payload.get("props")):
+    prop_items = _profile_items(
+        _payload_section(
+            story_bible.payload,
+            (
+                "props",
+                "objetos",
+                "objects",
+                "items",
+                "itens",
+                "objetos_narrativos",
+                "narrative_props",
+            ),
+        )
+    )
+    for raw in prop_items:
         profile = _prop_profile(raw)
         artifact = await _create_artifact(
             session, project_id, ArtifactType.PROP, profile["name"], profile
@@ -394,8 +439,8 @@ def visual_reference_prompt(profile: dict, view_type: str) -> str:
     base_prompt = str(profile.get("canonical_prompt") or profile.get("name") or "").strip()
     view_detail = VIEW_PROMPT_DETAILS.get(view_type, view_type.replace("_", " "))
     return (
-        f"{base_prompt}. Reference view: {view_type}. {view_detail}. "
-        "Vertical 9:16 production reference, clean background, consistent visual identity."
+        f"{base_prompt}. Vista de referencia: {view_type}. {view_detail}. "
+        "Referencia de producao vertical 9:16, fundo limpo, identidade visual consistente."
     )
 
 

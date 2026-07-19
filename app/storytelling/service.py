@@ -313,9 +313,134 @@ def normalize_script_payload(
     return normalized
 
 
+def _script_scene_sections(script_content: str) -> list[dict]:
+    text = str(script_content or "")
+    pattern = re.compile(
+        r"(?im)^\s*CENA\s+0*(?P<number>\d+)(?:\s*[-:]\s*(?P<title>.+?))?\s*$"
+    )
+    matches = list(pattern.finditer(text))
+    sections: list[dict] = []
+    for index, match in enumerate(matches):
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        block = text[start:end].strip()
+        title = str(match.group("title") or "").strip()
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if not title:
+            title = next(
+                (
+                    line
+                    for line in lines
+                    if not re.match(r"(?i)^(duracao|dura[cç][aã]o|objetivo)\s*:", line)
+                ),
+                f"Cena {index + 1}",
+            )
+        duration_match = re.search(r"(?i)\bdura[cç][aã]o\s*:\s*(\d+)\s*s", block)
+        summary_match = re.search(
+            r"(?ims)^\s*(?:objetivo(?: dramatico)?|a[cç][aã]o|narracao)\s*:\s*"
+            r"(.+?)(?:\n[A-ZÁÉÍÓÚÂÊÔÃÕÇ ]+\s*:|\Z)",
+            block,
+        )
+        summary = (
+            re.sub(r"\s+", " ", summary_match.group(1)).strip()
+            if summary_match
+            else _script_block_to_text(lines[:3])
+        )
+        sections.append(
+            {
+                "scene_number": int(match.group("number") or index + 1),
+                "title": title[:180],
+                "summary": summary[:500] or title,
+                "duration_seconds": int(duration_match.group(1)) if duration_match else None,
+                "block": block,
+            }
+        )
+    return sections
+
+
+def _clip_groups_for_script_sections(
+    clip_durations: list[int], sections: list[dict]
+) -> list[list[int]]:
+    parsed_durations = [
+        int(section["duration_seconds"])
+        for section in sections
+        if section.get("duration_seconds") is not None
+    ]
+    if len(parsed_durations) != len(sections) or sum(parsed_durations) <= 0:
+        groups: list[list[int]] = [[] for _section in sections]
+        for index, duration in enumerate(clip_durations):
+            scene_index = min((index * len(sections)) // len(clip_durations), len(sections) - 1)
+            groups[scene_index].append(duration)
+        return groups
+
+    groups = []
+    clip_index = 0
+    for section_index, wanted_duration in enumerate(parsed_durations):
+        remaining_sections = len(sections) - section_index - 1
+        if section_index == len(sections) - 1:
+            groups.append(clip_durations[clip_index:])
+            break
+        group: list[int] = []
+        current = 0
+        while clip_index < len(clip_durations) - remaining_sections:
+            next_duration = clip_durations[clip_index]
+            if group and current >= wanted_duration:
+                break
+            group.append(next_duration)
+            current += next_duration
+            clip_index += 1
+        groups.append(group)
+    return groups
+
+
+def _scene_plan_from_script_sections(
+    sections: list[dict], target_duration_seconds: int
+) -> dict:
+    clip_durations = video_clip_durations(target_duration_seconds)
+    clip_groups = _clip_groups_for_script_sections(clip_durations, sections)
+    scenes: list[dict] = []
+    for scene_number, (section, durations) in enumerate(zip(sections, clip_groups, strict=True), 1):
+        shots = [
+            {
+                "shot_number": shot_number,
+                "duration_seconds": duration,
+                "narration_text": section["summary"],
+                "dialogue_text": "",
+                "action": section["summary"],
+                "emotion": "progressao dramatica",
+                "visual_composition": (
+                    "Composicao vertical 9:16 baseada nesta cena do roteiro, "
+                    "com sujeito principal, local, objeto narrativo e luz consistentes."
+                ),
+                "camera_movement": "movimento curto e realista",
+                "generation_type": "IMAGE_TO_VIDEO",
+            }
+            for shot_number, duration in enumerate(durations, 1)
+        ]
+        scenes.append(
+            {
+                "scene_number": scene_number,
+                "title": section["title"],
+                "summary": section["summary"],
+                "duration_seconds": sum(durations),
+                "shots": shots,
+            }
+        )
+    return {"scenes": scenes}
+
+
 def normalize_scene_plan_payload(payload: dict, target_duration_seconds: int) -> dict:
+    return normalize_scene_plan_payload_from_script(payload, target_duration_seconds, "")
+
+
+def normalize_scene_plan_payload_from_script(
+    payload: dict, target_duration_seconds: int, script_content: str
+) -> dict:
     content = _required_mapping(payload, "generate_scenes_and_shots")
     raw_scenes = _required_list(content, "scenes", "generate_scenes_and_shots")
+    script_sections = _script_scene_sections(script_content)
+    if len(script_sections) > len(raw_scenes):
+        return _scene_plan_from_script_sections(script_sections, target_duration_seconds)
     clip_durations = video_clip_durations(target_duration_seconds)
     flattened: list[tuple[dict, dict]] = []
 
@@ -855,9 +980,10 @@ async def generate_scenes_and_shots(
     )
 
     scenes: list[Scene] = []
-    content = normalize_scene_plan_payload(
+    content = normalize_scene_plan_payload_from_script(
         _required_mapping(result.content, "generate_scenes_and_shots"),
         script.target_duration_seconds,
+        script.content,
     )
     for scene_index, raw_scene_payload in enumerate(
         _required_list(content, "scenes", "generate_scenes_and_shots"), 1

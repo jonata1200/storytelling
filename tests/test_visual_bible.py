@@ -8,6 +8,7 @@ from app.visual_bible.models import Character, CharacterVersion
 from app.visual_bible.service import (
     _character_profile,
     _location_profile,
+    _payload_section,
     _profile_items,
     _prop_profile,
     default_views_for,
@@ -48,9 +49,10 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
 
     assert (
         visual_reference_prompt(profile, "front_portrait")
-        == "Helena, 35, expressive detective, rainy noir lighting. Reference view: "
-        "front_portrait. front portrait, face centered, neutral expression, eye-level camera. "
-        "Vertical 9:16 production reference, clean background, consistent visual identity."
+        == "Helena, 35, expressive detective, rainy noir lighting. Vista de referencia: "
+        "front_portrait. retrato frontal, rosto centralizado, expressao neutra, camera na "
+        "altura dos olhos. Referencia de producao vertical 9:16, fundo limpo, identidade "
+        "visual consistente."
     )
 
 
@@ -61,8 +63,8 @@ def test_visual_reference_prompts_are_distinct_by_view_type() -> None:
     side = visual_reference_prompt(profile, "side")
 
     assert front != side
-    assert "front view" in front
-    assert "side view" in side
+    assert "vista frontal" in front
+    assert "vista lateral" in side
 
 
 def test_visual_profiles_accept_text_items_from_story_bible() -> None:
@@ -88,12 +90,18 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     location = _location_profile({"name": "Casa da familia", "lighting": "luz fria da janela"})
     prop = _prop_profile({"name": "Carta azul", "material": "papel amassado"})
 
-    assert "Professional cinematic character design reference" in character["canonical_prompt"]
+    assert (
+        "Referencia profissional de design cinematografico de personagem"
+        in character["canonical_prompt"]
+    )
     assert "cabelo castanho curto" in character["canonical_prompt"]
-    assert "wardrobe continuity" in character["canonical_prompt"]
-    assert "Professional cinematic location design reference" in location["canonical_prompt"]
-    assert "camera-safe geography" in location["canonical_prompt"]
-    assert "Professional cinematic prop design reference" in prop["canonical_prompt"]
+    assert "continuidade de figurino" in character["canonical_prompt"]
+    assert (
+        "Referencia profissional de design cinematografico de cenario"
+        in location["canonical_prompt"]
+    )
+    assert "geografia segura para camera" in location["canonical_prompt"]
+    assert "Referencia profissional de design cinematografico de objeto" in prop["canonical_prompt"]
     assert "papel amassado" in prop["canonical_prompt"]
 
 
@@ -109,6 +117,24 @@ def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:
         {"nome": "Clara", "funcao": "filha", "name": "Clara"},
         {"name": "Mae de Clara", "description": "Mae de Clara"},
     ]
+
+
+def test_payload_section_accepts_portuguese_story_bible_keys() -> None:
+    payload = {
+        "personagens": [{"name": "Dona Celia"}],
+        "locais": [{"name": "Sala de estar"}],
+        "objetos": [{"name": "Partitura"}],
+    }
+
+    assert _payload_section(payload, ("characters", "personagens")) == payload["personagens"]
+    assert _payload_section(payload, ("locations", "locais")) == payload["locais"]
+    assert _payload_section(payload, ("props", "objetos")) == payload["objetos"]
+
+
+def test_payload_section_accepts_nested_visual_bible_keys() -> None:
+    payload = {"visual_bible": {"locais": [{"name": "Quintal"}]}}
+
+    assert _payload_section(payload, ("locations", "locais")) == [{"name": "Quintal"}]
 
 
 @pytest.mark.asyncio

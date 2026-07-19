@@ -13,6 +13,7 @@ from app.storytelling.service import (
     _shot_narration_text,
     coerce_duration_minutes,
     normalize_scene_plan_payload,
+    normalize_scene_plan_payload_from_script,
     normalize_script_payload,
     normalize_story_idea_payload,
 )
@@ -156,6 +157,40 @@ def test_visual_references_prefer_newest_image_for_same_view() -> None:
     )
 
     assert references == [newer, older]
+
+
+def test_visual_library_cards_ready_requires_all_card_types() -> None:
+    assert pages._visual_library_cards_ready(
+        {"characters": [object()], "locations": [object()], "props": [object()]}
+    )
+    assert not pages._visual_library_cards_ready(
+        {"characters": [object()], "locations": [], "props": [object()]}
+    )
+
+
+def test_visual_batch_requests_include_only_missing_initial_images() -> None:
+    character_id = uuid4()
+    location_id = uuid4()
+    prop_id = uuid4()
+    summary = {
+        "characters": [SimpleNamespace(id=character_id)],
+        "locations": [SimpleNamespace(id=location_id)],
+        "props": [SimpleNamespace(id=prop_id)],
+        "visual_refs": [
+            SimpleNamespace(
+                target_kind="character",
+                target_id=character_id,
+                view_type="front_portrait",
+            )
+        ],
+    }
+
+    requests = pages._visual_batch_requests(summary)
+
+    assert requests == [
+        ("location", location_id, ["establishing"]),
+        ("prop", prop_id, ["front"]),
+    ]
 
 
 def test_visual_card_detail_formats_character_profile_without_raw_dict() -> None:
@@ -438,6 +473,57 @@ def test_scene_plan_payload_normalizes_shots_to_seedance_duration_range() -> Non
     assert sum(shot["duration_seconds"] for shot in shots) == 60
     assert all(4 <= shot["duration_seconds"] <= 15 for shot in shots)
     assert payload["scenes"][0]["duration_seconds"] == 60
+
+
+def test_scene_plan_payload_uses_script_scene_markers_when_ai_returns_one_scene() -> None:
+    script = """CENA 1
+INT. SALA DE ESTAR - FINAL DE TARDE
+DURACAO: 60s
+OBJETIVO: Apresentar a chegada inesperada.
+
+CENA 2
+EXT. QUINTAL - NOITE
+DURACAO: 60s
+OBJETIVO: Revelar o segredo.
+"""
+    payload = normalize_scene_plan_payload_from_script(
+        {
+            "scenes": [
+                {
+                    "scene_number": 1,
+                    "title": "Cena unica",
+                    "summary": "Resumo geral.",
+                    "duration_seconds": 120,
+                    "shots": [
+                        {
+                            "shot_number": 1,
+                            "duration_seconds": 120,
+                            "narration_text": "Resumo geral.",
+                            "dialogue_text": "",
+                            "action": "Resumo geral.",
+                            "emotion": "tensao",
+                            "visual_composition": "Plano vertical.",
+                            "camera_movement": "push-in",
+                            "generation_type": "IMAGE_TO_VIDEO",
+                        }
+                    ],
+                }
+            ]
+        },
+        120,
+        script,
+    )
+
+    assert [scene["title"] for scene in payload["scenes"]] == [
+        "INT. SALA DE ESTAR - FINAL DE TARDE",
+        "EXT. QUINTAL - NOITE",
+    ]
+    assert sum(scene["duration_seconds"] for scene in payload["scenes"]) == 120
+    assert all(
+        4 <= shot["duration_seconds"] <= 15
+        for scene in payload["scenes"]
+        for shot in scene["shots"]
+    )
 
 
 def test_script_payload_builds_content_from_scene_list_when_content_is_empty() -> None:
