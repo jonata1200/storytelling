@@ -34,6 +34,11 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         "instruction": "melhore o gancho",
         "project_context": {"project": "A carta"},
         "current_script": "Roteiro atual",
+        "clip_min_seconds": 4,
+        "clip_max_seconds": 15,
+        "clip_target_seconds": 15,
+        "expected_clip_count": 20,
+        "clip_durations": "15s, 15s",
     }
 
     compiled = {
@@ -41,8 +46,9 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         for task, template in DEFAULT_TEMPLATES.items()
     }
 
-    assert '"content":"ROTEIRO DE PRODUCAO COMPLETO AQUI"' in compiled["generate_script"]
-    assert "indicacao para storyboard" in compiled["generate_script"]
+    assert '"content":"ROTEIRO-BASE COMPLETO AQUI"' in compiled["generate_script"]
+    assert "Seedance 2.0 Fast" in compiled["generate_script"]
+    assert "entre 4s e 15s" in compiled["generate_scenes_and_shots"]
     assert "indicacao para video" in compiled["revise_script"]
     assert '"scenes"' in compiled["generate_scenes_and_shots"]
     assert '"ideas"' in compiled["generate_story_ideas"]

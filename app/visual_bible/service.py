@@ -166,25 +166,39 @@ def _character_profile(raw: object) -> dict:
     raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Personagem")
     role = _short_text(raw.get("role") or raw.get("funcao"), "personagem", 120)
+    apparent_age = raw.get("apparent_age", "adulto de idade visual definida")
+    body_type = raw.get("body_type", "silhueta humana natural e reconhecivel")
+    face_shape = raw.get("face_shape", "rosto com estrutura clara e memoravel")
+    skin_tone = raw.get("skin_tone", "tom de pele natural sob luz cinematica")
+    eyes = raw.get("eyes", "olhar legivel, expressao emocional controlada")
+    hair = raw.get("hair", "cabelo com corte, volume e contorno consistentes")
+    base_outfit = raw.get("base_outfit", "figurino base simples, identificavel e repetivel")
+    palette = raw.get("palette", ["azul profundo", "cinza neutro", "dourado suave"])
+    personality = raw.get("personality", "contida, resiliente e empatica")
     return {
         "permanent_id": raw.get("id", f"char_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
         "role": role,
-        "apparent_age": raw.get("apparent_age", "adulto"),
-        "body_type": raw.get("body_type", "tipo fisico comum e realista"),
-        "face_shape": raw.get("face_shape", "rosto oval"),
-        "skin_tone": raw.get("skin_tone", "tom de pele natural"),
-        "eyes": raw.get("eyes", "olhos expressivos"),
-        "hair": raw.get("hair", "cabelo consistente com o perfil"),
-        "base_outfit": raw.get("base_outfit", "roupa simples e reconhecivel"),
-        "palette": raw.get("palette", ["azul", "cinza", "branco"]),
+        "apparent_age": apparent_age,
+        "body_type": body_type,
+        "face_shape": face_shape,
+        "skin_tone": skin_tone,
+        "eyes": eyes,
+        "hair": hair,
+        "base_outfit": base_outfit,
+        "palette": palette,
         "voice": raw.get("voice", "voz humana calorosa"),
-        "personality": raw.get("personality", "contida, resiliente e empatica"),
+        "personality": personality,
         "arc": raw.get("arc", ""),
         "visual_constraints": ["manter idade aparente", "manter cabelo", "manter roupa base"],
         "canonical_prompt": (
-            f"{name}, {role}, drama emocional realista, "
-            "vertical video reference sheet, consistent face, consistent outfit"
+            f"Professional cinematic character design reference for {name}, {role}. "
+            f"Apparent age: {apparent_age}; body: {body_type}; face: {face_shape}; "
+            f"skin: {skin_tone}; eyes: {eyes}; hair: {hair}; base outfit: {base_outfit}; "
+            f"personality signal: {personality}; color palette: {palette}. "
+            "Realistic emotional drama, vertical 9:16 production asset, consistent identity, "
+            "repeatable face geometry, wardrobe continuity, natural skin texture, expressive "
+            "but not exaggerated acting, cinematic lighting, high-detail reference quality."
         ),
     }
 
@@ -192,37 +206,62 @@ def _character_profile(raw: object) -> dict:
 def _location_profile(raw: object) -> dict:
     raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Local")
+    description = raw.get("description", raw.get("mood", "local emocional da historia"))
+    layout = raw.get("layout", "espaco pequeno com pontos de camera claros")
+    materials = raw.get("materials", ["madeira", "parede clara", "tecidos simples"])
+    palette = raw.get("palette", ["azul frio", "dourado quente", "neutros gastos"])
+    lighting = raw.get("lighting", "luz natural suave com contraste cinematografico")
     return {
         "permanent_id": raw.get("id", f"loc_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
-        "description": raw.get("description", raw.get("mood", "local emocional da historia")),
-        "layout": raw.get("layout", "espaco pequeno com pontos de camera claros"),
-        "materials": raw.get("materials", ["madeira", "parede clara", "tecidos simples"]),
-        "palette": raw.get("palette", ["azul frio", "dourado quente"]),
-        "lighting": raw.get("lighting", "luz natural suave"),
+        "description": description,
+        "layout": layout,
+        "materials": materials,
+        "palette": palette,
+        "lighting": lighting,
         "spatial_rules": ["manter portas, janelas e moveis na mesma posicao"],
-        "canonical_prompt": f"{name}, ambiente realista, vertical frame, cinematic emotional drama",
+        "canonical_prompt": (
+            f"Professional cinematic location design reference for {name}. "
+            f"Story function: {description}; layout: {layout}; materials: {materials}; "
+            f"lighting plan: {lighting}; color palette: {palette}. "
+            "Realistic vertical 9:16 production environment, clear entrances and exits, "
+            "camera-safe geography, consistent furniture placement, visible depth layers, "
+            "motivated practical light sources, textured surfaces, emotionally grounded "
+            "atmosphere, ready for establishing shots and repeatable scene continuity."
+        ),
     }
 
 
 def _prop_profile(raw: object) -> dict:
     raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Objeto")
+    dimensions = raw.get("dimensions", "pequeno, manipulavel com uma mao")
+    material = raw.get("material", "material cotidiano com textura reconhecivel")
+    color = raw.get("color", "cor neutra com detalhe visual memoravel")
+    state = raw.get("state", "usado mas preservado")
+    owner = raw.get("owner", "protagonista")
+    narrative_importance = _short_text(
+        raw.get("importance") or raw.get("narrative_importance"),
+        "objeto de payoff narrativo",
+        220,
+    )
     return {
         "permanent_id": raw.get("id", f"prop_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
-        "dimensions": raw.get("dimensions", "pequeno, manipulavel com uma mao"),
-        "material": raw.get("material", "material cotidiano"),
-        "color": raw.get("color", "neutro com detalhe reconhecivel"),
-        "state": raw.get("state", "usado mas preservado"),
-        "owner": raw.get("owner", "protagonista"),
-        "narrative_importance": _short_text(
-            raw.get("importance") or raw.get("narrative_importance"),
-            "objeto de payoff narrativo",
-            220,
-        ),
+        "dimensions": dimensions,
+        "material": material,
+        "color": color,
+        "state": state,
+        "owner": owner,
+        "narrative_importance": narrative_importance,
         "canonical_prompt": (
-            f"{name}, objeto importante de drama emocional, multiple angle reference"
+            f"Professional cinematic prop design reference for {name}. "
+            f"Narrative importance: {narrative_importance}; dimensions: {dimensions}; "
+            f"material: {material}; color: {color}; condition: {state}; owner: {owner}. "
+            "Hero prop for realistic emotional drama, vertical 9:16 production reference, "
+            "recognizable silhouette, tactile surface detail, consistent markings, readable "
+            "scale in human hands, clean multi-angle asset quality, designed for close-ups "
+            "and continuity across generated images and video clips."
         ),
     }
 

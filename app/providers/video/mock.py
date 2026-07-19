@@ -5,6 +5,11 @@ from uuid import uuid4
 
 from app.core.enums import GenerationJobStatus
 from app.providers.video.types import ProviderCapabilities, VideoRequest, VideoResult
+from app.video_generation.durations import (
+    VIDEO_CLIP_MAX_SECONDS,
+    VIDEO_CLIP_MIN_SECONDS,
+    validate_video_clip_duration,
+)
 
 
 class MockVideoProvider:
@@ -17,7 +22,7 @@ class MockVideoProvider:
             image_to_video=True,
             reference_images=True,
             first_frame=True,
-            supported_durations=[3, 4, 5, 6, 8, 10],
+            supported_durations=list(range(VIDEO_CLIP_MIN_SECONDS, VIDEO_CLIP_MAX_SECONDS + 1)),
             supported_aspect_ratios=["9:16"],
             max_reference_images=4,
         )
@@ -35,6 +40,7 @@ class MockVideoProvider:
         return None
 
     async def _generate(self, request: VideoRequest, mode: str) -> VideoResult:
+        duration_seconds = validate_video_clip_duration(request.duration_seconds)
         request.output_dir.mkdir(parents=True, exist_ok=True)
         external_job_id = f"mock-video-{uuid4().hex}"
         file_path = request.output_dir / f"{external_job_id}.mockvideo.json"
@@ -42,7 +48,7 @@ class MockVideoProvider:
             "external_job_id": external_job_id,
             "mode": mode,
             "prompt": request.prompt,
-            "duration_seconds": request.duration_seconds,
+            "duration_seconds": duration_seconds,
             "aspect_ratio": request.aspect_ratio,
             "source_image_uri": request.source_image_uri,
             "reference_uris": request.reference_uris,

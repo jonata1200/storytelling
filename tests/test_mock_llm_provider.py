@@ -2,6 +2,7 @@ import pytest
 
 from app.providers.llm.mock import MockLLMProvider
 from app.providers.llm.types import LLMRequest
+from app.video_generation.durations import VIDEO_CLIP_MAX_SECONDS, VIDEO_CLIP_MIN_SECONDS
 
 
 @pytest.mark.asyncio
@@ -41,7 +42,16 @@ async def test_mock_llm_generates_scenes_with_shots() -> None:
 
     scenes = result.content["scenes"]
     assert len(scenes) == 4
-    assert all(len(scene["shots"]) == 3 for scene in scenes)
+    shots = [shot for scene in scenes for shot in scene["shots"]]
+    assert sum(shot["duration_seconds"] for shot in shots) == 240
+    assert all(
+        VIDEO_CLIP_MIN_SECONDS <= shot["duration_seconds"] <= VIDEO_CLIP_MAX_SECONDS
+        for shot in shots
+    )
+    assert all(
+        scene["duration_seconds"] == sum(shot["duration_seconds"] for shot in scene["shots"])
+        for scene in scenes
+    )
 
 
 @pytest.mark.asyncio

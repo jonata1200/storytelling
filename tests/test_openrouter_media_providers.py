@@ -2,6 +2,8 @@ import base64
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from app.config.settings import Settings
 from app.core.enums import GenerationJobStatus
 from app.providers.image.openrouter import OpenRouterImageProvider
@@ -88,3 +90,30 @@ def test_openrouter_video_provider_downloads_completed_video(
     assert result.file_path is not None
     assert result.file_path.read_bytes() == b"fake-mp4"
     assert result.estimated_cost == "1.5"
+
+
+def test_openrouter_video_provider_declares_seedance_duration_range() -> None:
+    provider = OpenRouterVideoProvider()
+
+    assert provider.capabilities.supported_durations == list(range(4, 16))
+
+
+def test_openrouter_video_provider_rejects_invalid_duration(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    provider = OpenRouterVideoProvider()
+    monkeypatch.setattr(
+        "app.providers.video.openrouter.get_settings",
+        lambda: Settings(openrouter_api_key="key"),
+    )
+
+    with pytest.raises(ValueError, match="4 a 15"):
+        provider._generate(
+            VideoRequest(
+                prompt="camera pushes in",
+                duration_seconds=16,
+                output_dir=tmp_path,
+                model="bytedance/seedance-2.0-fast",
+            ),
+            image_to_video=False,
+        )

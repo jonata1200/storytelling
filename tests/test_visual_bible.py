@@ -76,6 +76,27 @@ def test_visual_profiles_accept_text_items_from_story_bible() -> None:
     assert prop["name"] == "Carta azul"
 
 
+def test_visual_profiles_generate_professional_canonical_prompts() -> None:
+    character = _character_profile(
+        {
+            "name": "Clara",
+            "role": "filha",
+            "hair": "cabelo castanho curto",
+            "base_outfit": "casaco verde gasto",
+        }
+    )
+    location = _location_profile({"name": "Casa da familia", "lighting": "luz fria da janela"})
+    prop = _prop_profile({"name": "Carta azul", "material": "papel amassado"})
+
+    assert "Professional cinematic character design reference" in character["canonical_prompt"]
+    assert "cabelo castanho curto" in character["canonical_prompt"]
+    assert "wardrobe continuity" in character["canonical_prompt"]
+    assert "Professional cinematic location design reference" in location["canonical_prompt"]
+    assert "camera-safe geography" in location["canonical_prompt"]
+    assert "Professional cinematic prop design reference" in prop["canonical_prompt"]
+    assert "papel amassado" in prop["canonical_prompt"]
+
+
 def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:
     items = _profile_items(
         {

@@ -12,6 +12,7 @@ from app.storytelling.service import (
     _fallback_script_content_from_bible,
     _shot_narration_text,
     coerce_duration_minutes,
+    normalize_scene_plan_payload,
     normalize_script_payload,
     normalize_story_idea_payload,
 )
@@ -388,6 +389,55 @@ def test_script_payload_accepts_common_ai_field_names() -> None:
     assert payload["target_duration_seconds"] == 420
     assert payload["word_count"] == 8
     assert payload["content"] == "Cena 1: Uma carta chega tarde demais."
+
+
+def test_script_payload_preserves_briefing_duration_over_model_output() -> None:
+    payload = normalize_script_payload(
+        {
+            "title": "A carta azul",
+            "target_duration_seconds": 999,
+            "content": "Cena 1: Uma carta chega tarde demais.",
+        },
+        default_title="A carta azul",
+        language="pt-BR",
+        target_duration_seconds=420,
+    )
+
+    assert payload["target_duration_seconds"] == 420
+
+
+def test_scene_plan_payload_normalizes_shots_to_seedance_duration_range() -> None:
+    payload = normalize_scene_plan_payload(
+        {
+            "scenes": [
+                {
+                    "scene_number": 1,
+                    "title": "Cena longa",
+                    "summary": "Clara entende a carta.",
+                    "duration_seconds": 60,
+                    "shots": [
+                        {
+                            "shot_number": 1,
+                            "duration_seconds": 60,
+                            "narration_text": "Clara abre a carta.",
+                            "dialogue_text": "",
+                            "action": "Clara abre a carta diante da janela.",
+                            "emotion": "descoberta",
+                            "visual_composition": "Plano vertical com carta e rosto.",
+                            "camera_movement": "push-in lento",
+                            "generation_type": "IMAGE_TO_VIDEO",
+                        }
+                    ],
+                }
+            ]
+        },
+        60,
+    )
+
+    shots = [shot for scene in payload["scenes"] for shot in scene["shots"]]
+    assert sum(shot["duration_seconds"] for shot in shots) == 60
+    assert all(4 <= shot["duration_seconds"] <= 15 for shot in shots)
+    assert payload["scenes"][0]["duration_seconds"] == 60
 
 
 def test_script_payload_builds_content_from_scene_list_when_content_is_empty() -> None:

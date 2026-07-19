@@ -8,6 +8,11 @@ from app.generation.models import PromptExecution, PromptTemplate
 from app.generation.prompt_compiler import compile_prompt
 from app.providers.llm.mock import MockLLMProvider
 from app.providers.llm.types import LLMProvider, LLMRequest, LLMResult
+from app.video_generation.durations import (
+    VIDEO_CLIP_MAX_SECONDS,
+    VIDEO_CLIP_MIN_SECONDS,
+    VIDEO_CLIP_TARGET_SECONDS,
+)
 
 DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
     "generate_story_ideas": "Generate Story Ideas",
@@ -37,32 +42,42 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "timeline, relationships, continuity_rules, audio_style e export_profile."
     ),
     "generate_script": (
-        "Crie um roteiro de producao audiovisual em {language} para uma historia vertical com "
-        "duracao alvo de {target_duration_seconds}s. Use a Story Bible em {story_bible}. "
-        "O roteiro deve servir diretamente para personagens, storyboard e video. "
-        "Organize em 4 a 6 cenas numeradas, cada uma com duracao aproximada, cabecalho "
-        "INT./EXT. + local + periodo, objetivo dramatico, personagens em cena, local, "
-        "objetos importantes, elementos visuais, acao filmavel no presente, narracao separada "
-        "de dialogos, dialogos curtos com nomes em caixa alta, indicacao para storyboard "
-        "e indicacao para video com movimento de camera e ritmo. "
-        "Evite descricoes abstratas sem acao visual. Inclua gancho inicial, virada, climax "
-        "e payoff emocional. "
+        "Crie um roteiro-base profissional em {language} para uma historia vertical 9:16 "
+        "com duracao total fixa de {target_duration_seconds}s. Use a Story Bible em "
+        "{story_bible}. A etapa de video usa Seedance 2.0 Fast, portanto os planos finais "
+        "serao clipes independentes de {clip_min_seconds}s a {clip_max_seconds}s, com alvo "
+        "pratico de {clip_target_seconds}s por clipe. Escreva o roteiro para sustentar "
+        "aproximadamente {expected_clip_count} clipes, sem tentar colocar um plano unico "
+        "mais longo que esse limite. "
+        "Organize em 4 a 6 cenas macro numeradas. Em cada cena inclua apenas: cabecalho "
+        "INT./EXT. + local + periodo, duracao aproximada da cena, objetivo dramatico, "
+        "personagens presentes, local, objetos narrativos, acao filmavel no presente, "
+        "narracao quando houver, dialogos curtos com nomes em caixa alta, virada ou "
+        "microgancho da cena. Evite exposicao longa, adjetivos abstratos e listas tecnicas "
+        "que pertencem ao storyboard. Inclua gancho inicial, escalada, virada, climax e "
+        "payoff emocional dentro da duracao informada. "
         "Responda somente JSON neste formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
-        '"word_count":650,"content":"ROTEIRO DE PRODUCAO COMPLETO AQUI"}}'
+        '"word_count":650,"content":"ROTEIRO-BASE COMPLETO AQUI"}}'
     ),
     "generate_scenes_and_shots": (
-        "Divida o roteiro de producao em {script} em cenas e planos para duracao total de "
-        "{target_duration_seconds}s. Extraia de cada cena personagens, locais, objetos, "
-        "acao filmavel, narracao, dialogo, indicacoes de storyboard e indicacoes de video. "
-        "Cada plano deve ser util para gerar imagem/video: visual_composition deve descrever "
-        "enquadramento vertical, personagem/objeto principal, ambiente e luz; camera_movement "
-        "deve orientar movimento realista; action deve ser visivel e especifica. "
+        "Divida o roteiro em {script} em cenas e planos prontos para geracao de video "
+        "vertical 9:16. A duracao total obrigatoria e {target_duration_seconds}s. "
+        "A etapa de video usa Seedance 2.0 Fast: cada plano deve ter entre "
+        "{clip_min_seconds}s e {clip_max_seconds}s. Use exatamente {expected_clip_count} "
+        "planos com esta distribuicao de duracao, na ordem: {clip_durations}. "
+        "A soma dos planos precisa ser exatamente {target_duration_seconds}s. "
+        "Cenas podem agrupar varios planos; duration_seconds de cada cena deve ser a soma "
+        "dos seus planos. Extraia personagens, locais, objetos, acao filmavel, narracao e "
+        "dialogo de cada trecho. visual_composition deve descrever enquadramento vertical, "
+        "sujeito principal, ambiente, luz, profundidade e referencia de continuidade. "
+        "camera_movement deve orientar movimento realista compativel com clipe curto. "
+        "action deve ser visivel, especifica e executavel em uma unica tomada curta. "
         "narration_text deve ser sempre uma string nao vazia; se nao houver narrador, use "
         "uma descricao curta da acao visual do plano. dialogue_text pode ser string vazia. "
         "Responda somente JSON neste formato exato: "
         '{{"scenes":[{{"scene_number":1,"title":"...","summary":"...",'
-        '"duration_seconds":75,"shots":[{{"shot_number":1,"duration_seconds":25,'
+        '"duration_seconds":45,"shots":[{{"shot_number":1,"duration_seconds":15,'
         '"narration_text":"...","dialogue_text":"","action":"...","emotion":"...",'
         '"visual_composition":"...","camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}}]}}]}}'
     ),
@@ -81,6 +96,12 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         '"word_count":650,"content":"ROTEIRO DE PRODUCAO REVISADO COMPLETO AQUI"}}'
     ),
     "director_agent_chat": "{prompt}",
+}
+
+DEFAULT_TEMPLATE_VARIABLES: dict[str, int] = {
+    "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
+    "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
+    "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
 }
 
 
@@ -156,6 +177,7 @@ async def run_structured_generation(
     fallback_on_runtime_error: bool = False,
 ) -> tuple[LLMResult, PromptExecution]:
     template = await get_or_create_prompt_template(session, task)
+    variables = DEFAULT_TEMPLATE_VARIABLES | variables
     prompt = compile_prompt(template.template_text, variables)
     started = perf_counter()
     request = LLMRequest(

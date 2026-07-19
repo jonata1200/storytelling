@@ -11,6 +11,11 @@ from app.config.settings import get_settings
 from app.core.enums import GenerationJobStatus
 from app.providers.media_utils import local_uri_to_data_url
 from app.providers.video.types import ProviderCapabilities, VideoRequest, VideoResult
+from app.video_generation.durations import (
+    VIDEO_CLIP_MAX_SECONDS,
+    VIDEO_CLIP_MIN_SECONDS,
+    validate_video_clip_duration,
+)
 
 
 class OpenRouterVideoProvider:
@@ -24,7 +29,7 @@ class OpenRouterVideoProvider:
             reference_images=True,
             first_frame=True,
             native_audio=True,
-            supported_durations=[3, 4, 5, 6, 8, 10],
+            supported_durations=list(range(VIDEO_CLIP_MIN_SECONDS, VIDEO_CLIP_MAX_SECONDS + 1)),
             supported_aspect_ratios=["9:16", "16:9", "1:1", "4:3", "3:4"],
             max_reference_images=4,
         )
@@ -47,11 +52,12 @@ class OpenRouterVideoProvider:
         settings = get_settings()
         if not settings.openrouter_api_key:
             raise RuntimeError("OPENROUTER_API_KEY nao configurada")
+        duration_seconds = validate_video_clip_duration(request.duration_seconds)
 
         body: dict[str, Any] = {
             "model": request.model,
             "prompt": request.prompt,
-            "duration": max(1, int(request.duration_seconds)),
+            "duration": duration_seconds,
             "aspect_ratio": request.aspect_ratio,
             "generate_audio": False,
         }

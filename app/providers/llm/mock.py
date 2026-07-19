@@ -1,4 +1,5 @@
 from app.providers.llm.types import LLMRequest, LLMResult
+from app.video_generation.durations import video_clip_durations
 
 
 class MockLLMProvider:
@@ -150,9 +151,17 @@ class MockLLMProvider:
         bible = variables.get("story_bible", {})
         title = str(bible.get("title") or "Historia")
         language = str(variables.get("language") or "pt-BR")
+        target_duration_seconds = int(variables.get("target_duration_seconds") or 240)
+        scene_count = 5
+        base_duration = target_duration_seconds // scene_count
+        remainder = target_duration_seconds % scene_count
+        scene_durations = [
+            base_duration + 1 if index < remainder else base_duration
+            for index in range(scene_count)
+        ]
         content = (
             f"TITULO: {title}\n\n"
-            "CENA 01 - INT. CASA DA FAMILIA - FIM DE TARDE - 45s\n"
+            f"CENA 01 - INT. CASA DA FAMILIA - FIM DE TARDE - {scene_durations[0]}s\n"
             "OBJETIVO DRAMATICO: Apresentar Clara e a pista que rompe a rotina.\n"
             "PERSONAGENS: CLARA.\n"
             "LOCAL: sala simples, fotografias antigas, luz fria pela janela.\n"
@@ -166,8 +175,9 @@ class MockLLMProvider:
             "Isso nao podia estar aqui.\n"
             "INDICACAO PARA STORYBOARD: close na carta, push-in no rosto de Clara, "
             "corte para o porta-retratos.\n"
-            "INDICACAO PARA VIDEO: movimento lento de aproximacao, ritmo suspenso.\n\n"
-            "CENA 02 - EXT. RUA ESTREITA - NOITE - 70s\n"
+            "INDICACAO PARA VIDEO: dividir em clipes curtos de ate 15s, "
+            "movimento lento de aproximacao, ritmo suspenso.\n\n"
+            f"CENA 02 - EXT. RUA ESTREITA - NOITE - {scene_durations[1]}s\n"
             "OBJETIVO DRAMATICO: Transformar a pista em busca ativa.\n"
             "PERSONAGENS: CLARA.\n"
             "LOCAL: rua estreita, portas fechadas, postes falhando.\n"
@@ -179,8 +189,8 @@ class MockLLMProvider:
             "DIALOGO: \n"
             "INDICACAO PARA STORYBOARD: plano geral vertical da rua, travelling curto, "
             "close da carta no bolso.\n"
-            "INDICACAO PARA VIDEO: camera acompanha Clara por tras, cortes curtos.\n\n"
-            "CENA 03 - INT. SALA DA FAMILIA - MADRUGADA - 85s\n"
+            "INDICACAO PARA VIDEO: camera acompanha Clara por tras em blocos curtos.\n\n"
+            f"CENA 03 - INT. SALA DA FAMILIA - MADRUGADA - {scene_durations[2]}s\n"
             "OBJETIVO DRAMATICO: Revelar que a culpa estava no lugar errado.\n"
             "PERSONAGENS: CLARA.\n"
             "LOCAL: sala da familia, luz de abajur, parede de fotografias.\n"
@@ -195,7 +205,7 @@ class MockLLMProvider:
             "INDICACAO PARA STORYBOARD: close no texto da carta, contra-plongee leve, "
             "corte para Clara respirando fundo.\n"
             "INDICACAO PARA VIDEO: push-in lento no climax, pausa antes do dialogo.\n\n"
-            "CENA 04 - INT. CASA DA FAMILIA - AMANHECER - 100s\n"
+            f"CENA 04 - INT. CASA DA FAMILIA - AMANHECER - {scene_durations[3]}s\n"
             "OBJETIVO DRAMATICO: Entregar o payoff emocional e abrir reconciliacao.\n"
             "PERSONAGENS: CLARA.\n"
             "LOCAL: mesma sala, agora com luz quente do amanhecer.\n"
@@ -207,12 +217,24 @@ class MockLLMProvider:
             "DIALOGO: \n"
             "INDICACAO PARA STORYBOARD: detalhe da fotografia, plano medio de Clara, "
             "fade para a janela iluminada.\n"
-            "INDICACAO PARA VIDEO: camera fixa, movimento minimo, ritmo contemplativo."
+            "INDICACAO PARA VIDEO: camera fixa, movimento minimo, ritmo contemplativo.\n\n"
+            f"CENA 05 - EXT. FRENTE DA CASA - MANHA - {scene_durations[4]}s\n"
+            "OBJETIVO DRAMATICO: Fechar com imagem de consequencia e continuidade.\n"
+            "PERSONAGENS: CLARA.\n"
+            "LOCAL: frente da casa, rua silenciosa, primeira luz do dia.\n"
+            "OBJETOS IMPORTANTES: carta azul guardada no bolso.\n"
+            "ELEMENTOS VISUAIS: luz quente, porta aberta, sombra ficando para tras.\n"
+            "ACAO: Clara sai da casa sem esconder a carta, pronta para falar a verdade.\n"
+            "NARRACAO: O passado nao muda, mas o proximo passo finalmente pertence a ela.\n"
+            "DIALOGO: \n"
+            "INDICACAO PARA STORYBOARD: plano vertical de saida, detalhe da carta, "
+            "ultimo close sereno.\n"
+            "INDICACAO PARA VIDEO: caminhada curta, camera recua suavemente."
         )
         return {
             "title": title,
             "language": language,
-            "target_duration_seconds": int(variables.get("target_duration_seconds") or 240),
+            "target_duration_seconds": target_duration_seconds,
             "word_count": len(content.split()),
             "content": content,
         }
@@ -239,55 +261,45 @@ class MockLLMProvider:
 
     def _scenes_and_shots(self, variables: dict) -> dict:
         total_duration = int(variables.get("target_duration_seconds") or 240)
-        scene_duration = max(30, total_duration // 4)
+        durations = video_clip_durations(total_duration)
+        scene_specs = [
+            ("O gancho", "Uma pista rompe a rotina da protagonista.", "curiosidade"),
+            ("A busca", "Ela segue rastros que a familia evitava.", "ansiedade"),
+            ("A revelacao", "O segredo muda o sentido do abandono.", "choque"),
+            ("O payoff", "A verdade permite uma reconciliacao possivel.", "catarse"),
+        ]
+        grouped: list[list[int]] = [[] for _ in scene_specs]
+        for index, duration in enumerate(durations):
+            scene_index = min((index * len(scene_specs)) // len(durations), len(scene_specs) - 1)
+            grouped[scene_index].append(duration)
         return {
             "scenes": [
                 {
                     "scene_number": index,
                     "title": title,
                     "summary": summary,
-                    "duration_seconds": scene_duration,
+                    "duration_seconds": sum(scene_durations),
                     "shots": [
                         {
-                            "shot_number": 1,
-                            "duration_seconds": scene_duration // 3,
+                            "shot_number": shot_index,
+                            "duration_seconds": duration,
                             "narration_text": summary,
                             "dialogue_text": "",
-                            "action": "Apresentar informacao visual essencial.",
+                            "action": "Apresentar informacao visual essencial em tomada curta.",
                             "emotion": emotion,
-                            "visual_composition": "Plano vertical com rosto e objeto em destaque.",
-                            "camera_movement": "push-in lento",
-                            "generation_type": "ANIMATED_STILL",
-                        },
-                        {
-                            "shot_number": 2,
-                            "duration_seconds": scene_duration // 3,
-                            "narration_text": "A tensao cresce sem explicar demais.",
-                            "dialogue_text": "",
-                            "action": "Mostrar reacao e microgancho.",
-                            "emotion": emotion,
-                            "visual_composition": "Close emocional com fundo reconhecivel.",
-                            "camera_movement": "pan curto",
-                            "generation_type": "IMAGE_TO_VIDEO",
-                        },
-                        {
-                            "shot_number": 3,
-                            "duration_seconds": scene_duration - 2 * (scene_duration // 3),
-                            "narration_text": "A cena termina prometendo uma revelacao.",
-                            "dialogue_text": "",
-                            "action": "Fechar com detalhe visual.",
-                            "emotion": emotion,
-                            "visual_composition": "Objeto narrativo ocupando o terco inferior.",
-                            "camera_movement": "zoom suave",
+                            "visual_composition": (
+                                "Plano vertical 9:16 com rosto, objeto narrativo, "
+                                "ambiente reconhecivel e luz consistente."
+                            ),
+                            "camera_movement": "push-in lento e realista",
                             "generation_type": "CAMERA_ZOOM",
-                        },
+                        }
+                        for shot_index, duration in enumerate(scene_durations, 1)
                     ],
                 }
-                for index, title, summary, emotion in [
-                    (1, "O gancho", "Uma pista rompe a rotina da protagonista.", "curiosidade"),
-                    (2, "A busca", "Ela segue rastros que a familia evitava.", "ansiedade"),
-                    (3, "A revelacao", "O segredo muda o sentido do abandono.", "choque"),
-                    (4, "O payoff", "A verdade permite uma reconciliacao possivel.", "catarse"),
-                ]
+                for index, ((title, summary, emotion), scene_durations) in enumerate(
+                    zip(scene_specs, grouped, strict=True), 1
+                )
+                if scene_durations
             ]
         }

@@ -21,6 +21,14 @@ from app.storytelling.models import (
     StoryIdea,
 )
 from app.storytelling.schemas import BriefingCreate
+from app.video_generation.durations import (
+    VIDEO_CLIP_MAX_SECONDS,
+    VIDEO_CLIP_MIN_SECONDS,
+    VIDEO_CLIP_TARGET_SECONDS,
+    format_clip_durations,
+    validate_video_clip_duration,
+    video_clip_durations,
+)
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
 
@@ -227,11 +235,17 @@ def _fallback_script_content_from_bible(
     characters = _script_block_to_text(story_bible_payload.get("characters"))
     locations = _script_block_to_text(story_bible_payload.get("locations"))
     props = _script_block_to_text(story_bible_payload.get("props"))
+    clip_count = len(video_clip_durations(target_duration_seconds))
     scene_duration = max(30, target_duration_seconds // 5)
     return "\n\n".join(
         [
             f"ROTEIRO DE PRODUCAO - {title}",
             f"Duracao alvo: {target_duration_seconds}s",
+            (
+                "Planejamento de video: dividir depois em "
+                f"{clip_count} clipes de {VIDEO_CLIP_MIN_SECONDS}s a "
+                f"{VIDEO_CLIP_MAX_SECONDS}s para Seedance 2.0 Fast."
+            ),
             f"Logline: {logline or title}",
             f"Tema: {theme or 'transformacao emocional'}",
             f"Tom: {tone or 'cinematico e emocional'}",
@@ -291,14 +305,108 @@ def normalize_script_payload(
     normalized = dict(payload)
     normalized.setdefault("title", default_title)
     normalized.setdefault("language", language)
-    normalized["target_duration_seconds"] = _coerce_positive_int(
-        normalized.get("target_duration_seconds"), target_duration_seconds
-    )
+    normalized["target_duration_seconds"] = target_duration_seconds
     normalized["content"] = _script_content_from_payload(normalized)
     normalized["word_count"] = _coerce_positive_int(
         normalized.get("word_count"), len(normalized["content"].split())
     )
     return normalized
+
+
+def normalize_scene_plan_payload(payload: dict, target_duration_seconds: int) -> dict:
+    content = _required_mapping(payload, "generate_scenes_and_shots")
+    raw_scenes = _required_list(content, "scenes", "generate_scenes_and_shots")
+    clip_durations = video_clip_durations(target_duration_seconds)
+    flattened: list[tuple[dict, dict]] = []
+
+    for scene_index, raw_scene in enumerate(raw_scenes, 1):
+        scene = dict(
+            _required_mapping(raw_scene, f"generate_scenes_and_shots.scenes[{scene_index}]")
+        )
+        for shot_index, raw_shot in enumerate(
+            _required_list(scene, "shots", f"generate_scenes_and_shots.scenes[{scene_index}]"),
+            1,
+        ):
+            shot = dict(
+                _required_mapping(
+                    raw_shot,
+                    f"generate_scenes_and_shots.scenes[{scene_index}].shots[{shot_index}]",
+                )
+            )
+            flattened.append((scene, shot))
+
+    if not flattened:
+        raise GenerationOutputError("generate_scenes_and_shots: missing shots")
+
+    if len(flattened) < len(clip_durations):
+        last_scene, last_shot = flattened[-1]
+        for _index in range(len(clip_durations) - len(flattened)):
+            continuation = dict(last_shot)
+            continuation["narration_text"] = (
+                str(continuation.get("narration_text") or continuation.get("action") or "")
+                + " Continuidade visual do momento anterior."
+            ).strip()
+            continuation["action"] = (
+                str(continuation.get("action") or "A acao continua em nova tomada curta.")
+                + " A emocao evolui sem quebrar a continuidade."
+            ).strip()
+            flattened.append((last_scene, continuation))
+    elif len(flattened) > len(clip_durations):
+        selected = flattened[: len(clip_durations)]
+        extras = flattened[len(clip_durations) :]
+        _last_scene, last_shot = selected[-1]
+        extra_actions = [
+            str(extra_shot.get("action") or "").strip()
+            for _extra_scene, extra_shot in extras
+            if str(extra_shot.get("action") or "").strip()
+        ]
+        if extra_actions:
+            last_shot["action"] = (
+                str(last_shot.get("action") or "").strip()
+                + " "
+                + " ".join(extra_actions)
+            ).strip()
+        flattened = selected
+
+    groups: list[tuple[dict, list[dict]]] = []
+    for (scene, shot), duration in zip(flattened, clip_durations, strict=True):
+        validate_video_clip_duration(duration)
+        if not groups or groups[-1][0] is not scene:
+            groups.append((scene, []))
+        shot["duration_seconds"] = duration
+        shot["shot_number"] = len(groups[-1][1]) + 1
+        shot.setdefault("narration_text", str(shot.get("action") or "Acao visual do plano."))
+        shot.setdefault("dialogue_text", "")
+        shot.setdefault("action", str(shot.get("narration_text") or "Acao visual do plano."))
+        shot.setdefault("emotion", "tensao emocional")
+        shot.setdefault(
+            "visual_composition",
+            "Composicao vertical 9:16 com sujeito principal, ambiente e luz definidos.",
+        )
+        shot.setdefault("camera_movement", "movimento suave e realista")
+        shot.setdefault("generation_type", "IMAGE_TO_VIDEO")
+        groups[-1][1].append(shot)
+
+    normalized_scenes: list[dict] = []
+    for scene_number, (scene, shots) in enumerate(groups, 1):
+        scene = dict(scene)
+        scene["scene_number"] = scene_number
+        scene.setdefault("title", f"Cena {scene_number}")
+        scene.setdefault("summary", _shot_narration_text(shots[0], f"scene[{scene_number}]"))
+        scene["shots"] = shots
+        scene["duration_seconds"] = sum(int(shot["duration_seconds"]) for shot in shots)
+        normalized_scenes.append(scene)
+
+    total = sum(
+        int(shot["duration_seconds"])
+        for scene in normalized_scenes
+        for shot in scene["shots"]
+    )
+    if total != target_duration_seconds:
+        raise GenerationOutputError(
+            "generate_scenes_and_shots: shot durations do not match target duration"
+        )
+    return {"scenes": normalized_scenes}
 
 
 def _coerce_positive_int(value: object, default: int) -> int:
@@ -583,10 +691,16 @@ async def generate_script(
         return None
 
     target_duration_seconds = int(briefing.desired_duration_minutes * Decimal("60"))
+    clip_durations = video_clip_durations(target_duration_seconds)
     variables = {
         "story_bible": story_bible.payload,
         "language": briefing.language,
         "target_duration_seconds": target_duration_seconds,
+        "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
+        "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
+        "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
+        "expected_clip_count": len(clip_durations),
+        "clip_durations": format_clip_durations(clip_durations),
     }
     provider, model = await llm_provider_for_task(session, project_id, "generate_script")
     result, _execution = await run_structured_generation(
@@ -659,6 +773,9 @@ async def revise_script(
         "title": script.title,
         "language": script.language,
         "target_duration_seconds": script.target_duration_seconds,
+        "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
+        "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
+        "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
         "current_script": script.content,
         "instruction": instruction,
         "project_context": project_context or {},
@@ -718,6 +835,7 @@ async def generate_scenes_and_shots(
     if project is None or script is None or script.project_id != project_id:
         return None
 
+    clip_durations = video_clip_durations(script.target_duration_seconds)
     provider, model = await llm_provider_for_task(session, project_id, "generate_scenes_and_shots")
     result, _execution = await run_structured_generation(
         session,
@@ -727,12 +845,20 @@ async def generate_scenes_and_shots(
         {
             "script": script.content,
             "target_duration_seconds": script.target_duration_seconds,
+            "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
+            "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
+            "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
+            "expected_clip_count": len(clip_durations),
+            "clip_durations": format_clip_durations(clip_durations),
         },
         model=model,
     )
 
     scenes: list[Scene] = []
-    content = _required_mapping(result.content, "generate_scenes_and_shots")
+    content = normalize_scene_plan_payload(
+        _required_mapping(result.content, "generate_scenes_and_shots"),
+        script.target_duration_seconds,
+    )
     for scene_index, raw_scene_payload in enumerate(
         _required_list(content, "scenes", "generate_scenes_and_shots"), 1
     ):
