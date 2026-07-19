@@ -9,6 +9,7 @@ class ImageGenerationRequest(BaseModel):
     target_id: str
     view_type: str
     output_dir: Path
+    aspect_ratio: str = "9:16"
     negative_prompt: str | None = None
     references: list[str] = Field(default_factory=list)
     model: str = "mock-image"

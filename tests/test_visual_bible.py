@@ -15,6 +15,7 @@ from app.visual_bible.service import (
     initial_view_for,
     regenerate_visual_reference,
     update_visual_target_prompt,
+    visual_reference_aspect_ratio,
     visual_reference_prompt,
 )
 
@@ -50,10 +51,14 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
     assert (
         visual_reference_prompt(profile, "front_portrait")
         == "Helena, 35, expressive detective, rainy noir lighting. Vista de referencia: "
-        "front_portrait. retrato frontal, rosto centralizado, expressao neutra, camera na "
-        "altura dos olhos. Manter identidade unica do personagem, figurino exclusivo, "
-        "proporcoes, cabelo e paleta consistentes em todas as vistas. Referencia de "
-        "producao vertical 9:16, fundo limpo, identidade visual consistente."
+        "front_portrait. imagem inicial do personagem em pe, corpo inteiro, vista frontal, "
+        "pose neutra, bracos relaxados, corpo dos pes ao topo da cabeca totalmente visivel. "
+        "Imagem inicial obrigatoria no estilo fotografia de referencia de elenco: personagem "
+        "em pe, corpo inteiro, vista frontal, pose neutra, olhando para a camera, fundo cinza "
+        "neutro de estudio, iluminacao suave, uma unica pessoa, sem cenario, sem objetos "
+        "extras, corpo inteiro enquadrado dos pes ao topo da cabeca, sem cortar cabeca, "
+        "pes ou maos. Proporcao obrigatoria: 9:16. Fundo limpo, identidade visual "
+        "consistente."
     )
 
 
@@ -92,17 +97,16 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     prop = _prop_profile({"name": "Carta azul", "material": "papel amassado"})
 
     assert (
-        "Referencia profissional de design cinematografico de personagem"
-        in character["canonical_prompt"]
+        "Fotorrealista, hiper realista, foto de uma pessoa" in character["canonical_prompt"]
     )
     assert "cabelo castanho curto" in character["canonical_prompt"]
-    assert "continuidade de figurino" in character["canonical_prompt"]
+    assert "Figurino base exclusivo" in character["canonical_prompt"]
     assert (
-        "Referencia profissional de design cinematografico de cenario"
+        "Fotorrealista, hiper realista, fotografia de arquitetura"
         in location["canonical_prompt"]
     )
-    assert "geografia segura para camera" in location["canonical_prompt"]
-    assert "Referencia profissional de design cinematografico de objeto" in prop["canonical_prompt"]
+    assert "Nenhuma pessoa presente" in location["canonical_prompt"]
+    assert "Fotorrealista, hiper realista, fotografia de produto" in prop["canonical_prompt"]
     assert "papel amassado" in prop["canonical_prompt"]
 
 
@@ -115,6 +119,30 @@ def test_character_defaults_are_distinct_by_name() -> None:
     assert "nao reutilizar roupa" in " ".join(clara["visual_constraints"])
 
 
+def test_character_initial_reference_uses_full_body_gray_background() -> None:
+    character = _character_profile({"name": "Dona Celia"})
+
+    prompt = visual_reference_prompt(character, "front_portrait")
+
+    assert "personagem em pe" in prompt
+    assert "corpo inteiro" in prompt
+    assert "fundo cinza neutro de estudio" in prompt
+    assert "sem cortar cabeca, pes ou maos" in prompt
+    assert "Proporcao obrigatoria: 9:16" in prompt
+
+
+def test_character_multi_view_references_use_white_background_and_angles() -> None:
+    character = _character_profile({"name": "Dona Celia"})
+
+    prompt = visual_reference_prompt(character, "left_profile")
+
+    assert "fundo branco puro de estudio" in prompt
+    assert "vista lateral esquerda de corpo inteiro" in prompt
+    assert "angulos diferentes" in prompt
+    assert "mantendo exatamente o mesmo rosto" in prompt
+    assert "Proporcao obrigatoria: 16:9" in prompt
+
+
 def test_location_reference_prompt_forbids_people() -> None:
     location = _location_profile({"name": "Sala de estar"})
 
@@ -123,6 +151,7 @@ def test_location_reference_prompt_forbids_people() -> None:
     assert "Cenario vazio obrigatorio" in prompt
     assert "nao incluir pessoas" in prompt
     assert "sem personagens" in prompt
+    assert "Proporcao obrigatoria: 16:9" in prompt
 
 
 def test_prop_reference_prompt_requires_white_background_and_object_focus() -> None:
@@ -134,6 +163,18 @@ def test_prop_reference_prompt_requires_white_background_and_object_focus() -> N
     assert "objeto inteiro e centralizado" in prompt
     assert "sem pessoas" in prompt
     assert "sem maos" in prompt
+    assert "Proporcao obrigatoria: 1:1" in prompt
+
+
+def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:
+    character = _character_profile({"name": "Dona Celia"})
+    location = _location_profile({"name": "Sala de estar"})
+    prop = _prop_profile({"name": "Partitura"})
+
+    assert visual_reference_aspect_ratio(character, "front_portrait") == "9:16"
+    assert visual_reference_aspect_ratio(character, "left_profile") == "16:9"
+    assert visual_reference_aspect_ratio(location, "establishing") == "16:9"
+    assert visual_reference_aspect_ratio(prop, "front") == "1:1"
 
 
 def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:

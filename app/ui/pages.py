@@ -1954,6 +1954,27 @@ def _append_assistant_message_to_chat(project_id: UUID, content: str) -> None:
     nicegui_app.storage.user["project_assistant_messages"] = store
 
 
+def _safe_refresh(refreshable: Any) -> None:
+    try:
+        refreshable.refresh()
+    except RuntimeError as exc:
+        if "parent element this slot belongs to has been deleted" not in str(exc).lower():
+            raise
+
+
+def _safe_client_navigation(client: Any, target: str | None = None) -> None:
+    try:
+        if getattr(client, "is_deleted", False):
+            return
+        if target:
+            client.open(target)
+        else:
+            client.run_javascript("history.go(0)")
+    except RuntimeError as exc:
+        if "parent element this slot belongs to has been deleted" not in str(exc).lower():
+            raise
+
+
 def _sync_ai_action_events_to_chat(project_id: UUID, summary: dict[str, Any]) -> None:
     ai_action = _project_ai_action(summary)
     raw_events = ai_action.get("events", [])
@@ -2110,6 +2131,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
         async def send_message(
             text: str | None = None, next_section: str | None = None
         ) -> None:
+            client = prompt.client
             user_message = (text or prompt.value or "").strip()
             if not user_message:
                 return
@@ -2121,7 +2143,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             messages.append(pending_message)
             _save_assistant_messages(project_id, messages)
             prompt.value = ""
-            conversation.refresh()
+            _safe_refresh(conversation)
             should_reload = False
 
             async def report_progress(content: str) -> None:
@@ -2141,7 +2163,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                     {"role": "assistant", "content": progress_message},
                 )
                 _save_assistant_messages(project_id, messages)
-                conversation.refresh()
+                _safe_refresh(conversation)
                 await asyncio.sleep(0)
 
             try:
@@ -2169,13 +2191,13 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             _save_assistant_messages(project_id, messages)
             if should_reload:
                 if next_section:
-                    ui.navigate.to(f"/projects/{project_id}/{next_section}")
+                    _safe_client_navigation(client, f"/projects/{project_id}/{next_section}")
                 else:
-                    ui.navigate.reload()
+                    _safe_client_navigation(client)
                 return
-            conversation.refresh()
+            _safe_refresh(conversation)
             if next_section:
-                ui.navigate.to(f"/projects/{project_id}/{next_section}")
+                _safe_client_navigation(client, f"/projects/{project_id}/{next_section}")
 
         async def keep_reviewing_current_step() -> None:
             if flow_actions is None:

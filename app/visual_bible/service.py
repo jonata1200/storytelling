@@ -51,15 +51,34 @@ LOCATION_VIEWS = ["establishing", "floor_plan", "camera_points"]
 PROP_VIEWS = ["front", "side", "top", "scale_reference"]
 VIEW_PROMPT_DETAILS = {
     "front_portrait": (
-        "retrato frontal, rosto centralizado, expressao neutra, camera na altura dos olhos"
+        "imagem inicial do personagem em pe, corpo inteiro, vista frontal, pose neutra, "
+        "bracos relaxados, corpo dos pes ao topo da cabeca totalmente visivel"
     ),
-    "left_profile": "perfil esquerdo, mesmo rosto e cabelo, silhueta limpa e reconhecivel",
-    "right_profile": "perfil direito, mesmo rosto e cabelo, silhueta limpa e reconhecivel",
-    "back_view": "vista de costas, mesma roupa, cabelo e proporcoes corporais visiveis",
-    "full_body": "referencia de corpo inteiro, da cabeca aos pes, postura e figurino base visiveis",
-    "expression_sheet": "folha de expressoes com 4 emocoes, mesma identidade em todas as variacoes",
-    "pose_sheet": "folha de poses com 3 poses praticas, anatomia e figurino consistentes",
-    "scale_reference": "referencia de escala, postura neutra, proporcoes claras em fundo simples",
+    "left_profile": (
+        "vista lateral esquerda de corpo inteiro, personagem em pe, mesmo rosto, cabelo, "
+        "figurino e proporcoes"
+    ),
+    "right_profile": (
+        "vista lateral direita de corpo inteiro, personagem em pe, mesmo rosto, cabelo, "
+        "figurino e proporcoes"
+    ),
+    "back_view": (
+        "vista de costas de corpo inteiro, personagem em pe, mesmo figurino, cabelo "
+        "e proporcoes corporais visiveis"
+    ),
+    "full_body": (
+        "vista frontal de corpo inteiro em pe, da cabeca aos pes, postura neutra "
+        "e figurino base visiveis"
+    ),
+    "expression_sheet": (
+        "folha de expressoes faciais com 4 emocoes, mesma identidade em todas as variacoes"
+    ),
+    "pose_sheet": (
+        "folha de poses com 3 poses praticas de corpo inteiro, anatomia e figurino consistentes"
+    ),
+    "scale_reference": (
+        "referencia de escala de corpo inteiro, postura neutra, proporcoes claras"
+    ),
     "establishing": (
         "plano geral de apresentacao do ambiente vazio, layout espacial, luz, "
         "entradas e objetos principais visiveis"
@@ -241,7 +260,19 @@ def _character_visual_defaults(name: str) -> dict[str, object]:
         ["terracota", "caramelo", "azul desbotado"],
         ["lilas queimado", "grafite", "dourado suave"],
     ]
+    origins = [
+        "brasileira",
+        "brasileira do interior",
+        "brasileira urbana",
+        "brasileira litoranea",
+        "brasileira de origem nordestina",
+    ]
+    height_cm = 155 + (
+        int(hashlib.sha1(f"{name}:height".encode()).hexdigest()[:8], 16) % 36
+    )
     return {
+        "origin": _seeded_choice(name, origins, 0),
+        "height_cm": height_cm,
         "hair": _seeded_choice(name, hair_styles, 1),
         "eyes": _seeded_choice(name, eye_details, 2),
         "body_type": _seeded_choice(name, body_types, 3),
@@ -255,6 +286,11 @@ def _character_profile(raw: object) -> dict:
     name = str(raw.get("name") or "Personagem")
     defaults = _character_visual_defaults(name)
     role = _short_text(_first_value(raw, "role", "funcao", "função"), "personagem", 120)
+    gender = _first_value(raw, "gender", "genero", "sexo", fallback="pessoa")
+    origin = _first_value(raw, "origin", "origem", "nacionalidade", fallback=defaults["origin"])
+    height_cm = _first_value(
+        raw, "height_cm", "altura_cm", "altura", fallback=defaults["height_cm"]
+    )
     apparent_age = _first_value(
         raw, "apparent_age", "idade_aparente", "idade", fallback="adulto de idade visual definida"
     )
@@ -289,6 +325,9 @@ def _character_profile(raw: object) -> dict:
         "permanent_id": raw.get("id", f"char_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
         "role": role,
+        "gender": gender,
+        "origin": origin,
+        "height_cm": height_cm,
         "apparent_age": apparent_age,
         "body_type": body_type,
         "face_shape": face_shape,
@@ -308,14 +347,13 @@ def _character_profile(raw: object) -> dict:
             "nao reutilizar roupa de outro personagem",
         ],
         "canonical_prompt": (
-            f"Referencia profissional de design cinematografico de personagem para {name}, {role}. "
-            f"Idade aparente: {apparent_age}; corpo: {body_type}; rosto: {face_shape}; "
-            f"pele: {skin_tone}; olhos: {eyes}; cabelo: {hair}; figurino base: {base_outfit}; "
-            f"sinal de personalidade: {personality}; paleta de cores: {palette}. "
-            "Drama emocional realista, ativo de producao vertical 9:16, identidade consistente, "
-            "geometria facial repetivel, continuidade de figurino, textura natural de pele, "
-            "atuacao expressiva sem exagero, iluminacao cinematografica, "
-            "qualidade alta de referencia. "
+            "Fotorrealista, hiper realista, foto de uma pessoa. "
+            f"{str(gender).capitalize()} {origin}, {apparent_age}, altura {height_cm}cm, "
+            f"{body_type}. Cabelo: {hair}. Rosto: {face_shape}. Pele: {skin_tone}. "
+            f"Olhos: {eyes}. Papel dramatico: {role}. Sinal de personalidade: {personality}. "
+            f"Figurino base exclusivo: {base_outfit}. Material textil com caimento funcional, "
+            f"modelagem coerente com a historia. Paleta: {palette}. "
+            "Textura realista, iluminacao cinematografica, fotografia profissional. "
             "Este personagem deve ser visualmente distinto dos demais, com roupa, silhueta, cabelo "
             "e paleta exclusivos; evitar figurino generico, camiseta lisa repetida, blazer padrao "
             "ou roupa igual a outro personagem."
@@ -372,16 +410,15 @@ def _location_profile(raw: object) -> dict:
         "asset_kind": "location",
         "spatial_rules": ["manter portas, janelas e moveis na mesma posicao"],
         "canonical_prompt": (
-            f"Referencia profissional de design cinematografico de cenario para {name}. "
-            f"Funcao narrativa: {description}; layout: {layout}; materiais: {materials}; "
-            f"plano de iluminacao: {lighting}; paleta de cores: {palette}. "
-            "Ambiente de producao realista em vertical 9:16, entradas e saidas claras, "
-            "geografia segura para camera, posicao consistente de moveis, camadas de profundidade "
-            "visiveis, fontes de luz praticas e motivadas, superficies com textura, atmosfera "
-            "emocionalmente coerente, pronto para planos de apresentacao e continuidade de cena. "
-            "Imagem de cenario vazio, sem pessoas, sem personagens, sem multidao, "
-            "sem silhuetas humanas, sem retratos de pessoas em destaque; foco exclusivo "
-            "na arquitetura, objetos do ambiente, texturas, luz e composicao espacial."
+            "Fotorrealista, hiper realista, fotografia de arquitetura. "
+            f"Plano geral de {name}. Funcao narrativa: {description}. Layout: {layout}. "
+            f"Materiais e superficies: {materials}. Paleta de cores: {palette}. "
+            f"Iluminacao: {lighting}. Composicao com profundidade em primeiro plano, "
+            "plano medio e fundo, geografia clara para camera, entradas e saidas legiveis, "
+            "moveis e objetos do ambiente em posicoes consistentes. Nenhuma pessoa presente, "
+            "sem personagens, sem multidao, sem silhuetas humanas, sem retratos de pessoas "
+            "em destaque. Textura realista, iluminacao cinematografica suave, fotografia "
+            "profissional de arquitetura."
         ),
     }
 
@@ -425,17 +462,14 @@ def _prop_profile(raw: object) -> dict:
         "narrative_importance": narrative_importance,
         "asset_kind": "prop",
         "canonical_prompt": (
-            f"Referencia profissional de design cinematografico de objeto para {name}. "
-            f"Importancia narrativa: {narrative_importance}; dimensoes: {dimensions}; "
-            f"material: {material}; cor: {color}; estado: {state}; dono: {owner}. "
-            "Objeto heroico para drama emocional realista, referencia de producao vertical 9:16, "
-            "silhueta reconhecivel, detalhe tatil de superficie, marcas consistentes, escala "
-            "legivel, qualidade limpa de ativo multiangulo, projetado para close-ups "
-            "e continuidade "
-            "entre imagens geradas e clipes de video. O objeto deve aparecer sozinho, inteiro, "
-            "grande no quadro, centralizado, totalmente em destaque, sobre fundo branco "
-            "puro de estudio, sem maos, sem pessoas, sem cenario, sem mesa decorativa, "
-            "sem outros objetos competindo."
+            "Fotorrealista, hiper realista, fotografia de produto. "
+            f"Um unico {name}, posicionado em angulo de tres quartos, fundo branco puro "
+            f"ou cor solida neutra. Importancia narrativa: {narrative_importance}. "
+            f"Dimensoes: {dimensions}. Material: {material}. Cor: {color}. Estado: {state}. "
+            f"Dono ou relacao narrativa: {owner}. Objeto inteiro, totalmente em destaque, "
+            "centralizado, sem outros objetos, sem maos, sem pessoas, sem cenario. "
+            "Silhueta reconhecivel, detalhes funcionais legiveis, textura realista do material, "
+            "acabamento coerente com o uso na historia, iluminacao de estudio profissional."
         ),
     }
 
@@ -590,10 +624,39 @@ def initial_view_for(target_kind: str) -> str:
     }[target_kind]
 
 
+def _character_view_guardrail(view_type: str) -> str:
+    if view_type == "front_portrait":
+        return (
+            "Imagem inicial obrigatoria no estilo fotografia de referencia de elenco: "
+            "personagem em pe, corpo inteiro, vista frontal, pose neutra, olhando para a camera, "
+            "fundo cinza neutro de estudio, iluminacao suave, uma unica pessoa, sem cenario, "
+            "sem objetos extras, corpo inteiro enquadrado dos pes ao topo da cabeca, sem cortar "
+            "cabeca, pes ou maos."
+        )
+    return (
+        "Ficha de multiplas vistas obrigatoria: fundo branco puro de estudio, personagem em pe "
+        "e de corpo inteiro, visto pelo angulo solicitado, mantendo exatamente o mesmo rosto, "
+        "cabelo, corpo, figurino, sapatos, proporcoes e paleta. Mostrar angulos diferentes "
+        "sem mudar identidade, roupa ou idade aparente."
+    )
+
+
+def visual_reference_aspect_ratio(profile: dict, view_type: str) -> str:
+    asset_kind = str(profile.get("asset_kind") or "")
+    if asset_kind == "location":
+        return "16:9"
+    if asset_kind == "prop":
+        return "1:1"
+    if asset_kind == "character" and view_type != "front_portrait":
+        return "16:9"
+    return "9:16"
+
+
 def visual_reference_prompt(profile: dict, view_type: str) -> str:
     base_prompt = str(profile.get("canonical_prompt") or profile.get("name") or "").strip()
     view_detail = VIEW_PROMPT_DETAILS.get(view_type, view_type.replace("_", " "))
     asset_kind = str(profile.get("asset_kind") or "")
+    aspect_ratio = visual_reference_aspect_ratio(profile, view_type)
     if asset_kind == "location":
         guardrail = (
             "Cenario vazio obrigatorio: nao incluir pessoas, personagens, corpos, rostos, "
@@ -605,13 +668,10 @@ def visual_reference_prompt(profile: dict, view_type: str) -> str:
             "a maior parte do quadro, sem pessoas, sem maos, sem ambiente, sem outros objetos."
         )
     else:
-        guardrail = (
-            "Manter identidade unica do personagem, figurino exclusivo, proporcoes, "
-            "cabelo e paleta consistentes em todas as vistas."
-        )
+        guardrail = _character_view_guardrail(view_type)
     return (
         f"{base_prompt}. Vista de referencia: {view_type}. {view_detail}. "
-        f"{guardrail} Referencia de producao vertical 9:16, fundo limpo, "
+        f"{guardrail} Proporcao obrigatoria: {aspect_ratio}. Fundo limpo, "
         "identidade visual consistente."
     )
 
@@ -787,12 +847,14 @@ async def generate_visual_references(
 
     for view_type in views:
         prompt = visual_reference_prompt(profile, view_type)
+        aspect_ratio = visual_reference_aspect_ratio(profile, view_type)
         image_result = await provider.generate(
             ImageGenerationRequest(
                 prompt=prompt,
                 target_id=str(target_id),
                 view_type=view_type,
                 output_dir=output_dir,
+                aspect_ratio=aspect_ratio,
                 model=image_model,
             )
         )
@@ -804,7 +866,11 @@ async def generate_visual_references(
             storage_uri=image_result.storage_uri,
             content_type=image_result.content_type,
             sha256=image_result.sha256,
-            metadata_json={"provider": image_result.provider, "model": image_result.model},
+            metadata_json={
+                "provider": image_result.provider,
+                "model": image_result.model,
+                "aspect_ratio": aspect_ratio,
+            },
         )
         session.add(asset)
         await session.flush()
@@ -822,6 +888,7 @@ async def generate_visual_references(
             "target_id": str(target_id),
             "view_type": view_type,
             "prompt": prompt,
+            "aspect_ratio": aspect_ratio,
             "asset_id": str(asset.id),
         }
         artifact = await _create_artifact(
@@ -857,7 +924,7 @@ async def generate_visual_references(
             prompt=prompt,
             provider=image_result.provider,
             model=image_result.model,
-            metadata_json={"sha256": image_result.sha256},
+            metadata_json={"sha256": image_result.sha256, "aspect_ratio": aspect_ratio},
         )
         session.add(reference)
         references.append(reference)

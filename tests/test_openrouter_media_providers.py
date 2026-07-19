@@ -17,19 +17,20 @@ def test_openrouter_image_provider_writes_generated_image(
 ) -> None:
     provider = OpenRouterImageProvider()
     pixel = base64.b64encode(b"fake-png").decode("ascii")
+    posted: dict[str, Any] = {}
 
     monkeypatch.setattr(
         "app.providers.image.openrouter.get_settings",
         lambda: Settings(openrouter_api_key="key"),
     )
-    monkeypatch.setattr(
-        provider,
-        "_post_json",
-        lambda path, body: {
+    def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
+        posted.update({"path": path, "body": body})
+        return {
             "data": [{"b64_json": pixel, "media_type": "image/png"}],
             "usage": {"cost": 0.02},
-        },
-    )
+        }
+
+    monkeypatch.setattr(provider, "_post_json", fake_post)
 
     result = provider._generate(
         ImageGenerationRequest(
@@ -37,10 +38,13 @@ def test_openrouter_image_provider_writes_generated_image(
             target_id="char",
             view_type="front",
             output_dir=tmp_path,
+            aspect_ratio="1:1",
             model="google/gemini-2.5-flash-image",
         )
     )
 
+    assert posted["path"] == "/images"
+    assert posted["body"]["aspect_ratio"] == "1:1"
     assert result.provider == "openrouter"
     assert result.content_type == "image/png"
     assert result.file_path.exists()

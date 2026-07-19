@@ -42,7 +42,7 @@ class OpenRouterImageProvider:
             "model": request.model,
             "prompt": prompt,
             "n": 1,
-            "aspect_ratio": "9:16",
+            "aspect_ratio": request.aspect_ratio,
             "output_format": "png",
         }
         if request.references:

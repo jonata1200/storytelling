@@ -13,7 +13,12 @@ class MockImageProvider:
         request.output_dir.mkdir(parents=True, exist_ok=True)
         filename = f"{request.target_id}_{request.view_type}_{uuid4().hex[:8]}.svg"
         file_path = request.output_dir / filename
-        svg = self._build_svg(request.prompt, request.target_id, request.view_type)
+        svg = self._build_svg(
+            request.prompt,
+            request.target_id,
+            request.view_type,
+            request.aspect_ratio,
+        )
         file_path.write_text(svg, encoding="utf-8")
         sha256 = hashlib.sha256(svg.encode("utf-8")).hexdigest()
         return ImageResult(
@@ -36,32 +41,56 @@ class MockImageProvider:
         )
         return await self.generate(generation_request)
 
-    def _build_svg(self, prompt: str, target_id: str, view_type: str) -> str:
+    def _build_svg(
+        self, prompt: str, target_id: str, view_type: str, aspect_ratio: str
+    ) -> str:
         digest = hashlib.sha256(f"{target_id}:{view_type}:{prompt}".encode()).hexdigest()
         color_a = f"#{digest[:6]}"
         color_b = f"#{digest[6:12]}"
         label = escape(view_type.replace("_", " ").title())
         safe_prompt = escape(prompt[:180])
         safe_target = escape(target_id)
+        width, height = {
+            "16:9": (1920, 1080),
+            "1:1": (1400, 1400),
+            "9:16": (1080, 1920),
+        }.get(aspect_ratio, (1080, 1920))
+        inset_x = int(width * 0.08)
+        inset_y = int(height * 0.07)
+        panel_width = width - 2 * inset_x
+        panel_height = height - 2 * inset_y
+        center_x = width // 2
+        label_y = int(height * 0.77)
+        target_y = int(height * 0.82)
+        text_y = int(height * 0.86)
+        figure_top = int(height * 0.22)
+        figure_mid = int(height * 0.43)
+        head_radius = max(72, min(width, height) // 8)
+        body_width = max(140, width // 3)
+        body_height = max(220, height // 4)
         body_style = (
             "font-family:Arial;color:#f8fafc;font-size:30px;"
             "text-align:center;line-height:1.3"
         )
         return "\n".join(
             [
-                '<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920"',
-                '     viewBox="0 0 1080 1920">',
-                f'  <rect width="1080" height="1920" fill="{color_a}"/>',
-                f'  <rect x="90" y="140" width="900" height="1640" rx="44" fill="{color_b}"',
+                f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"',
+                f'     viewBox="0 0 {width} {height}">',
+                f'  <rect width="{width}" height="{height}" fill="{color_a}"/>',
+                f'  <rect x="{inset_x}" y="{inset_y}" width="{panel_width}"',
+                f'        height="{panel_height}" rx="44" fill="{color_b}"',
                 '        opacity="0.86"/>',
-                '  <circle cx="540" cy="560" r="230" fill="#f8fafc" opacity="0.82"/>',
-                '  <rect x="330" y="820" width="420" height="520" rx="120"',
+                f'  <circle cx="{center_x}" cy="{figure_top}" r="{head_radius}"',
+                '        fill="#f8fafc" opacity="0.82"/>',
+                f'  <rect x="{center_x - body_width // 2}" y="{figure_mid}"',
+                f'        width="{body_width}" height="{body_height}" rx="120"',
                 '        fill="#f8fafc" opacity="0.78"/>',
-                '  <text x="540" y="1480" text-anchor="middle" font-family="Arial"',
+                f'  <text x="{center_x}" y="{label_y}" text-anchor="middle" font-family="Arial"',
                 f'        font-size="58" fill="#f8fafc">{label}</text>',
-                '  <text x="540" y="1560" text-anchor="middle" font-family="Arial"',
+                f'  <text x="{center_x}" y="{target_y}" text-anchor="middle" font-family="Arial"',
                 f'        font-size="34" fill="#f8fafc">{safe_target}</text>',
-                '  <foreignObject x="160" y="1620" width="760" height="180">',
+                f'  <foreignObject x="{inset_x + 70}" y="{text_y}"',
+                f'        width="{panel_width - 140}" height="{max(120, height - text_y - 40)}">',
                 f'    <div xmlns="http://www.w3.org/1999/xhtml" style="{body_style}">',
                 f"      {safe_prompt}",
                 "    </div>",

@@ -58,6 +58,44 @@ def test_project_ai_action_reads_production_metadata() -> None:
     assert action["message"] == "Criando roteiro"
 
 
+def test_safe_client_navigation_uses_captured_client() -> None:
+    class FakeClient:
+        is_deleted = False
+
+        def __init__(self) -> None:
+            self.opened: str | None = None
+
+        def open(self, target: str) -> None:
+            self.opened = target
+
+        def run_javascript(self, code: str) -> None:
+            raise AssertionError("reload should not be used")
+
+    client = FakeClient()
+
+    pages._safe_client_navigation(client, "/projects/123/storyboard")
+
+    assert client.opened == "/projects/123/storyboard"
+
+
+def test_safe_client_navigation_ignores_deleted_slot_runtime_error() -> None:
+    class DeletedSlotClient:
+        is_deleted = False
+
+        def open(self, target: str) -> None:
+            raise RuntimeError("The parent element this slot belongs to has been deleted.")
+
+    pages._safe_client_navigation(DeletedSlotClient(), "/projects/123/storyboard")
+
+
+def test_safe_refresh_ignores_deleted_slot_runtime_error() -> None:
+    class DeletedRefreshable:
+        def refresh(self) -> None:
+            raise RuntimeError("The parent element this slot belongs to has been deleted.")
+
+    pages._safe_refresh(DeletedRefreshable())
+
+
 def test_legacy_assistant_greeting_is_removed_from_chat_history() -> None:
     assert (
         pages._is_legacy_assistant_greeting(
