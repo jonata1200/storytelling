@@ -51,8 +51,9 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
         visual_reference_prompt(profile, "front_portrait")
         == "Helena, 35, expressive detective, rainy noir lighting. Vista de referencia: "
         "front_portrait. retrato frontal, rosto centralizado, expressao neutra, camera na "
-        "altura dos olhos. Referencia de producao vertical 9:16, fundo limpo, identidade "
-        "visual consistente."
+        "altura dos olhos. Manter identidade unica do personagem, figurino exclusivo, "
+        "proporcoes, cabelo e paleta consistentes em todas as vistas. Referencia de "
+        "producao vertical 9:16, fundo limpo, identidade visual consistente."
     )
 
 
@@ -103,6 +104,36 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     assert "geografia segura para camera" in location["canonical_prompt"]
     assert "Referencia profissional de design cinematografico de objeto" in prop["canonical_prompt"]
     assert "papel amassado" in prop["canonical_prompt"]
+
+
+def test_character_defaults_are_distinct_by_name() -> None:
+    clara = _character_profile("Clara")
+    lucas = _character_profile("Lucas")
+
+    assert clara["base_outfit"] != lucas["base_outfit"]
+    assert clara["hair"] != lucas["hair"]
+    assert "nao reutilizar roupa" in " ".join(clara["visual_constraints"])
+
+
+def test_location_reference_prompt_forbids_people() -> None:
+    location = _location_profile({"name": "Sala de estar"})
+
+    prompt = visual_reference_prompt(location, "establishing")
+
+    assert "Cenario vazio obrigatorio" in prompt
+    assert "nao incluir pessoas" in prompt
+    assert "sem personagens" in prompt
+
+
+def test_prop_reference_prompt_requires_white_background_and_object_focus() -> None:
+    prop = _prop_profile({"name": "Partitura", "material": "papel envelhecido"})
+
+    prompt = visual_reference_prompt(prop, "front")
+
+    assert "fundo branco puro" in prompt
+    assert "objeto inteiro e centralizado" in prompt
+    assert "sem pessoas" in prompt
+    assert "sem maos" in prompt
 
 
 def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:

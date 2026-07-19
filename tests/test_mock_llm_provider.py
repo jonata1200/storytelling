@@ -71,11 +71,11 @@ async def test_mock_llm_generates_cinematic_script_format() -> None:
     )
 
     content = result.content["content"]
+    assert "FADE IN:" in content
     assert "CENA 01" in content
-    assert "OBJETIVO DRAMATICO" in content
-    assert "ELEMENTOS VISUAIS" in content
-    assert "INDICACAO PARA STORYBOARD" in content
-    assert "INDICACAO PARA VIDEO" in content
     assert "INT. CASA DA FAMILIA" in content
     assert "EXT. RUA ESTREITA" in content
     assert "CLARA\n" in content
+    assert "FADE OUT." in content
+    assert "OBJETIVO DRAMATICO" not in content
+    assert "INDICACAO PARA STORYBOARD" not in content

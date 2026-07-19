@@ -46,10 +46,13 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         for task, template in DEFAULT_TEMPLATES.items()
     }
 
-    assert '"content":"ROTEIRO-BASE COMPLETO AQUI"' in compiled["generate_script"]
+    assert '"content":"ROTEIRO CINEMATOGRAFICO COMPLETO AQUI"' in compiled["generate_script"]
     assert "Seedance 2.0 Fast" in compiled["generate_script"]
+    assert "FADE IN:" in compiled["generate_script"]
+    assert "slugline" in compiled["generate_script"]
+    assert "Nao use listas tecnicas" in compiled["generate_script"]
     assert "entre 4s e 15s" in compiled["generate_scenes_and_shots"]
-    assert "indicacao para video" in compiled["revise_script"]
+    assert "ROTEIRO CINEMATOGRAFICO REVISADO COMPLETO AQUI" in compiled["revise_script"]
     assert '"scenes"' in compiled["generate_scenes_and_shots"]
     assert '"ideas"' in compiled["generate_story_ideas"]
 

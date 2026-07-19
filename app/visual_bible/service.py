@@ -61,15 +61,23 @@ VIEW_PROMPT_DETAILS = {
     "pose_sheet": "folha de poses com 3 poses praticas, anatomia e figurino consistentes",
     "scale_reference": "referencia de escala, postura neutra, proporcoes claras em fundo simples",
     "establishing": (
-        "plano geral de apresentacao, layout espacial, luz, entradas e objetos principais visiveis"
+        "plano geral de apresentacao do ambiente vazio, layout espacial, luz, "
+        "entradas e objetos principais visiveis"
     ),
     "floor_plan": (
         "planta vista de cima, geometria do ambiente, portas, janelas e areas seguras para camera"
     ),
     "camera_points": "referencia de pontos de camera, 3 enquadramentos verticais dentro do local",
-    "front": "vista frontal, objeto centralizado, material, cor e detalhes reconheciveis visiveis",
-    "side": "vista lateral, espessura, silhueta e construcao do objeto visiveis",
-    "top": "vista superior, forma, textura e detalhes legiveis visiveis",
+    "front": (
+        "vista frontal, objeto totalmente em destaque, centralizado, material, "
+        "cor e detalhes reconheciveis visiveis"
+    ),
+    "side": (
+        "vista lateral, objeto totalmente em destaque, espessura, silhueta e construcao visiveis"
+    ),
+    "top": (
+        "vista superior, objeto totalmente em destaque, forma, textura e detalhes legiveis visiveis"
+    ),
 }
 
 
@@ -162,9 +170,7 @@ def _profile_mapping(raw: object) -> dict:
         normalized = dict(raw)
         if "name" not in normalized:
             normalized["name"] = (
-                normalized.get("nome")
-                or normalized.get("title")
-                or normalized.get("titulo")
+                normalized.get("nome") or normalized.get("title") or normalized.get("titulo")
             )
         return normalized
     text = str(raw or "").strip()
@@ -180,19 +186,105 @@ def _short_text(value: object, fallback: str, max_length: int) -> str:
     return f"{text[: max_length - 3].rstrip()}..."
 
 
+def _first_value(raw: dict, *keys: str, fallback: object = "") -> object:
+    for key in keys:
+        value = raw.get(key)
+        if value not in (None, "", [], {}):
+            return value
+    return fallback
+
+
+def _seeded_choice(seed: str, options: list[str], offset: int = 0) -> str:
+    digest = hashlib.sha1(f"{seed}:{offset}".encode()).hexdigest()
+    return options[int(digest[:8], 16) % len(options)]
+
+
+def _character_visual_defaults(name: str) -> dict[str, object]:
+    outfit_layers = [
+        "casaco de linho verde musgo sobre camisa creme amarrotada",
+        "jaqueta jeans clara com costuras aparentes e camiseta vinho",
+        "cardiga azul petroleo com vestido floral discreto",
+        "blazer cinza gasto, camisa branca sem gravata e calca escura",
+        "sueter mostarda texturizado com saia preta simples",
+        "camisa de algodao terracota com suspensorio marrom envelhecido",
+        "vestido azul escuro com xale de la rustico",
+        "jaqueta de couro caramelo marcada pelo uso e blusa neutra",
+    ]
+    hair_styles = [
+        "cabelo castanho curto com franja irregular",
+        "cabelo grisalho preso em coque baixo",
+        "cabelo preto ondulado na altura dos ombros",
+        "cabelo ruivo cacheado preso de lado",
+        "cabelo raspado nas laterais com topo natural",
+        "cabelo loiro escuro comprido, levemente despenteado",
+        "tranças finas presas para tras",
+        "cabelo branco curto, bem alinhado",
+    ]
+    eye_details = [
+        "olhos cansados com olhar atento e sobrancelhas marcantes",
+        "olhos pequenos e intensos, expressao desconfiada",
+        "olhos grandes e melancolicos, brilho contido",
+        "olhos claros, postura emocional reservada",
+        "olhos escuros, olhar caloroso mas firme",
+    ]
+    body_types = [
+        "silhueta alta e magra, postura levemente curvada",
+        "corpo baixo e compacto, gestos precisos",
+        "porte medio, ombros relaxados e presenca discreta",
+        "corpo robusto, postura protetora",
+        "silhueta delicada, movimentos contidos",
+    ]
+    palettes = [
+        ["verde musgo", "creme envelhecido", "marrom quente"],
+        ["azul petroleo", "vinho profundo", "cinza frio"],
+        ["mostarda", "preto fosco", "branco antigo"],
+        ["terracota", "caramelo", "azul desbotado"],
+        ["lilas queimado", "grafite", "dourado suave"],
+    ]
+    return {
+        "hair": _seeded_choice(name, hair_styles, 1),
+        "eyes": _seeded_choice(name, eye_details, 2),
+        "body_type": _seeded_choice(name, body_types, 3),
+        "base_outfit": _seeded_choice(name, outfit_layers, 4),
+        "palette": palettes[int(hashlib.sha1(name.encode()).hexdigest()[:8], 16) % len(palettes)],
+    }
+
+
 def _character_profile(raw: object) -> dict:
     raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Personagem")
-    role = _short_text(raw.get("role") or raw.get("funcao"), "personagem", 120)
-    apparent_age = raw.get("apparent_age", "adulto de idade visual definida")
-    body_type = raw.get("body_type", "silhueta humana natural e reconhecivel")
-    face_shape = raw.get("face_shape", "rosto com estrutura clara e memoravel")
-    skin_tone = raw.get("skin_tone", "tom de pele natural sob luz cinematica")
-    eyes = raw.get("eyes", "olhar legivel, expressao emocional controlada")
-    hair = raw.get("hair", "cabelo com corte, volume e contorno consistentes")
-    base_outfit = raw.get("base_outfit", "figurino base simples, identificavel e repetivel")
-    palette = raw.get("palette", ["azul profundo", "cinza neutro", "dourado suave"])
-    personality = raw.get("personality", "contida, resiliente e empatica")
+    defaults = _character_visual_defaults(name)
+    role = _short_text(_first_value(raw, "role", "funcao", "função"), "personagem", 120)
+    apparent_age = _first_value(
+        raw, "apparent_age", "idade_aparente", "idade", fallback="adulto de idade visual definida"
+    )
+    body_type = _first_value(
+        raw, "body_type", "tipo_fisico", "corpo", fallback=defaults["body_type"]
+    )
+    face_shape = _first_value(
+        raw,
+        "face_shape",
+        "formato_rosto",
+        "rosto",
+        fallback="rosto com estrutura clara e memoravel",
+    )
+    skin_tone = _first_value(
+        raw, "skin_tone", "tom_de_pele", "pele", fallback="tom de pele natural sob luz cinematica"
+    )
+    eyes = _first_value(raw, "eyes", "olhos", fallback=defaults["eyes"])
+    hair = _first_value(raw, "hair", "cabelo", fallback=defaults["hair"])
+    base_outfit = _first_value(
+        raw, "base_outfit", "figurino_base", "roupa", "figurino", fallback=defaults["base_outfit"]
+    )
+    palette = _first_value(
+        raw, "palette", "paleta", "paleta_de_cores", fallback=defaults["palette"]
+    )
+    personality = _first_value(
+        raw,
+        "personality",
+        "personalidade",
+        fallback="personalidade especifica e coerente com a historia",
+    )
     return {
         "permanent_id": raw.get("id", f"char_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
@@ -207,8 +299,14 @@ def _character_profile(raw: object) -> dict:
         "palette": palette,
         "voice": raw.get("voice", "voz humana calorosa"),
         "personality": personality,
-        "arc": raw.get("arc", ""),
-        "visual_constraints": ["manter idade aparente", "manter cabelo", "manter roupa base"],
+        "arc": _first_value(raw, "arc", "arco", fallback=""),
+        "asset_kind": "character",
+        "visual_constraints": [
+            "manter idade aparente",
+            "manter cabelo",
+            "manter figurino base exclusivo deste personagem",
+            "nao reutilizar roupa de outro personagem",
+        ],
         "canonical_prompt": (
             f"Referencia profissional de design cinematografico de personagem para {name}, {role}. "
             f"Idade aparente: {apparent_age}; corpo: {body_type}; rosto: {face_shape}; "
@@ -217,7 +315,10 @@ def _character_profile(raw: object) -> dict:
             "Drama emocional realista, ativo de producao vertical 9:16, identidade consistente, "
             "geometria facial repetivel, continuidade de figurino, textura natural de pele, "
             "atuacao expressiva sem exagero, iluminacao cinematografica, "
-            "qualidade alta de referencia."
+            "qualidade alta de referencia. "
+            "Este personagem deve ser visualmente distinto dos demais, com roupa, silhueta, cabelo "
+            "e paleta exclusivos; evitar figurino generico, camiseta lisa repetida, blazer padrao "
+            "ou roupa igual a outro personagem."
         ),
     }
 
@@ -225,11 +326,41 @@ def _character_profile(raw: object) -> dict:
 def _location_profile(raw: object) -> dict:
     raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Local")
-    description = raw.get("description", raw.get("mood", "local emocional da historia"))
-    layout = raw.get("layout", "espaco pequeno com pontos de camera claros")
-    materials = raw.get("materials", ["madeira", "parede clara", "tecidos simples"])
-    palette = raw.get("palette", ["azul frio", "dourado quente", "neutros gastos"])
-    lighting = raw.get("lighting", "luz natural suave com contraste cinematografico")
+    description = _first_value(
+        raw,
+        "description",
+        "descricao",
+        "descrição",
+        "mood",
+        "atmosfera",
+        fallback="local emocional da historia",
+    )
+    layout = _first_value(
+        raw,
+        "layout",
+        "planta",
+        "disposicao",
+        "disposição",
+        fallback="espaco com pontos de camera claros",
+    )
+    materials = _first_value(
+        raw, "materials", "materiais", fallback=["madeira", "parede clara", "tecidos simples"]
+    )
+    palette = _first_value(
+        raw,
+        "palette",
+        "paleta",
+        "paleta_de_cores",
+        fallback=["azul frio", "dourado quente", "neutros gastos"],
+    )
+    lighting = _first_value(
+        raw,
+        "lighting",
+        "iluminacao",
+        "iluminação",
+        "luz",
+        fallback="luz natural suave com contraste cinematografico",
+    )
     return {
         "permanent_id": raw.get("id", f"loc_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
@@ -238,6 +369,7 @@ def _location_profile(raw: object) -> dict:
         "materials": materials,
         "palette": palette,
         "lighting": lighting,
+        "asset_kind": "location",
         "spatial_rules": ["manter portas, janelas e moveis na mesma posicao"],
         "canonical_prompt": (
             f"Referencia profissional de design cinematografico de cenario para {name}. "
@@ -246,7 +378,10 @@ def _location_profile(raw: object) -> dict:
             "Ambiente de producao realista em vertical 9:16, entradas e saidas claras, "
             "geografia segura para camera, posicao consistente de moveis, camadas de profundidade "
             "visiveis, fontes de luz praticas e motivadas, superficies com textura, atmosfera "
-            "emocionalmente coerente, pronto para planos de apresentacao e continuidade de cena."
+            "emocionalmente coerente, pronto para planos de apresentacao e continuidade de cena. "
+            "Imagem de cenario vazio, sem pessoas, sem personagens, sem multidao, "
+            "sem silhuetas humanas, sem retratos de pessoas em destaque; foco exclusivo "
+            "na arquitetura, objetos do ambiente, texturas, luz e composicao espacial."
         ),
     }
 
@@ -254,13 +389,28 @@ def _location_profile(raw: object) -> dict:
 def _prop_profile(raw: object) -> dict:
     raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Objeto")
-    dimensions = raw.get("dimensions", "pequeno, manipulavel com uma mao")
-    material = raw.get("material", "material cotidiano com textura reconhecivel")
-    color = raw.get("color", "cor neutra com detalhe visual memoravel")
-    state = raw.get("state", "usado mas preservado")
-    owner = raw.get("owner", "protagonista")
+    dimensions = _first_value(
+        raw,
+        "dimensions",
+        "dimensoes",
+        "dimensões",
+        "tamanho",
+        fallback="pequeno, manipulavel com uma mao",
+    )
+    material = _first_value(
+        raw, "material", "materiais", fallback="material cotidiano com textura reconhecivel"
+    )
+    color = _first_value(
+        raw, "color", "cor", "cores", fallback="cor neutra com detalhe visual memoravel"
+    )
+    state = _first_value(
+        raw, "state", "estado", "condicao", "condição", fallback="usado mas preservado"
+    )
+    owner = _first_value(
+        raw, "owner", "dono", "proprietario", "proprietário", fallback="protagonista"
+    )
     narrative_importance = _short_text(
-        raw.get("importance") or raw.get("narrative_importance"),
+        _first_value(raw, "importance", "narrative_importance", "importancia", "importância"),
         "objeto de payoff narrativo",
         220,
     )
@@ -273,14 +423,19 @@ def _prop_profile(raw: object) -> dict:
         "state": state,
         "owner": owner,
         "narrative_importance": narrative_importance,
+        "asset_kind": "prop",
         "canonical_prompt": (
             f"Referencia profissional de design cinematografico de objeto para {name}. "
             f"Importancia narrativa: {narrative_importance}; dimensoes: {dimensions}; "
             f"material: {material}; cor: {color}; estado: {state}; dono: {owner}. "
             "Objeto heroico para drama emocional realista, referencia de producao vertical 9:16, "
             "silhueta reconhecivel, detalhe tatil de superficie, marcas consistentes, escala "
-            "legivel em maos humanas, qualidade limpa de ativo multiangulo, projetado para "
-            "close-ups e continuidade entre imagens geradas e clipes de video."
+            "legivel, qualidade limpa de ativo multiangulo, projetado para close-ups "
+            "e continuidade "
+            "entre imagens geradas e clipes de video. O objeto deve aparecer sozinho, inteiro, "
+            "grande no quadro, centralizado, totalmente em destaque, sobre fundo branco "
+            "puro de estudio, sem maos, sem pessoas, sem cenario, sem mesa decorativa, "
+            "sem outros objetos competindo."
         ),
     }
 
@@ -438,9 +593,26 @@ def initial_view_for(target_kind: str) -> str:
 def visual_reference_prompt(profile: dict, view_type: str) -> str:
     base_prompt = str(profile.get("canonical_prompt") or profile.get("name") or "").strip()
     view_detail = VIEW_PROMPT_DETAILS.get(view_type, view_type.replace("_", " "))
+    asset_kind = str(profile.get("asset_kind") or "")
+    if asset_kind == "location":
+        guardrail = (
+            "Cenario vazio obrigatorio: nao incluir pessoas, personagens, corpos, rostos, "
+            "silhuetas humanas ou multidoes. Priorizar arquitetura, layout, luz e objetos do local."
+        )
+    elif asset_kind == "prop":
+        guardrail = (
+            "Objeto isolado obrigatorio: fundo branco puro, objeto inteiro e centralizado ocupando "
+            "a maior parte do quadro, sem pessoas, sem maos, sem ambiente, sem outros objetos."
+        )
+    else:
+        guardrail = (
+            "Manter identidade unica do personagem, figurino exclusivo, proporcoes, "
+            "cabelo e paleta consistentes em todas as vistas."
+        )
     return (
         f"{base_prompt}. Vista de referencia: {view_type}. {view_detail}. "
-        "Referencia de producao vertical 9:16, fundo limpo, identidade visual consistente."
+        f"{guardrail} Referencia de producao vertical 9:16, fundo limpo, "
+        "identidade visual consistente."
     )
 
 
@@ -571,9 +743,7 @@ async def approve_visual_target_and_generate_views(
         session, project_id, target_kind, target_id
     )
     requested_views = view_types or default_views_for(target_kind)
-    missing_views = [
-        view for view in requested_views if view not in existing_views
-    ]
+    missing_views = [view for view in requested_views if view not in existing_views]
     if not missing_views:
         await session.commit()
         return []

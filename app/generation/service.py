@@ -39,26 +39,37 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "Use o briefing completo e a ideia em {idea}. Responda somente JSON com estes campos: "
         "title, logline, theme, genre, tone, target_emotion, audience, world_rules, "
         "visual_style, narrative_rules, forbidden_elements, characters, locations, props, "
-        "timeline, relationships, continuity_rules, audio_style e export_profile."
+        "timeline, relationships, continuity_rules, audio_style e export_profile. "
+        "Para characters, cada personagem deve ter aparencia unica e especifica: role, "
+        "apparent_age, body_type, face_shape, skin_tone, eyes, hair, base_outfit, palette, "
+        "personality e arc. Evite roupas genericas repetidas; cada figurino deve ter cor, "
+        "peca principal, textura e desgaste proprios. Para locations, descreva ambientes "
+        "sem pessoas: layout, materials, palette, lighting, props_in_scene e spatial_rules. "
+        "Para props, descreva objeto isolado: dimensions, material, color, state, owner e "
+        "narrative_importance."
     ),
     "generate_script": (
-        "Crie um roteiro-base profissional em {language} para uma historia vertical 9:16 "
+        "Crie um roteiro cinematografico profissional em {language}, no padrao de roteiro "
+        "de filme, para uma historia vertical 9:16 "
         "com duracao total fixa de {target_duration_seconds}s. Use a Story Bible em "
         "{story_bible}. A etapa de video usa Seedance 2.0 Fast, portanto os planos finais "
         "serao clipes independentes de {clip_min_seconds}s a {clip_max_seconds}s, com alvo "
         "pratico de {clip_target_seconds}s por clipe. Escreva o roteiro para sustentar "
         "aproximadamente {expected_clip_count} clipes, sem tentar colocar um plano unico "
         "mais longo que esse limite. "
-        "Organize em 4 a 6 cenas macro numeradas. Em cada cena inclua apenas: cabecalho "
-        "INT./EXT. + local + periodo, duracao aproximada da cena, objetivo dramatico, "
-        "personagens presentes, local, objetos narrativos, acao filmavel no presente, "
-        "narracao quando houver, dialogos curtos com nomes em caixa alta, virada ou "
-        "microgancho da cena. Evite exposicao longa, adjetivos abstratos e listas tecnicas "
-        "que pertencem ao storyboard. Inclua gancho inicial, escalada, virada, climax e "
-        "payoff emocional dentro da duracao informada. "
+        "Use formato cinematografico: titulo, FADE IN:, cenas com slugline em caixa alta "
+        "no padrao INT./EXT. LOCAL - PERIODO, linhas de acao no presente, personagens em "
+        "caixa alta na primeira aparicao, blocos de dialogo com nome do personagem em caixa "
+        "alta, parenteticos apenas quando essenciais, transicoes raras como CORTE PARA: "
+        "ou FADE OUT:. Nao use listas tecnicas dentro do roteiro, nao escreva 'objetivo', "
+        "'personagens', 'local' ou 'objetos narrativos' como campos aparentes. A informacao "
+        "deve aparecer naturalmente em acao, imagem e dialogo. Organize em 4 a 8 cenas, "
+        "com ritmo de filme: gancho visual, incidente incitante, escalada, virada central, "
+        "climax e imagem final. Evite exposicao longa e descricao abstrata; cada paragrafo "
+        "de acao deve ser filmavel. "
         "Responda somente JSON neste formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
-        '"word_count":650,"content":"ROTEIRO-BASE COMPLETO AQUI"}}'
+        '"word_count":650,"content":"ROTEIRO CINEMATOGRAFICO COMPLETO AQUI"}}'
     ),
     "generate_scenes_and_shots": (
         "Divida o roteiro em {script} em cenas e planos prontos para geracao de video "
@@ -86,14 +97,13 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "Preserve a continuidade da Story Bible e mantenha a duracao alvo de "
         "{target_duration_seconds}s. Pedido do usuario: {instruction}. "
         "Contexto do projeto: {project_context}. Roteiro atual: {current_script}. "
-        "Mantenha formato de roteiro de producao audiovisual com cenas numeradas, duracao "
-        "aproximada, cabecalhos INT./EXT., objetivo dramatico, personagens, local, objetos, "
-        "elementos visuais, acao filmavel no presente, narracao separada de dialogos, "
-        "personagens em caixa alta antes dos dialogos, indicacao para storyboard e indicacao "
-        "para video com movimento de camera e ritmo. "
+        "Mantenha formato cinematografico de filme: FADE IN:, sluglines INT./EXT. em caixa "
+        "alta, acao filmavel no presente, primeira aparicao de personagem em caixa alta, "
+        "dialogos em bloco com nome do personagem, parenteticos raros e transicoes discretas. "
+        "Nao transforme o roteiro em lista tecnica com campos de objetivo/personagens/local. "
         "Responda somente JSON neste formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
-        '"word_count":650,"content":"ROTEIRO DE PRODUCAO REVISADO COMPLETO AQUI"}}'
+        '"word_count":650,"content":"ROTEIRO CINEMATOGRAFICO REVISADO COMPLETO AQUI"}}'
     ),
     "director_agent_chat": "{prompt}",
 }
