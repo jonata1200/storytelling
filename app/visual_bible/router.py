@@ -97,13 +97,21 @@ async def post_generate_visual_references(
     payload: GenerateVisualReferencesRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[VisualReferenceRead]:
-    references = await generate_visual_references(
-        session,
-        project_id,
-        payload.target_kind,
-        payload.target_id,
-        payload.view_types,
-    )
+    try:
+        references = await generate_visual_references(
+            session,
+            project_id,
+            payload.target_kind,
+            payload.target_id,
+            payload.view_types,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except (OSError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Nao foi possivel gerar referencia visual: {exc}",
+        ) from exc
     if references is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visual target not found")
     return [VisualReferenceRead.model_validate(reference) for reference in references]

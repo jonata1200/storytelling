@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -19,6 +20,7 @@ from app.visual_bible.service import (
     initial_view_for,
     regenerate_visual_reference,
     update_visual_target_prompt,
+    validated_visual_reference_views,
     visual_reference_aspect_ratio,
     visual_reference_prompt,
 )
@@ -44,6 +46,13 @@ def test_initial_visual_reference_is_single_canonical_view() -> None:
 
     for target_kind in ["character", "location", "prop"]:
         assert initial_view_for(target_kind) in default_views_for(target_kind)
+
+
+def test_visual_reference_views_reject_invalid_values() -> None:
+    assert validated_visual_reference_views("prop", ["front", "side"]) == ["front", "side"]
+
+    with pytest.raises(ValueError, match="View type invalido"):
+        validated_visual_reference_views("prop", ["front", "bad/view"])
 
 
 def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
@@ -315,6 +324,31 @@ def test_script_fallback_repairs_missing_character_names() -> None:
     ]
 
 
+def test_script_fallback_does_not_partially_misname_character_cards() -> None:
+    script = """
+    INT. CASA - DIA
+    CLARA encontra uma carta.
+
+    CLARA
+    Eu preciso saber a verdade.
+    """
+    items = [
+        {"name": "Item", "role": "Protagonista"},
+        {"name": "Item", "role": "Netinho (co-protagonista)"},
+        {"name": "Item", "role": "Filha (coadjuvante)"},
+    ]
+
+    repaired = _repair_missing_character_names(items, script, "Dona Gertrudes")
+
+    assert [item["name"] for item in repaired] == ["Dona Gertrudes", "Netinho", "Filha"]
+
+
+def test_character_profile_uses_role_as_name_when_ai_omits_name() -> None:
+    character = _character_profile({"role": "Netinho (co-protagonista)", "apparent_age": "16"})
+
+    assert character["name"] == "Netinho"
+
+
 @pytest.mark.asyncio
 async def test_update_visual_target_prompt_versions_character_profile() -> None:
     project_id = uuid4()
@@ -383,7 +417,7 @@ async def test_regenerate_visual_reference_forces_existing_view(
     project_id = uuid4()
     target_id = uuid4()
     reference = object()
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     async def fake_generate_visual_references(*args: object, **kwargs: object) -> list[object]:
         captured["args"] = args

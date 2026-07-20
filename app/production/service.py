@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.production.models import ProjectProductionSettings
+from app.projects.repository import ProjectRepository
 
 WORKFLOW_MODES = {
     "keyframes_i2v": "Keyframes Images to Video",
@@ -20,6 +21,48 @@ CONTENT_TYPES = {
 
 ASPECT_RATIOS = ["9:16", "16:9", "1:1", "3:4", "4:3"]
 RESOLUTIONS = ["720x1280", "1080x1920", "1920x1080", "3840x2160"]
+AUDIO_MODES = {"narration_subtitles"}
+
+
+def _validate_model_name(value: object, field_name: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError(f"{field_name} nao pode ficar vazio")
+    if len(text) > 160:
+        raise ValueError(f"{field_name} deve ter no maximo 160 caracteres")
+    return text
+
+
+def _validated_production_payload(payload: dict) -> dict:
+    validators = {
+        "content_type": set(CONTENT_TYPES),
+        "aspect_ratio": set(ASPECT_RATIOS),
+        "image_resolution": set(RESOLUTIONS),
+        "video_resolution": set(RESOLUTIONS),
+        "workflow_mode": set(WORKFLOW_MODES),
+        "audio_mode": AUDIO_MODES,
+    }
+    validated = dict(payload)
+    for key, allowed_values in validators.items():
+        if key in validated and validated[key] not in allowed_values:
+            allowed = ", ".join(sorted(allowed_values))
+            raise ValueError(f"Valor invalido para {key}: {validated[key]}. Use: {allowed}")
+    for key in ("image_model", "video_model"):
+        if key in validated:
+            validated[key] = _validate_model_name(validated[key], key)
+    if "motion_intensity" in validated:
+        intensity = int(validated["motion_intensity"])
+        if intensity < 1 or intensity > 10:
+            raise ValueError("motion_intensity deve ficar entre 1 e 10")
+        validated["motion_intensity"] = intensity
+    if "episode_number" in validated:
+        episode_number = int(validated["episode_number"])
+        if episode_number < 1:
+            raise ValueError("episode_number deve ser maior ou igual a 1")
+        validated["episode_number"] = episode_number
+    if "metadata_json" in validated and not isinstance(validated["metadata_json"], dict):
+        raise ValueError("metadata_json deve ser um objeto")
+    return validated
 
 
 async def get_or_create_production_settings(
@@ -52,8 +95,10 @@ async def update_production_settings(
     project_id: UUID,
     payload: dict,
 ) -> ProjectProductionSettings:
+    if await ProjectRepository(session).get_project(project_id) is None:
+        raise ValueError("Project not found")
     settings = await get_or_create_production_settings(session, project_id)
-    for key, value in payload.items():
+    for key, value in _validated_production_payload(payload).items():
         if hasattr(settings, key):
             setattr(settings, key, value)
     await session.commit()

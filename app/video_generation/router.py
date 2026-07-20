@@ -51,14 +51,17 @@ async def post_generate_video_clips(
     payload: GenerateVideoClipsRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> VideoGenerationBatchRead:
-    result = await generate_video_clips(
-        session,
-        project_id,
-        payload.storyboard_frame_ids,
-        payload.variants_per_frame,
-        payload.provider,
-        payload.model,
-    )
+    try:
+        result = await generate_video_clips(
+            session,
+            project_id,
+            payload.storyboard_frame_ids,
+            payload.variants_per_frame,
+            payload.provider,
+            payload.model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     jobs, clips = result

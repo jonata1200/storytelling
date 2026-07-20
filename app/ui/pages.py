@@ -330,6 +330,10 @@ def _body_style() -> None:
             resize:none!important;
             overflow-y:auto!important;
           }
+          .workspace-layout { margin:0!important; gap:0!important; }
+          .workspace-layout > * { margin-top:0!important; }
+          .right-assistant { margin-top:0!important; padding-top:0!important; }
+          .right-assistant > :first-child { margin-top:0!important; }
           .q-field__control::before { border-color: #303530 !important; }
           .q-field__control::after { color: var(--acid) !important; }
           .q-field--focused .q-field__label { color: var(--acid) !important; }
@@ -2116,12 +2120,14 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
         await _approve_all_visual_targets_from_ui(project_id, visual_batch_requests)
         batch_dialog.close()
 
-    with ui.column().classes(
-        "right-assistant w-[340px] min-w-[340px] border-l border-[#252925] "
+    with ui.element("aside").classes(
+        "right-assistant flex flex-col w-[340px] min-w-[340px] border-l border-[#252925] "
         "bg-[#0d0f0e] h-[calc(100vh-64px)] min-h-0 px-4 pb-4 pt-0 !pt-0 mt-0 gap-4 sticky top-0 self-start"
     ).style("margin-top:0!important;padding-top:0!important;"):
-        with ui.row().classes("w-full items-center justify-between mt-0 pt-0"):
-            with ui.row().classes("items-center gap-2"):
+        with ui.element("div").classes(
+            "flex w-full items-center justify-between mt-0 pt-0 shrink-0"
+        ):
+            with ui.element("div").classes("flex items-center gap-2"):
                 ui.icon("auto_awesome").classes("acid")
                 ui.label("Diretor IA").classes("font-semibold")
             ui.badge("online").classes("bg-[#26301f] text-white")
@@ -3743,7 +3749,7 @@ def register_ui_pages() -> None:
             ui.navigate.to(f"/projects/{project_id}/{fallback}")
             return
         _workspace_header(project, section, counts)
-        with ui.row().classes("w-full items-start flex-nowrap gap-0"):
+        with ui.element("div").classes("workspace-layout flex w-full items-start flex-nowrap gap-0"):
             with ui.column().classes(
                 "workspace-main flex-1 min-w-0 p-8 lg:p-10 gap-4 h-[calc(100vh-64px)] overflow-y-auto"
             ):

@@ -37,40 +37,72 @@ def export_profile(fps: int = 30, bitrate: str = "8M", embed_subtitles: bool = T
     }
 
 
-def _render_placeholder_video(
+def _local_video_asset_path(storage_uri: str) -> Path | None:
+    if not storage_uri:
+        return None
+    storage_root = get_settings().local_storage_path.resolve()
+    path = Path(storage_uri)
+    candidate = path if path.is_absolute() else path.resolve()
+    try:
+        candidate.relative_to(storage_root)
+    except ValueError:
+        return None
+    if not candidate.is_file():
+        return None
+    return candidate
+
+
+async def _timeline_video_asset_paths(session: AsyncSession, timeline_id: UUID) -> list[Path]:
+    result = await session.execute(
+        select(Asset)
+        .join(TimelineItem, TimelineItem.source_asset_id == Asset.id)
+        .where(TimelineItem.timeline_id == timeline_id, TimelineItem.layer == "video")
+        .order_by(TimelineItem.order_index)
+    )
+    paths: list[Path] = []
+    for asset in result.scalars():
+        if asset.kind != AssetKind.VIDEO or not str(asset.content_type or "").startswith("video/"):
+            return []
+        path = _local_video_asset_path(asset.storage_uri)
+        if path is None:
+            return []
+        paths.append(path)
+    return paths
+
+
+def _concat_file_line(path: Path) -> str:
+    escaped = path.resolve().as_posix().replace("'", "'\\''")
+    return f"file '{escaped}'"
+
+
+def _render_timeline_video(
     ffmpeg_path: str,
+    clip_paths: list[Path],
     output_path: Path,
-    duration_seconds: int,
-    fps: int,
-    bitrate: str,
 ) -> str:
-    duration = max(1, duration_seconds)
+    concat_path = output_path.with_suffix(".concat.txt")
+    concat_path.write_text(
+        "\n".join(_concat_file_line(path) for path in clip_paths) + "\n",
+        encoding="utf-8",
+    )
     command = [
         ffmpeg_path,
         "-y",
+        "-safe",
+        "0",
         "-f",
-        "lavfi",
+        "concat",
         "-i",
-        f"color=c=black:s=1080x1920:r={fps}:d={duration}",
-        "-f",
-        "lavfi",
-        "-i",
-        "anullsrc=channel_layout=stereo:sample_rate=44100",
-        "-t",
-        str(duration),
-        "-shortest",
-        "-c:v",
-        "libx264",
-        "-pix_fmt",
-        "yuv420p",
-        "-b:v",
-        bitrate,
-        "-c:a",
-        "aac",
+        str(concat_path),
+        "-c",
+        "copy",
         str(output_path),
     ]
-    completed = subprocess.run(command, check=True, capture_output=True, text=True)
-    return completed.stderr[-2000:]
+    try:
+        completed = subprocess.run(command, check=True, capture_output=True, text=True)
+        return completed.stderr[-2000:]
+    finally:
+        concat_path.unlink(missing_ok=True)
 
 
 async def _create_artifact(
@@ -347,30 +379,42 @@ async def export_timeline(
     asset_kind = AssetKind.DOCUMENT
     content_type = "application/json"
     if ffmpeg_path:
-        mp4_path = export_dir / f"export_{uuid4().hex[:8]}.mp4"
-        try:
-            ffmpeg_log = await asyncio.to_thread(
-                _render_placeholder_video,
-                ffmpeg_path,
-                mp4_path,
-                timeline.duration_seconds,
-                fps,
-                bitrate,
+        clip_paths = await _timeline_video_asset_paths(session, timeline.id)
+        manifest["clip_count"] = len(clip_paths)
+        if clip_paths:
+            mp4_path = export_dir / f"export_{uuid4().hex[:8]}.mp4"
+            try:
+                ffmpeg_log = await asyncio.to_thread(
+                    _render_timeline_video,
+                    ffmpeg_path,
+                    clip_paths,
+                    mp4_path,
+                )
+            except (OSError, subprocess.CalledProcessError) as exc:
+                render_log = f"FFmpeg render failed; wrote structured export manifest. {exc}"
+                output_path.write_text(
+                    json.dumps(manifest, indent=2, ensure_ascii=True), encoding="utf-8"
+                )
+            else:
+                status = "RENDERED"
+                output_path = mp4_path
+                asset_kind = AssetKind.VIDEO
+                content_type = "video/mp4"
+                render_log = (
+                    "FFmpeg rendered the final timeline from local video clip assets."
+                    if not ffmpeg_log
+                    else (
+                        "FFmpeg rendered the final timeline from local video clip assets. "
+                        f"{ffmpeg_log}"
+                    )
+                )
+        else:
+            render_log = (
+                "FFmpeg found, but no local video clip assets were available; "
+                "wrote structured export manifest."
             )
-        except (OSError, subprocess.CalledProcessError) as exc:
-            render_log = f"FFmpeg render failed; wrote structured export manifest. {exc}"
             output_path.write_text(
                 json.dumps(manifest, indent=2, ensure_ascii=True), encoding="utf-8"
-            )
-        else:
-            status = "RENDERED"
-            output_path = mp4_path
-            asset_kind = AssetKind.VIDEO
-            content_type = "video/mp4"
-            render_log = (
-                "FFmpeg rendered a vertical placeholder assembly from timeline metadata."
-                if not ffmpeg_log
-                else f"FFmpeg rendered a vertical placeholder assembly. {ffmpeg_log}"
             )
     else:
         output_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=True), encoding="utf-8")

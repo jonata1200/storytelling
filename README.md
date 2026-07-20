@@ -123,7 +123,7 @@ senha: admin
 ## Testes
 
 ```powershell
-pytest
+python -m pytest
 ruff check .
 mypy app tests
 ```

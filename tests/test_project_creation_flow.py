@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
@@ -157,7 +158,7 @@ def test_legacy_assistant_greeting_is_removed_from_chat_history() -> None:
 
 def test_asset_url_maps_local_storage_file_to_public_storage_route(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     storage_root = tmp_path / "storage"
     image_path = storage_root / "mock_images" / "project 1" / "front view.svg"
@@ -176,7 +177,7 @@ def test_asset_url_maps_local_storage_file_to_public_storage_route(
 
 def test_asset_url_rejects_files_outside_configured_storage(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     storage_root = tmp_path / "storage"
     outside_file = tmp_path / "outside.svg"
@@ -559,11 +560,14 @@ def test_story_bible_payload_is_normalized_to_structured_model() -> None:
             ],
         },
         {"protagonist": "Dona Lourdes"},
-        SimpleNamespace(
-            theme="memoria familiar",
-            genre="drama",
-            audience="adultos",
-            primary_emotion="saudade",
+        cast(
+            Any,
+            SimpleNamespace(
+                theme="memoria familiar",
+                genre="drama",
+                audience="adultos",
+                primary_emotion="saudade",
+            ),
         ),
     )
 

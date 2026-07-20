@@ -251,11 +251,13 @@ async def generate_video_clips(
                     )
                 )
             except Exception as exc:
-                job.status = GenerationJobStatus.RETRY_SCHEDULED
+                job.status = GenerationJobStatus.FAILED
                 job.error = str(exc)
                 job.response_payload = {
-                    "next_retry_seconds": exponential_backoff_seconds(job.attempts)
+                    "retry_after_seconds": exponential_backoff_seconds(job.attempts),
+                    "retry_available": "manual",
                 }
+                job.completed_at = datetime.now(UTC)
                 jobs.append(job)
                 continue
 
@@ -353,7 +355,10 @@ async def generate_video_clips(
                 )
             )
 
-    advance_project_status(project, ProjectStatus.VIDEO_REVIEW)
+    if clips:
+        advance_project_status(project, ProjectStatus.VIDEO_REVIEW)
+    elif jobs:
+        advance_project_status(project, ProjectStatus.VIDEO_GENERATION)
     await session.commit()
     for item in [*jobs, *clips]:
         await session.refresh(item)

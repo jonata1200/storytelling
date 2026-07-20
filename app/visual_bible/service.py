@@ -25,7 +25,7 @@ from app.projects.versioning import create_artifact_version
 from app.providers.image.mock import MockImageProvider
 from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider
-from app.storytelling.models import Script, StoryBible
+from app.storytelling.models import Script, StoryBible, StoryIdea
 from app.visual_bible.models import (
     Character,
     CharacterVersion,
@@ -175,18 +175,20 @@ def _profile_items(value: object) -> list[dict]:
     if isinstance(value, dict):
         if _looks_like_single_profile(value):
             return [_profile_mapping(value)]
-        items: list[dict] = []
+        mapped_items: list[dict] = []
         for key, item in value.items():
             if isinstance(item, dict):
                 if _looks_like_single_profile(item):
-                    items.append(_profile_mapping(item, fallback_name=_humanize_identifier(key)))
+                    mapped_items.append(
+                        _profile_mapping(item, fallback_name=_humanize_identifier(key))
+                    )
                 else:
-                    items.extend(_profile_items(item))
+                    mapped_items.extend(_profile_items(item))
             elif isinstance(item, list):
-                items.extend(_profile_items(item))
+                mapped_items.extend(_profile_items(item))
             elif not _is_profile_detail_key(key) and _short_scalar_item(item):
-                items.append(_profile_mapping(item))
-        return items
+                mapped_items.append(_profile_mapping(item))
+        return mapped_items
     return [_profile_mapping(value)]
 
 
@@ -363,13 +365,52 @@ def _prompt_text(value: object) -> str:
     return str(value or "").strip()
 
 
+PLACEHOLDER_PROFILE_NAMES = {"", "item", "personagem", "protagonista"}
+
+
+def _role_display_name(value: object) -> str:
+    text = _prompt_text(value)
+    text = re.split(r"\s*\(", text, maxsplit=1)[0]
+    text = re.sub(
+        r"\b(?:coadjuvante|co-protagonista|coprotagonista|protagonista|principal|secundario|secundaria|apoio)\b",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"\s+", " ", text).strip(" .:-")
+    return text.title()
+
+
+def _story_idea_protagonist_name(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.split(r"[,;(\n]", text, maxsplit=1)[0]
+    text = re.sub(r"\b\d+\s*anos?.*$", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip(" .:-")
+    return text.title()
+
+
+def _is_primary_protagonist_role(value: object) -> bool:
+    text = str(value or "").strip().lower()
+    if "co-protagonista" in text or "coprotagonista" in text or "co protagonista" in text:
+        return False
+    return text == "protagonista" or text.startswith("protagonista ")
+
+
 def _profile_mapping(raw: object, fallback_name: str | None = None) -> dict:
     if isinstance(raw, dict):
         normalized = dict(raw)
         if not normalized.get("name"):
+            identifier_name = (
+                _humanize_identifier(normalized.get("id")) if normalized.get("id") else ""
+            )
+            role_name = _role_display_name(
+                _first_value(normalized, "role", "funcao", "função", fallback="")
+            )
             normalized["name"] = (
                 normalized.get("nome") or normalized.get("title") or normalized.get("titulo")
-                or fallback_name or _humanize_identifier(normalized.get("id"))
+                or fallback_name or identifier_name or role_name or "Item"
             )
         return normalized
     text = str(raw or "").strip()
@@ -796,19 +837,42 @@ def _script_character_names(script_content: str) -> list[str]:
 
 
 def _is_placeholder_profile_name(value: object) -> bool:
-    text = str(value or "").strip()
-    return not text or text in {"Item", "Personagem"}
+    text = str(value or "").strip().lower()
+    return text in PLACEHOLDER_PROFILE_NAMES
 
 
-def _repair_missing_character_names(items: list[dict], script_content: str) -> list[dict]:
+def _repair_missing_character_names(
+    items: list[dict], script_content: str, protagonist_hint: str = ""
+) -> list[dict]:
     candidates = _script_character_names(script_content)
-    if not candidates:
-        return items
+    missing_count = sum(1 for item in items if _is_placeholder_profile_name(item.get("name")))
+    use_script_candidates = missing_count > 0 and len(candidates) >= missing_count
+    candidate_index = 0
     repaired: list[dict] = []
-    for index, item in enumerate(items):
+    used_names: set[str] = set()
+    for item in items:
         profile = dict(item)
-        if _is_placeholder_profile_name(profile.get("name")) and index < len(candidates):
-            profile["name"] = candidates[index]
+        if _is_placeholder_profile_name(profile.get("name")):
+            role = _first_value(profile, "role", "funcao", "função", fallback="")
+            replacement = ""
+            if protagonist_hint and _is_primary_protagonist_role(role):
+                replacement = protagonist_hint
+            elif use_script_candidates and candidate_index < len(candidates):
+                replacement = candidates[candidate_index]
+                candidate_index += 1
+            else:
+                replacement = _role_display_name(role)
+            if replacement:
+                profile["name"] = replacement
+        name = str(profile.get("name") or "").strip()
+        key = name.lower()
+        if key and key in used_names:
+            role_name = _role_display_name(_first_value(profile, "role", "funcao", "função"))
+            if role_name and role_name.lower() != key:
+                profile["name"] = role_name
+                key = role_name.lower()
+        if key:
+            used_names.add(key)
         repaired.append(profile)
     return repaired
 
@@ -829,6 +893,10 @@ async def generate_visual_bible(
     )
     latest_script = script_result.scalars().first()
     script_content = latest_script.content if latest_script is not None else ""
+    story_idea = await session.get(StoryIdea, story_bible.story_idea_id)
+    protagonist_hint = _story_idea_protagonist_name(
+        story_idea.protagonist if story_idea is not None else ""
+    )
 
     characters: list[Character] = []
     character_items = _profile_items(
@@ -837,7 +905,9 @@ async def generate_visual_bible(
             ("characters", "personagens", "cast", "personas"),
         )
     )
-    character_items = _repair_missing_character_names(character_items, script_content)
+    character_items = _repair_missing_character_names(
+        character_items, script_content, protagonist_hint
+    )
     for raw in character_items:
         profile = _character_profile(raw)
         artifact = await _create_artifact(
@@ -954,8 +1024,10 @@ async def _get_visual_target(
         target = await session.get(Character, target_id)
     elif target_kind == "location":
         target = await session.get(Location, target_id)
-    else:
+    elif target_kind == "prop":
         target = await session.get(Prop, target_id)
+    else:
+        return None
     if target is None or target.project_id != project_id:
         return None
     return target.canonical_profile, target.artifact_id
@@ -967,6 +1039,19 @@ def default_views_for(target_kind: str) -> list[str]:
         "location": LOCATION_VIEWS,
         "prop": PROP_VIEWS,
     }[target_kind]
+
+
+def validated_visual_reference_views(target_kind: str, view_types: list[str] | None) -> list[str]:
+    allowed = default_views_for(target_kind)
+    if view_types is None:
+        return allowed
+    invalid = [view for view in view_types if view not in allowed]
+    if invalid:
+        raise ValueError(
+            f"View type invalido para {target_kind}: {', '.join(invalid)}. "
+            f"Use: {', '.join(allowed)}"
+        )
+    return view_types
 
 
 def initial_view_for(target_kind: str) -> str:
@@ -1155,7 +1240,7 @@ async def approve_visual_target_and_generate_views(
     existing_views = await _existing_visual_reference_views(
         session, project_id, target_kind, target_id
     )
-    requested_views = view_types or default_views_for(target_kind)
+    requested_views = validated_visual_reference_views(target_kind, view_types)
     missing_views = [view for view in requested_views if view not in existing_views]
     if not missing_views:
         await session.commit()
@@ -1185,7 +1270,7 @@ async def generate_visual_references(
         return None
     profile, target_artifact_id = target
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
-    requested_views = view_types or default_views_for(target_kind)
+    requested_views = validated_visual_reference_views(target_kind, view_types)
     if force:
         views = requested_views
     else:

@@ -1,4 +1,5 @@
 import hashlib
+import re
 from html import escape
 from pathlib import Path
 from uuid import uuid4
@@ -11,7 +12,9 @@ class MockImageProvider:
 
     async def generate(self, request: ImageGenerationRequest) -> ImageResult:
         request.output_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"{request.target_id}_{request.view_type}_{uuid4().hex[:8]}.svg"
+        safe_target = self._safe_filename_part(request.target_id)
+        safe_view = self._safe_filename_part(request.view_type)
+        filename = f"{safe_target}_{safe_view}_{uuid4().hex[:8]}.svg"
         file_path = request.output_dir / filename
         svg = self._build_svg(
             request.prompt,
@@ -102,3 +105,7 @@ class MockImageProvider:
 
     def _storage_uri(self, file_path: Path) -> str:
         return file_path.as_posix()
+
+    def _safe_filename_part(self, value: str) -> str:
+        cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._-")
+        return cleaned[:120] or "item"

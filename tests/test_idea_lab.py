@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
@@ -49,7 +50,7 @@ async def test_generate_freeform_ideas_falls_back_when_openrouter_fails(
     class FailingOpenRouterProvider:
         provider_name = "openrouter"
 
-        async def generate_structured(self, request: object):
+        async def generate_structured(self, request: object) -> NoReturn:
             raise RuntimeError("OpenRouter HTTP 429: rate limit")
 
     monkeypatch.setattr(

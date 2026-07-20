@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import NoReturn
 from uuid import uuid4
 
 import pytest
@@ -85,7 +86,7 @@ async def test_director_generation_can_fallback_on_any_openrouter_runtime_error(
     class FailingProvider:
         provider_name = "openrouter"
 
-        async def generate_structured(self, request: LLMRequest):
+        async def generate_structured(self, request: LLMRequest) -> NoReturn:
             raise RuntimeError("OpenRouter retornou conteudo que nao e JSON valido")
 
     class FakeSession:
@@ -131,7 +132,7 @@ async def test_structured_generation_keeps_schema_errors_without_chat_fallback(
     class FailingProvider:
         provider_name = "openrouter"
 
-        async def generate_structured(self, request: LLMRequest):
+        async def generate_structured(self, request: LLMRequest) -> NoReturn:
             raise RuntimeError("generate_script: empty field 'content'")
 
     class FakeSession:

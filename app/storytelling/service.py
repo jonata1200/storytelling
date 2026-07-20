@@ -948,6 +948,8 @@ def normalize_story_bible_payload(
 ) -> dict:
     title = _required_str(payload, "title", "generate_story_bible")
     logline = _required_str(payload, "logline", "generate_story_bible")
+    raw_export_profile = payload.get("export_profile")
+    export_profile_payload = raw_export_profile if isinstance(raw_export_profile, dict) else {}
     normalized = {
         "title": title,
         "logline": logline,
@@ -993,14 +995,12 @@ def normalize_story_bible_payload(
         "audio_style": payload.get("audio_style")
         if isinstance(payload.get("audio_style"), dict)
         else {"description": _story_bible_text(payload.get("audio_style"), "audio discreto")},
-        "export_profile": payload.get("export_profile")
-        if isinstance(payload.get("export_profile"), dict)
-        else {},
+        "export_profile": export_profile_payload,
     }
     normalized["export_profile"] = {
-        "aspect_ratio": str(normalized["export_profile"].get("aspect_ratio") or "9:16"),
-        "resolution": str(normalized["export_profile"].get("resolution") or "1080x1920"),
-        "language": str(normalized["export_profile"].get("language") or "pt-BR"),
+        "aspect_ratio": str(export_profile_payload.get("aspect_ratio") or "9:16"),
+        "resolution": str(export_profile_payload.get("resolution") or "1080x1920"),
+        "language": str(export_profile_payload.get("language") or "pt-BR"),
     }
     return normalized
 
