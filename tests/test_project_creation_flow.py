@@ -58,6 +58,53 @@ def test_project_ai_action_reads_production_metadata() -> None:
     assert action["message"] == "Criando roteiro"
 
 
+def test_ai_action_sync_adds_only_one_chat_message_per_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    storage: dict[str, Any] = {}
+    monkeypatch.setattr(
+        pages,
+        "nicegui_app",
+        SimpleNamespace(storage=SimpleNamespace(user=storage)),
+    )
+    summary = {
+        "production_settings": SimpleNamespace(
+            metadata_json={
+                "ai_action": {
+                    "events": [
+                        {
+                            "id": "create_initial_script:1",
+                            "action": "create_initial_script",
+                            "status": "queued",
+                            "message": "A IA vai iniciar a criacao do roteiro inicial.",
+                        },
+                        {
+                            "id": "create_initial_script:2",
+                            "action": "create_initial_script",
+                            "status": "running",
+                            "message": "A IA esta criando o roteiro inicial com base na ideia.",
+                        },
+                    ]
+                }
+            }
+        )
+    }
+
+    pages._sync_ai_action_events_to_chat(project_id, summary)
+    pages._sync_ai_action_events_to_chat(project_id, summary)
+
+    messages = storage["project_assistant_messages"][str(project_id)]
+    assert messages == [
+        {
+            "role": "assistant",
+            "content": "A IA vai iniciar a criacao do roteiro inicial.",
+            "event_id": "create_initial_script:1",
+            "event_action": "create_initial_script",
+        }
+    ]
+
+
 def test_safe_client_navigation_uses_captured_client() -> None:
     class FakeClient:
         is_deleted = False
@@ -323,6 +370,45 @@ def test_characters_section_unlocks_when_script_exists_without_shots() -> None:
     assert pages._step_ready("script", counts) is True
     assert allowed is True
     assert reason == ""
+
+
+def test_story_bible_section_unlocks_when_bible_exists() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "bibles": 1,
+        "scripts": 0,
+        "scenes": 0,
+        "shots": 0,
+        "characters": 0,
+        "frames": 0,
+        "animatics": 0,
+        "clips": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    allowed, reason = pages._workspace_section_access("bible", counts)
+
+    assert allowed is True
+    assert reason == ""
+
+
+def test_story_bible_items_present_named_sections() -> None:
+    items = pages._story_bible_items(
+        [
+            {
+                "name": "Dona Celia",
+                "role": "protagonista",
+                "arc": "aceita dividir o legado",
+            },
+            "regra de continuidade visual",
+        ]
+    )
+
+    assert items[0]["name"] == "Dona Celia"
+    assert "protagonista" in items[0]["detail"]
+    assert items[1] == {"name": "regra de continuidade visual", "detail": ""}
 
 
 def test_assistant_flow_actions_start_at_assets_stage() -> None:

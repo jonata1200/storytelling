@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import json
 import logging
 import mimetypes
 from collections.abc import Awaitable, Callable
@@ -57,6 +58,7 @@ from app.projects.service import (
     list_projects,
     rename_project,
 )
+from app.projects.versioning import create_artifact_version
 from app.quality.models import ContinuityIssue, QualityCheck
 from app.quality.service import run_quality_check
 from app.storyboards.models import (
@@ -482,6 +484,7 @@ async def _project_summary(project_id: UUID) -> dict[str, Any] | None:
             "quality": latest_quality,
             "export": latest_export,
             "model_settings": list(model_result.scalars()),
+            "story_bible": await _latest(session, StoryBible, project_id),
             "script": await _latest(session, Script, project_id),
             "scenes": await _latest_many(session, Scene, project_id, 12),
             "shots": await _latest_many(session, Shot, project_id, 20),
@@ -567,9 +570,14 @@ def _render_project_card(project: Project, redirect_to: str) -> None:
 
 
 def _workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool, str]:
+    bible_ready = _step_ready("bible", counts)
     script_ready = _step_ready("script", counts)
     assets_ready = _step_ready("visual", counts)
     storyboard_ready = _step_ready("storyboard", counts)
+    if section == "bible":
+        if not bible_ready:
+            return False, "Crie a Story Bible antes de acessar esta etapa."
+        return True, ""
     if section == "script":
         return True, ""
     if section == "assets":
@@ -594,7 +602,7 @@ def _workspace_section_access(section: str, counts: dict[str, int]) -> tuple[boo
 
 
 def _first_available_workspace_section(counts: dict[str, int]) -> str:
-    for section in ["video", "storyboard", "assets", "script"]:
+    for section in ["video", "storyboard", "assets", "script", "bible"]:
         allowed, _ = _workspace_section_access(section, counts)
         if allowed:
             return section
@@ -741,6 +749,7 @@ async def _set_project_ai_action_status(
     message: str,
     action: str = "create_initial_script",
     error: str | None = None,
+    record_event: bool = True,
 ) -> None:
     settings = await get_or_create_production_settings(session, project_id)
     metadata = dict(settings.metadata_json or {})
@@ -749,7 +758,14 @@ async def _set_project_ai_action_status(
         previous_action.get("events", []) if isinstance(previous_action, dict) else []
     )
     events = [event for event in previous_events if isinstance(event, dict)]
-    if not events or events[-1].get("message") != message or events[-1].get("status") != status:
+    if (
+        record_event
+        and (
+            not events
+            or events[-1].get("message") != message
+            or events[-1].get("status") != status
+        )
+    ):
         events.append(
             {
                 "id": f"{action}:{len(events) + 1}",
@@ -780,6 +796,7 @@ async def _generate_initial_script_in_background(
                 project_id,
                 status="running",
                 message="A IA esta criando o roteiro inicial com base na ideia.",
+                record_event=False,
             )
 
             async def report_progress(message: str) -> None:
@@ -788,6 +805,7 @@ async def _generate_initial_script_in_background(
                     project_id,
                     status="running",
                     message=message,
+                    record_event=False,
                 )
 
             await _generate_initial_script(session, project_id, source_idea, report_progress)
@@ -796,6 +814,7 @@ async def _generate_initial_script_in_background(
                 project_id,
                 status="completed",
                 message="Roteiro inicial criado.",
+                record_event=False,
             )
     except Exception:
         logger.exception("Nao foi possivel gerar roteiro inicial do projeto %s", project_id)
@@ -1801,6 +1820,7 @@ def _home_sidebar(active: str = "") -> None:
 
 def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> None:
     tabs = [
+        ("Story Bible", "bible"),
         ("Roteiro", "script"),
         ("Personagens", "assets"),
         ("Storyboard", "storyboard"),
@@ -1882,6 +1902,9 @@ def _load_assistant_messages(
             event_id = item.get("event_id")
             if event_id:
                 message["event_id"] = str(event_id)
+            event_action = item.get("event_action")
+            if event_action:
+                message["event_action"] = str(event_action)
             messages.append(message)
     _ = active, assistant_suggestions
     store[str(project_id)] = messages
@@ -1949,16 +1972,36 @@ def _sync_ai_action_events_to_chat(project_id: UUID, summary: dict[str, Any]) ->
         for item in messages
         if item.get("event_id") is not None
     }
+    known_event_actions = {
+        str(item.get("event_action"))
+        for item in messages
+        if item.get("event_action") is not None
+    }
     changed = False
     for event in raw_events:
         if not isinstance(event, dict):
             continue
         event_id = str(event.get("id") or "")
+        event_action = str(event.get("action") or "")
         message = str(event.get("message") or "").strip()
-        if not event_id or not message or event_id in known_event_ids:
+        if (
+            not event_id
+            or not event_action
+            or not message
+            or event_id in known_event_ids
+            or event_action in known_event_actions
+        ):
             continue
-        messages.append({"role": "assistant", "content": message, "event_id": event_id})
+        messages.append(
+            {
+                "role": "assistant",
+                "content": message,
+                "event_id": event_id,
+                "event_action": event_action,
+            }
+        )
         known_event_ids.add(event_id)
+        known_event_actions.add(event_action)
         changed = True
     if changed:
         store[str(project_id)] = cast(list[dict[str, str]], messages[-80:])
@@ -2021,12 +2064,17 @@ def _assistant_flow_actions(active: str, counts: dict[str, int]) -> dict[str, st
 
 def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> None:
     prompts = {
+        "bible": "Peça ajustes de premissa, personagens, locais ou regras.",
         "script": "Peça ajustes de tom, diálogo ou estrutura.",
         "assets": "Descreva um personagem, local ou objeto.",
         "storyboard": "Diga ao diretor o que enquadrar.",
         "video": "Descreva movimento, câmera ou ritmo.",
     }
     assistant_suggestions = {
+        "bible": (
+            "Sugestões que posso ajudar agora: revisar personagens, locais, objetos, "
+            "tema, tom e regras de continuidade antes de gerar o roteiro."
+        ),
         "script": (
             "Sugestões que posso ajudar agora: revisar a estrutura do roteiro, "
             "fortalecer o gancho inicial ou ajustar diálogos."
@@ -2225,6 +2273,222 @@ def _project_ai_action(summary: dict[str, Any]) -> dict[str, Any]:
 
 def _ordered_scenes(scenes: list[Any]) -> list[Any]:
     return sorted(scenes, key=lambda scene: int(getattr(scene, "scene_number", 0) or 0))
+
+
+def _story_bible_payload_json(story_bible: StoryBible) -> str:
+    return json.dumps(story_bible.payload or {}, ensure_ascii=False, indent=2)
+
+
+def _story_bible_text(value: object) -> str:
+    if value in (None, "", [], {}):
+        return ""
+    if isinstance(value, list):
+        return ", ".join(text for item in value if (text := _story_bible_text(item)))
+    if isinstance(value, dict):
+        name = (
+            value.get("name")
+            or value.get("nome")
+            or value.get("title")
+            or value.get("titulo")
+            or value.get("description")
+            or value.get("descricao")
+        )
+        if name:
+            return str(name)
+        return "; ".join(
+            f"{str(key).replace('_', ' ')}: {_story_bible_text(item)}"
+            for key, item in value.items()
+            if _story_bible_text(item)
+        )
+    return str(value).strip()
+
+
+def _story_bible_items(value: object) -> list[dict[str, str]]:
+    if value in (None, "", [], {}):
+        return []
+    if isinstance(value, list):
+        return [
+            item
+            for raw_item in value
+            if (item := _story_bible_item(raw_item))
+        ]
+    if isinstance(value, dict):
+        if any(key in value for key in ("name", "nome", "title", "titulo", "description")):
+            item = _story_bible_item(value)
+            return [item] if item else []
+        items: list[dict[str, str]] = []
+        for key, raw_item in value.items():
+            item = _story_bible_item(raw_item, fallback_name=str(key).replace("_", " ").title())
+            if item:
+                items.append(item)
+        return items
+    item = _story_bible_item(value)
+    return [item] if item else []
+
+
+def _story_bible_item(value: object, fallback_name: str = "") -> dict[str, str] | None:
+    if isinstance(value, dict):
+        name = _story_bible_text(
+            value.get("name")
+            or value.get("nome")
+            or value.get("title")
+            or value.get("titulo")
+            or fallback_name
+        )
+        details = [
+            _story_bible_text(item)
+            for key, item in value.items()
+            if key not in {"name", "nome", "title", "titulo"} and _story_bible_text(item)
+        ]
+        detail = " | ".join(details[:4])
+        return {"name": name or "Item", "detail": detail}
+    text = _story_bible_text(value)
+    if not text:
+        return None
+    return {"name": fallback_name or text, "detail": text if fallback_name else ""}
+
+
+async def _save_story_bible_from_ui(project_id: UUID, story_bible_id: UUID, raw_payload: str) -> None:
+    try:
+        payload = json.loads(raw_payload)
+        if not isinstance(payload, dict):
+            raise ValueError("O JSON precisa ser um objeto.")
+        async with AsyncSessionLocal() as session:
+            story_bible = await session.get(StoryBible, story_bible_id)
+            if story_bible is None or story_bible.project_id != project_id:
+                raise ValueError("Story Bible nao encontrada.")
+            title = str(payload.get("title") or story_bible.title).strip()
+            logline = str(payload.get("logline") or story_bible.logline).strip()
+            if not title or not logline:
+                raise ValueError("Mantenha title e logline preenchidos.")
+            story_bible.title = title[:220]
+            story_bible.logline = logline
+            story_bible.payload = payload
+            artifact = await session.get(Artifact, story_bible.artifact_id)
+            if artifact is not None:
+                artifact.name = story_bible.title
+                await create_artifact_version(
+                    session,
+                    artifact,
+                    payload,
+                    change_note="Story Bible edited in UI",
+                )
+            await session.commit()
+        ui.notify("Story Bible salva.", color="positive")
+        ui.navigate.reload()
+    except json.JSONDecodeError as exc:
+        ui.notify(f"JSON invalido: {exc.msg}", color="negative")
+    except Exception as exc:
+        ui.notify(f"Nao consegui salvar a Story Bible: {exc}", color="negative")
+
+
+def _render_story_bible_collection(title: str, items: list[dict[str, str]], icon: str) -> None:
+    with ui.element("section").classes("entity-card rounded-2xl p-5 w-full"):
+        with ui.row().classes("items-center gap-2 mb-3"):
+            ui.icon(icon).classes("acid text-xl")
+            ui.label(title).classes("font-semibold")
+            ui.badge(str(len(items))).classes("bg-[#26301f] text-white")
+        if not items:
+            ui.label("Nada definido ainda.").classes("text-sm text-[#8d938e]")
+            return
+        with ui.column().classes("w-full gap-3"):
+            for item in items:
+                with ui.element("div").classes("border border-[#343934] rounded-xl p-3"):
+                    ui.label(item["name"]).classes("font-semibold")
+                    if item["detail"]:
+                        ui.label(item["detail"]).classes("text-sm text-[#8d938e] line-clamp-3")
+
+
+def _render_story_bible_area(project_id: UUID, summary: dict[str, Any]) -> None:
+    story_bible: StoryBible | None = summary.get("story_bible")
+    if story_bible is None:
+        _section_title(
+            "Story Bible",
+            "Congele regras narrativas, personagens, locais, objetos e estilo.",
+            None,
+            None,
+        )
+        with ui.element("div").classes("entity-card rounded-2xl p-8"):
+            ui.icon("menu_book").classes("text-4xl acid")
+            ui.label("Story Bible ainda nao criada").classes("brand-type text-2xl font-bold")
+            ui.label("Gere ideias e crie a Story Bible antes de revisar esta etapa.").classes(
+                "text-sm text-[#8d938e]"
+            )
+        return
+
+    payload = story_bible.payload or {}
+    editor_value = _story_bible_payload_json(story_bible)
+    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_dialog, ui.card().classes(
+        "entity-card rounded-2xl p-6 w-[min(920px,94vw)] max-h-[88vh]"
+    ):
+        ui.label("Editar Story Bible").classes("brand-type text-2xl font-bold")
+        payload_input = ui.textarea("JSON da Story Bible", value=editor_value).props(
+            "outlined autogrow"
+        ).classes("w-full font-mono text-sm")
+        with ui.row().classes("w-full justify-end gap-2"):
+            ui.button("Cancelar", on_click=edit_dialog.close).props("flat no-caps")
+            ui.button(
+                "Salvar",
+                icon="save",
+                on_click=lambda: _save_story_bible_from_ui(
+                    project_id,
+                    story_bible.id,
+                    str(payload_input.value or ""),
+                ),
+            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+
+    _section_title(
+        "Story Bible",
+        "Revise a base criativa que orienta roteiro, ativos, storyboard e video.",
+        "Editar JSON",
+        edit_dialog.open,
+    )
+    with ui.row().classes("w-full gap-4 items-stretch"):
+        with ui.element("section").classes("entity-card rounded-2xl p-6 flex-1 min-w-0"):
+            ui.label(story_bible.title).classes("brand-type text-2xl font-bold")
+            ui.label(story_bible.logline).classes("text-sm text-[#d8dbd8] leading-6 mt-2")
+        with ui.element("section").classes("entity-card rounded-2xl p-6 w-full lg:w-80"):
+            ui.label("Direcao").classes("font-semibold mb-3")
+            for label, key in [
+                ("Tema", "theme"),
+                ("Genero", "genre"),
+                ("Tom", "tone"),
+                ("Emocao", "target_emotion"),
+                ("Publico", "audience"),
+            ]:
+                value = _story_bible_text(payload.get(key))
+                if value:
+                    ui.label(label).classes("text-xs uppercase text-[#8d938e] mt-2")
+                    ui.label(value).classes("text-sm")
+
+    with ui.grid().classes("w-full grid-cols-1 xl:grid-cols-3 gap-4"):
+        _render_story_bible_collection(
+            "Personagens",
+            _story_bible_items(payload.get("characters") or payload.get("personagens")),
+            "person",
+        )
+        _render_story_bible_collection(
+            "Locais",
+            _story_bible_items(payload.get("locations") or payload.get("locais")),
+            "location_on",
+        )
+        _render_story_bible_collection(
+            "Objetos",
+            _story_bible_items(payload.get("props") or payload.get("objetos")),
+            "category",
+        )
+
+    with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-2 gap-4"):
+        _render_story_bible_collection(
+            "Regras Narrativas",
+            _story_bible_items(payload.get("narrative_rules")),
+            "rule",
+        )
+        _render_story_bible_collection(
+            "Continuidade",
+            _story_bible_items(payload.get("continuity_rules")),
+            "verified",
+        )
 
 
 def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
@@ -3442,14 +3706,14 @@ def register_ui_pages() -> None:
 
     @ui.page("/projects/{project_id}", response_timeout=15)
     async def project_workspace(project_id: str) -> None:
-        ui.navigate.to(f"/projects/{project_id}/script")
+        ui.navigate.to(f"/projects/{project_id}/bible")
         return
 
     @ui.page("/projects/{project_id}/{section}", response_timeout=15)
     async def project_studio(project_id: str, section: str) -> None:
         _body_style()
-        if section not in {"script", "assets", "storyboard", "video"}:
-            ui.navigate.to(f"/projects/{project_id}/script")
+        if section not in {"bible", "script", "assets", "storyboard", "video"}:
+            ui.navigate.to(f"/projects/{project_id}/bible")
             return
         try:
             project_uuid = UUID(project_id)
@@ -3477,7 +3741,9 @@ def register_ui_pages() -> None:
             with ui.column().classes(
                 "workspace-main flex-1 min-w-0 p-8 lg:p-10 gap-4 h-[calc(100vh-64px)] overflow-y-auto"
             ):
-                if section == "script":
+                if section == "bible":
+                    _render_story_bible_area(project_uuid, summary)
+                elif section == "script":
                     _render_script_area(project_uuid, summary)
                 elif section == "assets":
                     _render_assets_area(project_uuid, summary)
