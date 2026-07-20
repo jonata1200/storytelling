@@ -150,18 +150,18 @@ PRODUCTION_STEPS = [
         "tips_and_updates",
     ),
     ProductionStep(
-        "bible",
-        "Story Bible",
-        "Congele regras narrativas, personagens, locais, objetos e estilo.",
-        "Gerar Story Bible",
-        "menu_book",
-    ),
-    ProductionStep(
         "script",
         "Roteiro",
         "Crie o texto base, duracao alvo, cenas e planos estruturados.",
         "Gerar roteiro",
         "description",
+    ),
+    ProductionStep(
+        "bible",
+        "Story Bible",
+        "Congele regras narrativas, personagens, locais, objetos e estilo.",
+        "Gerar Story Bible",
+        "menu_book",
     ),
     ProductionStep(
         "visual",
@@ -198,6 +198,15 @@ PRODUCTION_STEPS = [
         "Rodar QA",
         "verified",
     ),
+]
+
+
+WORKSPACE_TABS = [
+    ("Roteiro", "script"),
+    ("Story Bible", "bible"),
+    ("Personagens", "assets"),
+    ("Storyboard", "storyboard"),
+    ("Vídeo", "video"),
 ]
 
 
@@ -1819,13 +1828,6 @@ def _home_sidebar(active: str = "") -> None:
 
 
 def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> None:
-    tabs = [
-        ("Story Bible", "bible"),
-        ("Roteiro", "script"),
-        ("Personagens", "assets"),
-        ("Storyboard", "storyboard"),
-        ("Vídeo", "video"),
-    ]
     with ui.row().classes(
         "sticky top-0 z-30 w-full h-16 px-5 items-center border-b border-[#242824] bg-[#090b0a] gap-5"
     ):
@@ -1841,7 +1843,7 @@ def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> 
                 "bg-amber-900 text-amber-100"
             ).tooltip("Alguns artefatos derivados precisam ser regenerados.")
         with ui.row().classes("desktop-nav flex-1 justify-center gap-2"):
-            for label, key in tabs:
+            for label, key in WORKSPACE_TABS:
                 allowed, reason = _workspace_section_access(key, counts)
                 button = ui.button(
                     label,
@@ -2096,11 +2098,29 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
     _sync_ai_action_events_to_chat(project_id, summary)
     messages = _load_assistant_messages(project_id, active, assistant_suggestions)
     flow_actions = _assistant_flow_actions(active, summary["counts"])
+    visual_cards_ready = active == "assets" and _visual_library_cards_ready(summary)
+    visual_batch_requests = _visual_batch_requests(summary) if active == "assets" else []
+    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_dialog, ui.card().classes(
+        "entity-card rounded-2xl p-7 w-[min(520px,92vw)]"
+    ):
+        with ui.row().classes("items-center gap-4"):
+            ui.spinner(size="lg").classes("acid")
+            with ui.column().classes("gap-1"):
+                ui.label("IA gerando imagens").classes("brand-type text-xl font-bold")
+                ui.label(
+                    "Os ativos estao entrando em fila, um por vez, para evitar sobrecarga da API."
+                ).classes("text-sm text-[#8d938e]")
+
+    async def approve_all_visuals_from_chat() -> None:
+        batch_dialog.open()
+        await _approve_all_visual_targets_from_ui(project_id, visual_batch_requests)
+        batch_dialog.close()
+
     with ui.column().classes(
         "right-assistant w-[340px] min-w-[340px] border-l border-[#252925] "
-        "bg-[#0d0f0e] h-[calc(100vh-64px)] min-h-0 p-4 gap-4 sticky top-16"
-    ):
-        with ui.row().classes("w-full items-center justify-between"):
+        "bg-[#0d0f0e] h-[calc(100vh-64px)] min-h-0 px-4 pb-4 pt-0 !pt-0 mt-0 gap-4 sticky top-0 self-start"
+    ).style("margin-top:0!important;padding-top:0!important;"):
+        with ui.row().classes("w-full items-center justify-between mt-0 pt-0"):
             with ui.row().classes("items-center gap-2"):
                 ui.icon("auto_awesome").classes("acid")
                 ui.label("Diretor IA").classes("font-semibold")
@@ -2230,6 +2250,28 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                     ).props("outline no-caps").classes(
                         "rounded-xl w-full text-[#d8dbd8] border-[#3a403a]"
                     )
+
+        if active == "assets":
+            with ui.element("div").classes(
+                "glass rounded-2xl p-3 w-full shrink-0 border border-[#30362b]"
+            ):
+                ui.label("Geracao de imagens").classes("text-xs acid uppercase font-semibold")
+                if not visual_cards_ready:
+                    helper_text = "Crie personagens, locais e objetos antes de gerar tudo."
+                elif not visual_batch_requests:
+                    helper_text = "Todas as imagens iniciais ja foram criadas."
+                else:
+                    helper_text = (
+                        f"{len(visual_batch_requests)} ativo(s) aguardando imagem inicial."
+                    )
+                ui.label(helper_text).classes("text-xs text-[#8d938e] mt-2")
+                batch_button = ui.button(
+                    "Aprovar todos e gerar imagens",
+                    icon="auto_awesome",
+                    on_click=approve_all_visuals_from_chat,
+                ).props("unelevated no-caps").classes("acid-bg rounded-xl w-full mt-2")
+                if not visual_cards_ready or not visual_batch_requests:
+                    batch_button.props("disable")
 
         with ui.row().classes("w-full items-end gap-2 shrink-0"):
             prompt = (
@@ -2865,48 +2907,12 @@ def _entity_card(
 
 def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
     asset_map = {asset.id: asset for asset in summary.get("assets", [])}
-    cards_ready = _visual_library_cards_ready(summary)
-    batch_requests = _visual_batch_requests(summary)
     _section_title(
         "Biblioteca visual",
         "Personagens, locais e objetos canônicos do seu universo.",
         None,
         None,
     )
-    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_dialog, ui.card().classes(
-        "entity-card rounded-2xl p-7 w-[min(520px,92vw)]"
-    ):
-        with ui.row().classes("items-center gap-4"):
-            ui.spinner(size="lg").classes("acid")
-            with ui.column().classes("gap-1"):
-                ui.label("IA gerando imagens").classes("brand-type text-xl font-bold")
-                ui.label(
-                    "Os ativos estao entrando em fila, um por vez, para evitar sobrecarga da API."
-                ).classes("text-sm text-[#8d938e]")
-
-    async def approve_all_visuals() -> None:
-        batch_dialog.open()
-        await _approve_all_visual_targets_from_ui(project_id, batch_requests)
-        batch_dialog.close()
-
-    with ui.row().classes("w-full items-center justify-between gap-3"):
-        helper_text = (
-            "Crie personagens, locais e objetos antes de gerar tudo em lote."
-            if not cards_ready
-            else (
-                "Todas as imagens iniciais ja foram criadas."
-                if not batch_requests
-                else f"{len(batch_requests)} ativo(s) aguardando imagem inicial."
-            )
-        )
-        ui.label(helper_text).classes("text-sm text-[#8d938e]")
-        batch_button = ui.button(
-            "Aprovar todos e gerar imagens",
-            icon="auto_awesome",
-            on_click=approve_all_visuals,
-        ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-        if not cards_ready or not batch_requests:
-            batch_button.props("disable")
     with (
         ui.tabs()
         .classes("text-[#8d938e]")
@@ -3706,7 +3712,7 @@ def register_ui_pages() -> None:
 
     @ui.page("/projects/{project_id}", response_timeout=15)
     async def project_workspace(project_id: str) -> None:
-        ui.navigate.to(f"/projects/{project_id}/bible")
+        ui.navigate.to(f"/projects/{project_id}/script")
         return
 
     @ui.page("/projects/{project_id}/{section}", response_timeout=15)
@@ -3737,7 +3743,7 @@ def register_ui_pages() -> None:
             ui.navigate.to(f"/projects/{project_id}/{fallback}")
             return
         _workspace_header(project, section, counts)
-        with ui.row().classes("w-full items-start flex-nowrap"):
+        with ui.row().classes("w-full items-start flex-nowrap gap-0"):
             with ui.column().classes(
                 "workspace-main flex-1 min-w-0 p-8 lg:p-10 gap-4 h-[calc(100vh-64px)] overflow-y-auto"
             ):

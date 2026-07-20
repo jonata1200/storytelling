@@ -15,6 +15,7 @@ from app.storytelling.service import (
     normalize_scene_plan_payload,
     normalize_scene_plan_payload_from_script,
     normalize_script_payload,
+    normalize_story_bible_payload,
     normalize_story_idea_payload,
 )
 from app.ui import pages
@@ -394,6 +395,18 @@ def test_story_bible_section_unlocks_when_bible_exists() -> None:
     assert reason == ""
 
 
+def test_production_steps_show_script_before_story_bible() -> None:
+    step_keys = [step.key for step in pages.PRODUCTION_STEPS]
+
+    assert step_keys.index("script") < step_keys.index("bible")
+
+
+def test_workspace_tabs_show_script_before_story_bible() -> None:
+    tab_keys = [key for _, key in pages.WORKSPACE_TABS]
+
+    assert tab_keys[:2] == ["script", "bible"]
+
+
 def test_story_bible_items_present_named_sections() -> None:
     items = pages._story_bible_items(
         [
@@ -524,6 +537,63 @@ def test_story_idea_payload_defaults_unknown_scores() -> None:
     assert payload["retention_potential"] == 75
     assert payload["cliche_risk"] == 25
     assert payload["production_complexity"] == 35
+
+
+def test_story_bible_payload_is_normalized_to_structured_model() -> None:
+    payload = normalize_story_bible_payload(
+        {
+            "title": "O ultimo almoco",
+            "logline": "Uma avo prepara uma receita antes de revelar um segredo.",
+            "characters": [
+                {
+                    "eyes": "olhos castanhos atentos",
+                    "hair": "coque baixo branco",
+                    "role": "protagonista",
+                    "base_outfit": {
+                        "peca_principal": "vestido azul",
+                        "textura": "algodao gasto",
+                    },
+                },
+                "palette_caracteristicas_visuais_para_o_personagem",
+                "arc_aceita_dividir_o_legado",
+            ],
+        },
+        {"protagonist": "Dona Lourdes"},
+        SimpleNamespace(
+            theme="memoria familiar",
+            genre="drama",
+            audience="adultos",
+            primary_emotion="saudade",
+        ),
+    )
+
+    assert payload["theme"] == "memoria familiar"
+    assert payload["export_profile"] == {
+        "aspect_ratio": "9:16",
+        "resolution": "1080x1920",
+        "language": "pt-BR",
+    }
+    assert len(payload["characters"]) == 1
+    assert payload["characters"][0]["name"] == "Dona Lourdes"
+    assert payload["characters"][0]["base_outfit"]["main_piece"] == "vestido azul"
+    assert payload["locations"][0]["name"] == "Local principal"
+    assert payload["props"][0]["name"] == "Objeto de revelacao"
+
+
+def test_story_bible_payload_accepts_named_location_and_prop_maps() -> None:
+    payload = normalize_story_bible_payload(
+        {
+            "title": "A carta",
+            "logline": "Uma carta muda uma familia.",
+            "locais": {"sala_de_estar": {"lighting": "luz quente"}},
+            "objetos": {"carta_azul": {"material": "papel envelhecido"}},
+        }
+    )
+
+    assert payload["locations"][0]["name"] == "Sala De Estar"
+    assert payload["locations"][0]["lighting"] == "luz quente"
+    assert payload["props"][0]["name"] == "Carta Azul"
+    assert payload["props"][0]["material"] == "papel envelhecido"
 
 
 def test_story_idea_payload_requires_title() -> None:
