@@ -79,6 +79,14 @@ def _shot_narration_text(payload: dict, context: str) -> str:
     return _required_str(payload, "action", context)
 
 
+def _first_non_empty(payload: dict, *keys: str, fallback: object = "") -> object:
+    for key in keys:
+        value = payload.get(key)
+        if value not in (None, "", [], {}):
+            return value
+    return fallback
+
+
 def _required_int(payload: dict, key: str, context: str) -> int:
     value = payload.get(key)
     if value is None:
@@ -197,7 +205,188 @@ def _script_block_to_text(value: object) -> str:
     return "\n".join(lines)
 
 
-def _script_content_from_payload(payload: dict) -> str:
+SCRIPT_TECHNICAL_LABEL_RE = re.compile(
+    r"(?im)^\s*(?:"
+    r"numero|n[uú]mero|cabecalho|cabe[cç]alho|resumo|"
+    r"objetivo(?: dram[aá]tico)?|personagens?|local|ambiente|"
+    r"objetos?|a[cç][aã]o|narra[cç][aã]o|di[aá]logo|"
+    r"dura[cç][aã]o|indicacao para (?:storyboard|video)|"
+    r"indica[cç][aã]o para (?:storyboard|v[ií]deo)|"
+    r"storyboard|video|v[ií]deo|camera|c[aâ]mera|"
+    r"visual_composition|camera_movement|duration_seconds|"
+    r"narration_text|dialogue_text"
+    r")\s*:"
+)
+SCREENPLAY_SLUGLINE_RE = re.compile(r"(?im)^\s*(?:INT|EXT|INT/EXT|EXT/INT)\.\s+.+")
+SCREENPLAY_HEADING_RE = re.compile(
+    r"(?i)^\s*(?P<kind>INT|EXT|INT/EXT|EXT/INT)\.\s+"
+    r"(?P<location>.+?)(?:\s*-\s*(?P<period>[^-\n]+))?\s*$"
+)
+
+
+def _looks_like_screenplay(content: str) -> bool:
+    text = str(content or "").strip()
+    if not text:
+        return False
+    return bool(
+        re.search(r"(?im)^\s*FADE IN\s*:?", text)
+        and SCREENPLAY_SLUGLINE_RE.search(text)
+        and not SCRIPT_TECHNICAL_LABEL_RE.search(text)
+    )
+
+
+def _clean_screenplay_location(value: object, fallback: str) -> str:
+    text = re.sub(r"\s+", " ", str(value or fallback)).strip(" .:-")
+    text = re.sub(r"(?i)^(?:int|ext|int/ext|ext/int)\.\s*", "", text)
+    text = re.sub(
+        r"\s*-\s*(?:dia|noite|manha|manh[aã]|tarde|madrugada|amanhecer).*$",
+        "",
+        text,
+        flags=re.I,
+    )
+    return text.upper()[:80] or fallback.upper()
+
+
+def _screenplay_heading_parts(
+    value: object, *, fallback_location: str, fallback_period: str
+) -> tuple[str, str, str]:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    match = SCREENPLAY_HEADING_RE.match(text)
+    if match:
+        kind = match.group("kind").upper()
+        location = _clean_screenplay_location(match.group("location"), fallback_location)
+        period = str(match.group("period") or fallback_period).strip().upper()[:30]
+        return kind, location, period or fallback_period.upper()
+    return (
+        "INT",
+        _clean_screenplay_location(text, fallback_location),
+        fallback_period.upper()[:30],
+    )
+
+
+def _dialogue_blocks(value: object) -> list[tuple[str, str]]:
+    blocks: list[tuple[str, str]] = []
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            blocks.append(("PERSONAGEM", text))
+        return blocks
+    if isinstance(value, list):
+        for item in value:
+            blocks.extend(_dialogue_blocks(item))
+        return blocks
+    if isinstance(value, dict):
+        speaker = str(
+            value.get("character")
+            or value.get("personagem")
+            or value.get("speaker")
+            or value.get("name")
+            or "PERSONAGEM"
+        ).strip()
+        line = str(
+            value.get("line")
+            or value.get("fala")
+            or value.get("text")
+            or value.get("dialogue")
+            or value.get("dialogo")
+            or ""
+        ).strip()
+        if line:
+            blocks.append((speaker.upper()[:40], line))
+    return blocks
+
+
+def _action_text_from_mapping(value: dict, fallback: str) -> str:
+    parts: list[str] = []
+    for key in (
+        "action",
+        "acao",
+        "summary",
+        "resumo",
+        "description",
+        "descricao",
+        "narration_text",
+        "narration",
+    ):
+        text = _script_block_to_text(value.get(key))
+        if text:
+            parts.append(text)
+    for shot in value.get("shots") or value.get("planos") or []:
+        if isinstance(shot, dict):
+            shot_text = _script_block_to_text(
+                shot.get("action")
+                or shot.get("acao")
+                or shot.get("narration_text")
+                or shot.get("summary")
+            )
+            if shot_text:
+                parts.append(shot_text)
+    if not parts:
+        parts.append(fallback)
+    text = " ".join(parts)
+    text = re.sub(SCRIPT_TECHNICAL_LABEL_RE, "", text)
+    return re.sub(r"\s+", " ", text).strip()[:1200] or fallback
+
+
+def _screenplay_content_from_scene_items(
+    raw_scenes: list,
+    *,
+    title: str,
+    target_duration_seconds: int,
+) -> str:
+    _ = target_duration_seconds
+    lines = [f"TITULO: {title}", "", "FADE IN:"]
+    for index, raw_scene in enumerate(raw_scenes[:8], 1):
+        scene = raw_scene if isinstance(raw_scene, dict) else {"action": raw_scene}
+        scene_title = _first_non_empty(
+            scene,
+            "heading",
+            "slugline",
+            "location",
+            "local",
+            "setting",
+            "title",
+            fallback=f"Cena {index}",
+        )
+        period = _first_non_empty(scene, "period", "periodo", "time", fallback="DIA")
+        kind = str(scene.get("kind") or scene.get("tipo") or "").strip().upper()
+        kind = kind if kind in {"INT", "EXT", "INT/EXT", "EXT/INT"} else ""
+        parsed_kind, location, parsed_period = _screenplay_heading_parts(
+            scene_title,
+            fallback_location=f"CENA {index}",
+            fallback_period=str(period),
+        )
+        heading_kind = kind or parsed_kind
+        action = _action_text_from_mapping(
+            scene,
+            "O personagem atravessa o espaco em silencio, revelando uma escolha emocional.",
+        )
+
+        lines.extend(
+            [
+                "",
+                f"CENA {index:02d}",
+                f"{heading_kind}. {location} - {parsed_period}",
+                "",
+                action,
+            ]
+        )
+        dialogues = _dialogue_blocks(scene.get("dialogue") or scene.get("dialogo"))
+        for shot in scene.get("shots") or scene.get("planos") or []:
+            if isinstance(shot, dict):
+                dialogues.extend(_dialogue_blocks(shot.get("dialogue") or shot.get("dialogo")))
+                dialogue_text = str(shot.get("dialogue_text") or "").strip()
+                if dialogue_text:
+                    dialogues.append(("PERSONAGEM", dialogue_text))
+        for speaker, line in dialogues[:3]:
+            lines.extend(["", speaker, line])
+    lines.extend(["", "FADE OUT."])
+    return "\n".join(lines)
+
+
+def _script_content_from_payload(
+    payload: dict, *, default_title: str, target_duration_seconds: int
+) -> str:
     direct_content = (
         payload.get("content")
         or payload.get("script")
@@ -206,7 +395,8 @@ def _script_content_from_payload(payload: dict) -> str:
         or payload.get("texto")
     )
     if text := _script_block_to_text(direct_content):
-        return text
+        if _looks_like_screenplay(text):
+            return text
 
     for key in (
         "scenes",
@@ -220,8 +410,22 @@ def _script_content_from_payload(payload: dict) -> str:
         "outline",
         "roteiro_cenas",
     ):
-        if key in payload and (text := _script_block_to_text(payload[key])):
-            return text
+        value = payload.get(key)
+        if isinstance(value, list) and value:
+            return _screenplay_content_from_scene_items(
+                value,
+                title=str(payload.get("title") or payload.get("titulo") or default_title),
+                target_duration_seconds=target_duration_seconds,
+            )
+        if value and (text := _script_block_to_text(value)):
+            if _looks_like_screenplay(text):
+                return text
+    if text := _script_block_to_text(direct_content):
+        return _screenplay_content_from_scene_items(
+            [{"action": text}],
+            title=str(payload.get("title") or payload.get("titulo") or default_title),
+            target_duration_seconds=target_duration_seconds,
+        )
     return ""
 
 
@@ -229,67 +433,70 @@ def _fallback_script_content_from_bible(
     story_bible_payload: dict, title: str, target_duration_seconds: int
 ) -> str:
     logline = str(story_bible_payload.get("logline") or "").strip()
-    theme = str(story_bible_payload.get("theme") or "").strip()
-    tone = str(story_bible_payload.get("tone") or "").strip()
-    visual_style = str(story_bible_payload.get("visual_style") or "").strip()
-    characters = _script_block_to_text(story_bible_payload.get("characters"))
-    locations = _script_block_to_text(story_bible_payload.get("locations"))
-    props = _script_block_to_text(story_bible_payload.get("props"))
-    clip_count = len(video_clip_durations(target_duration_seconds))
-    scene_duration = max(30, target_duration_seconds // 5)
+    protagonist = "A PROTAGONISTA"
+    if isinstance(story_bible_payload.get("characters"), list):
+        first_character = (
+            story_bible_payload["characters"][0]
+            if story_bible_payload["characters"]
+            else {}
+        )
+        if isinstance(first_character, dict):
+            protagonist = str(first_character.get("name") or "A PROTAGONISTA").upper()
+    location = "CASA DA FAMILIA"
+    if isinstance(story_bible_payload.get("locations"), list):
+        first_location = (
+            story_bible_payload["locations"][0]
+            if story_bible_payload["locations"]
+            else {}
+        )
+        if isinstance(first_location, dict):
+            location = _clean_screenplay_location(first_location.get("name"), location)
+    prop = "objeto de revelacao"
+    if isinstance(story_bible_payload.get("props"), list):
+        first_prop = story_bible_payload["props"][0] if story_bible_payload["props"] else {}
+        if isinstance(first_prop, dict):
+            prop = str(first_prop.get("name") or prop)
     return "\n\n".join(
         [
-            f"ROTEIRO DE PRODUCAO - {title}",
-            f"Duracao alvo: {target_duration_seconds}s",
+            f"TITULO: {title}",
+            "FADE IN:",
             (
-                "Planejamento de video: dividir depois em "
-                f"{clip_count} clipes de {VIDEO_CLIP_MIN_SECONDS}s a "
-                f"{VIDEO_CLIP_MAX_SECONDS}s para Seedance 2.0 Fast."
-            ),
-            f"Logline: {logline or title}",
-            f"Tema: {theme or 'transformacao emocional'}",
-            f"Tom: {tone or 'cinematico e emocional'}",
-            f"Estilo visual: {visual_style or 'cinematico vertical'}",
-            f"Personagens principais:\n{characters or 'Definir a partir da Story Bible.'}",
-            f"Locais:\n{locations or 'Local principal definido pela Story Bible.'}",
-            f"Objetos importantes:\n{props or 'Objetos narrativos definidos pela Story Bible.'}",
-            (
-                f"CENA 1 - GANCHO INICIAL - {scene_duration}s\n"
-                "Objetivo dramatico: apresentar conflito visual imediato.\n"
-                "Acao: o protagonista encontra um sinal, objeto ou decisao que muda a rotina.\n"
-                "Narracao: uma frase curta introduz a promessa emocional.\n"
-                "Indicacao para storyboard: plano vertical forte com foco no rosto e no objeto.\n"
-                "Indicacao para video: camera lenta suave, ritmo de descoberta."
+                "CENA 01\n"
+                f"INT. {location} - FIM DE TARDE\n\n"
+                f"{protagonist} permanece diante de uma mesa coberta por marcas do passado. "
+                f"O {prop} aparece onde nao deveria estar. Ela toca o objeto como se a "
+                "casa inteira prendesse a respiracao.\n\n"
+                f"{protagonist}\n"
+                "Eu achei que essa historia tinha acabado."
             ),
             (
-                f"CENA 2 - CONTEXTO E DESEJO - {scene_duration}s\n"
-                "Objetivo dramatico: mostrar o que o protagonista quer proteger ou conquistar.\n"
-                "Acao: interacoes revelam relacoes, limites e stakes emocionais.\n"
-                "Dialogo: falas curtas, com nomes em caixa alta quando houver personagem falando.\n"
-                "Indicacao para storyboard: alternar plano medio e detalhe significativo.\n"
-                "Indicacao para video: movimento discreto acompanhando a decisao."
+                "CENA 02\n"
+                f"INT. {location} - NOITE\n\n"
+                "A luz do corredor corta a sala em duas metades. Fotografias antigas, "
+                f"cartas e pequenos sinais da vida familiar cercam {protagonist}. "
+                f"Ela relê cada pista ate entender que {logline or 'a verdade sempre esteve ali'}."
             ),
             (
-                f"CENA 3 - VIRADA - {scene_duration}s\n"
-                "Objetivo dramatico: colocar o protagonista diante de uma escolha irreversivel.\n"
-                "Acao: uma descoberta muda o sentido da historia.\n"
-                "Indicacao para storyboard: composicao vertical com contraste de luz e sombra.\n"
-                "Indicacao para video: aproximacao gradual ate o momento da virada."
+                "CENA 03\n"
+                "EXT. RUA DIANTE DA CASA - MADRUGADA\n\n"
+                f"{protagonist} sai para a rua vazia com o {prop} contra o peito. "
+                "O silencio deixa claro que a proxima escolha nao podera ser escondida."
             ),
             (
-                f"CENA 4 - CLIMAX - {scene_duration}s\n"
-                "Objetivo dramatico: resolver a escolha com acao clara e filmavel.\n"
-                "Acao: o protagonista age, perde algo ou revela uma verdade.\n"
-                "Indicacao para storyboard: planos de reacao e gesto decisivo.\n"
-                "Indicacao para video: ritmo mais intenso, cortes curtos e camera firme."
+                "CENA 04\n"
+                f"INT. {location} - AMANHECER\n\n"
+                "A primeira luz revela poeira suspensa no ar. "
+                f"{protagonist} coloca o {prop} no centro da mesa e encara a consequencia "
+                "do que descobriu.\n\n"
+                f"{protagonist}\n"
+                "A verdade vai doer. Mas a mentira ja doeu por tempo demais."
             ),
             (
-                f"CENA 5 - PAYOFF EMOCIONAL - {scene_duration}s\n"
-                "Objetivo dramatico: entregar consequencia emocional e imagem final memoravel.\n"
-                "Acao: o mundo da historia mostra a mudanca causada pela decisao.\n"
-                "Narracao: frase final curta com fechamento emocional.\n"
-                "Indicacao para storyboard: plano aberto ou detalhe final simbolico.\n"
-                "Indicacao para video: movimento suave de encerramento e pausa final."
+                "CENA 05\n"
+                "EXT. FRENTE DA CASA - MANHA\n\n"
+                f"{protagonist} fecha a porta sem tranca-la. Pela primeira vez, ela atravessa "
+                "a luz da manha sem esconder o passado.\n\n"
+                "FADE OUT."
             ),
         ]
     )
@@ -306,9 +513,15 @@ def normalize_script_payload(
     normalized.setdefault("title", default_title)
     normalized.setdefault("language", language)
     normalized["target_duration_seconds"] = target_duration_seconds
-    normalized["content"] = _script_content_from_payload(normalized)
-    normalized["word_count"] = _coerce_positive_int(
-        normalized.get("word_count"), len(normalized["content"].split())
+    normalized["content"] = _script_content_from_payload(
+        normalized,
+        default_title=default_title,
+        target_duration_seconds=target_duration_seconds,
+    )
+    content_word_count = len(normalized["content"].split())
+    normalized["word_count"] = max(
+        _coerce_positive_int(normalized.get("word_count"), content_word_count),
+        content_word_count,
     )
     return normalized
 

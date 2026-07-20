@@ -282,7 +282,34 @@ def _body_style() -> None:
           .glass { background:rgba(17,20,18,.88); border:1px solid var(--line); }
           .acid { color:var(--acid); }
           .acid-bg { background:var(--acid)!important; color:#10120d!important; }
-          .nav-pill { border:1px solid transparent; color:#8c918d; transition:.2s ease; }
+          .workspace-header {
+            display:grid;
+            grid-template-columns:minmax(260px,.75fr) minmax(420px,1.25fr) auto;
+            align-items:center;
+            gap:16px;
+            min-height:64px;
+            padding:0 20px;
+          }
+          .workspace-titlebar { min-width:0; flex-wrap:nowrap!important; }
+          .workspace-titlebar .q-btn { flex:0 0 auto; }
+          .workspace-nav {
+            min-width:0;
+            overflow-x:auto;
+            flex-wrap:nowrap!important;
+            justify-content:center;
+            scrollbar-width:none;
+          }
+          .workspace-nav::-webkit-scrollbar { display:none; }
+          .workspace-actions { flex-wrap:nowrap!important; justify-content:flex-end; min-width:max-content; }
+          .nav-pill {
+            border:1px solid transparent;
+            color:#8c918d;
+            transition:.2s ease;
+            flex:0 0 auto;
+            min-height:36px!important;
+            height:36px;
+          }
+          .nav-pill .q-btn__content { flex-wrap:nowrap; white-space:nowrap; gap:6px; }
           .nav-pill:hover { color:#eaf3ff; background:#171a18; }
           .nav-active { color:#ffffff!important; background:var(--acid)!important; border-color:rgba(255,255,255,.45)!important; min-width:92px; }
           .nav-active .q-btn__content,
@@ -316,7 +343,12 @@ def _body_style() -> None:
             background: #181b19 !important;
             border-radius: 14px !important;
           }
-          .assistant-chat-messages { overscroll-behavior:contain; }
+          .assistant-chat-messages {
+            overscroll-behavior:contain;
+            scrollbar-width:none;
+            -ms-overflow-style:none;
+          }
+          .assistant-chat-messages::-webkit-scrollbar { display:none; }
           .assistant-chat-bubble { white-space:pre-wrap; overflow-wrap:anywhere; }
           .assistant-chat-user-bubble { color:#ffffff!important; }
           .assistant-chat-input .q-field__control { min-height:48px!important; height:auto!important; max-height:132px!important; }
@@ -340,7 +372,21 @@ def _body_style() -> None:
           .q-placeholder::placeholder { color: #777d78 !important; }
           .q-menu { background: #151816 !important; color: #f8fafc !important; }
           ::-webkit-scrollbar { width:7px; height:7px } ::-webkit-scrollbar-thumb { background:#363b36; border-radius:10px }
-          @media(max-width:900px){.desktop-nav{display:none!important}.workspace-main{padding:18px!important}.right-assistant{display:none!important}}
+          @media(max-width:1180px){
+            .workspace-header {
+              grid-template-columns:minmax(240px,1fr) auto;
+              grid-template-areas:"title actions" "nav nav";
+              height:auto!important;
+              padding-top:8px;
+              padding-bottom:8px;
+              row-gap:8px;
+            }
+            .workspace-titlebar { grid-area:title; }
+            .workspace-nav { grid-area:nav; justify-content:flex-start; }
+            .workspace-actions { grid-area:actions; }
+            .workspace-main { height:calc(100vh - 112px)!important; }
+          }
+          @media(max-width:900px){.desktop-nav{display:none!important}.workspace-main{height:calc(100vh - 64px)!important;padding:18px!important}.right-assistant{display:none!important}}
         </style>
         """
     )
@@ -1832,21 +1878,24 @@ def _home_sidebar(active: str = "") -> None:
 
 
 def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> None:
-    with ui.row().classes(
-        "sticky top-0 z-30 w-full h-16 px-5 items-center border-b border-[#242824] bg-[#090b0a] gap-5"
+    with ui.element("header").classes(
+        "workspace-header sticky top-0 z-30 w-full border-b border-[#242824] bg-[#090b0a]"
     ):
-        _studio_logo(compact=True)
-        ui.button(icon="arrow_back", on_click=lambda: ui.navigate.to("/")).props(
-            "flat round"
-        ).classes("text-[#9da29d]")
-        with ui.column().classes("gap-0 min-w-40"):
-            ui.label(project.title).classes("font-semibold truncate max-w-56")
-        ui.label("Episódio 1").classes("text-[11px] text-[#818681]")
-        if counts.get("stale_artifacts", 0):
-            ui.badge(f"{counts['stale_artifacts']} desatualizado(s)").classes(
-                "bg-amber-900 text-amber-100"
-            ).tooltip("Alguns artefatos derivados precisam ser regenerados.")
-        with ui.row().classes("desktop-nav flex-1 justify-center gap-2"):
+        with ui.row().classes("workspace-titlebar items-center gap-3"):
+            _studio_logo(compact=True)
+            ui.button(icon="arrow_back", on_click=lambda: ui.navigate.to("/")).props(
+                "flat round dense"
+            ).classes("text-[#9da29d] shrink-0")
+            with ui.column().classes("gap-0 min-w-0"):
+                ui.label(project.title).classes("font-semibold truncate max-w-72")
+                ui.label("Episodio 1").classes(
+                    "workspace-episode text-[11px] text-[#818681]"
+                )
+            if counts.get("stale_artifacts", 0):
+                ui.badge(f"{counts['stale_artifacts']} desatualizado(s)").classes(
+                    "bg-amber-900 text-amber-100 shrink-0"
+                ).tooltip("Alguns artefatos derivados precisam ser regenerados.")
+        with ui.row().classes("workspace-nav desktop-nav items-center gap-1"):
             for label, key in WORKSPACE_TABS:
                 allowed, reason = _workspace_section_access(key, counts)
                 button = ui.button(
@@ -1854,16 +1903,17 @@ def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> 
                     icon=None if allowed else "lock",
                     on_click=lambda k=key: ui.navigate.to(f"/projects/{project.id}/{k}"),
                 ).props("flat no-caps" if allowed else "flat no-caps disable").classes(
-                    f"nav-pill rounded-full px-4 {'nav-active' if active == key else ''} "
+                    f"nav-pill rounded-full px-3 {'nav-active' if active == key else ''} "
                     f"{'nav-locked cursor-not-allowed' if not allowed else ''}"
                 )
                 if not allowed:
                     button.tooltip(reason)
-        ui.label("PT-BR").classes("desktop-nav text-sm text-[#a9aea9]")
-        _theme_toggle()
-        ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
-            "acid-bg rounded-xl font-semibold"
-        )
+        with ui.row().classes("workspace-actions items-center gap-3"):
+            ui.label("PT-BR").classes("desktop-nav text-sm text-[#a9aea9] shrink-0")
+            _theme_toggle()
+            ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
+                "acid-bg rounded-xl font-semibold shrink-0"
+            )
 
 
 def _assistant_initial_message(active: str, assistant_suggestions: dict[str, str]) -> dict[str, str]:
@@ -2159,7 +2209,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                             )
 
         with ui.column().classes(
-            "assistant-chat-messages w-full flex-1 min-h-0 overflow-y-auto pr-1"
+            "assistant-chat-messages w-full flex-1 min-h-0 overflow-y-auto"
         ):
             conversation()
 

@@ -77,5 +77,7 @@ async def test_mock_llm_generates_cinematic_script_format() -> None:
     assert "EXT. RUA ESTREITA" in content
     assert "CLARA\n" in content
     assert "FADE OUT." in content
+    assert " - 60s" not in content
+    assert " - 300s" not in content
     assert "OBJETIVO DRAMATICO" not in content
     assert "INDICACAO PARA STORYBOARD" not in content

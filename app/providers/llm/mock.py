@@ -152,31 +152,24 @@ class MockLLMProvider:
         title = str(bible.get("title") or "Historia")
         language = str(variables.get("language") or "pt-BR")
         target_duration_seconds = int(variables.get("target_duration_seconds") or 240)
-        scene_count = 5
-        base_duration = target_duration_seconds // scene_count
-        remainder = target_duration_seconds % scene_count
-        scene_durations = [
-            base_duration + 1 if index < remainder else base_duration
-            for index in range(scene_count)
-        ]
         content = (
             f"TITULO: {title}\n\n"
             "FADE IN:\n\n"
             "CENA 01\n"
-            f"INT. CASA DA FAMILIA - FIM DE TARDE - {scene_durations[0]}s\n\n"
+            "INT. CASA DA FAMILIA - FIM DE TARDE\n\n"
             "A sala simples respira poeira e luz fria. Fotografias antigas cobrem a mesa.\n\n"
             "CLARA, exausta mas atenta, encontra uma carta azul escondida atras de um "
             "porta-retratos rachado. A mao dela treme antes de abrir o envelope.\n\n"
             "CLARA\n"
             "Isso nao podia estar aqui.\n\n"
             "CENA 02\n"
-            f"EXT. RUA ESTREITA - NOITE - {scene_durations[1]}s\n\n"
+            "EXT. RUA ESTREITA - NOITE\n\n"
             "Postes falham sobre o asfalto molhado. Clara atravessa a rua com a carta "
             "dobrada no bolso do casaco.\n\n"
             "Cada porta fechada parece saber mais do que ela. Clara para diante de uma "
             "casa sem numero e escuta uma fita antiga tocar la dentro.\n\n"
             "CENA 03\n"
-            f"INT. SALA DA FAMILIA - MADRUGADA - {scene_durations[2]}s\n\n"
+            "INT. SALA DA FAMILIA - MADRUGADA\n\n"
             "A carta aberta repousa sob a luz de um abajur. A parede de fotografias vira "
             "um tribunal silencioso.\n\n"
             "Clara termina de ouvir a fita. A raiva dela cede lugar a uma compreensao "
@@ -184,13 +177,13 @@ class MockLLMProvider:
             "CLARA\n"
             "Eu passei anos odiando a pessoa errada.\n\n"
             "CENA 04\n"
-            f"INT. CASA DA FAMILIA - AMANHECER - {scene_durations[3]}s\n\n"
+            "INT. CASA DA FAMILIA - AMANHECER\n\n"
             "A mesma sala ganha luz quente. Clara encaixa a fotografia restaurada no "
             "porta-retratos e deixa a carta azul ao lado.\n\n"
             "Ela olha para a janela aberta. Nao ha vitoria facil no rosto dela, apenas "
             "a decisao de contar a verdade.\n\n"
             "CENA 05\n"
-            f"EXT. FRENTE DA CASA - MANHA - {scene_durations[4]}s\n\n"
+            "EXT. FRENTE DA CASA - MANHA\n\n"
             "Clara sai com a carta no bolso. A porta permanece aberta atras dela.\n\n"
             "Ela atravessa a primeira luz do dia sem esconder o passado.\n\n"
             "FADE OUT."
@@ -210,9 +203,10 @@ class MockLLMProvider:
         target_duration_seconds = int(variables.get("target_duration_seconds") or 300)
         content = (
             current_script.strip()
-            + "\n\nNOTA DE REVISAO CINEMATOGRAFICA:\n"
-            + f"Pedido do Diretor IA: {instruction.strip().capitalize()}.\n"
-            + "Preservar sluglines, acao no presente, dialogos em bloco e continuidade visual."
+            + "\n\nCENA 06\n"
+            + "INT. CASA DA FAMILIA - MANHA\n\n"
+            + f"A revisao ganha corpo em uma acao simples: {instruction.strip().capitalize()}. "
+            + "A cena preserva o conflito principal e deixa a emocao aparecer no gesto."
         ).strip()
         return {
             "title": str(variables.get("title") or "Roteiro revisado"),

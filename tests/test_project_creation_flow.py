@@ -620,8 +620,11 @@ def test_script_payload_accepts_common_ai_field_names() -> None:
     assert payload["title"] == "A carta azul"
     assert payload["language"] == "pt-BR"
     assert payload["target_duration_seconds"] == 420
-    assert payload["word_count"] == 8
-    assert payload["content"] == "Cena 1: Uma carta chega tarde demais."
+    assert payload["word_count"] > 8
+    assert "FADE IN:" in payload["content"]
+    assert "CENA 01" in payload["content"]
+    assert "INT. CENA 1 - DIA" in payload["content"]
+    assert "Cena 1: Uma carta chega tarde demais." in payload["content"]
 
 
 def test_script_payload_preserves_briefing_duration_over_model_output() -> None:
@@ -742,9 +745,13 @@ def test_script_payload_builds_content_from_scene_list_when_content_is_empty() -
         target_duration_seconds=300,
     )
 
-    assert "Cena: 1" in payload["content"]
-    assert "Titulo: A chegada" in payload["content"]
-    assert "Acao: Clara encontra a carta na porta." in payload["content"]
+    assert "FADE IN:" in payload["content"]
+    assert "CENA 01" in payload["content"]
+    assert "INT. A CHEGADA - DIA" in payload["content"]
+    assert "Clara encontra a carta na porta." in payload["content"]
+    assert "Titulo:" not in payload["content"]
+    assert "Acao:" not in payload["content"]
+    assert "Dolly in lento" not in payload["content"]
 
 
 def test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_script() -> None:
@@ -758,9 +765,12 @@ def test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_s
         300,
     )
 
-    assert "ROTEIRO DE PRODUCAO - A mensagem atrasada" in content
-    assert "CENA 1 - GANCHO INICIAL" in content
-    assert "Indicacao para video" in content
+    assert "TITULO: A mensagem atrasada" in content
+    assert "FADE IN:" in content
+    assert "CENA 01" in content
+    assert "INT. CASA DA FAMILIA - FIM DE TARDE" in content
+    assert "Indicacao para video" not in content
+    assert "Objetivo dramatico" not in content
 
 
 @pytest.mark.asyncio
