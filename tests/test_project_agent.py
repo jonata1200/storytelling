@@ -214,4 +214,4 @@ async def test_project_chat_reports_progress(
     )
 
     assert result == ProjectChatResult("Roteiro criado.", "generate_script", True)
-    assert progress_messages == ["Vou escrever o roteiro."]
+    assert progress_messages == ["Criando roteiro."]

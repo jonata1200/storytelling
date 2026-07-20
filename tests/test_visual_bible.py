@@ -11,6 +11,10 @@ from app.visual_bible.service import (
     _payload_section,
     _profile_items,
     _prop_profile,
+    _repair_missing_character_names,
+    _script_character_names,
+    _script_location_profiles,
+    _script_prop_profiles,
     default_views_for,
     initial_view_for,
     regenerate_visual_reference,
@@ -110,6 +114,21 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     assert "papel amassado" in prop["canonical_prompt"]
 
 
+def test_character_profile_formats_structured_outfit_as_prompt_text() -> None:
+    character = _character_profile(
+        {
+            "name": "Dona Lourdes",
+            "base_outfit": {
+                "peca_principal": "vestido azul indigio",
+                "textura": "algodao gasto",
+            },
+        }
+    )
+
+    assert "peca principal: vestido azul indigio" in character["canonical_prompt"]
+    assert "{'peca_principal'" not in character["canonical_prompt"]
+
+
 def test_character_defaults_are_distinct_by_name() -> None:
     clara = _character_profile("Clara")
     lucas = _character_profile("Lucas")
@@ -191,6 +210,45 @@ def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:
     ]
 
 
+def test_profile_items_do_not_turn_internal_fields_into_cards() -> None:
+    items = _profile_items(
+        {
+            "arc_aceita_que_o_legado_nao_e_perfeito": "arco emocional interno",
+            "personality_teimosa_afetuosa": "personalidade interna",
+            "palette_caracteristicas_visuais": ["azul", "branco"],
+        }
+    )
+
+    assert len(items) == 1
+    assert items[0]["name"] == "Item"
+    assert "arc_aceita_que_o_legado_nao_e_perfeito" in items[0]
+
+
+def test_profile_items_skip_internal_field_strings_inside_lists() -> None:
+    items = _profile_items(
+        [
+            {"name": "Dona Lourdes", "role": "protagonista"},
+            "palette_characteristicais_visuals_para_o_personagem",
+            "personality_teimosa_afetuosa",
+            "arc_aceita_que_o_legado_nao_e_controle",
+        ]
+    )
+
+    assert items == [{"name": "Dona Lourdes", "role": "protagonista"}]
+
+
+def test_profile_items_uses_named_mapping_keys_as_asset_names() -> None:
+    items = _profile_items(
+        {
+            "dona_celia": {"role": "matriarca", "arc": "aceita o legado"},
+            "lucas": {"role": "neto", "personality": "curioso"},
+        }
+    )
+
+    assert [item["name"] for item in items] == ["Dona Celia", "Lucas"]
+    assert items[0]["role"] == "matriarca"
+
+
 def test_payload_section_accepts_portuguese_story_bible_keys() -> None:
     payload = {
         "personagens": [{"name": "Dona Celia"}],
@@ -204,9 +262,57 @@ def test_payload_section_accepts_portuguese_story_bible_keys() -> None:
 
 
 def test_payload_section_accepts_nested_visual_bible_keys() -> None:
-    payload = {"visual_bible": {"locais": [{"name": "Quintal"}]}}
+    payload = {
+        "visual_bible": {
+            "locais": {"quintal": {"layout": "fundo da casa"}},
+            "objetos": {"partitura": {"material": "papel envelhecido"}},
+        }
+    }
 
-    assert _payload_section(payload, ("locations", "locais")) == [{"name": "Quintal"}]
+    locations = _profile_items(_payload_section(payload, ("locations", "locais")))
+    props = _profile_items(_payload_section(payload, ("props", "objetos")))
+
+    assert locations[0]["name"] == "Quintal"
+    assert props[0]["name"] == "Partitura"
+
+
+def test_script_fallback_extracts_locations_and_props() -> None:
+    script = """
+    FADE IN:
+
+    INT. COZINHA DE DONA LOURDES - MANHA
+    Vapor sobe de uma panela de ferro preto. Ela mexe com uma colher de pau.
+
+    EXT. QUINTAL - NOITE
+    A neta segura uma carta amarelada.
+    """
+
+    locations = _script_location_profiles(script)
+    props = _script_prop_profiles(script)
+
+    assert [item["name"] for item in locations] == ["Cozinha De Dona Lourdes", "Quintal"]
+    assert "Panela De Ferro Preto" in [item["name"] for item in props]
+    assert "Carta Amarelada" in [item["name"] for item in props]
+
+
+def test_script_fallback_repairs_missing_character_names() -> None:
+    script = """
+    INT. COZINHA - MANHA
+    DONA LOURDES (88) mexe a panela.
+
+    DONA LOURDES
+    Agora e seu.
+
+    NETE
+    Eu prometo.
+    """
+    items = [{"name": "Item", "role": "protagonista"}, {"role": "neta"}]
+
+    assert _script_character_names(script) == ["Dona Lourdes", "Nete"]
+    assert [item["name"] for item in _repair_missing_character_names(items, script)] == [
+        "Dona Lourdes",
+        "Nete",
+    ]
 
 
 @pytest.mark.asyncio

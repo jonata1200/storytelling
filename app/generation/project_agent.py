@@ -63,6 +63,16 @@ class ProjectChatResult:
 ProgressCallback = Callable[[str], Awaitable[None]]
 
 
+ACTION_PROGRESS_MESSAGES: dict[ProjectChatAction, str] = {
+    "generate_script": "Criando roteiro.",
+    "revise_script": "Revisando roteiro.",
+    "generate_assets": "Criando ativos visuais.",
+    "generate_storyboard": "Criando storyboard.",
+    "generate_video": "Preparando video.",
+    "chat": "Analisando projeto.",
+}
+
+
 async def _emit_progress(progress: ProgressCallback | None, message: str) -> None:
     if progress is not None:
         await progress(message)
@@ -461,36 +471,34 @@ async def handle_project_chat(
     action = classify_project_chat_action(message, active)
     force = _requests_regeneration(message)
     project_context = await build_project_context(session, project_id)
+    await _emit_progress(progress, ACTION_PROGRESS_MESSAGES[action])
 
     if action == "generate_script":
         _script, result_message, changed = await _ensure_script_pipeline(
-            session, project_id, progress
+            session, project_id, None
         )
         return ProjectChatResult(result_message, action, changed)
     if action == "revise_script":
         script, result_message, changed = await _ensure_script_pipeline(
-            session, project_id, progress
+            session, project_id, None
         )
         if script is None:
             return ProjectChatResult(result_message, action, changed)
-        await _emit_progress(progress, "Vou revisar o roteiro mantendo a continuidade do projeto.")
         revised = await revise_script(session, project_id, script.id, message, project_context)
         if revised is None:
             return ProjectChatResult("Nao consegui aplicar a revisao no roteiro.", action, changed)
         return ProjectChatResult("Roteiro revisado e nova versao salva no projeto.", action, True)
     if action == "generate_assets":
         return await _ensure_visual_pipeline(
-            session, project_id, force=force, progress=progress
+            session, project_id, force=force, progress=None
         )
     if action == "generate_storyboard":
         return await _ensure_storyboard_pipeline(
-            session, project_id, force=force, progress=progress
+            session, project_id, force=force, progress=None
         )
     if action == "generate_video":
-        await _emit_progress(progress, "Vou preparar o storyboard para a etapa de video.")
-        return await _ensure_video_pipeline(session, project_id, force=force, progress=progress)
+        return await _ensure_video_pipeline(session, project_id, force=force, progress=None)
 
-    await _emit_progress(progress, "Vou analisar o projeto e responder como Diretor IA.")
     response = await ask_director_agent(
         session,
         project_id,

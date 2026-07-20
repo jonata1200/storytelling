@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from decimal import Decimal
 from uuid import UUID
 
@@ -24,7 +25,7 @@ from app.projects.versioning import create_artifact_version
 from app.providers.image.mock import MockImageProvider
 from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider
-from app.storytelling.models import StoryBible
+from app.storytelling.models import Script, StoryBible
 from app.visual_bible.models import (
     Character,
     CharacterVersion,
@@ -162,11 +163,30 @@ def _profile_items(value: object) -> list[dict]:
     if value is None:
         return []
     if isinstance(value, list):
-        return [_profile_mapping(item) for item in value]
+        items: list[dict] = []
+        for item in value:
+            if _is_internal_field_scalar(item):
+                continue
+            if isinstance(item, list):
+                items.extend(_profile_items(item))
+            else:
+                items.append(_profile_mapping(item))
+        return items
     if isinstance(value, dict):
-        if any(key in value for key in ("name", "nome", "title", "titulo", "description")):
+        if _looks_like_single_profile(value):
             return [_profile_mapping(value)]
-        return [_profile_mapping(item) for item in value.values()]
+        items: list[dict] = []
+        for key, item in value.items():
+            if isinstance(item, dict):
+                if _looks_like_single_profile(item):
+                    items.append(_profile_mapping(item, fallback_name=_humanize_identifier(key)))
+                else:
+                    items.extend(_profile_items(item))
+            elif isinstance(item, list):
+                items.extend(_profile_items(item))
+            elif not _is_profile_detail_key(key) and _short_scalar_item(item):
+                items.append(_profile_mapping(item))
+        return items
     return [_profile_mapping(value)]
 
 
@@ -184,12 +204,172 @@ def _payload_section(payload: dict, keys: tuple[str, ...]) -> object:
     return None
 
 
-def _profile_mapping(raw: object) -> dict:
+PROFILE_NAME_KEYS = (
+    "name",
+    "nome",
+    "title",
+    "titulo",
+    "description",
+    "descricao",
+    "descrição",
+)
+PROFILE_DETAIL_KEYS = frozenset(
+    {
+        "id",
+        "role",
+        "funcao",
+        "função",
+        "arc",
+        "arco",
+        "personality",
+        "personalidade",
+        "palette",
+        "paleta",
+        "paleta_de_cores",
+        "apparent_age",
+        "idade_aparente",
+        "idade",
+        "body_type",
+        "tipo_fisico",
+        "corpo",
+        "face_shape",
+        "formato_rosto",
+        "rosto",
+        "skin_tone",
+        "tom_de_pele",
+        "pele",
+        "eyes",
+        "olhos",
+        "hair",
+        "cabelo",
+        "base_outfit",
+        "figurino_base",
+        "roupa",
+        "figurino",
+        "gender",
+        "genero",
+        "sexo",
+        "origin",
+        "origem",
+        "nacionalidade",
+        "height_cm",
+        "altura_cm",
+        "altura",
+        "mood",
+        "atmosfera",
+        "layout",
+        "planta",
+        "disposicao",
+        "disposição",
+        "materials",
+        "materiais",
+        "lighting",
+        "iluminacao",
+        "iluminação",
+        "luz",
+        "props_in_scene",
+        "spatial_rules",
+        "dimensions",
+        "dimensoes",
+        "dimensões",
+        "tamanho",
+        "material",
+        "color",
+        "cor",
+        "cores",
+        "state",
+        "estado",
+        "condicao",
+        "condição",
+        "owner",
+        "dono",
+        "proprietario",
+        "proprietário",
+        "importance",
+        "importancia",
+        "importância",
+        "narrative_importance",
+    }
+)
+
+
+def _is_profile_detail_key(key: object) -> bool:
+    normalized = str(key or "").strip().lower()
+    if normalized in PROFILE_DETAIL_KEYS:
+        return True
+    return any(
+        normalized.startswith(f"{prefix}_")
+        for prefix in (
+            "arc",
+            "arco",
+            "personality",
+            "personalidade",
+            "palette",
+            "paleta",
+            "hair",
+            "cabelo",
+            "eyes",
+            "olhos",
+            "role",
+            "funcao",
+            "local",
+            "objeto",
+        )
+    )
+
+
+def _looks_like_single_profile(value: dict) -> bool:
+    return any(key in value for key in PROFILE_NAME_KEYS) or any(
+        _is_profile_detail_key(key) for key in value
+    )
+
+
+def _humanize_identifier(value: object) -> str:
+    text = str(value or "").strip().strip("_-")
+    if not text:
+        return "Item"
+    prefixes = ("char_", "loc_", "prop_", "personagem_", "local_", "objeto_")
+    lower_text = text.lower()
+    for prefix in prefixes:
+        if lower_text.startswith(prefix):
+            text = text[len(prefix) :]
+            break
+    return " ".join(part for part in text.replace("-", "_").split("_") if part).title() or "Item"
+
+
+def _short_scalar_item(value: object) -> bool:
+    if value in (None, "", [], {}):
+        return False
+    return len(str(value).strip()) <= 90
+
+
+def _is_internal_field_scalar(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    text = value.strip().lower()
+    return _is_profile_detail_key(text)
+
+
+def _prompt_text(value: object) -> str:
+    if isinstance(value, dict):
+        parts = [
+            f"{_humanize_identifier(key).lower()}: {_prompt_text(item)}"
+            for key, item in value.items()
+            if item not in (None, "", [], {})
+        ]
+        return "; ".join(parts)
+    if isinstance(value, list):
+        return ", ".join(_prompt_text(item) for item in value if item not in (None, "", [], {}))
+    return str(value or "").strip()
+
+
+def _profile_mapping(raw: object, fallback_name: str | None = None) -> dict:
     if isinstance(raw, dict):
         normalized = dict(raw)
-        if "name" not in normalized:
+        if not normalized.get("name"):
             normalized["name"] = (
                 normalized.get("nome") or normalized.get("title") or normalized.get("titulo")
+                or fallback_name or _humanize_identifier(normalized.get("id"))
             )
         return normalized
     text = str(raw or "").strip()
@@ -348,11 +528,15 @@ def _character_profile(raw: object) -> dict:
         ],
         "canonical_prompt": (
             "Fotorrealista, hiper realista, foto de uma pessoa. "
-            f"{str(gender).capitalize()} {origin}, {apparent_age}, altura {height_cm}cm, "
-            f"{body_type}. Cabelo: {hair}. Rosto: {face_shape}. Pele: {skin_tone}. "
-            f"Olhos: {eyes}. Papel dramatico: {role}. Sinal de personalidade: {personality}. "
-            f"Figurino base exclusivo: {base_outfit}. Material textil com caimento funcional, "
-            f"modelagem coerente com a historia. Paleta: {palette}. "
+            f"{_prompt_text(gender).capitalize()} {_prompt_text(origin)}, "
+            f"{_prompt_text(apparent_age)}, altura {_prompt_text(height_cm)}cm, "
+            f"{_prompt_text(body_type)}. Cabelo: {_prompt_text(hair)}. "
+            f"Rosto: {_prompt_text(face_shape)}. Pele: {_prompt_text(skin_tone)}. "
+            f"Olhos: {_prompt_text(eyes)}. Papel dramatico: {_prompt_text(role)}. "
+            f"Sinal de personalidade: {_prompt_text(personality)}. "
+            f"Figurino base exclusivo: {_prompt_text(base_outfit)}. "
+            "Material textil com caimento funcional, "
+            f"modelagem coerente com a historia. Paleta: {_prompt_text(palette)}. "
             "Textura realista, iluminacao cinematografica, fotografia profissional. "
             "Este personagem deve ser visualmente distinto dos demais, com roupa, silhueta, cabelo "
             "e paleta exclusivos; evitar figurino generico, camiseta lisa repetida, blazer padrao "
@@ -411,9 +595,10 @@ def _location_profile(raw: object) -> dict:
         "spatial_rules": ["manter portas, janelas e moveis na mesma posicao"],
         "canonical_prompt": (
             "Fotorrealista, hiper realista, fotografia de arquitetura. "
-            f"Plano geral de {name}. Funcao narrativa: {description}. Layout: {layout}. "
-            f"Materiais e superficies: {materials}. Paleta de cores: {palette}. "
-            f"Iluminacao: {lighting}. Composicao com profundidade em primeiro plano, "
+            f"Plano geral de {name}. Funcao narrativa: {_prompt_text(description)}. "
+            f"Layout: {_prompt_text(layout)}. Materiais e superficies: {_prompt_text(materials)}. "
+            f"Paleta de cores: {_prompt_text(palette)}. Iluminacao: {_prompt_text(lighting)}. "
+            "Composicao com profundidade em primeiro plano, "
             "plano medio e fundo, geografia clara para camera, entradas e saidas legiveis, "
             "moveis e objetos do ambiente em posicoes consistentes. Nenhuma pessoa presente, "
             "sem personagens, sem multidao, sem silhuetas humanas, sem retratos de pessoas "
@@ -464,14 +649,168 @@ def _prop_profile(raw: object) -> dict:
         "canonical_prompt": (
             "Fotorrealista, hiper realista, fotografia de produto. "
             f"Um unico {name}, posicionado em angulo de tres quartos, fundo branco puro "
-            f"ou cor solida neutra. Importancia narrativa: {narrative_importance}. "
-            f"Dimensoes: {dimensions}. Material: {material}. Cor: {color}. Estado: {state}. "
-            f"Dono ou relacao narrativa: {owner}. Objeto inteiro, totalmente em destaque, "
+            f"ou cor solida neutra. Importancia narrativa: {_prompt_text(narrative_importance)}. "
+            f"Dimensoes: {_prompt_text(dimensions)}. Material: {_prompt_text(material)}. "
+            f"Cor: {_prompt_text(color)}. Estado: {_prompt_text(state)}. "
+            f"Dono ou relacao narrativa: {_prompt_text(owner)}. "
+            "Objeto inteiro, totalmente em destaque, "
             "centralizado, sem outros objetos, sem maos, sem pessoas, sem cenario. "
             "Silhueta reconhecivel, detalhes funcionais legiveis, textura realista do material, "
             "acabamento coerente com o uso na historia, iluminacao de estudio profissional."
         ),
     }
+
+
+SCENE_LOCATION_RE = re.compile(
+    r"(?im)^\s*(?:INT|EXT|INT/EXT|INTERIOR|EXTERIOR)\.?\s+(?P<location>.+?)\s*$"
+)
+SCRIPT_PROP_KEYWORDS = (
+    "anel",
+    "bilhete",
+    "boneca",
+    "brinquedo",
+    "caixa",
+    "caneta",
+    "carta",
+    "chave",
+    "colher",
+    "colar",
+    "cumbuca",
+    "diario",
+    "envelope",
+    "faca",
+    "fita",
+    "fotografia",
+    "livro",
+    "mala",
+    "mochila",
+    "panela",
+    "partitura",
+    "pote",
+    "prato",
+    "receita",
+    "relogio",
+    "retrato",
+    "tabua",
+)
+
+
+def _clean_script_entity_name(value: str) -> str:
+    text = re.sub(r"\([^)]*\)", "", value)
+    text = re.split(r"\s+-\s+", text, maxsplit=1)[0]
+    text = re.sub(r"\b\d+\s*s\b", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip(" .:-")
+    return text.title()
+
+
+def _script_location_profiles(script_content: str) -> list[dict]:
+    profiles: list[dict] = []
+    seen: set[str] = set()
+    for match in SCENE_LOCATION_RE.finditer(script_content):
+        name = _clean_script_entity_name(match.group("location"))
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        profiles.append(
+            {
+                "name": name,
+                "description": f"Ambiente extraido do roteiro: {name}",
+                "layout": "geografia definida pelas acoes e entradas descritas no roteiro",
+                "materials": "materiais, moveis e objetos visiveis no texto da cena",
+                "lighting": "luz coerente com o periodo da slugline e o tom dramatico",
+            }
+        )
+        if len(profiles) >= 6:
+            break
+    return profiles
+
+
+def _script_prop_profiles(script_content: str) -> list[dict]:
+    profiles: list[dict] = []
+    seen: set[str] = set()
+    for keyword in SCRIPT_PROP_KEYWORDS:
+        pattern = re.compile(
+            rf"\b(?:um|uma|o|a|os|as|do|da|dos|das)?\s*"
+            rf"((?:\w+\s+){{0,2}}{re.escape(keyword)}"
+            r"(?:\s+(?!de\b|do\b|da\b|dos\b|das\b|com\b)\w+){0,2}"
+            r"(?:\s+(?:de|do|da|dos|das|com)\s+\w+(?:\s+\w+){0,3})?)",
+            re.IGNORECASE,
+        )
+        for match in pattern.finditer(script_content):
+            raw_name = match.group(1)
+            keyword_match = re.search(rf"\b{re.escape(keyword)}\b", raw_name, re.IGNORECASE)
+            if keyword_match is not None:
+                raw_name = raw_name[keyword_match.start() :]
+            name = _clean_script_entity_name(raw_name)
+            if not name or len(name) < 3:
+                continue
+            key = name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            profiles.append(
+                {
+                    "name": name,
+                    "narrative_importance": f"Objeto narrativo extraido do roteiro: {name}",
+                    "material": "material visivel conforme descrito no roteiro",
+                    "state": "estado coerente com a cena em que aparece",
+                }
+            )
+            break
+        if len(profiles) >= 6:
+            break
+    return profiles
+
+
+SCRIPT_CHARACTER_EXCLUSIONS = {
+    "FADE IN",
+    "FADE OUT",
+    "CORTE PARA",
+    "INT",
+    "EXT",
+    "CONTINUO",
+    "DETALHES",
+}
+
+
+def _script_character_names(script_content: str) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for raw_line in script_content.splitlines():
+        line = re.sub(r"\([^)]*\)", "", raw_line).strip(" .:-")
+        if not line or len(line) > 48:
+            continue
+        if not re.fullmatch(r"[A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{2,}", line):
+            continue
+        if line in SCRIPT_CHARACTER_EXCLUSIONS or line.startswith(("INT", "EXT")):
+            continue
+        key = line.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(line.title())
+    return names
+
+
+def _is_placeholder_profile_name(value: object) -> bool:
+    text = str(value or "").strip()
+    return not text or text in {"Item", "Personagem"}
+
+
+def _repair_missing_character_names(items: list[dict], script_content: str) -> list[dict]:
+    candidates = _script_character_names(script_content)
+    if not candidates:
+        return items
+    repaired: list[dict] = []
+    for index, item in enumerate(items):
+        profile = dict(item)
+        if _is_placeholder_profile_name(profile.get("name")) and index < len(candidates):
+            profile["name"] = candidates[index]
+        repaired.append(profile)
+    return repaired
 
 
 async def generate_visual_bible(
@@ -482,6 +821,15 @@ async def generate_visual_bible(
     if project is None or story_bible is None or story_bible.project_id != project_id:
         return None
 
+    script_result = await session.execute(
+        select(Script)
+        .where(Script.project_id == project_id, Script.story_bible_id == story_bible_id)
+        .order_by(Script.created_at.desc())
+        .limit(1)
+    )
+    latest_script = script_result.scalars().first()
+    script_content = latest_script.content if latest_script is not None else ""
+
     characters: list[Character] = []
     character_items = _profile_items(
         _payload_section(
@@ -489,6 +837,7 @@ async def generate_visual_bible(
             ("characters", "personagens", "cast", "personas"),
         )
     )
+    character_items = _repair_missing_character_names(character_items, script_content)
     for raw in character_items:
         profile = _character_profile(raw)
         artifact = await _create_artifact(
@@ -522,6 +871,8 @@ async def generate_visual_bible(
             ("locations", "locais", "lugares", "settings", "places", "cenarios", "cenários"),
         )
     )
+    if not location_items and script_content:
+        location_items = _script_location_profiles(script_content)
     for raw in location_items:
         profile = _location_profile(raw)
         artifact = await _create_artifact(
@@ -562,6 +913,8 @@ async def generate_visual_bible(
             ),
         )
     )
+    if not prop_items and script_content:
+        prop_items = _script_prop_profiles(script_content)
     for raw in prop_items:
         profile = _prop_profile(raw)
         artifact = await _create_artifact(

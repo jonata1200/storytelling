@@ -1221,55 +1221,45 @@ async def _create_next_episode(project_id: UUID) -> None:
 
 
 async def _run_step(project_id: UUID, step_key: str) -> None:
+    step_messages = {
+        "ideas": "Criando ideias.",
+        "bible": "Criando Story Bible.",
+        "script": "Criando roteiro.",
+        "visual": "Criando ativos visuais.",
+        "storyboard": "Criando storyboard.",
+        "video": "Preparando video.",
+        "finalization": "Finalizando projeto.",
+        "quality": "Revisando qualidade.",
+    }
     try:
+        _append_assistant_message_to_chat(
+            project_id,
+            step_messages.get(step_key, "Executando etapa."),
+        )
         async with AsyncSessionLocal() as session:
             if step_key == "ideas":
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Vou gerar novas ideias alinhadas ao briefing do projeto.",
-                )
                 await generate_story_ideas(session, project_id)
             elif step_key == "bible":
                 idea = await _latest(session, StoryIdea, project_id)
                 if idea is None:
                     raise ValueError("gere ideias primeiro")
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Vou transformar a ideia selecionada em uma Story Bible.",
-                )
                 await generate_story_bible(session, project_id, idea.id)
             elif step_key == "script":
                 bible = await _latest(session, StoryBible, project_id)
                 if bible is None:
                     raise ValueError("gere a Story Bible primeiro")
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Vou criar o roteiro cinematografico a partir da Story Bible.",
-                )
                 script = await generate_script(session, project_id, bible.id)
                 if script is None:
                     raise ValueError("nao foi possivel gerar roteiro")
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Roteiro criado. Agora vou separar a historia em cenas e planos.",
-                )
                 await generate_scenes_and_shots(session, project_id, script.id)
             elif step_key == "visual":
                 bible = await _latest(session, StoryBible, project_id)
                 if bible is None:
                     raise ValueError("gere a Story Bible primeiro")
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Vou criar os perfis de personagens, locais e objetos para aprovacao visual.",
-                )
                 await generate_visual_bible(session, project_id, bible.id)
                 ui.notify(
                     "Ativos preparados. Aprove os prompts na Biblioteca visual para criar as imagens.",
                     color="info",
-                )
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Perfis visuais preparados. Revise e aprove os prompts antes de criar imagens.",
                 )
                 ui.navigate.reload()
                 return
@@ -1277,15 +1267,7 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 script = await _latest(session, Script, project_id)
                 if script is None:
                     raise ValueError("gere o roteiro primeiro")
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Vou transformar as cenas em frames de storyboard.",
-                )
                 await generate_storyboard_frames(session, project_id, script.id)
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Storyboard criado. Agora vou montar o animatic.",
-                )
                 await generate_animatic_bundle(session, project_id, script.id)
             elif step_key == "video":
                 result = await session.execute(
@@ -1296,17 +1278,9 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 frames = list(result.scalars())
                 if not frames:
                     raise ValueError("gere o storyboard primeiro")
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Vou preparar os prompts de video para sua aprovacao antes de gerar clipes.",
-                )
                 ui.notify(
                     "Prompts de video prontos. Aprove-os na aba Video para gerar os clipes.",
                     color="info",
-                )
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Prompts de video preparados. Revise-os na aba Video antes de gerar clipes.",
                 )
                 ui.navigate.reload()
                 return
@@ -1314,10 +1288,6 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 source_audio = await _latest(session, AudioTrack, project_id)
                 if source_audio is None:
                     raise ValueError("gere o animatic primeiro")
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Vou sintetizar a narracao final e preparar legendas.",
-                )
                 final_audio = await synthesize_narration(
                     session, project_id, source_audio.id, "pt-br-warm-narrator"
                 )
@@ -1325,10 +1295,6 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                     raise ValueError("nao foi possivel gerar narracao")
                 subtitle = await generate_subtitles(session, project_id, final_audio.id)
                 animatic = await _latest(session, Animatic, project_id)
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Narracao e legendas prontas. Vou montar a timeline final.",
-                )
                 timeline = await create_final_timeline(
                     session, project_id, animatic.id if animatic else None
                 )
@@ -1341,14 +1307,9 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                     subtitle.id if subtitle else None,
                 )
             elif step_key == "quality":
-                _append_assistant_message_to_chat(
-                    project_id,
-                    "Vou revisar continuidade, estrutura e possiveis inconsistencias.",
-                )
                 await run_quality_check(session, project_id)
             else:
                 raise ValueError("etapa sem acao automatica")
-        _append_assistant_message_to_chat(project_id, "Etapa concluida com sucesso.")
         ui.notify("Etapa executada com sucesso.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
@@ -2150,18 +2111,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                 progress_message = content.strip()
                 if not progress_message:
                     return
-                pending_index = (
-                    messages.index(pending_message)
-                    if pending_message in messages
-                    else len(messages)
-                )
-                previous = messages[pending_index - 1] if pending_index > 0 else {}
-                if previous.get("role") == "assistant" and previous.get("content") == progress_message:
-                    return
-                messages.insert(
-                    pending_index,
-                    {"role": "assistant", "content": progress_message},
-                )
+                pending_message["content"] = progress_message
                 _save_assistant_messages(project_id, messages)
                 _safe_refresh(conversation)
                 await asyncio.sleep(0)
