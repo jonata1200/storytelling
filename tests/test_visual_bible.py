@@ -63,18 +63,16 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
         "canonical_prompt": "Helena, 35, expressive detective, rainy noir lighting",
     }
 
-    assert (
-        visual_reference_prompt(profile, "front_portrait")
-        == "Helena, 35, expressive detective, rainy noir lighting. Vista de referencia: "
-        "front_portrait. imagem inicial do personagem em pe, corpo inteiro, vista frontal, "
-        "pose neutra, bracos relaxados, corpo dos pes ao topo da cabeca totalmente visivel. "
-        "Imagem inicial obrigatoria no estilo fotografia de referencia de elenco: personagem "
-        "em pe, corpo inteiro, vista frontal, pose neutra, olhando para a camera, fundo cinza "
-        "neutro de estudio, iluminacao suave, uma unica pessoa, sem cenario, sem objetos "
-        "extras, corpo inteiro enquadrado dos pes ao topo da cabeca, sem cortar cabeca, "
-        "pes ou maos. Proporcao obrigatoria: 9:16. Fundo limpo, identidade visual "
-        "consistente."
+    prompt = visual_reference_prompt(profile, "front_portrait")
+
+    assert prompt.startswith(
+        "Helena, 35, expressive detective, rainy noir lighting. Vista de referencia: "
+        "front_portrait."
     )
+    assert "fundo cinza neutro de estudio" in prompt
+    assert "Proporcao obrigatoria: 9:16" in prompt
+    assert "referencia de continuidade para storyboard e video" in prompt
+    assert "identidade visual consistente" in prompt
 
 
 def test_visual_reference_prompts_are_distinct_by_view_type() -> None:
@@ -114,6 +112,8 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     assert (
         "Fotorrealista, hiper realista, foto de uma pessoa" in character["canonical_prompt"]
     )
+    assert "fotografia de referencia de elenco" in character["canonical_prompt"]
+    assert "Manter exatamente o mesmo rosto" in character["canonical_prompt"]
     assert character["narrative_profile"]["name"] == "Clara"
     assert character["visual_profile"]["hair"] == "cabelo castanho curto"
     assert "cabelo castanho curto" in character["canonical_prompt"]
@@ -122,8 +122,10 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
         "Fotorrealista, hiper realista, fotografia de arquitetura"
         in location["canonical_prompt"]
     )
+    assert "ambiente vazio e claramente filmavel" in location["canonical_prompt"]
     assert "Nenhuma pessoa presente" in location["canonical_prompt"]
     assert "Fotorrealista, hiper realista, fotografia de produto" in prop["canonical_prompt"]
+    assert "continuidade cinematografica" in prop["canonical_prompt"]
     assert "papel amassado" in prop["canonical_prompt"]
     assert location["narrative_profile"]["name"] == "Casa da familia"
     assert prop["visual_profile"]["material"] == "papel amassado"
@@ -217,6 +219,7 @@ def test_character_initial_reference_uses_full_body_gray_background() -> None:
     assert "fundo cinza neutro de estudio" in prompt
     assert "sem cortar cabeca, pes ou maos" in prompt
     assert "Proporcao obrigatoria: 9:16" in prompt
+    assert "referencia de continuidade para storyboard e video" in prompt
 
 
 def test_character_multi_view_references_use_white_background_and_angles() -> None:
@@ -252,6 +255,7 @@ def test_prop_reference_prompt_requires_white_background_and_object_focus() -> N
     assert "sem pessoas" in prompt
     assert "sem maos" in prompt
     assert "Proporcao obrigatoria: 1:1" in prompt
+    assert "detalhes principais legiveis" in prompt
 
 
 def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:

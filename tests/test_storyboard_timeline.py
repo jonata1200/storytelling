@@ -82,11 +82,16 @@ def test_storyboard_prompt_includes_visual_bible_context() -> None:
         },
     )
 
-    assert "Continuidade visual obrigatoria" in prompt
+    assert "Biblioteca visual canonica - autoridade de continuidade" in prompt
+    assert "Personagens:" in prompt
+    assert "Locais:" in prompt
+    assert "Objetos:" in prompt
     assert "Clara" in prompt
     assert "casaco verde gasto" in prompt
     assert "Carta azul" in prompt
     assert "primeiro frame util para image-to-video" in prompt
+    assert "nenhum texto, legenda, marca d'agua" in prompt
+    assert "nao criar montagem, colagem, split screen" in prompt
 
 
 def test_storyboard_coverage_errors_detect_missing_and_duration_mismatch() -> None:

@@ -614,20 +614,25 @@ def _character_profile(raw: object) -> dict:
             "nao reutilizar roupa de outro personagem",
         ],
         "canonical_prompt": (
-            "Fotorrealista, hiper realista, foto de uma pessoa. "
+            "Fotorrealista, hiper realista, foto de uma pessoa, fotografia de referencia "
+            "de elenco para producao audiovisual. Uma unica pessoa, identidade visual "
+            "consistente e memoravel. "
             f"{_prompt_text(gender).capitalize()} {_prompt_text(origin)}, "
             f"{_prompt_text(apparent_age)}, altura {_prompt_text(height_cm)}cm, "
-            f"{_prompt_text(body_type)}. Cabelo: {_prompt_text(hair)}. "
-            f"Rosto: {_prompt_text(face_shape)}. Pele: {_prompt_text(skin_tone)}. "
-            f"Olhos: {_prompt_text(eyes)}. Papel dramatico: {_prompt_text(role)}. "
+            f"{_prompt_text(body_type)}. Rosto: {_prompt_text(face_shape)}. "
+            f"Pele: {_prompt_text(skin_tone)}. Olhos: {_prompt_text(eyes)}. "
+            f"Cabelo: {_prompt_text(hair)}. Papel dramatico: {_prompt_text(role)}. "
             f"Sinal de personalidade: {_prompt_text(personality)}. "
-            f"Figurino base exclusivo: {_prompt_text(base_outfit)}. "
-            "Material textil com caimento funcional, "
-            f"modelagem coerente com a historia. Paleta: {_prompt_text(palette)}. "
-            "Textura realista, iluminacao cinematografica, fotografia profissional. "
+            f"Figurino base exclusivo e reutilizavel em todas as cenas: "
+            f"{_prompt_text(base_outfit)}. Paleta exclusiva: {_prompt_text(palette)}. "
+            "Roupa com materiais, camadas, textura, desgaste e caimento coerentes com "
+            "a historia. Silhueta reconhecivel em corpo inteiro. Expressao neutra com "
+            "leve pista emocional do personagem. Iluminacao cinematografica natural, "
+            "textura de pele realista, fotografia profissional. "
             "Este personagem deve ser visualmente distinto dos demais, com roupa, silhueta, cabelo "
             "e paleta exclusivos; evitar figurino generico, camiseta lisa repetida, blazer padrao "
-            "ou roupa igual a outro personagem."
+            "ou roupa igual a outro personagem. Manter exatamente o mesmo rosto, cabelo, "
+            "idade aparente, corpo, figurino, sapatos e paleta em todas as referencias."
         ),
     }
 
@@ -693,16 +698,21 @@ def _location_profile(raw: object) -> dict:
         "asset_kind": "location",
         "spatial_rules": ["manter portas, janelas e moveis na mesma posicao"],
         "canonical_prompt": (
-            "Fotorrealista, hiper realista, fotografia de arquitetura. "
-            f"Plano geral de {name}. Funcao narrativa: {_prompt_text(description)}. "
+            "Fotorrealista, hiper realista, fotografia de arquitetura cinematografica "
+            "para producao audiovisual. "
+            f"Plano geral de {name}, ambiente vazio e claramente filmavel. "
+            f"Funcao narrativa: {_prompt_text(description)}. "
             f"Layout: {_prompt_text(layout)}. Materiais e superficies: {_prompt_text(materials)}. "
             f"Paleta de cores: {_prompt_text(palette)}. Iluminacao: {_prompt_text(lighting)}. "
-            "Composicao com profundidade em primeiro plano, "
-            "plano medio e fundo, geografia clara para camera, entradas e saidas legiveis, "
-            "moveis e objetos do ambiente em posicoes consistentes. Nenhuma pessoa presente, "
+            "Geografia espacial clara: entradas, saidas, portas, janelas, moveis principais "
+            "e areas de circulacao visiveis. Profundidade em primeiro plano, plano medio "
+            "e fundo. Objetos do ambiente em posicoes consistentes para continuidade. "
+            "Luz coerente com o tom emocional da historia. Nenhuma pessoa presente, "
             "sem personagens, sem multidao, sem silhuetas humanas, sem retratos de pessoas "
-            "em destaque. Textura realista, iluminacao cinematografica suave, fotografia "
-            "profissional de arquitetura."
+            "em destaque. Ambiente reconhecivel, nao generico, com detalhes especificos "
+            "que revelem historia, uso e classe social. Composicao adequada para "
+            "enquadramentos verticais 9:16 e planos de video curtos. Textura realista, "
+            "iluminacao cinematografica suave, fotografia profissional de arquitetura."
         ),
     }
 
@@ -759,16 +769,21 @@ def _prop_profile(raw: object) -> dict:
         "visual_profile": visual_profile,
         "asset_kind": "prop",
         "canonical_prompt": (
-            "Fotorrealista, hiper realista, fotografia de produto. "
-            f"Um unico {name}, posicionado em angulo de tres quartos, fundo branco puro "
-            f"ou cor solida neutra. Importancia narrativa: {_prompt_text(narrative_importance)}. "
+            "Fotorrealista, hiper realista, fotografia de produto para continuidade "
+            "cinematografica. "
+            f"Um unico {name}, inteiro, centralizado e totalmente visivel, posicionado em "
+            "angulo de tres quartos, fundo branco puro ou cor solida neutra. "
+            f"Importancia narrativa: {_prompt_text(narrative_importance)}. "
             f"Dimensoes: {_prompt_text(dimensions)}. Material: {_prompt_text(material)}. "
             f"Cor: {_prompt_text(color)}. Estado: {_prompt_text(state)}. "
             f"Dono ou relacao narrativa: {_prompt_text(owner)}. "
-            "Objeto inteiro, totalmente em destaque, "
-            "centralizado, sem outros objetos, sem maos, sem pessoas, sem cenario. "
-            "Silhueta reconhecivel, detalhes funcionais legiveis, textura realista do material, "
-            "acabamento coerente com o uso na historia, iluminacao de estudio profissional."
+            "Silhueta reconhecivel, escala clara, detalhes funcionais legiveis. "
+            "Textura realista do material, marcas de uso coerentes com a historia, "
+            "acabamento especifico. Objeto facil de reconhecer em close-up e em planos "
+            "mais abertos. Sem maos, sem pessoas, sem cenario, sem outros objetos, sem "
+            "reflexos que escondam detalhes. Evitar objeto generico; incluir "
+            "caracteristicas visuais memoraveis ligadas ao payoff narrativo. Iluminacao "
+            "de estudio profissional, sombras suaves, contorno claro."
         ),
     }
 
@@ -1433,7 +1448,8 @@ def visual_reference_prompt(profile: dict, view_type: str) -> str:
     return (
         f"{base_prompt}. Vista de referencia: {view_type}. {view_detail}. "
         f"{guardrail} Proporcao obrigatoria: {aspect_ratio}. Fundo limpo, "
-        "identidade visual consistente."
+        "referencia de continuidade para storyboard e video, identidade visual consistente, "
+        "detalhes principais legiveis e sem variacoes indesejadas."
     )
 
 
