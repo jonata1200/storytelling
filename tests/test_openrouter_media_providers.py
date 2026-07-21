@@ -21,7 +21,7 @@ def test_openrouter_image_provider_writes_generated_image(
 
     monkeypatch.setattr(
         "app.providers.image.openrouter.get_settings",
-        lambda: Settings(openrouter_api_key="key"),
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
     )
     def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
         posted.update({"path": path, "body": body})
@@ -60,7 +60,7 @@ def test_openrouter_video_provider_downloads_completed_video(
 
     monkeypatch.setattr(
         "app.providers.video.openrouter.get_settings",
-        lambda: Settings(openrouter_api_key="key"),
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
     )
 
     def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -108,7 +108,7 @@ def test_openrouter_video_provider_rejects_invalid_duration(
     provider = OpenRouterVideoProvider()
     monkeypatch.setattr(
         "app.providers.video.openrouter.get_settings",
-        lambda: Settings(openrouter_api_key="key"),
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
     )
 
     with pytest.raises(ValueError, match="4 a 15"):

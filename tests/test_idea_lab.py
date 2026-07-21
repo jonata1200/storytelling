@@ -57,7 +57,7 @@ async def test_generate_freeform_ideas_falls_back_when_openrouter_fails(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="key", openrouter_default_model="free-model"),
+        lambda: Settings(openrouter_api_key="sk-or-v1-test", openrouter_default_model="free-model"),
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", FailingOpenRouterProvider)
 
@@ -131,7 +131,7 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="key", openrouter_default_model="free-model"),
+        lambda: Settings(openrouter_api_key="sk-or-v1-test", openrouter_default_model="free-model"),
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", lambda: provider)
 

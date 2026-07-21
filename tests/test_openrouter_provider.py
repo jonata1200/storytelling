@@ -43,7 +43,7 @@ def test_openrouter_provider_reports_network_errors(monkeypatch: pytest.MonkeyPa
     provider = OpenRouterLLMProvider()
 
     class Settings:
-        openrouter_api_key = "key"
+        openrouter_api_key = "sk-or-v1-test"
         openrouter_base_url = "https://openrouter.ai/api/v1"
         openrouter_site_url = "http://127.0.0.1:8000"
         openrouter_app_title = "Storytelling"
@@ -55,6 +55,26 @@ def test_openrouter_provider_reports_network_errors(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("app.providers.llm.openrouter.urllib.request.urlopen", raise_url_error)
 
     with pytest.raises(RuntimeError, match="network error"):
+        provider._send_request(
+            LLMRequest(task="generate_story_ideas", prompt="{}", model="model"),
+            use_response_format=True,
+        )
+
+
+def test_openrouter_provider_rejects_invalid_api_key_before_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenRouterLLMProvider()
+
+    class Settings:
+        openrouter_api_key = "JKl1464&*"
+        openrouter_base_url = "https://openrouter.ai/api/v1"
+        openrouter_site_url = "http://127.0.0.1:8000"
+        openrouter_app_title = "Storytelling"
+
+    monkeypatch.setattr("app.providers.llm.openrouter.get_settings", lambda: Settings())
+
+    with pytest.raises(RuntimeError, match="ausente ou invalida"):
         provider._send_request(
             LLMRequest(task="generate_story_ideas", prompt="{}", model="model"),
             use_response_format=True,

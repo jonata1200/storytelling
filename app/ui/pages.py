@@ -633,23 +633,44 @@ def _body_style() -> None:
             background:transparent!important;
             box-shadow:none!important;
           }
-          .idea-badge-genre,
-          body:not(.body--dark) .idea-badge-genre {
+          .idea-badge-genre {
             background:rgba(90,163,240,.12)!important;
             color:#bdf5ff!important;
             border:1px solid rgba(90,163,240,.24);
           }
-          .idea-badge-emotion,
-          body:not(.body--dark) .idea-badge-emotion {
+          .idea-badge-emotion {
             background:rgba(88,214,167,.12)!important;
             color:#c7ffe7!important;
             border:1px solid rgba(88,214,167,.22);
           }
-          .idea-badge-duration,
-          body:not(.body--dark) .idea-badge-duration {
+          .idea-badge-duration {
             background:rgba(255,209,102,.12)!important;
             color:#ffe6a1!important;
             border:1px solid rgba(255,209,102,.2);
+          }
+          body:not(.body--dark) .idea-badge-genre {
+            background:#e4f1ff!important;
+            color:#155f9f!important;
+            border:1px solid rgba(21,95,159,.28);
+          }
+          body:not(.body--dark) .idea-badge-emotion {
+            background:#e6f6e9!important;
+            color:#1e6a48!important;
+            border:1px solid rgba(30,106,72,.24);
+          }
+          body:not(.body--dark) .idea-badge-duration {
+            background:#fff3d0!important;
+            color:#8a5a00!important;
+            border:1px solid rgba(138,90,0,.24);
+          }
+          .idea-badge-genre,
+          .idea-badge-emotion,
+          .idea-badge-duration {
+            display:inline-flex;
+            align-items:center;
+            line-height:1.25;
+            font-weight:700!important;
+            text-shadow:none!important;
           }
           .q-btn {
             border-radius:8px!important;

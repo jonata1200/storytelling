@@ -4,7 +4,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from app.config.settings import get_settings
+from app.config.settings import get_settings, normalize_openrouter_api_key
 from app.providers.llm.types import LLMRequest, LLMResult
 
 
@@ -13,8 +13,8 @@ class OpenRouterLLMProvider:
 
     async def generate_structured(self, request: LLMRequest) -> LLMResult:
         settings = get_settings()
-        if not settings.openrouter_api_key:
-            raise RuntimeError("OPENROUTER_API_KEY nao configurada")
+        if not normalize_openrouter_api_key(settings.openrouter_api_key):
+            raise RuntimeError("OPENROUTER_API_KEY ausente ou invalida")
 
         response = await asyncio.to_thread(self._send_request, request, True)
         content_text = self._extract_message_content(response)
@@ -31,6 +31,9 @@ class OpenRouterLLMProvider:
 
     def _send_request(self, request: LLMRequest, use_response_format: bool) -> dict[str, Any]:
         settings = get_settings()
+        api_key = normalize_openrouter_api_key(settings.openrouter_api_key)
+        if not api_key:
+            raise RuntimeError("OPENROUTER_API_KEY ausente ou invalida")
         url = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
         body = {
             "model": request.model,
@@ -53,7 +56,7 @@ class OpenRouterLLMProvider:
             url,
             data=data,
             headers={
-                "Authorization": f"Bearer {settings.openrouter_api_key}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
                 "HTTP-Referer": settings.openrouter_site_url,
                 "X-OpenRouter-Title": settings.openrouter_app_title,

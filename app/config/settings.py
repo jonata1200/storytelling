@@ -6,6 +6,15 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def normalize_openrouter_api_key(value: str | None) -> str | None:
+    if not value:
+        return None
+    key = value.strip()
+    if not key.startswith("sk-or-"):
+        return None
+    return key
+
+
 class Settings(BaseSettings):
     app_name: str = "Storytelling"
     app_env: str = "local"
@@ -39,6 +48,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def reject_insecure_non_local_defaults(self) -> "Settings":
+        self.openrouter_api_key = normalize_openrouter_api_key(self.openrouter_api_key)
         if self.app_env.lower() not in {"local", "development", "test"}:
             if self.api_basic_username == "admin" and self.api_basic_password == "admin":
                 raise ValueError("Default API credentials are forbidden outside local environments")
