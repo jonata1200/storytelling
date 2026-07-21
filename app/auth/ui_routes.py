@@ -30,17 +30,18 @@ def _auth_page(mode: str, message: str = "") -> HTMLResponse:
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <title>{title} - {app_name}</title>
           <style>
-            :root {{ color-scheme: dark; --bg:#090b0a; --panel:#151816; --line:#2a302b; --text:#f4f5f2; --muted:#969c97; --accent:#5898d4; }}
+            :root {{ color-scheme: dark; --bg:#05070c; --panel:#0c1722; --panel-2:#101f2d; --line:rgba(90,163,240,.2); --text:#eaf8ff; --muted:#86a1b2; --accent:#5aa3f0; --blue:#5aa3f0; }}
             * {{ box-sizing:border-box; }}
-            body {{ margin:0; min-height:100vh; display:grid; place-items:center; background:var(--bg); color:var(--text); font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
-            main {{ width:min(420px, calc(100vw - 32px)); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:32px; box-shadow:0 24px 80px rgba(0,0,0,.35); }}
+            body {{ margin:0; min-height:100vh; display:grid; place-items:center; background:linear-gradient(115deg, rgba(90,163,240,.18), rgba(90,163,240,.07) 32%, transparent 58%), linear-gradient(180deg, #05070c, #08131d 48%, #04070c); color:var(--text); font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+            body::before {{ content:""; position:fixed; inset:0; pointer-events:none; background:linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(180deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size:72px 72px; }}
+            main {{ position:relative; width:min(420px, calc(100vw - 32px)); background:linear-gradient(180deg, rgba(20,38,54,.92), rgba(7,15,24,.96)); border:1px solid var(--line); border-radius:8px; padding:32px; box-shadow:0 0 0 1px rgba(90,163,240,.12), 0 24px 80px rgba(0,0,0,.48), 0 0 28px rgba(90,163,240,.18); }}
             img {{ width:48px; height:48px; border-radius:8px; object-fit:cover; }}
             h1 {{ margin:18px 0 6px; font-size:28px; line-height:1.1; letter-spacing:0; }}
             p {{ margin:0 0 24px; color:var(--muted); }}
-            label {{ display:block; margin:16px 0 8px; color:#d9dcd9; font-size:14px; }}
-            input {{ width:100%; min-height:46px; border:1px solid #343a35; border-radius:8px; background:#0f1210; color:var(--text); padding:0 14px; font:inherit; }}
-            input:focus {{ outline:2px solid var(--accent); outline-offset:1px; }}
-            button {{ width:100%; min-height:46px; margin-top:22px; border:0; border-radius:8px; background:var(--accent); color:#081015; font-weight:700; cursor:pointer; }}
+            label {{ display:block; margin:16px 0 8px; color:#cbeeff; font-size:14px; }}
+            input {{ width:100%; min-height:46px; border:1px solid rgba(90,163,240,.22); border-radius:8px; background:#08121c; color:var(--text); padding:0 14px; font:inherit; }}
+            input:focus {{ outline:2px solid var(--accent); outline-offset:1px; box-shadow:0 0 24px rgba(90,163,240,.18); }}
+            button {{ width:100%; min-height:46px; margin-top:22px; border:1px solid rgba(90,163,240,.7); border-radius:8px; background:linear-gradient(135deg, var(--accent), var(--blue)); color:#031019; font-weight:800; cursor:pointer; box-shadow:0 0 24px rgba(90,163,240,.25); }}
             a {{ color:var(--accent); text-decoration:none; }}
             .message {{ margin:0 0 12px; padding:10px 12px; border-radius:8px; background:#35231f; color:#ffcabd; border:1px solid #6c3a31; }}
             .footer {{ margin-top:18px; text-align:center; font-size:14px; }}
