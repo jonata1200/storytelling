@@ -249,16 +249,20 @@ def test_visual_references_prefer_newest_image_for_same_view() -> None:
     assert references == [newer, older]
 
 
-def test_visual_library_cards_ready_requires_all_card_types() -> None:
+def test_visual_library_cards_ready_when_any_card_type_exists() -> None:
     assert pages._visual_library_cards_ready(
         {"characters": [object()], "locations": [object()], "props": [object()]}
     )
-    assert not pages._visual_library_cards_ready(
+    assert pages._visual_library_cards_ready(
         {"characters": [object()], "locations": [], "props": [object()]}
     )
+    assert pages._visual_library_cards_ready(
+        {"characters": [], "locations": [object()], "props": []}
+    )
+    assert not pages._visual_library_cards_ready({"characters": [], "locations": [], "props": []})
 
 
-def test_visual_batch_requests_include_only_missing_initial_images() -> None:
+def test_visual_batch_requests_include_all_missing_views() -> None:
     character_id = uuid4()
     location_id = uuid4()
     prop_id = uuid4()
@@ -278,8 +282,21 @@ def test_visual_batch_requests_include_only_missing_initial_images() -> None:
     requests = pages._visual_batch_requests(summary)
 
     assert requests == [
-        ("location", location_id, ["establishing"]),
-        ("prop", prop_id, ["front"]),
+        (
+            "character",
+            character_id,
+            [
+                "left_profile",
+                "right_profile",
+                "back_view",
+                "full_body",
+                "expression_sheet",
+                "pose_sheet",
+                "scale_reference",
+            ],
+        ),
+        ("location", location_id, ["establishing", "floor_plan", "camera_points"]),
+        ("prop", prop_id, ["front", "side", "top", "scale_reference"]),
     ]
 
 

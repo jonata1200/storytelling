@@ -79,7 +79,15 @@ from app.storytelling.idea_lab import (
     replace_generated_ideas,
     save_idea,
 )
-from app.storytelling.models import Briefing, Scene, Script, Shot, StoryBible, StoryIdea
+from app.storytelling.models import (
+    Briefing,
+    Scene,
+    Script,
+    ScriptVersion,
+    Shot,
+    StoryBible,
+    StoryIdea,
+)
 from app.storytelling.schemas import BriefingCreate
 from app.storytelling.service import (
     coerce_duration_minutes,
@@ -478,6 +486,12 @@ def _body_style() -> None:
             filter:brightness(1.08);
             box-shadow:0 0 0 1px rgba(90,163,240,.4), 0 0 32px rgba(90,163,240,.38)!important;
           }
+          .workspace-export-button,
+          .workspace-export-button .q-icon,
+          .workspace-export-button .q-btn__content,
+          .workspace-export-button .q-btn__content span {
+            color:#ffffff!important;
+          }
           .glass,
           .entity-card,
           .q-card {
@@ -545,7 +559,7 @@ def _body_style() -> None:
             margin:0!important;
             height:100%!important;
             min-height:0!important;
-            padding:36px 30px 28px 30px!important;
+            padding:50px 30px 28px 30px!important;
             box-shadow:none!important;
             backdrop-filter:none;
           }
@@ -1914,7 +1928,7 @@ async def _regenerate_visual_reference_from_ui(
 
 
 def _visual_library_cards_ready(summary: dict[str, Any]) -> bool:
-    return bool(summary["characters"] and summary["locations"] and summary["props"])
+    return bool(summary["characters"] or summary["locations"] or summary["props"])
 
 
 def _visual_batch_requests(summary: dict[str, Any]) -> list[tuple[str, UUID, list[str]]]:
@@ -1926,9 +1940,11 @@ def _visual_batch_requests(summary: dict[str, Any]) -> list[tuple[str, UUID, lis
     ]:
         for item in items:
             existing_views = _visual_reference_views_for(summary, target_kind, item.id)
-            initial_view = initial_view_for(target_kind)
-            if initial_view not in existing_views:
-                requests.append((target_kind, item.id, [initial_view]))
+            missing_views = [
+                view for view in default_views_for(target_kind) if view not in existing_views
+            ]
+            if missing_views:
+                requests.append((target_kind, item.id, missing_views))
     return requests
 
 
@@ -2351,7 +2367,7 @@ def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> 
             ui.label("PT-BR").classes("desktop-nav text-sm text-[#a9aea9] shrink-0")
             _theme_toggle()
             ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
-                "acid-bg rounded-xl font-semibold shrink-0"
+                "acid-bg workspace-export-button rounded-xl font-semibold shrink-0"
             )
 
 
@@ -2610,8 +2626,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
         batch_dialog.close()
 
     with ui.element("aside").classes(
-        "right-assistant flex flex-col w-[340px] min-w-[340px] border-l border-[#252925] "
-        "bg-[#0d0f0e] h-[calc(100vh-64px)] min-h-0 px-4 pb-4 pt-0 !pt-0 mt-0 gap-4 sticky top-0 self-start"
+        "right-assistant flex flex-col min-h-0 mt-0 gap-4 sticky top-0 self-start"
     ):
         with ui.element("div").classes(
             "flex w-full items-center justify-between mt-0 pt-0 shrink-0"
@@ -2754,10 +2769,15 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                 if not visual_cards_ready:
                     helper_text = "Crie personagens, locais e objetos antes de gerar tudo."
                 elif not visual_batch_requests:
-                    helper_text = "Todas as imagens iniciais ja foram criadas."
+                    helper_text = "Todas as imagens dos ativos ja foram criadas."
                 else:
+                    pending_view_count = sum(
+                        len(view_types)
+                        for _target_kind, _target_id, view_types in visual_batch_requests
+                    )
                     helper_text = (
-                        f"{len(visual_batch_requests)} ativo(s) aguardando imagem inicial."
+                        f"{pending_view_count} imagem(ns) pendente(s) em "
+                        f"{len(visual_batch_requests)} ativo(s)."
                     )
                 ui.label(helper_text).classes("text-xs text-[#8d938e] mt-2")
                 batch_button = ui.button(
@@ -2919,6 +2939,61 @@ async def _save_story_bible_from_ui(project_id: UUID, story_bible_id: UUID, raw_
         ui.notify(f"Nao consegui salvar a Story Bible: {exc}", color="negative")
 
 
+async def _save_script_from_ui(
+    project_id: UUID,
+    script_id: UUID,
+    title: str,
+    content: str,
+) -> None:
+    try:
+        clean_title = title.strip()
+        clean_content = content.strip()
+        if not clean_title:
+            raise ValueError("Informe um titulo para o roteiro.")
+        if not clean_content:
+            raise ValueError("O roteiro nao pode ficar vazio.")
+
+        async with AsyncSessionLocal() as session:
+            script = await session.get(Script, script_id)
+            if script is None or script.project_id != project_id:
+                raise ValueError("Roteiro nao encontrado.")
+            artifact = await session.get(Artifact, script.artifact_id)
+            if artifact is None:
+                raise ValueError("Artefato do roteiro nao encontrado.")
+
+            script.title = clean_title[:220]
+            script.content = clean_content
+            script.word_count = len(clean_content.split())
+            payload = {
+                "title": script.title,
+                "language": script.language,
+                "target_duration_seconds": script.target_duration_seconds,
+                "word_count": script.word_count,
+                "content": script.content,
+            }
+            artifact.name = script.title
+            await create_artifact_version(
+                session,
+                artifact,
+                payload,
+                change_note="Script edited manually in UI",
+            )
+            session.add(
+                ScriptVersion(
+                    script_id=script.id,
+                    version_number=artifact.current_version,
+                    content=script.content,
+                    word_count=script.word_count,
+                    payload=payload,
+                )
+            )
+            await session.commit()
+        ui.notify("Roteiro salvo.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        ui.notify(f"Nao consegui salvar o roteiro: {exc}", color="negative")
+
+
 def _render_story_bible_collection(title: str, items: list[dict[str, str]], icon: str) -> None:
     with ui.element("section").classes("entity-card rounded-2xl p-5 w-full"):
         with ui.row().classes("items-center gap-2 mb-3"):
@@ -3048,11 +3123,33 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     )
     if generation_in_progress:
         ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
+    edit_dialog = None
+    if script is not None:
+        with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_dialog, ui.card().classes(
+            "entity-card rounded-2xl p-6 w-[min(1040px,94vw)] max-h-[90vh]"
+        ):
+            ui.label("Editar roteiro").classes("brand-type text-2xl font-bold")
+            title_input = ui.input("Titulo", value=script.title).props("outlined").classes("w-full")
+            content_input = ui.textarea("Conteudo do roteiro", value=script.content).props(
+                "outlined"
+            ).classes("w-full font-mono text-sm min-h-[54vh]")
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button("Cancelar", on_click=edit_dialog.close).props("flat no-caps")
+                ui.button(
+                    "Salvar",
+                    icon="save",
+                    on_click=lambda: _save_script_from_ui(
+                        project_id,
+                        script.id,
+                        str(title_input.value or ""),
+                        str(content_input.value or ""),
+                    ),
+                ).props("unelevated no-caps").classes("acid-bg rounded-xl font-semibold")
     _section_title(
         "Roteiro",
-        "Estruture a narrativa e transforme o texto em cenas e planos.",
-        None,
-        None,
+        "Edite e revise o roteiro cinematografico que orienta as proximas etapas.",
+        "Editar roteiro" if edit_dialog is not None else None,
+        edit_dialog.open if edit_dialog is not None else None,
     )
     with ui.row().classes("w-full gap-4 items-start"):
         with ui.column().classes("flex-1 gap-4"):
@@ -3083,7 +3180,7 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                     ui.label(str(ai_action.get("error") or ai_action.get("message") or "")).classes(
                         "text-sm opacity-80"
                     )
-            with ui.element("div").classes("entity-card rounded-2xl p-7 min-h-[520px] w-full"):
+            with ui.element("div").classes("entity-card rounded-2xl p-7 min-h-[640px] w-full"):
                 ui.label(script.title if script else "Seu roteiro começa aqui").classes(
                     "brand-type text-2xl font-bold mb-5"
                 )
@@ -3093,15 +3190,6 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                     else "A IA esta desenvolvendo o roteiro com base na ideia do projeto."
                 )
                 ui.label(content).classes("whitespace-pre-wrap leading-8 text-[#d9dcd9]")
-        with ui.column().classes("w-64 gap-3"):
-            ui.label("Cenas").classes("font-semibold")
-            for scene in _ordered_scenes(summary["scenes"]):
-                with ui.element("div").classes("entity-card rounded-xl p-3 w-full"):
-                    ui.label(f"Cena {scene.scene_number}").classes("text-xs acid uppercase")
-                    ui.label(scene.title).classes("font-medium")
-                    ui.label(f"{scene.duration_seconds}s").classes("text-xs text-[#7f857f]")
-            if not summary["scenes"]:
-                ui.label("Nenhuma cena criada.").classes("text-sm text-[#777d78]")
 
 
 def _visual_reference_views_for(
