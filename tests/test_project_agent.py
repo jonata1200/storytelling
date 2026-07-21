@@ -164,6 +164,54 @@ async def test_project_chat_routes_assets_storyboard_and_video(
 
 
 @pytest.mark.asyncio
+async def test_project_chat_uses_project_state_for_progression_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    calls: list[str] = []
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        assert requested_project_id == project_id
+        return {
+            "found": True,
+            "counts": {
+                "scripts": 1,
+                "scenes": 5,
+                "shots": 20,
+                "characters": 0,
+                "locations": 0,
+                "props": 0,
+                "frames": 0,
+                "clips": 0,
+            },
+        }
+
+    async def fake_assets(
+        session: AsyncSession,
+        requested_project_id: Any,
+        force: bool = False,
+        progress: Any = None,
+    ) -> ProjectChatResult:
+        calls.append("assets")
+        assert requested_project_id == project_id
+        return ProjectChatResult("assets ok", "generate_assets", True)
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_ensure_visual_pipeline", fake_assets)
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "script",
+        "pode avançar para a próxima etapa",
+        [],
+    )
+
+    assert result.action == "generate_assets"
+    assert calls == ["assets"]
+
+
+@pytest.mark.asyncio
 async def test_project_chat_routes_script_finalization_and_quality(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
