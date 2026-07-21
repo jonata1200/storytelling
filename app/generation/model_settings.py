@@ -11,14 +11,12 @@ from app.providers.llm.types import LLMProvider
 
 NARRATIVE_TASKS = [
     "generate_story_ideas",
-    "generate_story_bible",
     "generate_script",
     "generate_scenes_and_shots",
 ]
 
 TASK_LABELS = {
     "generate_story_ideas": "Ideias",
-    "generate_story_bible": "Story Bible",
     "generate_script": "Roteiro",
     "generate_scenes_and_shots": "Cenas e planos",
 }

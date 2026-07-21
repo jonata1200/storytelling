@@ -8,7 +8,6 @@ class MockLLMProvider:
     async def generate_structured(self, request: LLMRequest) -> LLMResult:
         generators = {
             "generate_story_ideas": self._story_ideas,
-            "generate_story_bible": self._story_bible,
             "generate_script": self._script,
             "generate_scenes_and_shots": self._scenes_and_shots,
             "revise_script": self._revise_script,
@@ -110,89 +109,10 @@ class MockLLMProvider:
             ]
         }
 
-    def _story_bible(self, variables: dict) -> dict:
-        idea = variables.get("idea", {})
-        title = str(idea.get("title") or "Historia sem titulo")
-        return {
-            "title": title,
-            "logline": str(idea.get("premise") or "Uma historia emocional de reparacao."),
-            "theme": variables.get("theme", "reparacao"),
-            "genre": variables.get("genre", "drama emocional"),
-            "tone": "intimo, humano e progressivamente catartico",
-            "target_emotion": variables.get("primary_emotion", "esperanca"),
-            "audience": variables.get("audience", "publico geral"),
-            "story_engine": {
-                "dramatic_question": "Clara conseguira reparar a promessa antes que seja tarde?",
-                "central_conflict": "A verdade chega quando todos ja aprenderam a evita-la.",
-                "emotional_promise": (
-                    "A dor antiga pode virar cuidado quando alguem encara o passado."
-                ),
-                "inciting_incident": "Clara encontra uma mensagem guardada no objeto de revelacao.",
-                "midpoint_turn": "Ela descobre que a pessoa culpada tentou protege-la.",
-                "climax": "Clara conta a verdade para a familia e assume sua parte na ferida.",
-                "ending_image": "A porta da casa fica aberta enquanto a luz da manha entra.",
-            },
-            "world_rules": ["realismo contemporaneo", "conflitos resolvidos por escolhas humanas"],
-            "visual_style": {"format": "vertical 9:16", "palette": ["azul frio", "dourado quente"]},
-            "narrative_rules": [
-                "gancho imediato",
-                "microgancho a cada cena",
-                "payoff emocional claro",
-            ],
-            "forbidden_elements": ["reviravolta aleatoria", "exposicao longa"],
-            "characters": [
-                {
-                    "id": "char_protagonist",
-                    "name": str(idea.get("protagonist", "Protagonista")),
-                    "role": "protagonista",
-                    "desire": "reparar uma promessa quebrada sem perder a familia",
-                    "fear": "descobrir que a culpa sempre foi dela",
-                    "secret": "ela guardou uma lembranca que muda o sentido da separacao",
-                    "arc": str(idea.get("emotional_need", "mudanca emocional")),
-                    "base_outfit": {
-                        "main_piece": "camisa azul desbotada",
-                        "color": "azul frio",
-                        "fabric": "algodao gasto",
-                        "texture": "tecido opaco com marcas de uso",
-                        "wear_marks": "punhos amassados",
-                        "accessories": ["colar discreto"],
-                    },
-                }
-            ],
-            "locations": [
-                {
-                    "id": "loc_home",
-                    "name": "Casa da familia",
-                    "description": "sala pequena com fotografias antigas e mesa central",
-                    "layout": "janela lateral, corredor ao fundo e mesa no centro",
-                    "lighting": "luz natural fria no inicio e dourada no payoff",
-                    "materials": ["madeira", "papel envelhecido", "tecido gasto"],
-                }
-            ],
-            "props": [
-                {
-                    "id": "prop_reveal",
-                    "name": "objeto de revelacao",
-                    "material": "papel envelhecido dentro de envelope azul",
-                    "owner": "Clara",
-                    "narrative_importance": "payoff que revela a verdade familiar",
-                    "first_appearance": "incidente incitante",
-                    "visual_rules": ["sempre aparecer em detalhe antes de mudar de maos"],
-                }
-            ],
-            "timeline": [],
-            "relationships": [],
-            "continuity_rules": [
-                "manter roupa azul de Clara ate o climax",
-                "o envelope azul deve aparecer sempre com a mesma dobra no canto",
-            ],
-            "audio_style": {"narration": "voz calorosa e contida", "music": "piano discreto"},
-            "export_profile": {"aspect_ratio": "9:16", "resolution": "1080x1920"},
-        }
-
     def _script(self, variables: dict) -> dict:
-        bible = variables.get("story_bible", {})
-        title = str(bible.get("title") or "Historia")
+        idea = variables.get("idea", {})
+        contract = variables.get("narrative_contract", {})
+        title = str(idea.get("title") or contract.get("title") or "Historia")
         language = str(variables.get("language") or "pt-BR")
         target_duration_seconds = int(variables.get("target_duration_seconds") or 240)
         content = (

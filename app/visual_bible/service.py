@@ -25,7 +25,7 @@ from app.projects.versioning import create_artifact_version
 from app.providers.image.mock import MockImageProvider
 from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider
-from app.storytelling.models import Script, StoryBible, StoryIdea
+from app.storytelling.models import Script, StoryIdea
 from app.visual_bible.models import (
     Character,
     CharacterVersion,
@@ -1037,7 +1037,7 @@ def _match_visual_target(
 async def _upsert_character_profile(
     session: AsyncSession,
     project_id: UUID,
-    story_bible_artifact_id: UUID,
+    source_artifact_id: UUID,
     profile: dict,
     existing_characters: list[Character],
 ) -> Character:
@@ -1054,7 +1054,7 @@ async def _upsert_character_profile(
                     character_id=existing.id,
                     version_number=existing.current_version,
                     canonical_profile=profile,
-                    change_note="Canonical character profile updated from Story Bible",
+                    change_note="Canonical character profile updated from script",
                 )
             )
             artifact = await session.get(Artifact, existing.artifact_id)
@@ -1064,15 +1064,15 @@ async def _upsert_character_profile(
                     session,
                     artifact,
                     profile,
-                    change_note="Canonical character profile updated from Story Bible",
+                    change_note="Canonical character profile updated from script",
                 )
-        await _add_dependency(session, story_bible_artifact_id, existing.artifact_id)
+        await _add_dependency(session, source_artifact_id, existing.artifact_id)
         return existing
 
     artifact = await _create_artifact(
         session, project_id, ArtifactType.CHARACTER, profile["name"], profile
     )
-    await _add_dependency(session, story_bible_artifact_id, artifact.id)
+    await _add_dependency(session, source_artifact_id, artifact.id)
     character = Character(
         project_id=project_id,
         artifact_id=artifact.id,
@@ -1098,7 +1098,7 @@ async def _upsert_character_profile(
 async def _upsert_location_profile(
     session: AsyncSession,
     project_id: UUID,
-    story_bible_artifact_id: UUID,
+    source_artifact_id: UUID,
     profile: dict,
     existing_locations: list[Location],
 ) -> Location:
@@ -1114,7 +1114,7 @@ async def _upsert_location_profile(
                     location_id=existing.id,
                     version_number=existing.current_version,
                     canonical_profile=profile,
-                    change_note="Canonical location profile updated from Story Bible",
+                    change_note="Canonical location profile updated from script",
                 )
             )
             artifact = await session.get(Artifact, existing.artifact_id)
@@ -1124,15 +1124,15 @@ async def _upsert_location_profile(
                     session,
                     artifact,
                     profile,
-                    change_note="Canonical location profile updated from Story Bible",
+                    change_note="Canonical location profile updated from script",
                 )
-        await _add_dependency(session, story_bible_artifact_id, existing.artifact_id)
+        await _add_dependency(session, source_artifact_id, existing.artifact_id)
         return existing
 
     artifact = await _create_artifact(
         session, project_id, ArtifactType.LOCATION, profile["name"], profile
     )
-    await _add_dependency(session, story_bible_artifact_id, artifact.id)
+    await _add_dependency(session, source_artifact_id, artifact.id)
     location = Location(
         project_id=project_id,
         artifact_id=artifact.id,
@@ -1157,7 +1157,7 @@ async def _upsert_location_profile(
 async def _upsert_prop_profile(
     session: AsyncSession,
     project_id: UUID,
-    story_bible_artifact_id: UUID,
+    source_artifact_id: UUID,
     profile: dict,
     existing_props: list[Prop],
 ) -> Prop:
@@ -1173,7 +1173,7 @@ async def _upsert_prop_profile(
                     prop_id=existing.id,
                     version_number=existing.current_version,
                     canonical_profile=profile,
-                    change_note="Canonical prop profile updated from Story Bible",
+                    change_note="Canonical prop profile updated from script",
                 )
             )
             artifact = await session.get(Artifact, existing.artifact_id)
@@ -1183,15 +1183,15 @@ async def _upsert_prop_profile(
                     session,
                     artifact,
                     profile,
-                    change_note="Canonical prop profile updated from Story Bible",
+                    change_note="Canonical prop profile updated from script",
                 )
-        await _add_dependency(session, story_bible_artifact_id, existing.artifact_id)
+        await _add_dependency(session, source_artifact_id, existing.artifact_id)
         return existing
 
     artifact = await _create_artifact(
         session, project_id, ArtifactType.PROP, profile["name"], profile
     )
-    await _add_dependency(session, story_bible_artifact_id, artifact.id)
+    await _add_dependency(session, source_artifact_id, artifact.id)
     prop = Prop(
         project_id=project_id,
         artifact_id=artifact.id,
@@ -1214,22 +1214,16 @@ async def _upsert_prop_profile(
 
 
 async def generate_visual_bible(
-    session: AsyncSession, project_id: UUID, story_bible_id: UUID
+    session: AsyncSession, project_id: UUID, script_id: UUID
 ) -> tuple[list[Character], list[Location], list[Prop]] | None:
     project = await ProjectRepository(session).get_project(project_id)
-    story_bible = await session.get(StoryBible, story_bible_id)
-    if project is None or story_bible is None or story_bible.project_id != project_id:
+    latest_script = await session.get(Script, script_id)
+    if project is None or latest_script is None or latest_script.project_id != project_id:
         return None
 
-    script_result = await session.execute(
-        select(Script)
-        .where(Script.project_id == project_id, Script.story_bible_id == story_bible_id)
-        .order_by(Script.created_at.desc())
-        .limit(1)
-    )
-    latest_script = script_result.scalars().first()
-    script_content = latest_script.content if latest_script is not None else ""
-    story_idea = await session.get(StoryIdea, story_bible.story_idea_id)
+    script_content = latest_script.content
+    story_idea = await session.get(StoryIdea, latest_script.story_idea_id)
+    source_payload = story_idea.payload if story_idea is not None else {}
     protagonist_hint = _story_idea_protagonist_name(
         story_idea.protagonist if story_idea is not None else ""
     )
@@ -1237,10 +1231,28 @@ async def generate_visual_bible(
     characters: list[Character] = []
     character_items = _profile_items(
         _payload_section(
-            story_bible.payload,
+            source_payload,
             ("characters", "personagens", "cast", "personas"),
         )
     )
+    if not character_items:
+        fallback_name = protagonist_hint or (
+            _script_character_names(script_content)[0]
+            if _script_character_names(script_content)
+            else "Protagonista"
+        )
+        character_items = [
+            {
+                "name": fallback_name,
+                "role": "protagonista",
+                "desire": source_payload.get("protagonist_desire")
+                or source_payload.get("stakes")
+                or "cumprir a promessa emocional da historia",
+                "arc": source_payload.get("emotional_need")
+                or source_payload.get("resolution")
+                or "transformacao emocional visivel",
+            }
+        ]
     character_items = _repair_missing_character_names(
         character_items, script_content, protagonist_hint
     )
@@ -1255,7 +1267,7 @@ async def generate_visual_bible(
             await _upsert_character_profile(
                 session,
                 project_id,
-                story_bible.artifact_id,
+                latest_script.artifact_id,
                 profile,
                 existing_characters,
             )
@@ -1264,7 +1276,7 @@ async def generate_visual_bible(
     locations: list[Location] = []
     location_items = _profile_items(
         _payload_section(
-            story_bible.payload,
+            source_payload,
             ("locations", "locais", "lugares", "settings", "places", "cenarios", "cenários"),
         )
     )
@@ -1283,7 +1295,7 @@ async def generate_visual_bible(
             await _upsert_location_profile(
                 session,
                 project_id,
-                story_bible.artifact_id,
+                latest_script.artifact_id,
                 profile,
                 existing_locations,
             )
@@ -1292,7 +1304,7 @@ async def generate_visual_bible(
     props: list[Prop] = []
     prop_items = _profile_items(
         _payload_section(
-            story_bible.payload,
+            source_payload,
             (
                 "props",
                 "objetos",
@@ -1315,7 +1327,7 @@ async def generate_visual_bible(
             await _upsert_prop_profile(
                 session,
                 project_id,
-                story_bible.artifact_id,
+                latest_script.artifact_id,
                 profile,
                 existing_props,
             )

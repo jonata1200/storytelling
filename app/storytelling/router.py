@@ -13,11 +13,9 @@ from app.storytelling.schemas import (
     BriefingRead,
     GenerateScenesRequest,
     GenerateScriptRequest,
-    GenerateStoryBibleRequest,
     SceneRead,
     ScriptRead,
     ShotRead,
-    StoryBibleRead,
     StoryIdeaRead,
 )
 from app.storytelling.service import (
@@ -25,7 +23,6 @@ from app.storytelling.service import (
     create_briefing,
     generate_scenes_and_shots,
     generate_script,
-    generate_story_bible,
     generate_story_ideas,
     list_story_ideas,
 )
@@ -82,27 +79,6 @@ async def get_ideas(
     return [StoryIdeaRead.model_validate(idea) for idea in ideas]
 
 
-@router.post("/{project_id}/story-bible/generate", response_model=StoryBibleRead)
-async def post_generate_story_bible(
-    project_id: UUID,
-    payload: GenerateStoryBibleRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> StoryBibleRead:
-    try:
-        story_bible = await generate_story_bible(session, project_id, payload.story_idea_id)
-    except GenerationOutputError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
-    if story_bible is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project, briefing, or story idea not found",
-        )
-    return StoryBibleRead.model_validate(story_bible)
-
-
 @router.post("/{project_id}/script/generate", response_model=ScriptRead)
 async def post_generate_script(
     project_id: UUID,
@@ -110,7 +86,7 @@ async def post_generate_script(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ScriptRead:
     try:
-        script = await generate_script(session, project_id, payload.story_bible_id)
+        script = await generate_script(session, project_id, payload.story_idea_id)
     except GenerationOutputError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -119,7 +95,7 @@ async def post_generate_script(
     if script is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project, briefing, or story bible not found",
+            detail="Project, briefing, or story idea not found",
         )
     return ScriptRead.model_validate(script)
 

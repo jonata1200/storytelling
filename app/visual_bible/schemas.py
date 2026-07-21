@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class GenerateVisualBibleRequest(BaseModel):
-    story_bible_id: UUID
+    script_id: UUID
 
 
 class CharacterRead(BaseModel):

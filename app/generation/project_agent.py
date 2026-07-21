@@ -23,11 +23,10 @@ from app.quality.models import ContinuityIssue, QualityCheck
 from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
-from app.storytelling.models import Briefing, Scene, Script, Shot, StoryBible, StoryIdea
+from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
 from app.storytelling.service import (
     generate_scenes_and_shots,
     generate_script,
-    generate_story_bible,
     generate_story_ideas,
     revise_script,
 )
@@ -43,7 +42,6 @@ from app.visual_bible.service import (
 ProjectChatAction = Literal[
     "chat",
     "generate_ideas",
-    "generate_story_bible",
     "generate_script",
     "revise_script",
     "generate_assets",
@@ -86,7 +84,6 @@ ProgressCallback = Callable[[str], Awaitable[None]]
 
 ACTION_PROGRESS_MESSAGES: dict[ProjectChatAction, str] = {
     "generate_ideas": "Criando ideias.",
-    "generate_story_bible": "Criando Story Bible.",
     "generate_script": "Criando roteiro.",
     "revise_script": "Revisando roteiro.",
     "generate_assets": "Criando ativos visuais.",
@@ -153,7 +150,6 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
 
     briefing = await _latest(session, Briefing, project_id)
     idea = await _latest(session, StoryIdea, project_id)
-    bible = await _latest(session, StoryBible, project_id)
     script = await _latest(session, Script, project_id)
     stale_count = await session.scalar(
         select(func.count())
@@ -182,7 +178,6 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
             else None
         ),
         "idea": _compact_payload(idea.payload) if idea is not None else None,
-        "story_bible": _compact_payload(bible.payload) if bible is not None else None,
         "script": (
             {
                 "title": script.title,
@@ -195,7 +190,6 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
         ),
         "counts": {
             "ideas": await _count(session, StoryIdea, project_id),
-            "bibles": await _count(session, StoryBible, project_id),
             "scripts": await _count(session, Script, project_id),
             "scenes": await _count(session, Scene, project_id),
             "shots": await _count(session, Shot, project_id),
@@ -343,14 +337,12 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
     if actionable and any(term in normalized for term in asset_terms):
         return "generate_assets"
     if actionable and any(term in normalized for term in bible_terms):
-        return "generate_story_bible"
+        return "generate_script"
     if wants_generation and any(term in normalized for term in idea_terms):
         return "generate_ideas"
     if wants_revision and (active == "script" or any(term in normalized for term in script_terms)):
         return "revise_script"
     if wants_revision:
-        if active == "bible":
-            return "generate_story_bible"
         if active == "assets":
             return "generate_assets"
         if active == "storyboard":
@@ -362,8 +354,6 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
     ):
         return "generate_script"
     if wants_generation:
-        if active == "bible":
-            return "generate_story_bible"
         if active == "assets":
             return "generate_assets"
         if active == "storyboard":
@@ -409,13 +399,6 @@ def _requests_visual_prompt_approval(message: str) -> bool:
     return any(term in normalized for term in approval_terms) and any(
         term in normalized for term in visual_terms
     )
-
-
-@dataclass(frozen=True)
-class StoryBiblePipelineResult:
-    bible: StoryBible | None
-    message: str
-    changed: bool
 
 
 @dataclass(frozen=True)
@@ -604,50 +587,6 @@ async def _ensure_ideas_pipeline(
     return ProjectChatResult(f"Criei {len(ideas)} ideia(s) para o projeto.", "generate_ideas", True)
 
 
-async def _ensure_story_bible_pipeline(
-    session: AsyncSession,
-    project_id: UUID,
-    progress: ProgressCallback | None = None,
-) -> StoryBiblePipelineResult:
-    briefing = await _latest(session, Briefing, project_id)
-    if briefing is None:
-        return StoryBiblePipelineResult(
-            None,
-            "Este projeto ainda nao tem briefing para orientar a Story Bible.",
-            False,
-        )
-
-    bible = await _latest(session, StoryBible, project_id)
-    if bible is not None:
-        return StoryBiblePipelineResult(
-            bible,
-            "O projeto ja tem Story Bible. Posso ajudar a revisar antes do roteiro.",
-            False,
-        )
-
-    idea = await _latest(session, StoryIdea, project_id)
-    if idea is None:
-        await _emit_progress(progress, "Vou criar uma ideia base para orientar a Story Bible.")
-        ideas = await generate_story_ideas(session, project_id)
-        if not ideas:
-            return StoryBiblePipelineResult(
-                None,
-                "Nao consegui gerar uma ideia base para este projeto.",
-                False,
-            )
-        idea = ideas[0]
-
-    await _emit_progress(progress, "Vou montar a Story Bible com personagens, mundo e arco.")
-    bible = await generate_story_bible(session, project_id, idea.id)
-    if bible is None:
-        return StoryBiblePipelineResult(
-            None,
-            "Nao consegui gerar a Story Bible para este projeto.",
-            False,
-        )
-    return StoryBiblePipelineResult(bible, "Story Bible criada para este projeto.", True)
-
-
 async def _ensure_script_pipeline(
     session: AsyncSession,
     project_id: UUID,
@@ -676,18 +615,11 @@ async def _ensure_script_pipeline(
             return None, "Nao consegui gerar uma ideia base para este projeto.", False
         idea = ideas[0]
 
-    bible = await _latest(session, StoryBible, project_id)
-    if bible is None:
-        await _emit_progress(progress, "Vou montar a Story Bible com personagens, mundo e arco.")
-        bible = await generate_story_bible(session, project_id, idea.id)
-        if bible is None:
-            return None, "Nao consegui gerar a Story Bible antes do roteiro.", False
-
     await _emit_progress(
         progress,
-        "Vou escrever o roteiro cinematografico a partir da Story Bible.",
+        "Vou escrever o roteiro cinematografico a partir da ideia aprovada.",
     )
-    script = await generate_script(session, project_id, bible.id)
+    script = await generate_script(session, project_id, idea.id)
     if script is None:
         return None, "Nao consegui gerar o roteiro para este projeto.", False
     await _emit_progress(progress, "Roteiro criado. Agora vou separar em cenas e planos.")
@@ -707,13 +639,6 @@ async def _ensure_visual_pipeline(
     if script is None:
         return ProjectChatResult(message, "generate_assets", changed)
 
-    bible = await _latest(session, StoryBible, project_id)
-    if bible is None:
-        return ProjectChatResult(
-            "Nao encontrei a Story Bible para criar personagens.",
-            "generate_assets",
-        )
-
     existing_characters = await _count(session, Character, project_id)
     existing_locations = await _count(session, Location, project_id)
     existing_props = await _count(session, Prop, project_id)
@@ -729,7 +654,7 @@ async def _ensure_visual_pipeline(
             progress,
             "Vou extrair personagens, locais e objetos do roteiro para a biblioteca visual.",
         )
-        visual = await generate_visual_bible(session, project_id, bible.id)
+        visual = await generate_visual_bible(session, project_id, script.id)
         if visual is None:
             return ProjectChatResult(
                 "Nao consegui criar personagens e referencias visuais.",
@@ -941,9 +866,6 @@ async def handle_project_chat(
 
     if action == "generate_ideas":
         return await _ensure_ideas_pipeline(session, project_id, progress=progress)
-    if action == "generate_story_bible":
-        result = await _ensure_story_bible_pipeline(session, project_id, progress)
-        return ProjectChatResult(result.message, action, result.changed)
     if action == "generate_script":
         _script, result_message, changed = await _ensure_script_pipeline(
             session, project_id, progress

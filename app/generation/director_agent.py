@@ -8,7 +8,7 @@ from app.generation.service import run_structured_generation
 
 SECTION_TASKS = {
     "script": "generate_script",
-    "assets": "generate_story_bible",
+    "assets": "generate_script",
     "storyboard": "generate_scenes_and_shots",
     "video": "generate_scenes_and_shots",
 }

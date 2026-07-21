@@ -32,8 +32,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         "idea": {"title": "A carta"},
         "language": "pt-BR",
         "target_duration_seconds": 300,
-        "story_bible": {"title": "A carta"},
-        "story_bible_contract": {"title": "A carta"},
+        "narrative_contract": {"title": "A carta"},
         "script": "Roteiro atual",
         "instruction": "melhore o gancho",
         "project_context": {"project": "A carta"},
@@ -63,8 +62,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
     assert '"ideas"' in compiled["generate_story_ideas"]
     assert "Genero preferido: drama" in compiled["generate_story_ideas"]
     assert '"payoff"' in compiled["generate_story_ideas"]
-    assert "script_contract" in compiled["generate_story_bible"]
-    assert "visual_contract" in compiled["generate_story_bible"]
+    assert "contrato narrativo" in compiled["generate_script"]
 
 
 def test_generation_fallback_detects_openrouter_resource_exhaustion() -> None:

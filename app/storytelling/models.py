@@ -44,23 +44,12 @@ class StoryIdea(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     payload: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
 
-class StoryBible(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    __tablename__ = "story_bibles"
-
-    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
-    artifact_id: Mapped[UUID] = mapped_column(ForeignKey("artifacts.id"), nullable=False)
-    story_idea_id: Mapped[UUID] = mapped_column(ForeignKey("story_ideas.id"), nullable=False)
-    title: Mapped[str] = mapped_column(String(220), nullable=False)
-    logline: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
-
-
 class Script(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "scripts"
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     artifact_id: Mapped[UUID] = mapped_column(ForeignKey("artifacts.id"), nullable=False)
-    story_bible_id: Mapped[UUID] = mapped_column(ForeignKey("story_bibles.id"), nullable=False)
+    story_idea_id: Mapped[UUID] = mapped_column(ForeignKey("story_ideas.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(220), nullable=False)
     language: Mapped[str] = mapped_column(String(16), nullable=False)
     target_duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)

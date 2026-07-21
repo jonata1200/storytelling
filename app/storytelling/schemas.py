@@ -48,32 +48,15 @@ class StoryIdeaRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class GenerateStoryBibleRequest(BaseModel):
-    story_idea_id: UUID
-
-
-class StoryBibleRead(BaseModel):
-    id: UUID
-    project_id: UUID
-    artifact_id: UUID
-    story_idea_id: UUID
-    title: str
-    logline: str
-    payload: dict
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class GenerateScriptRequest(BaseModel):
-    story_bible_id: UUID
+    story_idea_id: UUID
 
 
 class ScriptRead(BaseModel):
     id: UUID
     project_id: UUID
     artifact_id: UUID
-    story_bible_id: UUID
+    story_idea_id: UUID
     title: str
     language: str
     target_duration_seconds: int

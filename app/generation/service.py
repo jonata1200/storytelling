@@ -17,7 +17,6 @@ from app.video_generation.durations import (
 
 DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
     "generate_story_ideas": "Generate Story Ideas",
-    "generate_story_bible": "Generate Story Bible",
     "generate_script": "Generate Script",
     "generate_scenes_and_shots": "Generate Scenes And Shots",
     "revise_script": "Revise Script",
@@ -33,7 +32,7 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "Tema: {theme}. Genero preferido: {genre}. Publico: {audience}. "
         "Emocao: {primary_emotion}. "
         "Cada ideia deve deixar claro conflito, obstaculos, stakes, twist, climax, payoff "
-        "e resolucao para que Story Bible e roteiro consigam preservar a proposta original. "
+        "e resolucao para que o roteiro consiga preservar a proposta original. "
         "{retry_guidance}"
         "Responda somente JSON neste formato: "
         '{{"ideas":[{{"title":"...","genre":"...","primary_emotion":"...",'
@@ -43,42 +42,12 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         '"duration_minutes":5,"retention_potential":80,"cliche_risk":20,'
         '"production_complexity":35}}]}}'
     ),
-    "generate_story_bible": (
-        "Crie uma Story Bible estruturada usando a ideia aprovada: {idea_title}. "
-        "Use o briefing completo e a ideia em {idea}. Responda somente JSON valido, sem markdown, "
-        "sem comentarios e sem strings soltas dentro das listas. A Story Bible deve ser uma base "
-        "editorial organizada para roteiro, biblioteca visual, storyboard e video. "
-        "Use exatamente esta estrutura de alto nivel: title, logline, theme, genre, tone, "
-        "target_emotion, audience, story_engine, world_rules, visual_style, narrative_rules, "
-        "forbidden_elements, characters, locations, props, timeline, relationships, "
-        "continuity_rules, audio_style e export_profile. "
-        "story_engine deve conter dramatic_question, central_conflict, emotional_promise, "
-        "inciting_incident, midpoint_turn, climax e ending_image. "
-        "characters deve ser sempre array de objetos, nunca array de textos. Cada personagem "
-        "precisa ter id, name, role, apparent_age, gender, origin, height_cm, body_type, "
-        "face_shape, skin_tone, eyes, hair, base_outfit, palette, personality, desire, fear, "
-        "secret e arc. base_outfit deve ser objeto com main_piece, color, fabric, texture, "
-        "wear_marks e accessories; palette deve ser array de 3 a 5 cores. "
-        "locations deve ser sempre array de objetos com id, name, description, layout, "
-        "materials, palette, lighting, props_in_scene, spatial_rules e forbidden_elements; "
-        "locais devem estar vazios, sem pessoas. "
-        "props deve ser sempre array de objetos com id, name, dimensions, material, color, "
-        "state, owner, narrative_importance, first_appearance e visual_rules. "
-        "timeline deve ter beats ordenados com act, beat, purpose e emotional_turn. "
-        "relationships deve ter source, target, relationship e tension. "
-        "continuity_rules deve ser array de regras objetivas. "
-        "export_profile deve conter aspect_ratio '9:16', resolution '1080x1920' "
-        "e language 'pt-BR'. "
-        "Inclua tambem script_contract com personagens essenciais, locais permitidos, objetos "
-        "de payoff, beats obrigatorios, regras proibidas, tom e promessa emocional; inclua "
-        "visual_contract com regras de figurino, paleta, locais, props e continuidade visual. "
-        "{retry_guidance}"
-    ),
     "generate_script": (
         "Crie um roteiro cinematografico profissional em {language}, no padrao de roteiro "
         "de filme, para uma historia vertical 9:16 "
-        "com duracao total fixa de {target_duration_seconds}s. Use o contrato narrativo em "
-        "{story_bible_contract}. A etapa de video usa Seedance 2.0 Fast, portanto os planos finais "
+        "com duracao total fixa de {target_duration_seconds}s. Use a ideia aprovada em "
+        "{idea} e o contrato narrativo em {narrative_contract}. A etapa de video usa "
+        "Seedance 2.0 Fast, portanto os planos finais "
         "serao clipes independentes de {clip_min_seconds}s a {clip_max_seconds}s, com alvo "
         "pratico de {clip_target_seconds}s por clipe. Escreva o roteiro para sustentar "
         "aproximadamente {expected_clip_count} clipes, sem tentar colocar um plano unico "
@@ -132,7 +101,8 @@ DEFAULT_TEMPLATES: dict[str, str] = {
     ),
     "revise_script": (
         "Revise o roteiro existente atendendo ao pedido do usuario. "
-        "Preserve a continuidade da Story Bible e mantenha a duracao alvo de "
+        "Preserve a continuidade da ideia, dos personagens e dos ativos visuais, "
+        "mantendo a duracao alvo de "
         "{target_duration_seconds}s. Pedido do usuario: {instruction}. "
         "Contexto do projeto: {project_context}. Roteiro atual: {current_script}. "
         "Mantenha formato cinematografico de filme, nao ficha tecnica: FADE IN:, "

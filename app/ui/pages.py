@@ -2,7 +2,6 @@
 
 import asyncio
 import base64
-import json
 import logging
 import mimetypes
 import re
@@ -86,7 +85,6 @@ from app.storytelling.models import (
     Script,
     ScriptVersion,
     Shot,
-    StoryBible,
     StoryIdea,
 )
 from app.storytelling.schemas import BriefingCreate
@@ -96,7 +94,6 @@ from app.storytelling.service import (
     create_story_idea_from_payload,
     generate_scenes_and_shots,
     generate_script,
-    generate_story_bible,
     generate_story_ideas,
 )
 from app.video_generation.models import GenerationJob, VideoClip
@@ -167,13 +164,6 @@ PRODUCTION_STEPS = [
         "description",
     ),
     ProductionStep(
-        "bible",
-        "Story Bible",
-        "Congele regras narrativas, personagens, locais, objetos e estilo.",
-        "Gerar Story Bible",
-        "menu_book",
-    ),
-    ProductionStep(
         "visual",
         "Visual",
         "Crie fichas canonicas e referencias visuais aprovaveis.",
@@ -212,7 +202,6 @@ PRODUCTION_STEPS = [
 
 
 WORKSPACE_TABS = [
-    ("Story Bible", "bible"),
     ("Roteiro", "script"),
     ("Personagens", "assets"),
     ("Storyboard", "storyboard"),
@@ -995,7 +984,6 @@ async def _project_summary(project_id: UUID) -> dict[str, Any] | None:
             "counts": {
                 "briefings": await _scalar_count(session, Briefing, project_id),
                 "ideas": await _scalar_count(session, StoryIdea, project_id),
-                "bibles": await _scalar_count(session, StoryBible, project_id),
                 "scripts": await _scalar_count(session, Script, project_id),
                 "scenes": await _scalar_count(session, Scene, project_id),
                 "shots": await _scalar_count(session, Shot, project_id),
@@ -1024,7 +1012,6 @@ async def _project_summary(project_id: UUID) -> dict[str, Any] | None:
             "quality": latest_quality,
             "export": latest_export,
             "model_settings": list(model_result.scalars()),
-            "story_bible": await _latest(session, StoryBible, project_id),
             "script": await _latest(session, Script, project_id),
             "scenes": await _latest_many(session, Scene, project_id, 12),
             "shots": await _latest_many(session, Shot, project_id, 20),
@@ -1044,7 +1031,6 @@ def _step_ready(step_key: str, counts: dict[str, int]) -> bool:
     readiness = {
         "briefing": counts["briefings"] > 0,
         "ideas": counts["ideas"] > 0,
-        "bible": counts["bibles"] > 0,
         "script": counts["scripts"] > 0,
         "visual": counts["characters"] > 0,
         "storyboard": counts["frames"] > 0 and counts["animatics"] > 0,
@@ -1087,7 +1073,7 @@ def _render_project_card(project: Project, redirect_to: str) -> None:
     with (
         ui.element("article")
         .classes("entity-card rounded-2xl overflow-hidden cursor-pointer")
-        .on("click", lambda p=project.id: ui.navigate.to(f"/projects/{p}/bible"))
+        .on("click", lambda p=project.id: ui.navigate.to(f"/projects/{p}/script"))
     ):
         with ui.element("div").classes("visual-placeholder aspect-video p-5 flex items-end"):
             ui.icon("play_circle").classes("text-4xl acid")
@@ -1113,8 +1099,6 @@ def _workspace_section_access(section: str, counts: dict[str, int]) -> tuple[boo
     script_ready = _step_ready("script", counts)
     assets_ready = _step_ready("visual", counts)
     storyboard_ready = _step_ready("storyboard", counts)
-    if section == "bible":
-        return True, ""
     if section == "script":
         return True, ""
     if section == "assets":
@@ -1139,11 +1123,11 @@ def _workspace_section_access(section: str, counts: dict[str, int]) -> tuple[boo
 
 
 def _first_available_workspace_section(counts: dict[str, int]) -> str:
-    for section in ["bible", "script", "assets", "storyboard", "video"]:
+    for section in ["script", "assets", "storyboard", "video"]:
         allowed, _ = _workspace_section_access(section, counts)
         if allowed:
             return section
-    return "bible"
+    return "script"
 
 
 def _render_header(title: str, subtitle: str) -> None:
@@ -1263,13 +1247,8 @@ async def _generate_initial_script(
         idea = generated_ideas[0]
 
     if progress is not None:
-        await progress("Vou montar a Story Bible com personagens, mundo e arco narrativo.")
-    story_bible = await generate_story_bible(session, project_id, idea.id)
-    if story_bible is None:
-        raise ValueError("nao foi possivel gerar a Story Bible")
-    if progress is not None:
-        await progress("Vou escrever o roteiro cinematografico a partir da Story Bible.")
-    script = await generate_script(session, project_id, story_bible.id)
+        await progress("Vou escrever o roteiro cinematografico a partir da ideia escolhida.")
+    script = await generate_script(session, project_id, idea.id)
     if script is None:
         raise ValueError("nao foi possivel gerar roteiro")
     if progress is not None:
@@ -1278,34 +1257,6 @@ async def _generate_initial_script(
     if scenes is None:
         raise ValueError("nao foi possivel gerar cenas e planos")
     return script
-
-
-async def _generate_initial_story_bible(
-    session: AsyncSession,
-    project_id: UUID,
-    source_idea: dict[str, Any] | None = None,
-    progress: Callable[[str], Awaitable[None]] | None = None,
-) -> StoryBible:
-    if source_idea is not None:
-        if progress is not None:
-            await progress("Vou registrar a ideia escolhida dentro deste projeto.")
-        idea = await create_story_idea_from_payload(session, project_id, source_idea)
-        if idea is None:
-            raise ValueError("nao foi possivel registrar a ideia selecionada")
-    else:
-        if progress is not None:
-            await progress("Vou criar uma ideia base para orientar a Story Bible.")
-        generated_ideas = await generate_story_ideas(session, project_id)
-        if not generated_ideas:
-            raise ValueError("nao foi possivel gerar ideias iniciais")
-        idea = generated_ideas[0]
-
-    if progress is not None:
-        await progress("Vou montar a Story Bible com personagens, mundo e arco narrativo.")
-    story_bible = await generate_story_bible(session, project_id, idea.id)
-    if story_bible is None:
-        raise ValueError("nao foi possivel gerar a Story Bible")
-    return story_bible
 
 
 async def _set_project_ai_action_status(
@@ -1396,58 +1347,6 @@ async def _generate_initial_script_in_background(
             )
 
 
-async def _generate_initial_story_bible_in_background(
-    project_id: UUID,
-    source_idea: dict[str, Any] | None = None,
-) -> None:
-    try:
-        async with AsyncSessionLocal() as session:
-            await _set_project_ai_action_status(
-                session,
-                project_id,
-                status="running",
-                message="A IA esta criando a Story Bible com base na ideia.",
-                action="create_initial_story_bible",
-                record_event=False,
-            )
-
-            async def report_progress(message: str) -> None:
-                await _set_project_ai_action_status(
-                    session,
-                    project_id,
-                    status="running",
-                    message=message,
-                    action="create_initial_story_bible",
-                    record_event=False,
-                )
-
-            await _generate_initial_story_bible(
-                session,
-                project_id,
-                source_idea,
-                report_progress,
-            )
-            await _set_project_ai_action_status(
-                session,
-                project_id,
-                status="completed",
-                message="Story Bible inicial criada.",
-                action="create_initial_story_bible",
-                record_event=False,
-            )
-    except Exception:
-        logger.exception("Nao foi possivel gerar Story Bible inicial do projeto %s", project_id)
-        async with AsyncSessionLocal() as session:
-            await _set_project_ai_action_status(
-                session,
-                project_id,
-                status="failed",
-                message="A IA nao conseguiu criar a Story Bible inicial.",
-                action="create_initial_story_bible",
-                error="Consulte o terminal para ver o erro completo.",
-            )
-
-
 async def _resume_initial_script_in_background(project_id: UUID) -> None:
     try:
         async with AsyncSessionLocal() as session:
@@ -1490,37 +1389,26 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                 )
                 return
 
-            story_bible = await _latest(session, StoryBible, project_id)
-            if story_bible is None:
-                story_idea = await _latest(session, StoryIdea, project_id)
-                if story_idea is None:
-                    await _set_project_ai_action_status(
-                        session,
-                        project_id,
-                        status="running",
-                        message="Vou criar uma ideia base para orientar o roteiro.",
-                    )
-                    generated_ideas = await generate_story_ideas(session, project_id)
-                    if not generated_ideas:
-                        raise ValueError("nao foi possivel gerar ideias iniciais")
-                    story_idea = generated_ideas[0]
+            story_idea = await _latest(session, StoryIdea, project_id)
+            if story_idea is None:
                 await _set_project_ai_action_status(
                     session,
                     project_id,
                     status="running",
-                    message="Vou montar a Story Bible com personagens, mundo e arco narrativo.",
+                    message="Vou criar uma ideia base para orientar o roteiro.",
                 )
-                story_bible = await generate_story_bible(session, project_id, story_idea.id)
-                if story_bible is None:
-                    raise ValueError("nao foi possivel gerar a Story Bible")
+                generated_ideas = await generate_story_ideas(session, project_id)
+                if not generated_ideas:
+                    raise ValueError("nao foi possivel gerar ideias iniciais")
+                story_idea = generated_ideas[0]
 
             await _set_project_ai_action_status(
                 session,
                 project_id,
                 status="running",
-                message="Vou escrever o roteiro cinematografico a partir da Story Bible.",
+                message="Vou escrever o roteiro cinematografico a partir da ideia aprovada.",
             )
-            script = await generate_script(session, project_id, story_bible.id)
+            script = await generate_script(session, project_id, story_idea.id)
             if script is None:
                 raise ValueError("nao foi possivel gerar roteiro")
 
@@ -1660,13 +1548,7 @@ async def _develop_script_for_existing_project(
             return "Nao consegui gerar uma ideia base para este projeto.", False
         idea = ideas[0]
 
-    bible = await _latest(session, StoryBible, project_id)
-    if bible is None:
-        bible = await generate_story_bible(session, project_id, idea.id)
-        if bible is None:
-            return "Nao consegui gerar a Story Bible antes do roteiro.", False
-
-    script = await generate_script(session, project_id, bible.id)
+    script = await generate_script(session, project_id, idea.id)
     if script is None:
         return "Nao consegui gerar o roteiro para este projeto.", False
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
@@ -1679,7 +1561,6 @@ async def _create_project_from_form(
     form: dict[str, Any],
     *,
     generate_initial_script: bool = False,
-    generate_initial_story_bible: bool = False,
     source_idea: dict[str, Any] | None = None,
 ) -> None:
     try:
@@ -1726,30 +1607,14 @@ async def _create_project_from_form(
                 ],
             )
             await create_briefing(session, project.id, briefing)
-            if generate_initial_story_bible:
-                await _set_project_ai_action_status(
-                    session,
-                    project.id,
-                    status="queued",
-                    message="A IA vai iniciar a criacao da Story Bible.",
-                    action="create_initial_story_bible",
-                )
-            elif generate_initial_script:
+            if generate_initial_script:
                 await _set_project_ai_action_status(
                     session,
                     project.id,
                     status="queued",
                     message="A IA vai iniciar a criacao do roteiro inicial.",
                 )
-        if generate_initial_story_bible:
-            background_tasks.create(
-                _generate_initial_story_bible_in_background(
-                    project_id,
-                    dict(source_idea) if source_idea is not None else None,
-                ),
-                name=f"initial-story-bible-{project_id}",
-            )
-        elif generate_initial_script:
+        if generate_initial_script:
             background_tasks.create(
                 _generate_initial_script_in_background(
                     project_id,
@@ -1757,17 +1622,13 @@ async def _create_project_from_form(
                 ),
                 name=f"initial-script-{project_id}",
             )
-        if generate_initial_story_bible:
-            message = "Projeto criado. A IA ja iniciou a Story Bible."
-        elif generate_initial_script:
+        if generate_initial_script:
             message = f"Projeto criado. A IA ja iniciou o roteiro de {duration:g} minutos."
         else:
             message = "Projeto criado com briefing inicial."
         ui.notify(message, color="positive")
-        if generate_initial_story_bible:
-            destination = f"/projects/{project_id}/bible"
-        elif generate_initial_script:
-            destination = f"/projects/{project_id}/bible"
+        if generate_initial_script:
+            destination = f"/projects/{project_id}/script"
         else:
             destination = f"/projects/{project_id}"
         ui.navigate.to(destination)
@@ -1848,7 +1709,7 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
     }
     await _create_project_from_form(
         form,
-        generate_initial_story_bible=True,
+        generate_initial_script=True,
         source_idea=idea,
     )
 
@@ -1990,7 +1851,6 @@ async def _create_next_episode(project_id: UUID) -> None:
 
 STEP_LOADING_COPY = {
     "ideas": ("Gerando ideias", "A IA esta criando caminhos narrativos para o projeto."),
-    "bible": ("Gerando Story Bible", "A IA esta consolidando mundo, personagens e regras."),
     "script": ("Gerando roteiro", "A IA esta escrevendo o roteiro e separando cenas."),
     "visual": ("Gerando visual", "A IA esta preparando ativos e referencias iniciais."),
     "storyboard": ("Gerando storyboard", "A IA esta criando quadros e animatic."),
@@ -2007,7 +1867,6 @@ async def _run_step(
 ) -> None:
     step_messages = {
         "ideas": "Criando ideias.",
-        "bible": "Criando Story Bible.",
         "script": "Criando roteiro.",
         "visual": "Criando ativos visuais.",
         "storyboard": "Criando storyboard.",
@@ -2028,20 +1887,18 @@ async def _run_step(
                     generate_story_ideas(session, project_id),
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
-            elif step_key == "bible":
+            elif step_key == "script":
                 idea = await _latest(session, StoryIdea, project_id)
                 if idea is None:
-                    raise ValueError("gere ideias primeiro")
-                await asyncio.wait_for(
-                    generate_story_bible(session, project_id, idea.id),
-                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
-                )
-            elif step_key == "script":
-                bible = await _latest(session, StoryBible, project_id)
-                if bible is None:
-                    raise ValueError("gere a Story Bible primeiro")
+                    ideas = await asyncio.wait_for(
+                        generate_story_ideas(session, project_id),
+                        timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                    )
+                    if not ideas:
+                        raise ValueError("nao foi possivel gerar uma ideia base")
+                    idea = ideas[0]
                 script = await asyncio.wait_for(
-                    generate_script(session, project_id, bible.id),
+                    generate_script(session, project_id, idea.id),
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
                 if script is None:
@@ -2051,11 +1908,11 @@ async def _run_step(
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
             elif step_key == "visual":
-                bible = await _latest(session, StoryBible, project_id)
-                if bible is None:
-                    raise ValueError("gere a Story Bible primeiro")
+                script = await _latest(session, Script, project_id)
+                if script is None:
+                    raise ValueError("gere o roteiro primeiro")
                 visual = await asyncio.wait_for(
-                    generate_visual_bible(session, project_id, bible.id),
+                    generate_visual_bible(session, project_id, script.id),
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
                 if visual is None:
@@ -2857,17 +2714,12 @@ def _sync_ai_action_events_to_chat(project_id: UUID, summary: dict[str, Any]) ->
 
 def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> None:
     prompts = {
-        "bible": "Peça ajustes de premissa, personagens, locais ou regras.",
         "script": "Peça ajustes de tom, diálogo ou estrutura.",
         "assets": "Descreva um personagem, local ou objeto.",
         "storyboard": "Diga ao diretor o que enquadrar.",
         "video": "Descreva movimento, câmera ou ritmo.",
     }
     assistant_suggestions = {
-        "bible": (
-            "Sugestões que posso ajudar agora: revisar personagens, locais, objetos, "
-            "tema, tom e regras de continuidade antes de gerar o roteiro."
-        ),
         "script": (
             "Sugestões que posso ajudar agora: revisar a estrutura do roteiro, "
             "fortalecer o gancho inicial ou ajustar diálogos."
@@ -3045,113 +2897,6 @@ def _ordered_scenes(scenes: list[Any]) -> list[Any]:
     return sorted(scenes, key=lambda scene: int(getattr(scene, "scene_number", 0) or 0))
 
 
-def _story_bible_payload_json(story_bible: StoryBible) -> str:
-    return json.dumps(story_bible.payload or {}, ensure_ascii=False, indent=2)
-
-
-def _story_bible_text(value: object) -> str:
-    if value in (None, "", [], {}):
-        return ""
-    if isinstance(value, list):
-        return ", ".join(text for item in value if (text := _story_bible_text(item)))
-    if isinstance(value, dict):
-        name = (
-            value.get("name")
-            or value.get("nome")
-            or value.get("title")
-            or value.get("titulo")
-            or value.get("description")
-            or value.get("descricao")
-        )
-        if name:
-            return str(name)
-        return "; ".join(
-            f"{str(key).replace('_', ' ')}: {_story_bible_text(item)}"
-            for key, item in value.items()
-            if _story_bible_text(item)
-        )
-    return str(value).strip()
-
-
-def _story_bible_items(value: object) -> list[dict[str, str]]:
-    if value in (None, "", [], {}):
-        return []
-    if isinstance(value, list):
-        return [
-            item
-            for raw_item in value
-            if (item := _story_bible_item(raw_item))
-        ]
-    if isinstance(value, dict):
-        if any(key in value for key in ("name", "nome", "title", "titulo", "description")):
-            item = _story_bible_item(value)
-            return [item] if item else []
-        items: list[dict[str, str]] = []
-        for key, raw_item in value.items():
-            item = _story_bible_item(raw_item, fallback_name=str(key).replace("_", " ").title())
-            if item:
-                items.append(item)
-        return items
-    item = _story_bible_item(value)
-    return [item] if item else []
-
-
-def _story_bible_item(value: object, fallback_name: str = "") -> dict[str, str] | None:
-    if isinstance(value, dict):
-        name = _story_bible_text(
-            value.get("name")
-            or value.get("nome")
-            or value.get("title")
-            or value.get("titulo")
-            or fallback_name
-        )
-        details = [
-            _story_bible_text(item)
-            for key, item in value.items()
-            if key not in {"name", "nome", "title", "titulo"} and _story_bible_text(item)
-        ]
-        detail = " | ".join(details[:4])
-        return {"name": name or "Item", "detail": detail}
-    text = _story_bible_text(value)
-    if not text:
-        return None
-    return {"name": fallback_name or text, "detail": text if fallback_name else ""}
-
-
-async def _save_story_bible_from_ui(project_id: UUID, story_bible_id: UUID, raw_payload: str) -> None:
-    try:
-        payload = json.loads(raw_payload)
-        if not isinstance(payload, dict):
-            raise ValueError("O JSON precisa ser um objeto.")
-        async with AsyncSessionLocal() as session:
-            story_bible = await session.get(StoryBible, story_bible_id)
-            if story_bible is None or story_bible.project_id != project_id:
-                raise ValueError("Story Bible nao encontrada.")
-            title = str(payload.get("title") or story_bible.title).strip()
-            logline = str(payload.get("logline") or story_bible.logline).strip()
-            if not title or not logline:
-                raise ValueError("Mantenha title e logline preenchidos.")
-            story_bible.title = title[:220]
-            story_bible.logline = logline
-            story_bible.payload = payload
-            artifact = await session.get(Artifact, story_bible.artifact_id)
-            if artifact is not None:
-                artifact.name = story_bible.title
-                await create_artifact_version(
-                    session,
-                    artifact,
-                    payload,
-                    change_note="Story Bible edited in UI",
-                )
-            await session.commit()
-        ui.notify("Story Bible salva.", color="positive")
-        ui.navigate.reload()
-    except json.JSONDecodeError as exc:
-        ui.notify(f"JSON invalido: {exc.msg}", color="negative")
-    except Exception as exc:
-        ui.notify(f"Nao consegui salvar a Story Bible: {exc}", color="negative")
-
-
 async def _save_script_from_ui(
     project_id: UUID,
     script_id: UUID,
@@ -3205,115 +2950,6 @@ async def _save_script_from_ui(
         ui.navigate.reload()
     except Exception as exc:
         ui.notify(f"Nao consegui salvar o roteiro: {exc}", color="negative")
-
-
-def _render_story_bible_collection(title: str, items: list[dict[str, str]], icon: str) -> None:
-    with ui.element("section").classes("entity-card rounded-2xl p-5 w-full"):
-        with ui.row().classes("items-center gap-2 mb-3"):
-            ui.icon(icon).classes("acid text-xl")
-            ui.label(title).classes("font-semibold")
-            ui.badge(str(len(items))).classes("bg-[#26301f] text-white")
-        if not items:
-            ui.label("Nada definido ainda.").classes("text-sm text-[#8d938e]")
-            return
-        with ui.column().classes("w-full gap-3"):
-            for item in items:
-                with ui.element("div").classes("border border-[#343934] rounded-xl p-3"):
-                    ui.label(item["name"]).classes("font-semibold")
-                    if item["detail"]:
-                        ui.label(item["detail"]).classes("text-sm text-[#8d938e] line-clamp-3")
-
-
-def _render_story_bible_area(project_id: UUID, summary: dict[str, Any]) -> None:
-    story_bible: StoryBible | None = summary.get("story_bible")
-    if story_bible is None:
-        _section_title(
-            "Story Bible",
-            "Congele regras narrativas, personagens, locais, objetos e estilo.",
-            None,
-            None,
-        )
-        with ui.element("div").classes("entity-card rounded-2xl p-8"):
-            ui.icon("menu_book").classes("text-4xl acid")
-            ui.label("Story Bible ainda nao criada").classes("brand-type text-2xl font-bold")
-            ui.label("Gere ideias e crie a Story Bible antes de revisar esta etapa.").classes(
-                "text-sm text-[#8d938e]"
-            )
-        return
-
-    payload = story_bible.payload or {}
-    editor_value = _story_bible_payload_json(story_bible)
-    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_dialog, ui.card().classes(
-        "entity-card rounded-2xl p-6 w-[min(920px,94vw)] max-h-[88vh]"
-    ):
-        ui.label("Editar Story Bible").classes("brand-type text-2xl font-bold")
-        payload_input = ui.textarea("JSON da Story Bible", value=editor_value).props(
-            "outlined autogrow"
-        ).classes("w-full font-mono text-sm")
-        with ui.row().classes("w-full justify-end gap-2"):
-            ui.button("Cancelar", on_click=edit_dialog.close).props("flat no-caps")
-            ui.button(
-                "Salvar",
-                icon="save",
-                on_click=lambda: _save_story_bible_from_ui(
-                    project_id,
-                    story_bible.id,
-                    str(payload_input.value or ""),
-                ),
-            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-
-    _section_title(
-        "Story Bible",
-        "Revise a base criativa que orienta roteiro, ativos, storyboard e video.",
-        "Editar JSON",
-        edit_dialog.open,
-    )
-    with ui.row().classes("w-full gap-4 items-stretch"):
-        with ui.element("section").classes("entity-card rounded-2xl p-6 flex-1 min-w-0"):
-            ui.label(story_bible.title).classes("brand-type text-2xl font-bold")
-            ui.label(story_bible.logline).classes("text-sm text-[#d8dbd8] leading-6 mt-2")
-        with ui.element("section").classes("entity-card rounded-2xl p-6 w-full lg:w-80"):
-            ui.label("Direcao").classes("font-semibold mb-3")
-            for label, key in [
-                ("Tema", "theme"),
-                ("Genero", "genre"),
-                ("Tom", "tone"),
-                ("Emocao", "target_emotion"),
-                ("Publico", "audience"),
-            ]:
-                value = _story_bible_text(payload.get(key))
-                if value:
-                    ui.label(label).classes("text-xs uppercase text-[#8d938e] mt-2")
-                    ui.label(value).classes("text-sm")
-
-    with ui.grid().classes("w-full grid-cols-1 xl:grid-cols-3 gap-4"):
-        _render_story_bible_collection(
-            "Personagens",
-            _story_bible_items(payload.get("characters") or payload.get("personagens")),
-            "person",
-        )
-        _render_story_bible_collection(
-            "Locais",
-            _story_bible_items(payload.get("locations") or payload.get("locais")),
-            "location_on",
-        )
-        _render_story_bible_collection(
-            "Objetos",
-            _story_bible_items(payload.get("props") or payload.get("objetos")),
-            "category",
-        )
-
-    with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-2 gap-4"):
-        _render_story_bible_collection(
-            "Regras Narrativas",
-            _story_bible_items(payload.get("narrative_rules")),
-            "rule",
-        )
-        _render_story_bible_collection(
-            "Continuidade",
-            _story_bible_items(payload.get("continuity_rules")),
-            "verified",
-        )
 
 
 def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
@@ -4481,14 +4117,14 @@ def register_ui_pages() -> None:
 
     @ui.page("/projects/{project_id}", response_timeout=15)
     async def project_workspace(project_id: str) -> None:
-        ui.navigate.to(f"/projects/{project_id}/bible")
+        ui.navigate.to(f"/projects/{project_id}/script")
         return
 
     @ui.page("/projects/{project_id}/{section}", response_timeout=15)
     async def project_studio(project_id: str, section: str) -> None:
         _body_style()
-        if section not in {"bible", "script", "assets", "storyboard", "video"}:
-            ui.navigate.to(f"/projects/{project_id}/bible")
+        if section not in {"script", "assets", "storyboard", "video"}:
+            ui.navigate.to(f"/projects/{project_id}/script")
             return
         try:
             project_uuid = UUID(project_id)
@@ -4516,9 +4152,7 @@ def register_ui_pages() -> None:
             with ui.column().classes(
                 "workspace-main flex-1 min-w-0 p-8 lg:p-10 gap-4 h-[calc(100vh-64px)] overflow-y-auto"
             ):
-                if section == "bible":
-                    _render_story_bible_area(project_uuid, summary)
-                elif section == "script":
+                if section == "script":
                     _render_script_area(project_uuid, summary)
                 elif section == "assets":
                     _render_assets_area(project_uuid, summary)

@@ -18,18 +18,10 @@ from app.quality.continuity import (
 from app.quality.models import ContinuityIssue, ContinuityState, QualityCheck
 from app.quality.security import security_scan_text
 from app.storyboards.models import Timeline, TimelineItem
-from app.storytelling.models import Briefing, Scene, Script, Shot, StoryBible
+from app.storytelling.models import Briefing, Scene, Script, Shot
 from app.video_generation.models import GenerationJob
+from app.visual_bible.models import Character, Location, Prop
 from app.workflows.state_machine import advance_project_status
-
-
-async def _latest_story_bible(session: AsyncSession, project_id: UUID) -> StoryBible | None:
-    result = await session.execute(
-        select(StoryBible)
-        .where(StoryBible.project_id == project_id)
-        .order_by(StoryBible.created_at.desc())
-    )
-    return result.scalars().first()
 
 
 async def _ordered_shots(session: AsyncSession, project_id: UUID) -> list[tuple[Shot, Scene]]:
@@ -77,6 +69,29 @@ async def _upsert_continuity_state(
     return state
 
 
+async def _continuity_source_payload(session: AsyncSession, project_id: UUID) -> dict:
+    characters_result = await session.execute(
+        select(Character).where(Character.project_id == project_id)
+    )
+    locations_result = await session.execute(
+        select(Location).where(Location.project_id == project_id)
+    )
+    props_result = await session.execute(select(Prop).where(Prop.project_id == project_id))
+    characters = [
+        character.canonical_profile or {"id": str(character.id), "name": character.name}
+        for character in characters_result.scalars()
+    ]
+    locations = [
+        location.canonical_profile or {"id": str(location.id), "name": location.name}
+        for location in locations_result.scalars()
+    ]
+    props = [
+        prop.canonical_profile or {"id": str(prop.id), "name": prop.name}
+        for prop in props_result.scalars()
+    ]
+    return {"characters": characters, "locations": locations, "props": props}
+
+
 async def _create_issue_if_new(
     session: AsyncSession,
     project_id: UUID,
@@ -117,16 +132,16 @@ async def build_continuity_ledger(
     session: AsyncSession, project_id: UUID
 ) -> tuple[list[ContinuityState], list[ContinuityIssue]] | None:
     project = await ProjectRepository(session).get_project(project_id)
-    story_bible = await _latest_story_bible(session, project_id)
-    if project is None or story_bible is None:
+    if project is None:
         return None
 
+    source_payload = await _continuity_source_payload(session, project_id)
     states: list[ContinuityState] = []
     issues: list[ContinuityIssue] = []
     previous_state_payload: dict | None = None
     previous_state_id: UUID | None = None
     for shot, scene in await _ordered_shots(session, project_id):
-        state_payload = build_initial_shot_state(shot, story_bible.payload)
+        state_payload = build_initial_shot_state(shot, source_payload)
         state_payload = inherit_persistent_details(previous_state_payload, state_payload)
         state = await _upsert_continuity_state(
             session, project_id, shot, scene, state_payload, previous_state_id

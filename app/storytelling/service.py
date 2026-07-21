@@ -18,7 +18,6 @@ from app.storytelling.models import (
     Script,
     ScriptVersion,
     Shot,
-    StoryBible,
     StoryIdea,
 )
 from app.storytelling.schemas import BriefingCreate
@@ -657,6 +656,97 @@ def _story_bible_visual_contract(story_bible_payload: dict) -> dict:
         ),
         "continuity_rules": story_bible_payload.get("continuity_rules"),
     }
+
+
+def _idea_script_contract(idea: StoryIdea, briefing: Briefing) -> dict:
+    payload = idea.payload or {}
+    return {
+        "title": idea.title,
+        "logline": payload.get("premise") or idea.premise,
+        "theme": payload.get("theme") or briefing.theme,
+        "genre": payload.get("genre") or briefing.genre,
+        "tone": payload.get("tone") or "cinematografico e emocional",
+        "target_emotion": payload.get("primary_emotion") or briefing.primary_emotion,
+        "audience": briefing.audience,
+        "story_engine": {
+            "dramatic_question": payload.get("dramatic_question")
+            or payload.get("conflict")
+            or "Qual escolha emocional define a historia?",
+            "central_conflict": payload.get("conflict") or idea.premise,
+            "emotional_promise": payload.get("payoff") or idea.hook,
+            "inciting_incident": payload.get("hook") or idea.hook,
+            "midpoint_turn": payload.get("twist") or payload.get("obstacles"),
+            "climax": payload.get("climax"),
+            "ending_image": payload.get("resolution") or payload.get("payoff"),
+        },
+        "characters": [
+            {
+                "name": idea.protagonist,
+                "role": "protagonista",
+                "desire": payload.get("protagonist_desire") or payload.get("stakes"),
+                "fear": payload.get("fear") or payload.get("obstacles"),
+                "arc": payload.get("emotional_need") or payload.get("resolution"),
+            }
+        ],
+        "locations": payload.get("locations") or payload.get("locais") or [],
+        "props": payload.get("props") or payload.get("objetos") or [],
+        "narrative_rules": [
+            "gancho visual imediato",
+            "microviradas ao longo das cenas",
+            "payoff emocional claro",
+        ],
+        "continuity_rules": [
+            "manter continuidade de personagens, locais e objetos extraidos do roteiro"
+        ],
+        "forbidden_elements": briefing.constraints,
+        "visual_style": briefing.visual_style,
+        "audio_style": {"description": "audio discreto a servico da emocao"},
+    }
+
+
+def _fallback_script_content_from_idea(
+    idea_payload: dict, title: str, target_duration_seconds: int
+) -> str:
+    del target_duration_seconds
+    premise = str(idea_payload.get("premise") or "").strip()
+    hook = str(idea_payload.get("hook") or "").strip()
+    protagonist = str(idea_payload.get("protagonist") or "Clara").strip() or "Clara"
+    protagonist_upper = protagonist.split(",", 1)[0].strip().upper() or "CLARA"
+    conflict = str(idea_payload.get("conflict") or premise or "a verdade chega tarde demais")
+    payoff = str(idea_payload.get("payoff") or idea_payload.get("resolution") or "").strip()
+    return "\n\n".join(
+        [
+            f"TITULO: {title}",
+            "FADE IN:",
+            (
+                "CENA 01\n"
+                "INT. CASA DA FAMILIA - FIM DE TARDE\n\n"
+                f"{protagonist_upper} percebe um detalhe fora do lugar. "
+                f"{hook or 'Uma pista simples muda o peso da casa inteira.'}\n\n"
+                f"{protagonist_upper}\n"
+                "Isso nao podia estar aqui."
+            ),
+            (
+                "CENA 02\n"
+                "INT. CORREDOR DA CASA - NOITE\n\n"
+                f"A busca transforma cada fotografia em suspeita. {conflict}. "
+                "A duvida avanca mais rapido do que a coragem."
+            ),
+            (
+                "CENA 03\n"
+                "INT. SALA DA FAMILIA - MADRUGADA\n\n"
+                f"{protagonist_upper} junta as pistas e entende que a historia escondida "
+                "nao era sobre culpa simples. Era sobre uma escolha que feriu todos ao redor."
+            ),
+            (
+                "CENA 04\n"
+                "EXT. FRENTE DA CASA - MANHA\n\n"
+                f"{protagonist_upper} atravessa a primeira luz do dia decidido a contar "
+                f"a verdade. {payoff or 'A reparacao nao apaga a dor, mas abre uma porta.'}\n\n"
+                "FADE OUT."
+            ),
+        ]
+    )
 
 
 def normalize_script_payload(
@@ -1766,90 +1856,27 @@ async def list_story_ideas(session: AsyncSession, project_id: UUID) -> list[Stor
     return list(result.scalars())
 
 
-async def generate_story_bible(
+async def generate_script(
     session: AsyncSession, project_id: UUID, story_idea_id: UUID
-) -> StoryBible | None:
+) -> Script | None:
     project = await ProjectRepository(session).get_project(project_id)
     idea = await session.get(StoryIdea, story_idea_id)
     briefing = await get_latest_briefing(session, project_id)
-    if project is None or idea is None or idea.project_id != project_id or briefing is None:
-        return None
-
-    variables = _briefing_payload(
-        BriefingCreate.model_validate(briefing, from_attributes=True)
-    ) | {"idea": idea.payload, "idea_title": idea.title, "retry_guidance": ""}
-    provider, model = await llm_provider_for_task(session, project_id, "generate_story_bible")
-    payload: dict | None = None
-    for attempt in range(2):
-        result, _execution = await run_structured_generation(
-            session,
-            provider,
-            project_id,
-            "generate_story_bible",
-            variables,
-            model=model,
-            fallback_on_runtime_error=True,
-        )
-        try:
-            payload = normalize_story_bible_payload(
-                _required_mapping(result.content, "generate_story_bible"),
-                idea.payload,
-                briefing,
-            )
-            validate_story_bible_payload(payload, "generate_story_bible")
-            break
-        except GenerationOutputError as exc:
-            payload = None
-            if attempt == 1:
-                break
-            variables["retry_guidance"] = (
-                "A resposta anterior foi recusada porque a Story Bible ficou incompleta: "
-                f"{exc}. Recrie preenchendo campos narrativos, visuais e contratos "
-                "sem usar valores genericos."
-            )
-    if payload is None:
-        return None
-    title = _required_str(payload, "title", "generate_story_bible")
-    artifact = await _create_artifact(
-        session, project_id, ArtifactType.STORY_BIBLE, title, payload
-    )
-    await _add_dependency(session, idea.artifact_id, artifact.id)
-    story_bible = StoryBible(
-        project_id=project_id,
-        artifact_id=artifact.id,
-        story_idea_id=idea.id,
-        title=title,
-        logline=_required_str(payload, "logline", "generate_story_bible"),
-        payload=payload,
-    )
-    session.add(story_bible)
-    advance_project_status(project, ProjectStatus.STORY_APPROVAL)
-    await session.commit()
-    await session.refresh(story_bible)
-    return story_bible
-
-
-async def generate_script(
-    session: AsyncSession, project_id: UUID, story_bible_id: UUID
-) -> Script | None:
-    project = await ProjectRepository(session).get_project(project_id)
-    story_bible = await session.get(StoryBible, story_bible_id)
-    briefing = await get_latest_briefing(session, project_id)
     if (
         project is None
-        or story_bible is None
-        or story_bible.project_id != project_id
+        or idea is None
+        or idea.project_id != project_id
         or briefing is None
     ):
         return None
 
     target_duration_seconds = int(briefing.desired_duration_minutes * Decimal("60"))
     clip_durations = video_clip_durations(target_duration_seconds)
-    story_bible_contract = story_bible.payload.get("script_contract")
-    if not isinstance(story_bible_contract, dict):
-        story_bible_contract = _story_bible_script_contract(story_bible.payload)
+    narrative_contract = _idea_script_contract(idea, briefing)
     variables = {
-        "story_bible_contract": story_bible_contract,
+        "narrative_contract": narrative_contract,
+        "idea": idea.payload,
+        "idea_title": idea.title,
         "language": briefing.language,
         "target_duration_seconds": target_duration_seconds,
         "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
@@ -1874,7 +1901,7 @@ async def generate_script(
         try:
             payload = normalize_script_payload(
                 _required_mapping(result.content, "generate_script"),
-                default_title=story_bible.title,
+                default_title=idea.title,
                 language=briefing.language,
                 target_duration_seconds=target_duration_seconds,
             )
@@ -1889,20 +1916,20 @@ async def generate_script(
             )
     if payload is None:
         payload = {
-            "title": story_bible.title,
+            "title": idea.title,
             "language": briefing.language,
             "target_duration_seconds": target_duration_seconds,
-            "content": _fallback_script_content_from_bible(
-                story_bible.payload,
-                story_bible.title,
+            "content": _fallback_script_content_from_idea(
+                idea.payload,
+                idea.title,
                 target_duration_seconds,
             ),
         }
         payload["word_count"] = len(payload["content"].split())
     title = _required_str(payload, "title", "generate_script")
     if not str(payload.get("content") or "").strip():
-        payload["content"] = _fallback_script_content_from_bible(
-            story_bible.payload,
+        payload["content"] = _fallback_script_content_from_idea(
+            idea.payload,
             title,
             target_duration_seconds,
         )
@@ -1910,11 +1937,11 @@ async def generate_script(
     artifact = await _create_artifact(
         session, project_id, ArtifactType.SCRIPT, title, payload
     )
-    await _add_dependency(session, story_bible.artifact_id, artifact.id)
+    await _add_dependency(session, idea.artifact_id, artifact.id)
     script = Script(
         project_id=project_id,
         artifact_id=artifact.id,
-        story_bible_id=story_bible.id,
+        story_idea_id=idea.id,
         title=title,
         language=_required_str(payload, "language", "generate_script"),
         target_duration_seconds=_required_int(

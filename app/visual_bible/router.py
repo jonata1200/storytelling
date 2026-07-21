@@ -39,13 +39,13 @@ async def post_generate_visual_bible(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> VisualBibleRead:
     try:
-        result = await generate_visual_bible(session, project_id, payload.story_bible_id)
+        result = await generate_visual_bible(session, project_id, payload.script_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project or Story Bible not found",
+            detail="Project or script not found",
         )
     characters, locations, props = result
     return VisualBibleRead(

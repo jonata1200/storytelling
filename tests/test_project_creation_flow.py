@@ -409,11 +409,10 @@ def test_characters_section_unlocks_when_script_exists_without_shots() -> None:
     assert reason == ""
 
 
-def test_story_bible_section_unlocks_when_bible_exists() -> None:
+def test_script_section_is_entry_point() -> None:
     counts = {
         "briefings": 1,
         "ideas": 1,
-        "bibles": 1,
         "scripts": 0,
         "scenes": 0,
         "shots": 0,
@@ -425,17 +424,17 @@ def test_story_bible_section_unlocks_when_bible_exists() -> None:
         "qa_issues": 0,
     }
 
-    allowed, reason = pages._workspace_section_access("bible", counts)
+    allowed, reason = pages._workspace_section_access("script", counts)
 
     assert allowed is True
     assert reason == ""
+    assert pages._first_available_workspace_section(counts) == "script"
 
 
-def test_story_bible_section_is_first_available_even_before_generation() -> None:
+def test_unknown_workspace_section_is_rejected() -> None:
     counts = {
         "briefings": 1,
         "ideas": 1,
-        "bibles": 0,
         "scripts": 1,
         "scenes": 1,
         "shots": 1,
@@ -449,21 +448,22 @@ def test_story_bible_section_is_first_available_even_before_generation() -> None
 
     allowed, reason = pages._workspace_section_access("bible", counts)
 
-    assert allowed is True
-    assert reason == ""
-    assert pages._first_available_workspace_section(counts) == "bible"
+    assert allowed is False
+    assert reason == "Etapa desconhecida."
+    assert pages._first_available_workspace_section(counts) == "script"
 
 
-def test_production_steps_show_script_before_story_bible() -> None:
+def test_production_steps_do_not_include_story_bible() -> None:
     step_keys = [step.key for step in pages.PRODUCTION_STEPS]
 
-    assert step_keys.index("script") < step_keys.index("bible")
+    assert "script" in step_keys
+    assert "bible" not in step_keys
 
 
-def test_workspace_tabs_show_story_bible_before_script() -> None:
+def test_workspace_tabs_start_with_script() -> None:
     tab_keys = [key for _, key in pages.WORKSPACE_TABS]
 
-    assert tab_keys[:2] == ["bible", "script"]
+    assert tab_keys[:2] == ["script", "assets"]
 
 
 def test_idea_lab_duration_and_count_options_match_generation_controls() -> None:
@@ -471,23 +471,6 @@ def test_idea_lab_duration_and_count_options_match_generation_controls() -> None
     assert pages.IDEA_COUNT_OPTIONS == list(range(1, 11))
     assert "Documentário" not in pages.IDEA_GENRES
     assert "Histórias familiares emocionantes" not in pages.IDEA_GENRES
-
-
-def test_story_bible_items_present_named_sections() -> None:
-    items = pages._story_bible_items(
-        [
-            {
-                "name": "Dona Celia",
-                "role": "protagonista",
-                "arc": "aceita dividir o legado",
-            },
-            "regra de continuidade visual",
-        ]
-    )
-
-    assert items[0]["name"] == "Dona Celia"
-    assert "protagonista" in items[0]["detail"]
-    assert items[1] == {"name": "regra de continuidade visual", "detail": ""}
 
 
 def test_story_idea_payload_is_normalized_for_pipeline() -> None:
@@ -973,7 +956,7 @@ def test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_s
 
 
 @pytest.mark.asyncio
-async def test_developing_story_idea_starts_initial_story_bible_pipeline(
+async def test_developing_story_idea_starts_initial_script_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
@@ -1012,8 +995,8 @@ async def test_developing_story_idea_starts_initial_story_bible_pipeline(
 
     await pages._create_project_from_idea(idea)
 
-    assert captured["generate_initial_script"] is False
-    assert captured["generate_initial_story_bible"] is True
+    assert captured["generate_initial_script"] is True
+    assert captured["generate_initial_story_bible"] is False
     assert captured["source_idea"] is idea
     assert captured["form"]["duration"] == 7
     assert "7 minutos" in captured["form"]["objective"]
@@ -1029,7 +1012,6 @@ async def test_initial_script_pipeline_uses_selected_idea_and_creates_script(
 ) -> None:
     project_id = uuid4()
     idea_id = uuid4()
-    bible_id = uuid4()
     script_id = uuid4()
     selected_idea = {"title": "A carta azul", "premise": "Uma carta chega no dia certo."}
     calls: list[str] = []
@@ -1040,16 +1022,10 @@ async def test_initial_script_pipeline_uses_selected_idea_and_creates_script(
         assert args[2] is selected_idea
         return SimpleNamespace(id=idea_id)
 
-    async def fake_generate_story_bible(*args: Any, **kwargs: Any) -> SimpleNamespace:
-        calls.append("bible")
-        assert args[1] == project_id
-        assert args[2] == idea_id
-        return SimpleNamespace(id=bible_id)
-
     async def fake_generate_script(*args: Any, **kwargs: Any) -> SimpleNamespace:
         calls.append("script")
         assert args[1] == project_id
-        assert args[2] == bible_id
+        assert args[2] == idea_id
         return SimpleNamespace(id=script_id)
 
     async def fake_generate_scenes_and_shots(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
@@ -1061,7 +1037,6 @@ async def test_initial_script_pipeline_uses_selected_idea_and_creates_script(
     monkeypatch.setattr(
         pages, "create_story_idea_from_payload", fake_create_story_idea_from_payload
     )
-    monkeypatch.setattr(pages, "generate_story_bible", fake_generate_story_bible)
     monkeypatch.setattr(pages, "generate_script", fake_generate_script)
     monkeypatch.setattr(pages, "generate_scenes_and_shots", fake_generate_scenes_and_shots)
 
@@ -1070,46 +1045,11 @@ async def test_initial_script_pipeline_uses_selected_idea_and_creates_script(
     )
 
     assert script.id == script_id
-    assert calls == ["idea", "bible", "script", "scenes"]
+    assert calls == ["idea", "script", "scenes"]
 
 
-@pytest.mark.asyncio
-async def test_initial_story_bible_pipeline_uses_selected_idea_without_script(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project_id = uuid4()
-    idea_id = uuid4()
-    bible_id = uuid4()
-    selected_idea = {"title": "A carta azul", "premise": "Uma carta chega no dia certo."}
-    calls: list[str] = []
-
-    async def fake_create_story_idea_from_payload(*args: Any, **kwargs: Any) -> SimpleNamespace:
-        calls.append("idea")
-        assert args[1] == project_id
-        assert args[2] is selected_idea
-        return SimpleNamespace(id=idea_id)
-
-    async def fake_generate_story_bible(*args: Any, **kwargs: Any) -> SimpleNamespace:
-        calls.append("bible")
-        assert args[1] == project_id
-        assert args[2] == idea_id
-        return SimpleNamespace(id=bible_id)
-
-    async def fake_generate_script(*args: Any, **kwargs: Any) -> None:
-        raise AssertionError("script generation should not run")
-
-    monkeypatch.setattr(
-        pages, "create_story_idea_from_payload", fake_create_story_idea_from_payload
-    )
-    monkeypatch.setattr(pages, "generate_story_bible", fake_generate_story_bible)
-    monkeypatch.setattr(pages, "generate_script", fake_generate_script)
-
-    story_bible = await pages._generate_initial_story_bible(
-        cast(AsyncSession, object()), project_id, selected_idea
-    )
-
-    assert story_bible.id == bible_id
-    assert calls == ["idea", "bible"]
+def test_initial_story_bible_pipeline_was_removed() -> None:
+    assert not hasattr(pages, "_generate_initial_story_bible")
 
 
 @pytest.mark.asyncio
@@ -1118,7 +1058,6 @@ async def test_project_chat_can_trigger_script_generation(
 ) -> None:
     project_id = uuid4()
     idea_id = uuid4()
-    bible_id = uuid4()
     script_id = uuid4()
     calls: list[str] = []
 
@@ -1134,14 +1073,9 @@ async def test_project_chat_can_trigger_script_generation(
         calls.append("ideas")
         return [SimpleNamespace(id=idea_id)]
 
-    async def fake_generate_story_bible(*args: Any, **kwargs: Any) -> SimpleNamespace:
-        calls.append("bible")
-        assert args[2] == idea_id
-        return SimpleNamespace(id=bible_id)
-
     async def fake_generate_script(*args: Any, **kwargs: Any) -> SimpleNamespace:
         calls.append("script")
-        assert args[2] == bible_id
+        assert args[2] == idea_id
         return SimpleNamespace(id=script_id)
 
     async def fake_generate_scenes_and_shots(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
@@ -1151,7 +1085,6 @@ async def test_project_chat_can_trigger_script_generation(
 
     monkeypatch.setattr(pages, "_latest", fake_latest)
     monkeypatch.setattr(pages, "generate_story_ideas", fake_generate_story_ideas)
-    monkeypatch.setattr(pages, "generate_story_bible", fake_generate_story_bible)
     monkeypatch.setattr(pages, "generate_script", fake_generate_script)
     monkeypatch.setattr(pages, "generate_scenes_and_shots", fake_generate_scenes_and_shots)
 
@@ -1161,4 +1094,4 @@ async def test_project_chat_can_trigger_script_generation(
 
     assert message == "Roteiro criado e dividido em cenas e planos."
     assert should_reload is True
-    assert calls == ["ideas", "bible", "script", "scenes"]
+    assert calls == ["ideas", "script", "scenes"]

@@ -63,7 +63,8 @@ async def test_mock_llm_generates_cinematic_script_format() -> None:
             task="generate_script",
             prompt="",
             variables={
-                "story_bible": {"title": "A promessa"},
+                "idea": {"title": "A promessa"},
+                "narrative_contract": {"title": "A promessa"},
                 "language": "pt-BR",
                 "target_duration_seconds": 300,
             },
