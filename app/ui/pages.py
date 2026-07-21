@@ -73,7 +73,6 @@ from app.storyboards.models import (
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
 from app.storytelling.idea_lab import (
     delete_all_ideas,
-    delete_generated_idea,
     delete_saved_idea,
     generate_freeform_ideas,
     load_generated_ideas,
@@ -127,11 +126,9 @@ IDEA_GENRES = [
     "Animação",
     "Aventura",
     "Comédia",
-    "Documentário",
     "Drama",
     "Fantasia",
     "Ficção Científica",
-    "Histórias familiares emocionantes",
     "Romance",
     "Suspense (Thriller)",
     "Terror (ou Horror)",
@@ -4027,7 +4024,6 @@ def register_ui_pages() -> None:
     async def ideas_page() -> None:
         _body_style()
         _home_sidebar("ideas")
-        ideas: list[dict[str, Any]] = load_generated_ideas()
         saved_ideas = load_saved_ideas()
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
             with ui.column().classes("w-full max-w-6xl mx-auto px-6 py-8 gap-7"):
@@ -4061,7 +4057,6 @@ def register_ui_pages() -> None:
                                 "Comédia",
                                 "Terror",
                                 "Romance",
-                                "Documentário",
                             ],
                             label="Gênero",
                             value="Drama",
@@ -4102,8 +4097,7 @@ def register_ui_pages() -> None:
                                 ),
                                 timeout=UI_GENERATION_TIMEOUT_SECONDS,
                             )
-                            ideas.clear()
-                            ideas.extend(replace_generated_ideas(generated))
+                            replace_generated_ideas([])
                             for generated_idea in generated:
                                 saved = save_idea(generated_idea)
                                 saved_ideas[:] = [
@@ -4112,7 +4106,6 @@ def register_ui_pages() -> None:
                                     if existing.get("id") != saved["id"]
                                 ]
                                 saved_ideas.insert(0, saved)
-                            idea_results.refresh()
                             saved_results.refresh()
                             ui.notify(
                                 f"{len(generated)} ideia(s) gerada(s) e salva(s).",
@@ -4161,12 +4154,6 @@ def register_ui_pages() -> None:
                         "acid-bg rounded-2xl px-10 py-5 text-lg font-bold"
                     )
 
-                def discard_generated(idea: dict[str, Any]) -> None:
-                    if idea in ideas:
-                        ideas.remove(idea)
-                    delete_generated_idea(str(idea.get("id") or ""))
-                    idea_results.refresh()
-
                 def delete_saved(idea_id: str) -> None:
                     delete_saved_idea(idea_id)
                     saved_ideas[:] = [
@@ -4174,66 +4161,6 @@ def register_ui_pages() -> None:
                     ]
                     saved_results.refresh()
                     ui.notify("Ideia descartada.", color="warning")
-
-                @ui.refreshable
-                def idea_results() -> None:
-                    if not ideas:
-                        with ui.element("div").classes(
-                            "w-full border border-dashed border-[#343934] rounded-2xl min-h-52 flex flex-col items-center justify-center text-[#777d78]"
-                        ):
-                            ui.icon("tips_and_updates").classes("text-5xl")
-                            ui.label("Suas ideias aparecerão aqui.").classes("mt-3")
-                        return
-                    with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-3 gap-4"):
-                        for idea in ideas:
-                            with ui.element("article").classes(
-                                "entity-card rounded-2xl p-5 flex flex-col min-h-80"
-                            ):
-                                ui.label(
-                                    _clean_idea_title(
-                                        idea.get("title"), "História sem título"
-                                    )
-                                ).classes(
-                                    "brand-type text-2xl font-bold"
-                                )
-                                with ui.row().classes("gap-2 mt-3 flex-wrap"):
-                                    ui.label(str(idea.get("genre") or "Genero sugerido")).classes(
-                                        "idea-badge-genre rounded-md px-2 py-0.5 text-xs font-medium"
-                                    )
-                                    ui.label(
-                                        str(idea.get("primary_emotion") or "Emocao sugerida")
-                                    ).classes(
-                                        "idea-badge-emotion rounded-md px-2 py-0.5 text-xs font-medium"
-                                    )
-                                    ui.label(
-                                        f"{coerce_duration_minutes(idea.get('duration_minutes')):g} min"
-                                    ).classes(
-                                        "idea-badge-duration rounded-md px-2 py-0.5 text-xs font-medium"
-                                    )
-                                if idea.get("theme"):
-                                    ui.label(f"Tema: {idea['theme']}").classes(
-                                        "text-xs text-[#9aa29b] mt-3"
-                                    )
-                                ui.label(str(idea.get("hook") or "")).classes(
-                                    "text-sm text-[#d4d8d4] mt-3 font-medium"
-                                )
-                                ui.label(str(idea.get("premise") or "")).classes(
-                                    "text-sm text-[#8d938e] mt-3 leading-6"
-                                )
-                                ui.space()
-                                with ui.row().classes("gap-2 mt-4"):
-                                    ui.button(
-                                        "Ocultar",
-                                        icon="visibility_off",
-                                        on_click=lambda item=idea: discard_generated(item),
-                                    ).props("flat no-caps").classes("text-[#aeb3ae]")
-                                    ui.button(
-                                        "Desenvolver",
-                                        icon="arrow_forward",
-                                        on_click=lambda item=idea: _create_project_from_idea(item),
-                                    ).props("flat no-caps").classes("acid")
-
-                idea_results()
 
                 @ui.refreshable
                 def saved_results() -> None:

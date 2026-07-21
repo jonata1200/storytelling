@@ -469,6 +469,8 @@ def test_workspace_tabs_show_story_bible_before_script() -> None:
 def test_idea_lab_duration_and_count_options_match_generation_controls() -> None:
     assert pages.STORY_DURATION_OPTIONS == [5, 10, 15, 20, 25]
     assert pages.IDEA_COUNT_OPTIONS == list(range(1, 11))
+    assert "Documentário" not in pages.IDEA_GENRES
+    assert "Histórias familiares emocionantes" not in pages.IDEA_GENRES
 
 
 def test_story_bible_items_present_named_sections() -> None:

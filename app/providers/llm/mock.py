@@ -55,7 +55,7 @@ class MockLLMProvider:
         count = int(variables.get("count") or 3)
         target_duration = float(variables.get("target_duration_minutes") or 5)
         selected_genre = str(variables.get("genre") or "").strip()
-        genres = ["Drama", "Suspense", "Ficcao cientifica", "Romance", "Documentario"]
+        genres = ["Drama", "Suspense", "Ficcao cientifica", "Romance", "Aventura"]
         emotions = ["Esperanca", "Curiosidade", "Tensao", "Melancolia", "Surpresa"]
         themes = [
             "uma promessa esquecida numa cidade pequena",

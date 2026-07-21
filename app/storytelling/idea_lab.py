@@ -187,7 +187,12 @@ def _load_ideas(path: Path, label: str) -> list[dict[str, Any]]:
 
 def save_idea(idea: dict[str, Any], path: Path = SAVED_IDEAS_PATH) -> dict[str, Any]:
     normalized = _normalize_idea(idea)
-    ideas = [item for item in load_saved_ideas(path) if item.get("id") != normalized["id"]]
+    normalized_key = _idea_dedupe_key(normalized)
+    ideas = [
+        item
+        for item in load_saved_ideas(path)
+        if item.get("id") != normalized["id"] and _idea_dedupe_key(item) != normalized_key
+    ]
     ideas.insert(0, normalized)
     _write_ideas(ideas, path)
     return normalized
@@ -204,6 +209,16 @@ def _normalize_idea(idea: dict[str, Any], default_duration_minutes: float = 5.0)
     )
     normalized.setdefault("id", uuid.uuid4().hex)
     return normalized
+
+
+def _idea_dedupe_key(idea: dict[str, Any]) -> tuple[str, str, str, str]:
+    normalized = _normalize_idea(idea)
+    return (
+        str(normalized.get("title") or "").casefold().strip(),
+        str(normalized.get("genre") or "").casefold().strip(),
+        f"{coerce_duration_minutes(normalized.get('duration_minutes')):g}",
+        str(normalized.get("premise") or "").casefold().strip(),
+    )
 
 
 def _write_ideas(ideas: list[dict[str, Any]], path: Path) -> None:

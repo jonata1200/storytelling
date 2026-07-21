@@ -200,6 +200,37 @@ def test_saved_ideas_can_be_saved_and_deleted(tmp_path: Path) -> None:
     assert load_saved_ideas(path) == []
 
 
+def test_saving_same_idea_content_does_not_duplicate_saved_list(tmp_path: Path) -> None:
+    path = tmp_path / "saved-ideas.json"
+    save_idea(
+        {
+            "id": "idea-1",
+            "title": "A chave no jardim",
+            "genre": "Suspense",
+            "primary_emotion": "Curiosidade",
+            "premise": "Uma chave muda de lugar a cada mentira.",
+            "duration_minutes": 10,
+        },
+        path,
+    )
+    save_idea(
+        {
+            "id": "idea-2",
+            "title": "A chave no jardim",
+            "genre": "Suspense",
+            "primary_emotion": "Curiosidade",
+            "premise": "Uma chave muda de lugar a cada mentira.",
+            "duration_minutes": 10,
+        },
+        path,
+    )
+
+    saved = load_saved_ideas(path)
+
+    assert len(saved) == 1
+    assert saved[0]["id"] == "idea-2"
+
+
 def test_generated_ideas_can_be_persisted_and_discarded(tmp_path: Path) -> None:
     path = tmp_path / "generated-ideas.json"
     ideas = replace_generated_ideas(
