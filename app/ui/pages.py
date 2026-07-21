@@ -1285,6 +1285,34 @@ async def _generate_initial_script(
     return script
 
 
+async def _generate_initial_story_bible(
+    session: AsyncSession,
+    project_id: UUID,
+    source_idea: dict[str, Any] | None = None,
+    progress: Callable[[str], Awaitable[None]] | None = None,
+) -> StoryBible:
+    if source_idea is not None:
+        if progress is not None:
+            await progress("Vou registrar a ideia escolhida dentro deste projeto.")
+        idea = await create_story_idea_from_payload(session, project_id, source_idea)
+        if idea is None:
+            raise ValueError("nao foi possivel registrar a ideia selecionada")
+    else:
+        if progress is not None:
+            await progress("Vou criar uma ideia base para orientar a Story Bible.")
+        generated_ideas = await generate_story_ideas(session, project_id)
+        if not generated_ideas:
+            raise ValueError("nao foi possivel gerar ideias iniciais")
+        idea = generated_ideas[0]
+
+    if progress is not None:
+        await progress("Vou montar a Story Bible com personagens, mundo e arco narrativo.")
+    story_bible = await generate_story_bible(session, project_id, idea.id)
+    if story_bible is None:
+        raise ValueError("nao foi possivel gerar a Story Bible")
+    return story_bible
+
+
 async def _set_project_ai_action_status(
     session: AsyncSession,
     project_id: UUID,
@@ -1369,6 +1397,58 @@ async def _generate_initial_script_in_background(
                 project_id,
                 status="failed",
                 message="A IA nao conseguiu criar o roteiro inicial.",
+                error="Consulte o terminal para ver o erro completo.",
+            )
+
+
+async def _generate_initial_story_bible_in_background(
+    project_id: UUID,
+    source_idea: dict[str, Any] | None = None,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="running",
+                message="A IA esta criando a Story Bible com base na ideia.",
+                action="create_initial_story_bible",
+                record_event=False,
+            )
+
+            async def report_progress(message: str) -> None:
+                await _set_project_ai_action_status(
+                    session,
+                    project_id,
+                    status="running",
+                    message=message,
+                    action="create_initial_story_bible",
+                    record_event=False,
+                )
+
+            await _generate_initial_story_bible(
+                session,
+                project_id,
+                source_idea,
+                report_progress,
+            )
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="completed",
+                message="Story Bible inicial criada.",
+                action="create_initial_story_bible",
+                record_event=False,
+            )
+    except Exception:
+        logger.exception("Nao foi possivel gerar Story Bible inicial do projeto %s", project_id)
+        async with AsyncSessionLocal() as session:
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="failed",
+                message="A IA nao conseguiu criar a Story Bible inicial.",
+                action="create_initial_story_bible",
                 error="Consulte o terminal para ver o erro completo.",
             )
 
@@ -1604,6 +1684,7 @@ async def _create_project_from_form(
     form: dict[str, Any],
     *,
     generate_initial_script: bool = False,
+    generate_initial_story_bible: bool = False,
     source_idea: dict[str, Any] | None = None,
 ) -> None:
     try:
@@ -1650,14 +1731,30 @@ async def _create_project_from_form(
                 ],
             )
             await create_briefing(session, project.id, briefing)
-            if generate_initial_script:
+            if generate_initial_story_bible:
+                await _set_project_ai_action_status(
+                    session,
+                    project.id,
+                    status="queued",
+                    message="A IA vai iniciar a criacao da Story Bible.",
+                    action="create_initial_story_bible",
+                )
+            elif generate_initial_script:
                 await _set_project_ai_action_status(
                     session,
                     project.id,
                     status="queued",
                     message="A IA vai iniciar a criacao do roteiro inicial.",
                 )
-        if generate_initial_script:
+        if generate_initial_story_bible:
+            background_tasks.create(
+                _generate_initial_story_bible_in_background(
+                    project_id,
+                    dict(source_idea) if source_idea is not None else None,
+                ),
+                name=f"initial-story-bible-{project_id}",
+            )
+        elif generate_initial_script:
             background_tasks.create(
                 _generate_initial_script_in_background(
                     project_id,
@@ -1665,15 +1762,19 @@ async def _create_project_from_form(
                 ),
                 name=f"initial-script-{project_id}",
             )
-        message = (
-            f"Projeto criado. A IA ja iniciou o roteiro de {duration:g} minutos."
-            if generate_initial_script
-            else "Projeto criado com briefing inicial."
-        )
+        if generate_initial_story_bible:
+            message = "Projeto criado. A IA ja iniciou a Story Bible."
+        elif generate_initial_script:
+            message = f"Projeto criado. A IA ja iniciou o roteiro de {duration:g} minutos."
+        else:
+            message = "Projeto criado com briefing inicial."
         ui.notify(message, color="positive")
-        destination = (
-            f"/projects/{project_id}/script" if generate_initial_script else f"/projects/{project_id}"
-        )
+        if generate_initial_story_bible:
+            destination = f"/projects/{project_id}/bible"
+        elif generate_initial_script:
+            destination = f"/projects/{project_id}/script"
+        else:
+            destination = f"/projects/{project_id}"
         ui.navigate.to(destination)
     except Exception as exc:
         ui.notify(f"Nao foi possivel criar o projeto: {exc}", color="negative")
@@ -1750,7 +1851,11 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
         "image_model": get_settings().openrouter_image_model,
         "video_model": get_settings().openrouter_video_model,
     }
-    await _create_project_from_form(form, generate_initial_script=True, source_idea=idea)
+    await _create_project_from_form(
+        form,
+        generate_initial_story_bible=True,
+        source_idea=idea,
+    )
 
 
 async def _rename_project_from_ui(project_id: UUID, title: str, redirect_to: str) -> None:
@@ -2652,6 +2757,8 @@ def _load_assistant_messages(
                 message["event_action"] = str(event_action)
             messages.append(message)
     _ = active, assistant_suggestions
+    if not messages:
+        messages.append(_assistant_initial_message(active, assistant_suggestions))
     store[str(project_id)] = messages
     nicegui_app.storage.user["project_assistant_messages"] = store
     return messages
@@ -2753,60 +2860,6 @@ def _sync_ai_action_events_to_chat(project_id: UUID, summary: dict[str, Any]) ->
         nicegui_app.storage.user["project_assistant_messages"] = store
 
 
-def _assistant_flow_actions(active: str, counts: dict[str, int]) -> dict[str, str] | None:
-    if active not in {"assets", "storyboard", "video"}:
-        return None
-    review = {
-        "review_label": "Revisar esta etapa",
-        "review_user_message": "Quero revisar esta etapa antes de seguir.",
-        "review_response": (
-            "Combinado. Vamos manter o fluxo nesta etapa para revisar, ajustar e aprovar "
-            "as informacoes antes de avancar."
-        ),
-    }
-    if active == "assets":
-        if not _step_ready("visual", counts):
-            return {
-                **review,
-                "continue_label": "Criar ativos",
-                "continue_prompt": "Pode criar personagens, locais e objetos da historia.",
-                "continue_target": "assets",
-            }
-        return {
-            **review,
-            "continue_label": "Seguir para storyboard",
-            "continue_prompt": "Pode gerar o storyboard completo a partir dos ativos criados.",
-            "continue_target": "storyboard",
-        }
-    if active == "storyboard":
-        if not _step_ready("storyboard", counts):
-            return {
-                **review,
-                "continue_label": "Criar storyboard",
-                "continue_prompt": "Pode criar o storyboard completo a partir do roteiro.",
-                "continue_target": "storyboard",
-            }
-        return {
-            **review,
-            "continue_label": "Seguir para video",
-            "continue_prompt": "Pode preparar os prompts de video a partir do storyboard.",
-            "continue_target": "video",
-        }
-    if not _step_ready("video", counts):
-        return {
-            **review,
-            "continue_label": "Preparar video",
-            "continue_prompt": "Pode preparar os prompts de video a partir do storyboard.",
-            "continue_target": "video",
-        }
-    return {
-        **review,
-        "continue_label": "Revisar montagem",
-        "continue_prompt": "Pode revisar a montagem de video e orientar os proximos ajustes.",
-        "continue_target": "video",
-    }
-
-
 def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> None:
     prompts = {
         "bible": "Peça ajustes de premissa, personagens, locais ou regras.",
@@ -2840,24 +2893,6 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
     }
     _sync_ai_action_events_to_chat(project_id, summary)
     messages = _load_assistant_messages(project_id, active, assistant_suggestions)
-    flow_actions = _assistant_flow_actions(active, summary["counts"])
-    visual_cards_ready = active == "assets" and _visual_library_cards_ready(summary)
-    visual_batch_requests = _visual_batch_requests(summary) if active == "assets" else []
-    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_dialog, ui.card().classes(
-        "entity-card rounded-2xl p-7 w-[min(520px,92vw)]"
-    ):
-        with ui.row().classes("items-center gap-4"):
-            ui.spinner(size="lg").classes("acid")
-            with ui.column().classes("gap-1"):
-                ui.label("IA gerando imagens").classes("brand-type text-xl font-bold")
-                ui.label(
-                    "Os ativos estao entrando em fila, um por vez, para evitar sobrecarga da API."
-                ).classes("text-sm text-[#8d938e]")
-
-    async def approve_all_visuals_from_chat() -> None:
-        batch_dialog.open()
-        await _approve_all_visual_targets_from_ui(project_id, visual_batch_requests)
-        batch_dialog.close()
 
     with ui.element("aside").classes(
         "right-assistant flex flex-col min-h-0 mt-0 gap-4 sticky top-0 self-start"
@@ -2901,9 +2936,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
         ):
             conversation()
 
-        async def send_message(
-            text: str | None = None, next_section: str | None = None
-        ) -> None:
+        async def send_message(text: str | None = None) -> None:
             client = prompt.client
             user_message = (text or prompt.value or "").strip()
             if not user_message:
@@ -2952,75 +2985,9 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             messages.append({"role": "assistant", "content": response})
             _save_assistant_messages(project_id, messages)
             if should_reload:
-                if next_section:
-                    _safe_client_navigation(client, f"/projects/{project_id}/{next_section}")
-                else:
-                    _safe_client_navigation(client)
+                _safe_client_navigation(client)
                 return
             _safe_refresh(conversation)
-            if next_section:
-                _safe_client_navigation(client, f"/projects/{project_id}/{next_section}")
-
-        async def keep_reviewing_current_step() -> None:
-            if flow_actions is None:
-                return
-            messages.append(
-                {"role": "user", "content": flow_actions["review_user_message"]}
-            )
-            messages.append(
-                {"role": "assistant", "content": flow_actions["review_response"]}
-            )
-            _save_assistant_messages(project_id, messages)
-            conversation.refresh()
-
-        if flow_actions is not None:
-            with ui.element("div").classes(
-                "glass rounded-2xl p-3 w-full shrink-0 border border-[#30362b]"
-            ):
-                ui.label("Decisao de fluxo").classes("text-xs acid uppercase font-semibold")
-                with ui.column().classes("w-full gap-2 mt-2"):
-                    ui.button(
-                        flow_actions["continue_label"],
-                        icon="arrow_forward",
-                        on_click=lambda: send_message(
-                            flow_actions["continue_prompt"],
-                            flow_actions["continue_target"],
-                        ),
-                    ).props("unelevated no-caps").classes("acid-bg rounded-xl w-full")
-                    ui.button(
-                        flow_actions["review_label"],
-                        icon="rate_review",
-                        on_click=keep_reviewing_current_step,
-                    ).props("outline no-caps").classes(
-                        "rounded-xl w-full text-[#d8dbd8] border-[#3a403a]"
-                    )
-
-        if active == "assets":
-            with ui.element("div").classes(
-                "glass rounded-2xl p-3 w-full shrink-0 border border-[#30362b]"
-            ):
-                ui.label("Geracao de imagens").classes("text-xs acid uppercase font-semibold")
-                if not visual_cards_ready:
-                    helper_text = "Crie personagens, locais e objetos antes de gerar tudo."
-                elif not visual_batch_requests:
-                    helper_text = "Todas as imagens dos ativos ja foram criadas."
-                else:
-                    pending_view_count = sum(
-                        len(view_types)
-                        for _target_kind, _target_id, view_types in visual_batch_requests
-                    )
-                    helper_text = (
-                        f"{pending_view_count} imagem(ns) pendente(s) em "
-                        f"{len(visual_batch_requests)} ativo(s)."
-                    )
-                ui.label(helper_text).classes("text-xs text-[#8d938e] mt-2")
-                batch_button = ui.button(
-                    "Aprovar todos e gerar imagens",
-                    icon="auto_awesome",
-                    on_click=approve_all_visuals_from_chat,
-                ).props("unelevated no-caps").classes("acid-bg rounded-xl w-full mt-2")
-                if not visual_cards_ready or not visual_batch_requests:
-                    batch_button.props("disable")
 
         with ui.row().classes("w-full items-end gap-2 shrink-0"):
             prompt = (
@@ -4585,7 +4552,7 @@ def register_ui_pages() -> None:
 
     @ui.page("/projects/{project_id}", response_timeout=15)
     async def project_workspace(project_id: str) -> None:
-        ui.navigate.to(f"/projects/{project_id}/script")
+        ui.navigate.to(f"/projects/{project_id}/bible")
         return
 
     @ui.page("/projects/{project_id}/{section}", response_timeout=15)

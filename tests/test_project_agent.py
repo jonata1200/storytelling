@@ -35,6 +35,16 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("mude os enquadramentos", "storyboard") == (
         "generate_storyboard"
     )
+    assert classify_project_chat_action("crie a Story Bible", "bible") == (
+        "generate_story_bible"
+    )
+    assert classify_project_chat_action("gere ideias novas", "bible") == "generate_ideas"
+    assert classify_project_chat_action("exportar a timeline final", "video") == (
+        "generate_finalization"
+    )
+    assert classify_project_chat_action("rode o controle de qualidade", "video") == (
+        "run_quality"
+    )
 
 
 @pytest.mark.asyncio
@@ -146,6 +156,63 @@ async def test_project_chat_routes_assets_storyboard_and_video(
 
 
 @pytest.mark.asyncio
+async def test_project_chat_routes_story_bible_finalization_and_quality(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    calls: list[str] = []
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        return {"project_id": str(requested_project_id)}
+
+    async def fake_story_bible(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+    ) -> SimpleNamespace:
+        calls.append("bible")
+        assert requested_project_id == project_id
+        return SimpleNamespace(message="bible ok", changed=True)
+
+    async def fake_finalization(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+    ) -> ProjectChatResult:
+        calls.append("finalization")
+        assert requested_project_id == project_id
+        return ProjectChatResult("final ok", "generate_finalization", True)
+
+    async def fake_quality(
+        session: AsyncSession,
+        requested_project_id: Any,
+    ) -> ProjectChatResult:
+        calls.append("quality")
+        assert requested_project_id == project_id
+        return ProjectChatResult("quality ok", "run_quality", True)
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_ensure_story_bible_pipeline", fake_story_bible)
+    monkeypatch.setattr(project_agent, "_ensure_finalization_pipeline", fake_finalization)
+    monkeypatch.setattr(project_agent, "_ensure_quality_pipeline", fake_quality)
+
+    bible = await handle_project_chat(
+        cast(AsyncSession, object()), project_id, "bible", "crie a Story Bible", []
+    )
+    finalization = await handle_project_chat(
+        cast(AsyncSession, object()), project_id, "video", "exportar timeline final", []
+    )
+    quality = await handle_project_chat(
+        cast(AsyncSession, object()), project_id, "video", "rode o controle de qualidade", []
+    )
+
+    assert bible.action == "generate_story_bible"
+    assert finalization.action == "generate_finalization"
+    assert quality.action == "run_quality"
+    assert calls == ["bible", "finalization", "quality"]
+
+
+@pytest.mark.asyncio
 async def test_project_chat_forces_regeneration_for_visual_requests(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -214,4 +281,4 @@ async def test_project_chat_reports_progress(
     )
 
     assert result == ProjectChatResult("Roteiro criado.", "generate_script", True)
-    assert progress_messages == ["Criando roteiro."]
+    assert progress_messages == ["Criando roteiro.", "Vou escrever o roteiro."]

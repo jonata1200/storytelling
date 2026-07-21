@@ -7,10 +7,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ArtifactStatus
+from app.finalization.models import Export, SubtitleTrack
+from app.finalization.service import (
+    create_final_timeline,
+    export_timeline,
+    generate_subtitles,
+    synthesize_narration,
+)
 from app.generation.director_agent import ask_director_agent
 from app.projects.models import Artifact
 from app.projects.repository import ProjectRepository
-from app.storyboards.models import Animatic, StoryboardFrame
+from app.quality.models import ContinuityIssue, QualityCheck
+from app.quality.service import run_quality_check
+from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryBible, StoryIdea
 from app.storytelling.service import (
@@ -30,11 +39,15 @@ from app.visual_bible.service import (
 
 ProjectChatAction = Literal[
     "chat",
+    "generate_ideas",
+    "generate_story_bible",
     "generate_script",
     "revise_script",
     "generate_assets",
     "generate_storyboard",
     "generate_video",
+    "generate_finalization",
+    "run_quality",
 ]
 
 REVISION_TERMS = (
@@ -68,11 +81,15 @@ ProgressCallback = Callable[[str], Awaitable[None]]
 
 
 ACTION_PROGRESS_MESSAGES: dict[ProjectChatAction, str] = {
+    "generate_ideas": "Criando ideias.",
+    "generate_story_bible": "Criando Story Bible.",
     "generate_script": "Criando roteiro.",
     "revise_script": "Revisando roteiro.",
     "generate_assets": "Criando ativos visuais.",
     "generate_storyboard": "Criando storyboard.",
     "generate_video": "Preparando video.",
+    "generate_finalization": "Finalizando projeto.",
+    "run_quality": "Rodando controle de qualidade.",
     "chat": "Analisando projeto.",
 }
 
@@ -184,6 +201,12 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
             "frames": await _count(session, StoryboardFrame, project_id),
             "animatics": await _count(session, Animatic, project_id),
             "clips": await _count(session, VideoClip, project_id),
+            "timelines": await _count(session, Timeline, project_id),
+            "audio_tracks": await _count(session, AudioTrack, project_id),
+            "subtitles": await _count(session, SubtitleTrack, project_id),
+            "exports": await _count(session, Export, project_id),
+            "quality_checks": await _count(session, QualityCheck, project_id),
+            "qa_issues": await _count(session, ContinuityIssue, project_id),
             "stale_artifacts": int(stale_count or 0),
         },
         "recent": {
@@ -223,8 +246,36 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "montar",
         "produza",
         "produzir",
+        "exporte",
+        "exportar",
+        "finalize",
+        "finalizar",
+        "valide",
+        "validar",
+        "rode",
+        "rodar",
+        "execute",
+        "executar",
     )
     script_terms = ("roteiro", "historia", "história", "cena", "cenas", "dialogo", "diálogo")
+    idea_terms = (
+        "ideia",
+        "ideias",
+        "premissa",
+        "premissas",
+        "opcao",
+        "opcoes",
+        "opção",
+        "opções",
+    )
+    bible_terms = (
+        "story bible",
+        "bible",
+        "biblia",
+        "bíblia",
+        "universo",
+        "mundo",
+    )
     asset_terms = (
         "personagem",
         "personagens",
@@ -248,20 +299,51 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
     )
     video_terms = ("video", "vídeo", "clipe", "clipes", "montagem")
 
+    finalization_terms = (
+        "finalizacao",
+        "finalização",
+        "finalizar",
+        "export",
+        "exportar",
+        "timeline",
+        "legenda",
+        "legendas",
+        "narracao",
+        "narração",
+    )
+    quality_terms = (
+        "qualidade",
+        "qa",
+        "controle",
+        "continuidade",
+        "validar",
+        "validacao",
+        "validação",
+    )
+
     wants_generation = any(term in normalized for term in generation_terms)
     wants_revision = _requests_regeneration(message)
+    actionable = wants_generation or wants_revision
 
-    if (wants_generation or wants_revision) and any(term in normalized for term in video_terms):
+    if actionable and any(term in normalized for term in quality_terms):
+        return "run_quality"
+    if actionable and any(term in normalized for term in finalization_terms):
+        return "generate_finalization"
+    if actionable and any(term in normalized for term in video_terms):
         return "generate_video"
-    if (wants_generation or wants_revision) and any(
-        term in normalized for term in storyboard_terms
-    ):
+    if actionable and any(term in normalized for term in storyboard_terms):
         return "generate_storyboard"
-    if (wants_generation or wants_revision) and any(term in normalized for term in asset_terms):
+    if actionable and any(term in normalized for term in asset_terms):
         return "generate_assets"
+    if actionable and any(term in normalized for term in bible_terms):
+        return "generate_story_bible"
+    if wants_generation and any(term in normalized for term in idea_terms):
+        return "generate_ideas"
     if wants_revision and (active == "script" or any(term in normalized for term in script_terms)):
         return "revise_script"
     if wants_revision:
+        if active == "bible":
+            return "generate_story_bible"
         if active == "assets":
             return "generate_assets"
         if active == "storyboard":
@@ -273,6 +355,8 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
     ):
         return "generate_script"
     if wants_generation:
+        if active == "bible":
+            return "generate_story_bible"
         if active == "assets":
             return "generate_assets"
         if active == "storyboard":
@@ -286,6 +370,84 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
 def _requests_regeneration(message: str) -> bool:
     normalized = message.lower()
     return any(term in normalized for term in REVISION_TERMS)
+
+
+@dataclass(frozen=True)
+class StoryBiblePipelineResult:
+    bible: StoryBible | None
+    message: str
+    changed: bool
+
+
+async def _ensure_ideas_pipeline(
+    session: AsyncSession,
+    project_id: UUID,
+    progress: ProgressCallback | None = None,
+) -> ProjectChatResult:
+    briefing = await _latest(session, Briefing, project_id)
+    if briefing is None:
+        return ProjectChatResult(
+            "Este projeto ainda nao tem briefing para orientar as ideias.",
+            "generate_ideas",
+        )
+
+    existing_ideas = await _count(session, StoryIdea, project_id)
+    if existing_ideas > 0:
+        return ProjectChatResult(
+            "O projeto ja tem ideias registradas. Posso ajudar a escolher ou ajustar uma delas.",
+            "generate_ideas",
+            False,
+        )
+
+    await _emit_progress(progress, "Vou criar ideias narrativas a partir do briefing.")
+    ideas = await generate_story_ideas(session, project_id)
+    if not ideas:
+        return ProjectChatResult("Nao consegui gerar ideias para este projeto.", "generate_ideas")
+    return ProjectChatResult(f"Criei {len(ideas)} ideia(s) para o projeto.", "generate_ideas", True)
+
+
+async def _ensure_story_bible_pipeline(
+    session: AsyncSession,
+    project_id: UUID,
+    progress: ProgressCallback | None = None,
+) -> StoryBiblePipelineResult:
+    briefing = await _latest(session, Briefing, project_id)
+    if briefing is None:
+        return StoryBiblePipelineResult(
+            None,
+            "Este projeto ainda nao tem briefing para orientar a Story Bible.",
+            False,
+        )
+
+    bible = await _latest(session, StoryBible, project_id)
+    if bible is not None:
+        return StoryBiblePipelineResult(
+            bible,
+            "O projeto ja tem Story Bible. Posso ajudar a revisar antes do roteiro.",
+            False,
+        )
+
+    idea = await _latest(session, StoryIdea, project_id)
+    if idea is None:
+        await _emit_progress(progress, "Vou criar uma ideia base para orientar a Story Bible.")
+        ideas = await generate_story_ideas(session, project_id)
+        if not ideas:
+            return StoryBiblePipelineResult(
+                None,
+                "Nao consegui gerar uma ideia base para este projeto.",
+                False,
+            )
+        idea = ideas[0]
+
+    await _emit_progress(progress, "Vou montar a Story Bible com personagens, mundo e arco.")
+    bible = await generate_story_bible(session, project_id, idea.id)
+    if bible is None:
+        return StoryBiblePipelineResult(
+            None,
+            "Nao consegui gerar a Story Bible para este projeto.",
+            False,
+        )
+    return StoryBiblePipelineResult(bible, "Story Bible criada para este projeto.", True)
 
 
 async def _ensure_script_pipeline(
@@ -479,6 +641,93 @@ async def _ensure_video_pipeline(
     )
 
 
+async def _ensure_finalization_pipeline(
+    session: AsyncSession,
+    project_id: UUID,
+    progress: ProgressCallback | None = None,
+) -> ProjectChatResult:
+    storyboard_result = await _ensure_storyboard_pipeline(session, project_id, progress=progress)
+    changed = storyboard_result.changed
+
+    source_audio = await _latest(session, AudioTrack, project_id)
+    if source_audio is None:
+        return ProjectChatResult(
+            "Nao encontrei audio do animatic para criar a narracao final.",
+            "generate_finalization",
+            changed,
+        )
+
+    await _emit_progress(progress, "Vou sintetizar a narracao final.")
+    final_audio = await synthesize_narration(
+        session,
+        project_id,
+        source_audio.id,
+        "pt-br-warm-narrator",
+    )
+    if final_audio is None:
+        return ProjectChatResult(
+            "Nao consegui gerar a narracao final.",
+            "generate_finalization",
+            changed,
+        )
+    changed = True
+
+    await _emit_progress(progress, "Vou gerar as legendas.")
+    subtitle = await generate_subtitles(session, project_id, final_audio.id)
+    if subtitle is not None:
+        changed = True
+
+    timeline = await _latest(session, Timeline, project_id)
+    if timeline is None:
+        await _emit_progress(progress, "Vou montar a timeline final.")
+        animatic = await _latest(session, Animatic, project_id)
+        try:
+            timeline = await create_final_timeline(
+                session,
+                project_id,
+                animatic.id if animatic else None,
+            )
+        except ValueError as exc:
+            return ProjectChatResult(str(exc), "generate_finalization", changed)
+        if timeline is None:
+            return ProjectChatResult(
+                "Finalizacao preparada, mas ainda faltam clipes selecionados para a timeline.",
+                "generate_finalization",
+                changed,
+            )
+        changed = True
+
+    await _emit_progress(progress, "Vou exportar a timeline.")
+    exported = await export_timeline(
+        session,
+        project_id,
+        timeline.id,
+        subtitle.id if subtitle else None,
+    )
+    if exported is None:
+        return ProjectChatResult(
+            "Timeline criada, mas nao consegui exportar o projeto.",
+            "generate_finalization",
+            changed,
+        )
+    return ProjectChatResult(
+        "Finalizacao criada e exportacao salva no projeto.",
+        "generate_finalization",
+        True,
+    )
+
+
+async def _ensure_quality_pipeline(session: AsyncSession, project_id: UUID) -> ProjectChatResult:
+    check = await run_quality_check(session, project_id)
+    if check is None:
+        return ProjectChatResult("Nao consegui rodar o controle de qualidade.", "run_quality")
+    return ProjectChatResult(
+        f"Controle de qualidade concluido com score {check.score} ({check.status}).",
+        "run_quality",
+        True,
+    )
+
+
 async def handle_project_chat(
     session: AsyncSession,
     project_id: UUID,
@@ -492,14 +741,19 @@ async def handle_project_chat(
     project_context = await build_project_context(session, project_id)
     await _emit_progress(progress, ACTION_PROGRESS_MESSAGES[action])
 
+    if action == "generate_ideas":
+        return await _ensure_ideas_pipeline(session, project_id, progress=progress)
+    if action == "generate_story_bible":
+        result = await _ensure_story_bible_pipeline(session, project_id, progress)
+        return ProjectChatResult(result.message, action, result.changed)
     if action == "generate_script":
         _script, result_message, changed = await _ensure_script_pipeline(
-            session, project_id, None
+            session, project_id, progress
         )
         return ProjectChatResult(result_message, action, changed)
     if action == "revise_script":
         script, result_message, changed = await _ensure_script_pipeline(
-            session, project_id, None
+            session, project_id, progress
         )
         if script is None:
             return ProjectChatResult(result_message, action, changed)
@@ -509,14 +763,18 @@ async def handle_project_chat(
         return ProjectChatResult("Roteiro revisado e nova versao salva no projeto.", action, True)
     if action == "generate_assets":
         return await _ensure_visual_pipeline(
-            session, project_id, force=force, progress=None
+            session, project_id, force=force, progress=progress
         )
     if action == "generate_storyboard":
         return await _ensure_storyboard_pipeline(
-            session, project_id, force=force, progress=None
+            session, project_id, force=force, progress=progress
         )
     if action == "generate_video":
-        return await _ensure_video_pipeline(session, project_id, force=force, progress=None)
+        return await _ensure_video_pipeline(session, project_id, force=force, progress=progress)
+    if action == "generate_finalization":
+        return await _ensure_finalization_pipeline(session, project_id, progress=progress)
+    if action == "run_quality":
+        return await _ensure_quality_pipeline(session, project_id)
 
     response = await ask_director_agent(
         session,

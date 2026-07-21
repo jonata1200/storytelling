@@ -460,60 +460,6 @@ def test_story_bible_items_present_named_sections() -> None:
     assert items[1] == {"name": "regra de continuidade visual", "detail": ""}
 
 
-def test_assistant_flow_actions_start_at_assets_stage() -> None:
-    counts = {
-        "briefings": 1,
-        "ideas": 1,
-        "bibles": 1,
-        "scripts": 1,
-        "scenes": 1,
-        "shots": 1,
-        "characters": 0,
-        "frames": 0,
-        "animatics": 0,
-        "clips": 0,
-        "exports": 0,
-        "qa_issues": 0,
-    }
-
-    assert pages._assistant_flow_actions("script", counts) is None
-
-    assets_actions = pages._assistant_flow_actions("assets", counts)
-
-    assert assets_actions is not None
-    assert assets_actions["continue_label"] == "Criar ativos"
-    assert assets_actions["continue_target"] == "assets"
-    assert "revisar" in assets_actions["review_user_message"]
-
-
-def test_assistant_flow_actions_advance_when_stage_is_ready() -> None:
-    counts = {
-        "briefings": 1,
-        "ideas": 1,
-        "bibles": 1,
-        "scripts": 1,
-        "scenes": 1,
-        "shots": 1,
-        "characters": 3,
-        "frames": 6,
-        "animatics": 1,
-        "clips": 0,
-        "exports": 0,
-        "qa_issues": 0,
-    }
-
-    assets_actions = pages._assistant_flow_actions("assets", counts)
-    storyboard_actions = pages._assistant_flow_actions("storyboard", counts)
-    video_actions = pages._assistant_flow_actions("video", counts)
-
-    assert assets_actions is not None
-    assert storyboard_actions is not None
-    assert video_actions is not None
-    assert assets_actions["continue_target"] == "storyboard"
-    assert storyboard_actions["continue_target"] == "video"
-    assert video_actions["continue_label"] == "Preparar video"
-
-
 def test_story_idea_payload_is_normalized_for_pipeline() -> None:
     payload = normalize_story_idea_payload(
         {
@@ -996,7 +942,7 @@ def test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_s
 
 
 @pytest.mark.asyncio
-async def test_developing_story_idea_starts_initial_script_pipeline(
+async def test_developing_story_idea_starts_initial_story_bible_pipeline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
@@ -1005,10 +951,12 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
         form: dict[str, Any],
         *,
         generate_initial_script: bool = False,
+        generate_initial_story_bible: bool = False,
         source_idea: dict[str, Any] | None = None,
     ) -> None:
         captured["form"] = form
         captured["generate_initial_script"] = generate_initial_script
+        captured["generate_initial_story_bible"] = generate_initial_story_bible
         captured["source_idea"] = source_idea
 
     monkeypatch.setattr(pages, "_create_project_from_form", fake_create_project_from_form)
@@ -1033,7 +981,8 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
 
     await pages._create_project_from_idea(idea)
 
-    assert captured["generate_initial_script"] is True
+    assert captured["generate_initial_script"] is False
+    assert captured["generate_initial_story_bible"] is True
     assert captured["source_idea"] is idea
     assert captured["form"]["duration"] == 7
     assert "7 minutos" in captured["form"]["objective"]
@@ -1091,6 +1040,45 @@ async def test_initial_script_pipeline_uses_selected_idea_and_creates_script(
 
     assert script.id == script_id
     assert calls == ["idea", "bible", "script", "scenes"]
+
+
+@pytest.mark.asyncio
+async def test_initial_story_bible_pipeline_uses_selected_idea_without_script(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    idea_id = uuid4()
+    bible_id = uuid4()
+    selected_idea = {"title": "A carta azul", "premise": "Uma carta chega no dia certo."}
+    calls: list[str] = []
+
+    async def fake_create_story_idea_from_payload(*args: Any, **kwargs: Any) -> SimpleNamespace:
+        calls.append("idea")
+        assert args[1] == project_id
+        assert args[2] is selected_idea
+        return SimpleNamespace(id=idea_id)
+
+    async def fake_generate_story_bible(*args: Any, **kwargs: Any) -> SimpleNamespace:
+        calls.append("bible")
+        assert args[1] == project_id
+        assert args[2] == idea_id
+        return SimpleNamespace(id=bible_id)
+
+    async def fake_generate_script(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("script generation should not run")
+
+    monkeypatch.setattr(
+        pages, "create_story_idea_from_payload", fake_create_story_idea_from_payload
+    )
+    monkeypatch.setattr(pages, "generate_story_bible", fake_generate_story_bible)
+    monkeypatch.setattr(pages, "generate_script", fake_generate_script)
+
+    story_bible = await pages._generate_initial_story_bible(
+        cast(AsyncSession, object()), project_id, selected_idea
+    )
+
+    assert story_bible.id == bible_id
+    assert calls == ["idea", "bible"]
 
 
 @pytest.mark.asyncio
