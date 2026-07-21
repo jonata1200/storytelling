@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -42,6 +42,21 @@ def test_chat_prompt_title_uses_first_sentence() -> None:
     prompt = "A chave perdida. Depois disso, a historia revela um segredo familiar."
 
     assert _compact_project_title(prompt) == "A chave perdida"
+
+
+def test_clean_idea_title_removes_numbered_prefix() -> None:
+    assert pages._clean_idea_title("Ideia 06: Uma Comunidade") == "Uma Comunidade"
+    assert pages._clean_idea_title("IDEIA 02 - O Trem") == "O Trem"
+
+
+def test_ai_action_without_timestamp_is_stale() -> None:
+    assert pages._ai_action_is_stale({"status": "running"}) is True
+
+
+def test_recent_ai_action_is_not_stale() -> None:
+    updated_at = datetime.now(UTC).isoformat()
+
+    assert pages._ai_action_is_stale({"status": "running", "updated_at": updated_at}) is False
 
 
 def test_project_ai_action_reads_production_metadata() -> None:
@@ -422,10 +437,10 @@ def test_production_steps_show_script_before_story_bible() -> None:
     assert step_keys.index("script") < step_keys.index("bible")
 
 
-def test_workspace_tabs_show_script_before_story_bible() -> None:
+def test_workspace_tabs_show_story_bible_before_script() -> None:
     tab_keys = [key for _, key in pages.WORKSPACE_TABS]
 
-    assert tab_keys[:2] == ["script", "bible"]
+    assert tab_keys[:2] == ["bible", "script"]
 
 
 def test_story_bible_items_present_named_sections() -> None:

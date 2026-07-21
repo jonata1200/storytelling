@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from typing import NoReturn
 from uuid import uuid4
@@ -130,6 +131,49 @@ async def test_director_generation_can_fallback_on_any_openrouter_runtime_error(
     assert execution.model == "mock-llm"
     assert execution.parameters["fallback_from"] == "unstable-model"
     assert "nao e JSON valido" in execution.parameters["fallback_error"]
+    assert session.flushed is True
+
+
+@pytest.mark.asyncio
+async def test_structured_generation_falls_back_to_mock_when_provider_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SlowProvider:
+        provider_name = "openrouter"
+
+        async def generate_structured(self, request: LLMRequest) -> object:
+            await asyncio.sleep(0.05)
+            raise AssertionError("provider should time out first")
+
+    class FakeSession:
+        flushed = False
+
+        def add(self, item: object) -> None:
+            self.item = item
+
+        async def flush(self) -> None:
+            self.flushed = True
+
+    async def fake_template(session: object, task: str) -> SimpleNamespace:
+        return SimpleNamespace(id=uuid4(), version=1, template_text="{prompt}", output_schema={})
+
+    monkeypatch.setattr(generation_service, "get_or_create_prompt_template", fake_template)
+    monkeypatch.setattr(generation_service, "LLM_PROVIDER_TIMEOUT_SECONDS", 0.001)
+
+    session = FakeSession()
+    result, execution = await run_structured_generation(
+        session,  # type: ignore[arg-type]
+        SlowProvider(),  # type: ignore[arg-type]
+        uuid4(),
+        "director_agent_chat",
+        {"prompt": "Ajude", "section": "script"},
+        model="slow-model",
+        fallback_on_runtime_error=True,
+    )
+
+    assert result.provider == "mock"
+    assert execution.provider == "mock"
+    assert "demorou mais" in execution.parameters["fallback_error"]
     assert session.flushed is True
 
 

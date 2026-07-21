@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from typing import NoReturn
 
@@ -65,6 +66,31 @@ async def test_generate_freeform_ideas_falls_back_when_openrouter_fails(
 
     assert len(ideas) == 3
     assert {idea.get("genre") for idea in ideas} == {"Suspense"}
+
+
+@pytest.mark.asyncio
+async def test_generate_freeform_ideas_falls_back_when_openrouter_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SlowOpenRouterProvider:
+        provider_name = "openrouter"
+
+        async def generate_structured(self, request: LLMRequest) -> LLMResult:
+            await asyncio.sleep(0.05)
+            raise AssertionError("provider should time out first")
+
+    monkeypatch.setattr(
+        idea_lab,
+        "get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test", openrouter_default_model="free-model"),
+    )
+    monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", SlowOpenRouterProvider)
+    monkeypatch.setattr(idea_lab, "IDEA_PROVIDER_TIMEOUT_SECONDS", 0.001)
+
+    ideas = await generate_freeform_ideas(count=3, genre="Drama")
+
+    assert len(ideas) == 3
+    assert {idea.get("genre") for idea in ideas} == {"Drama"}
 
 
 @pytest.mark.asyncio

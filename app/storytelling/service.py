@@ -1693,7 +1693,13 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
     last_error: GenerationOutputError | None = None
     for attempt in range(2):
         result, execution = await run_structured_generation(
-            session, provider, project_id, "generate_story_ideas", variables, model=model
+            session,
+            provider,
+            project_id,
+            "generate_story_ideas",
+            variables,
+            model=model,
+            fallback_on_runtime_error=True,
         )
         try:
             content = _required_mapping(result.content, "generate_story_ideas")
@@ -1776,7 +1782,13 @@ async def generate_story_bible(
     payload: dict | None = None
     for attempt in range(2):
         result, _execution = await run_structured_generation(
-            session, provider, project_id, "generate_story_bible", variables, model=model
+            session,
+            provider,
+            project_id,
+            "generate_story_bible",
+            variables,
+            model=model,
+            fallback_on_runtime_error=True,
         )
         try:
             payload = normalize_story_bible_payload(
@@ -1851,7 +1863,13 @@ async def generate_script(
     payload: dict | None = None
     for attempt in range(2):
         result, _execution = await run_structured_generation(
-            session, provider, project_id, "generate_script", variables, model=model
+            session,
+            provider,
+            project_id,
+            "generate_script",
+            variables,
+            model=model,
+            fallback_on_runtime_error=True,
         )
         try:
             payload = normalize_script_payload(
@@ -1962,6 +1980,7 @@ async def revise_script(
             variables,
             artifact_id=script.artifact_id,
             model=model,
+            fallback_on_runtime_error=True,
         )
         try:
             payload = normalize_script_payload(
@@ -2067,6 +2086,7 @@ async def generate_scenes_and_shots(
                 "clip_durations": format_clip_durations(clip_durations),
             },
             model=model,
+            fallback_on_runtime_error=True,
         )
         content = normalize_scene_plan_payload_from_script(
             _required_mapping(result.content, "generate_scenes_and_shots"),

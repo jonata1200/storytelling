@@ -5,8 +5,10 @@ import base64
 import json
 import logging
 import mimetypes
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -115,7 +117,9 @@ BRAND_MARK_URL = "/ui-assets/favicon.png"
 DEFAULT_STORY_DURATION_MINUTES = 5.0
 STORY_DURATION_OPTIONS = [3, 4, 5, 6, 7, 8]
 BLOCKING_DIALOG_PROPS = "persistent no-esc-dismiss no-backdrop-dismiss"
+UI_GENERATION_TIMEOUT_SECONDS = 90
 logger = logging.getLogger(__name__)
+IDEA_TITLE_PREFIX_RE = re.compile(r"^\s*ideia\s+\d+\s*[:\-–]\s*", re.IGNORECASE)
 
 IDEA_GENRES = [
     "Ação",
@@ -210,8 +214,8 @@ PRODUCTION_STEPS = [
 
 
 WORKSPACE_TABS = [
-    ("Roteiro", "script"),
     ("Story Bible", "bible"),
+    ("Roteiro", "script"),
     ("Personagens", "assets"),
     ("Storyboard", "storyboard"),
     ("Vídeo", "video"),
@@ -362,6 +366,17 @@ def _body_style() -> None:
             line-height:20px!important;
             padding-top:12px!important;
             padding-bottom:12px!important;
+            resize:none!important;
+            overflow-y:auto!important;
+          }
+          .script-editor-textarea,
+          .script-editor-textarea .q-field__control,
+          .script-editor-textarea .q-field__native,
+          .script-editor-textarea textarea {
+            height:100%!important;
+            min-height:0!important;
+          }
+          .script-editor-textarea textarea {
             resize:none!important;
             overflow-y:auto!important;
           }
@@ -559,7 +574,7 @@ def _body_style() -> None:
             margin:0!important;
             height:100%!important;
             min-height:0!important;
-            padding:50px 30px 28px 30px!important;
+            padding:22px 30px 28px 30px!important;
             box-shadow:none!important;
             backdrop-filter:none;
           }
@@ -815,6 +830,16 @@ def _body_style() -> None:
           body:not(.body--dark) .workspace-header span {
             color:#07121d!important;
             text-shadow:none!important;
+          }
+          .workspace-header .workspace-export-button,
+          .workspace-header .workspace-export-button .q-icon,
+          .workspace-header .workspace-export-button .q-btn__content,
+          .workspace-header .workspace-export-button .q-btn__content span,
+          body:not(.body--dark) .workspace-header .workspace-export-button,
+          body:not(.body--dark) .workspace-header .workspace-export-button .q-icon,
+          body:not(.body--dark) .workspace-header .workspace-export-button .q-btn__content,
+          body:not(.body--dark) .workspace-header .workspace-export-button .q-btn__content span {
+            color:#ffffff!important;
           }
           body:not(.body--dark) .workspace-header .workspace-episode,
           body:not(.body--dark) .workspace-actions label {
@@ -1214,6 +1239,8 @@ def _format_idea_payload_for_project(idea: dict[str, Any]) -> str:
             value_text = "; ".join(f"{item_key}: {item_value}" for item_key, item_value in value.items())
         else:
             value_text = str(value)
+        if key == "title":
+            value_text = _clean_idea_title(value_text)
         if key == "duration_minutes":
             value_text = f"{coerce_duration_minutes(value):g} minutos"
         lines.append(f"{labels.get(key, key)}: {value_text}")
@@ -1296,6 +1323,7 @@ async def _set_project_ai_action_status(
         "status": status,
         "message": message,
         "error": error,
+        "updated_at": datetime.now(UTC).isoformat(),
         "events": events[-60:],
     }
     settings.metadata_json = metadata
@@ -1342,6 +1370,110 @@ async def _generate_initial_script_in_background(
                 status="failed",
                 message="A IA nao conseguiu criar o roteiro inicial.",
                 error="Consulte o terminal para ver o erro completo.",
+            )
+
+
+async def _resume_initial_script_in_background(project_id: UUID) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            project = await ProjectRepository(session).get_project(project_id)
+            if project is None:
+                await _set_project_ai_action_status(
+                    session,
+                    project_id,
+                    status="failed",
+                    message="A IA nao conseguiu criar o roteiro inicial.",
+                    error="Projeto nao encontrado ou foi apagado.",
+                )
+                return
+
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="running",
+                message="Retomando a criação do roteiro inicial.",
+            )
+
+            script = await _latest(session, Script, project_id)
+            if script is not None:
+                scenes = await _latest_many(session, Scene, project_id, 1)
+                if not scenes:
+                    await _set_project_ai_action_status(
+                        session,
+                        project_id,
+                        status="running",
+                        message="Roteiro encontrado. Vou criar cenas e planos.",
+                    )
+                    generated_scenes = await generate_scenes_and_shots(session, project_id, script.id)
+                    if generated_scenes is None:
+                        raise ValueError("nao foi possivel gerar cenas e planos")
+                await _set_project_ai_action_status(
+                    session,
+                    project_id,
+                    status="completed",
+                    message="Roteiro inicial criado.",
+                )
+                return
+
+            story_bible = await _latest(session, StoryBible, project_id)
+            if story_bible is None:
+                story_idea = await _latest(session, StoryIdea, project_id)
+                if story_idea is None:
+                    await _set_project_ai_action_status(
+                        session,
+                        project_id,
+                        status="running",
+                        message="Vou criar uma ideia base para orientar o roteiro.",
+                    )
+                    generated_ideas = await generate_story_ideas(session, project_id)
+                    if not generated_ideas:
+                        raise ValueError("nao foi possivel gerar ideias iniciais")
+                    story_idea = generated_ideas[0]
+                await _set_project_ai_action_status(
+                    session,
+                    project_id,
+                    status="running",
+                    message="Vou montar a Story Bible com personagens, mundo e arco narrativo.",
+                )
+                story_bible = await generate_story_bible(session, project_id, story_idea.id)
+                if story_bible is None:
+                    raise ValueError("nao foi possivel gerar a Story Bible")
+
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="running",
+                message="Vou escrever o roteiro cinematografico a partir da Story Bible.",
+            )
+            script = await generate_script(session, project_id, story_bible.id)
+            if script is None:
+                raise ValueError("nao foi possivel gerar roteiro")
+
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="running",
+                message="Roteiro criado. Agora vou separar a historia em cenas e planos.",
+            )
+            scenes = await generate_scenes_and_shots(session, project_id, script.id)
+            if scenes is None:
+                raise ValueError("nao foi possivel gerar cenas e planos")
+
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="completed",
+                message="Roteiro inicial criado.",
+            )
+    except Exception as exc:
+        logger.exception("Nao foi possivel retomar roteiro inicial do projeto %s", project_id)
+        async with AsyncSessionLocal() as session:
+            await _set_project_ai_action_status(
+                session,
+                project_id,
+                status="failed",
+                message="A IA nao conseguiu criar o roteiro inicial.",
+                error=str(exc),
             )
 
 
@@ -1583,7 +1715,7 @@ async def _create_project_from_chat_prompt(prompt: str) -> None:
 
 
 async def _create_project_from_idea(idea: dict[str, Any]) -> None:
-    title = str(idea.get("title") or "Ideia de storytelling").strip()
+    title = _clean_idea_title(idea.get("title"), "Ideia de storytelling")
     theme = str(idea.get("theme") or idea.get("premise") or title).strip()
     premise = str(idea.get("premise") or idea.get("hook") or theme).strip()
     genre = str(idea.get("genre") or "drama emocional").strip()
@@ -1756,7 +1888,23 @@ async def _create_next_episode(project_id: UUID) -> None:
         ui.notify(f"Nao foi possivel criar proximo episodio: {exc}", color="negative")
 
 
-async def _run_step(project_id: UUID, step_key: str) -> None:
+STEP_LOADING_COPY = {
+    "ideas": ("Gerando ideias", "A IA esta criando caminhos narrativos para o projeto."),
+    "bible": ("Gerando Story Bible", "A IA esta consolidando mundo, personagens e regras."),
+    "script": ("Gerando roteiro", "A IA esta escrevendo o roteiro e separando cenas."),
+    "visual": ("Gerando visual", "A IA esta preparando ativos e referencias iniciais."),
+    "storyboard": ("Gerando storyboard", "A IA esta criando quadros e animatic."),
+    "video": ("Preparando video", "A IA esta verificando os prompts de video."),
+    "finalization": ("Finalizando projeto", "A IA esta montando narracao, legendas e export."),
+    "quality": ("Revisando qualidade", "A IA esta checando continuidade e riscos."),
+}
+
+
+async def _run_step(
+    project_id: UUID,
+    step_key: str,
+    loading_dialog: Any | None = None,
+) -> None:
     step_messages = {
         "ideas": "Criando ideias.",
         "bible": "Criando Story Bible.",
@@ -1767,6 +1915,8 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
         "finalization": "Finalizando projeto.",
         "quality": "Revisando qualidade.",
     }
+    if loading_dialog is not None:
+        loading_dialog.open()
     try:
         _append_assistant_message_to_chat(
             project_id,
@@ -1774,25 +1924,40 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
         )
         async with AsyncSessionLocal() as session:
             if step_key == "ideas":
-                await generate_story_ideas(session, project_id)
+                await asyncio.wait_for(
+                    generate_story_ideas(session, project_id),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                )
             elif step_key == "bible":
                 idea = await _latest(session, StoryIdea, project_id)
                 if idea is None:
                     raise ValueError("gere ideias primeiro")
-                await generate_story_bible(session, project_id, idea.id)
+                await asyncio.wait_for(
+                    generate_story_bible(session, project_id, idea.id),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                )
             elif step_key == "script":
                 bible = await _latest(session, StoryBible, project_id)
                 if bible is None:
                     raise ValueError("gere a Story Bible primeiro")
-                script = await generate_script(session, project_id, bible.id)
+                script = await asyncio.wait_for(
+                    generate_script(session, project_id, bible.id),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                )
                 if script is None:
                     raise ValueError("nao foi possivel gerar roteiro")
-                await generate_scenes_and_shots(session, project_id, script.id)
+                await asyncio.wait_for(
+                    generate_scenes_and_shots(session, project_id, script.id),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                )
             elif step_key == "visual":
                 bible = await _latest(session, StoryBible, project_id)
                 if bible is None:
                     raise ValueError("gere a Story Bible primeiro")
-                visual = await generate_visual_bible(session, project_id, bible.id)
+                visual = await asyncio.wait_for(
+                    generate_visual_bible(session, project_id, bible.id),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                )
                 if visual is None:
                     raise ValueError("nao foi possivel criar a Biblioteca visual")
                 characters, locations, props = visual
@@ -1819,8 +1984,14 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 script = await _latest(session, Script, project_id)
                 if script is None:
                     raise ValueError("gere o roteiro primeiro")
-                await generate_storyboard_frames(session, project_id, script.id)
-                await generate_animatic_bundle(session, project_id, script.id)
+                await asyncio.wait_for(
+                    generate_storyboard_frames(session, project_id, script.id),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                )
+                await asyncio.wait_for(
+                    generate_animatic_bundle(session, project_id, script.id),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                )
             elif step_key == "video":
                 result = await session.execute(
                     select(StoryboardFrame)
@@ -1840,33 +2011,55 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 source_audio = await _latest(session, AudioTrack, project_id)
                 if source_audio is None:
                     raise ValueError("gere o animatic primeiro")
-                final_audio = await synthesize_narration(
-                    session, project_id, source_audio.id, "pt-br-warm-narrator"
+                final_audio = await asyncio.wait_for(
+                    synthesize_narration(
+                        session, project_id, source_audio.id, "pt-br-warm-narrator"
+                    ),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
                 if final_audio is None:
                     raise ValueError("nao foi possivel gerar narracao")
-                subtitle = await generate_subtitles(session, project_id, final_audio.id)
+                subtitle = await asyncio.wait_for(
+                    generate_subtitles(session, project_id, final_audio.id),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                )
                 animatic = await _latest(session, Animatic, project_id)
-                timeline = await create_final_timeline(
-                    session, project_id, animatic.id if animatic else None
+                timeline = await asyncio.wait_for(
+                    create_final_timeline(
+                        session, project_id, animatic.id if animatic else None
+                    ),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
                 if timeline is None:
                     raise ValueError("gere clipes de video primeiro")
-                await export_timeline(
-                    session,
-                    project_id,
-                    timeline.id,
-                    subtitle.id if subtitle else None,
+                await asyncio.wait_for(
+                    export_timeline(
+                        session,
+                        project_id,
+                        timeline.id,
+                        subtitle.id if subtitle else None,
+                    ),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
             elif step_key == "quality":
-                await run_quality_check(session, project_id)
+                await asyncio.wait_for(
+                    run_quality_check(session, project_id),
+                    timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                )
             else:
                 raise ValueError("etapa sem acao automatica")
         ui.notify("Etapa executada com sucesso.", color="positive")
         ui.navigate.reload()
+    except TimeoutError:
+        message = f"Etapa demorou mais de {UI_GENERATION_TIMEOUT_SECONDS}s e foi interrompida."
+        _append_assistant_message_to_chat(project_id, message)
+        ui.notify(message, color="warning")
     except Exception as exc:
         _append_assistant_message_to_chat(project_id, f"Nao consegui concluir a etapa: {exc}")
         ui.notify(f"Acao interrompida: {exc}", color="warning")
+    finally:
+        if loading_dialog is not None:
+            loading_dialog.close()
 
 
 async def _approve_visual_target_from_ui(
@@ -2028,6 +2221,10 @@ async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]
 
 def _render_step_card(project_id: UUID, step: ProductionStep, counts: dict[str, int]) -> None:
     ready = _step_ready(step.key, counts)
+    loading_title, loading_message = STEP_LOADING_COPY.get(
+        step.key,
+        ("Executando etapa", "A IA esta trabalhando nesta etapa."),
+    )
     status_text = "pronto" if ready else "pendente"
     status_classes = (
         "bg-emerald-950 text-emerald-200 border border-emerald-800"
@@ -2047,10 +2244,20 @@ def _render_step_card(project_id: UUID, step: ProductionStep, counts: dict[str, 
                 on_click=lambda: ui.navigate.to("/dashboard"),
             ).classes(_button_classes())
         else:
+            with ui.dialog().props(BLOCKING_DIALOG_PROPS) as loading_dialog, ui.card().classes(
+                "entity-card rounded-2xl p-6 min-w-80 items-center text-center"
+            ):
+                ui.spinner("dots", size="lg", color="primary")
+                ui.label(loading_title).classes("brand-type text-xl font-bold mt-3")
+                ui.label(loading_message).classes("text-sm text-[#8f9590]")
             ui.button(
                 step.action_label,
                 icon="play_arrow",
-                on_click=lambda key=step.key: _run_step(project_id, key),
+                on_click=lambda key=step.key, dialog=loading_dialog: _run_step(
+                    project_id,
+                    key,
+                    dialog,
+                ),
             ).classes(_button_classes())
 
 
@@ -2263,6 +2470,12 @@ def _studio_logo(compact: bool = False) -> None:
         ui.image(BRAND_MARK_URL).classes("w-9 h-9 rounded-xl object-cover")
         if not compact:
             ui.label("Storytelling").classes("brand-type text-xl font-extrabold")
+
+
+def _clean_idea_title(value: object, fallback: str = "Historia sem titulo") -> str:
+    title = str(value or "").strip()
+    title = IDEA_TITLE_PREFIX_RE.sub("", title).strip()
+    return title or fallback
 
 
 def _theme_toggle() -> None:
@@ -2849,6 +3062,23 @@ def _project_ai_action(summary: dict[str, Any]) -> dict[str, Any]:
     return action if isinstance(action, dict) else {}
 
 
+def _ai_action_is_stale(action: dict[str, Any], max_age_seconds: int = 120) -> bool:
+    status = str(action.get("status") or "")
+    if status not in {"queued", "running"}:
+        return False
+    updated_at = str(action.get("updated_at") or "").strip()
+    if not updated_at:
+        return True
+    try:
+        parsed = datetime.fromisoformat(updated_at)
+    except ValueError:
+        return True
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    age = datetime.now(UTC) - parsed.astimezone(UTC)
+    return age.total_seconds() > max_age_seconds
+
+
 def _ordered_scenes(scenes: list[Any]) -> list[Any]:
     return sorted(scenes, key=lambda scene: int(getattr(scene, "scene_number", 0) or 0))
 
@@ -3134,27 +3364,40 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     should_recover_missing_scenes = (
         missing_scenes and ai_status not in {"queued", "running"} and not scene_generation_failed
     )
+    should_resume_stale_script = (
+        script is None
+        and ai_status in {"queued", "running"}
+        and _ai_action_is_stale(ai_action)
+    )
     if should_recover_missing_scenes:
         background_tasks.create(
             _generate_missing_scenes_in_background(project_id, script.id),
             name=f"generate missing scenes {project_id}",
         )
+    if should_resume_stale_script:
+        background_tasks.create(
+            _resume_initial_script_in_background(project_id),
+            name=f"resume initial script {project_id}",
+        )
     generation_in_progress = (
-        ai_status in {"queued", "running"} or should_recover_missing_scenes
+        ai_status in {"queued", "running"}
+        or should_recover_missing_scenes
+        or should_resume_stale_script
     )
     if generation_in_progress:
         ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
     edit_dialog = None
     if script is not None:
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_dialog, ui.card().classes(
-            "entity-card rounded-2xl p-6 w-[min(1040px,94vw)] max-h-[90vh]"
+            "entity-card rounded-2xl p-6 w-[min(1040px,94vw)] h-[min(860px,92vh)] "
+            "max-h-[92vh] flex flex-col"
         ):
-            ui.label("Editar roteiro").classes("brand-type text-2xl font-bold")
+            ui.label("Editar roteiro").classes("brand-type text-2xl font-bold shrink-0")
             title_input = ui.input("Titulo", value=script.title).props("outlined").classes("w-full")
             content_input = ui.textarea("Conteudo do roteiro", value=script.content).props(
                 "outlined"
-            ).classes("w-full font-mono text-sm min-h-[54vh]")
-            with ui.row().classes("w-full justify-end gap-2"):
+            ).classes("script-editor-textarea w-full flex-1 min-h-0 font-mono text-sm")
+            with ui.row().classes("w-full justify-end gap-2 shrink-0"):
                 ui.button("Cancelar", on_click=edit_dialog.close).props("flat no-caps")
                 ui.button(
                     "Salvar",
@@ -3181,7 +3424,13 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                     ui.spinner("dots", size="md", color="primary")
                     with ui.column().classes("gap-0"):
                         ui.label(
-                            "IA criando cenas" if missing_scenes else "IA criando o roteiro"
+                            "IA criando cenas"
+                            if missing_scenes
+                            else (
+                                "IA retomando o roteiro"
+                                if should_resume_stale_script
+                                else "IA criando o roteiro"
+                            )
                         ).classes("font-semibold")
                         ui.label(
                             "A IA esta criando cenas e planos para o roteiro."
@@ -3192,6 +3441,13 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                             )
                         ).classes("text-sm text-[#858b86]")
             elif script is None and ai_status == "failed":
+                def retry_initial_script() -> None:
+                    background_tasks.create(
+                        _resume_initial_script_in_background(project_id),
+                        name=f"retry initial script {project_id}",
+                    )
+                    ui.notify("Retomando a criação do roteiro.", color="positive")
+
                 with ui.element("div").classes(
                     "border border-red-900 bg-red-950/40 rounded-2xl p-4 text-red-100"
                 ):
@@ -3201,6 +3457,11 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                     ui.label(str(ai_action.get("error") or ai_action.get("message") or "")).classes(
                         "text-sm opacity-80"
                     )
+                    ui.button(
+                        "Tentar novamente",
+                        icon="refresh",
+                        on_click=retry_initial_script,
+                    ).props("unelevated no-caps").classes("acid-bg rounded-xl mt-3")
             with ui.element("div").classes("entity-card rounded-2xl p-7 min-h-[640px] w-full"):
                 ui.label(script.title if script else "Seu roteiro começa aqui").classes(
                     "brand-type text-2xl font-bold mb-5"
@@ -3865,17 +4126,25 @@ def register_ui_pages() -> None:
                     async def generate() -> None:
                         loading_dialog.open()
                         try:
-                            generated = await generate_freeform_ideas(
-                                "",
-                                count=10,
-                                genre=str(genre_select.value or ""),
-                                target_duration_minutes=coerce_duration_minutes(
-                                    duration_select.value
+                            generated = await asyncio.wait_for(
+                                generate_freeform_ideas(
+                                    "",
+                                    count=10,
+                                    genre=str(genre_select.value or ""),
+                                    target_duration_minutes=coerce_duration_minutes(
+                                        duration_select.value
+                                    ),
                                 ),
+                                timeout=UI_GENERATION_TIMEOUT_SECONDS,
                             )
                             ideas.clear()
                             ideas.extend(replace_generated_ideas(generated))
                             idea_results.refresh()
+                        except TimeoutError:
+                            ui.notify(
+                                "A geracao demorou demais. Tente novamente ou use mock.",
+                                color="warning",
+                            )
                         except Exception as exc:
                             ui.notify(f"Não foi possível gerar ideias: {exc}", color="negative")
                         finally:
@@ -3942,15 +4211,16 @@ def register_ui_pages() -> None:
                             ui.label("Suas ideias aparecerão aqui.").classes("mt-3")
                         return
                     with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-3 gap-4"):
-                        for index, idea in enumerate(ideas, 1):
+                        for idea in ideas:
                             with ui.element("article").classes(
                                 "entity-card rounded-2xl p-5 flex flex-col min-h-80"
                             ):
-                                ui.label(f"IDEIA {index:02d}").classes(
-                                    "text-xs acid font-semibold tracking-widest"
-                                )
-                                ui.label(str(idea.get("title") or "História sem título")).classes(
-                                    "brand-type text-2xl font-bold mt-2"
+                                ui.label(
+                                    _clean_idea_title(
+                                        idea.get("title"), "História sem título"
+                                    )
+                                ).classes(
+                                    "brand-type text-2xl font-bold"
                                 )
                                 with ui.row().classes("gap-2 mt-3 flex-wrap"):
                                     ui.label(str(idea.get("genre") or "Genero sugerido")).classes(
@@ -4003,15 +4273,14 @@ def register_ui_pages() -> None:
                         ui.label("Nenhuma ideia salva ainda.").classes("text-sm text-[#777d78]")
                         return
                     with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-3 gap-4"):
-                        for index, idea in enumerate(saved_ideas, 1):
+                        for idea in saved_ideas:
                             with ui.element("article").classes(
                                 "entity-card rounded-2xl p-5 flex flex-col min-h-80"
                             ):
-                                ui.label(f"SALVA {index:02d}").classes(
-                                    "text-xs acid font-semibold tracking-widest"
-                                )
-                                ui.label(str(idea.get("title") or "Historia sem titulo")).classes(
-                                    "brand-type text-2xl font-bold mt-2"
+                                ui.label(
+                                    _clean_idea_title(idea.get("title"), "Historia sem titulo")
+                                ).classes(
+                                    "brand-type text-2xl font-bold"
                                 )
                                 with ui.row().classes("gap-2 mt-3 flex-wrap"):
                                     ui.label(str(idea.get("genre") or "Genero sugerido")).classes(

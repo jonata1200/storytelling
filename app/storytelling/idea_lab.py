@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import tempfile
@@ -19,6 +20,7 @@ from app.storytelling.service import (
 
 SAVED_IDEAS_PATH = Path(".runtime/idea_lab_saved.json")
 GENERATED_IDEAS_PATH = Path(".runtime/idea_lab_generated.json")
+IDEA_PROVIDER_TIMEOUT_SECONDS = 60
 
 
 async def generate_freeform_ideas(
@@ -86,8 +88,11 @@ async def _generate_with_runtime_fallback(
     provider: OpenRouterLLMProvider | MockLLMProvider, request: LLMRequest
 ) -> LLMResult:
     try:
-        return await provider.generate_structured(request)
-    except RuntimeError:
+        provider_call = provider.generate_structured(request)
+        if getattr(provider, "provider_name", "") == "mock":
+            return await provider_call
+        return await asyncio.wait_for(provider_call, timeout=IDEA_PROVIDER_TIMEOUT_SECONDS)
+    except (RuntimeError, TimeoutError):
         if getattr(provider, "provider_name", "") == "mock":
             raise
         return await MockLLMProvider().generate_structured(

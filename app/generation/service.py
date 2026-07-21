@@ -1,3 +1,4 @@
+import asyncio
 from time import perf_counter
 from uuid import UUID
 
@@ -22,6 +23,8 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
     "revise_script": "Revise Script",
     "director_agent_chat": "Director Agent Chat",
 }
+
+LLM_PROVIDER_TIMEOUT_SECONDS = 60
 
 DEFAULT_TEMPLATES: dict[str, str] = {
     "generate_story_ideas": (
@@ -236,8 +239,19 @@ async def run_structured_generation(
     )
     fallback_error: str | None = None
     try:
-        result = await provider.generate_structured(request)
-    except RuntimeError as exc:
+        provider_call = provider.generate_structured(request)
+        if getattr(provider, "provider_name", "") == "mock":
+            result = await provider_call
+        else:
+            result = await asyncio.wait_for(
+                provider_call,
+                timeout=LLM_PROVIDER_TIMEOUT_SECONDS,
+            )
+    except (RuntimeError, TimeoutError) as exc:
+        if isinstance(exc, TimeoutError):
+            exc = RuntimeError(
+                f"Provider demorou mais de {LLM_PROVIDER_TIMEOUT_SECONDS}s"
+            )
         should_fallback = fallback_on_runtime_error or should_fallback_to_mock(exc)
         if getattr(provider, "provider_name", "") == "mock" or not should_fallback:
             raise
