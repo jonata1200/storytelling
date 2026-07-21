@@ -45,6 +45,9 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("rode o controle de qualidade", "video") == (
         "run_quality"
     )
+    assert classify_project_chat_action("aprove o prompt da Clara para gerar imagem", "assets") == (
+        "approve_visual_prompt"
+    )
 
 
 @pytest.mark.asyncio
@@ -210,6 +213,120 @@ async def test_project_chat_routes_story_bible_finalization_and_quality(
     assert finalization.action == "generate_finalization"
     assert quality.action == "run_quality"
     assert calls == ["bible", "finalization", "quality"]
+
+
+@pytest.mark.asyncio
+async def test_project_chat_routes_visual_prompt_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    calls: list[str] = []
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        return {"project_id": str(requested_project_id)}
+
+    async def fake_approve_visual_prompt(
+        session: AsyncSession,
+        requested_project_id: Any,
+        message: str,
+        progress: Any = None,
+    ) -> ProjectChatResult:
+        calls.append(message)
+        assert requested_project_id == project_id
+        return ProjectChatResult("aprovado", "approve_visual_prompt", True)
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(
+        project_agent,
+        "_approve_visual_prompt_from_chat",
+        fake_approve_visual_prompt,
+    )
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "assets",
+        "aprove o prompt da Clara para gerar imagem",
+        [],
+    )
+
+    assert result == ProjectChatResult("aprovado", "approve_visual_prompt", True)
+    assert calls == ["aprove o prompt da Clara para gerar imagem"]
+
+
+@pytest.mark.asyncio
+async def test_visual_prompt_approval_matches_target_name_and_generates_initial_view(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    target_id = uuid4()
+    target = project_agent.VisualChatTarget("character", target_id, "Clara")
+    captured: dict[str, Any] = {}
+
+    async def fake_targets(
+        session: AsyncSession,
+        requested_project_id: Any,
+        target_kind: str | None = None,
+    ) -> list[Any]:
+        assert requested_project_id == project_id
+        assert target_kind == "character"
+        return [target]
+
+    async def fake_views(
+        session: AsyncSession,
+        requested_project_id: Any,
+        requested_target: Any,
+    ) -> set[str]:
+        assert requested_project_id == project_id
+        assert requested_target == target
+        return set()
+
+    async def fake_approve(*args: Any, **kwargs: Any) -> list[object]:
+        captured["args"] = args
+        return [object()]
+
+    monkeypatch.setattr(project_agent, "_visual_chat_targets", fake_targets)
+    monkeypatch.setattr(project_agent, "_visual_reference_views_for_target", fake_views)
+    monkeypatch.setattr(project_agent, "approve_visual_target_and_generate_views", fake_approve)
+
+    result = await project_agent._approve_visual_prompt_from_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "aprove o prompt do personagem Clara para criar imagem",
+    )
+
+    assert result == ProjectChatResult(
+        "Aprovei 1 ativo(s) visual(is) e criei 1 imagem(ns).",
+        "approve_visual_prompt",
+        True,
+    )
+    assert captured["args"][1:] == (project_id, "character", target_id, ["front_portrait"])
+
+
+@pytest.mark.asyncio
+async def test_visual_prompt_approval_asks_for_target_when_ambiguous(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    targets = [
+        project_agent.VisualChatTarget("character", uuid4(), "Clara"),
+        project_agent.VisualChatTarget("character", uuid4(), "Marta"),
+    ]
+
+    async def fake_targets(*args: Any, **kwargs: Any) -> list[Any]:
+        return targets
+
+    monkeypatch.setattr(project_agent, "_visual_chat_targets", fake_targets)
+
+    result = await project_agent._approve_visual_prompt_from_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "aprove o prompt do personagem",
+    )
+
+    assert result.action == "approve_visual_prompt"
+    assert result.changed is False
+    assert "Clara, Marta" in result.message
 
 
 @pytest.mark.asyncio

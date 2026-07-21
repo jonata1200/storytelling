@@ -54,7 +54,7 @@ class OpenRouterImageProvider:
                 for reference in request.references
             ]
 
-        response = self._post_json("/images", body)
+        response, submitted_body = self._post_image_generation(body)
         data = response.get("data")
         if not isinstance(data, list) or not data:
             raise RuntimeError("OpenRouter Images retornou resposta sem data")
@@ -65,7 +65,9 @@ class OpenRouterImageProvider:
         if not isinstance(encoded_image, str) or not encoded_image:
             raise RuntimeError("OpenRouter Images nao retornou b64_json")
 
-        media_type = str(first_image.get("media_type") or "image/png")
+        requested_format = str(submitted_body.get("output_format") or "png").lower()
+        fallback_media_type = "image/jpeg" if requested_format in {"jpg", "jpeg"} else "image/png"
+        media_type = str(first_image.get("media_type") or fallback_media_type)
         image_bytes = base64.b64decode(encoded_image.encode("ascii"))
         request.output_dir.mkdir(parents=True, exist_ok=True)
         extension = extension_from_media_type(media_type)
@@ -86,6 +88,43 @@ class OpenRouterImageProvider:
             prompt=prompt,
             estimated_cost=str(usage.get("cost") or "0.000000"),
         )
+
+    def _post_image_generation(self, body: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        submitted_body = dict(body)
+        try:
+            return self._post_json("/images", submitted_body), submitted_body
+        except RuntimeError as exc:
+            if not self._should_retry_with_jpeg(exc, submitted_body):
+                if not self._should_retry_without_n(exc, submitted_body):
+                    raise
+                submitted_body = dict(submitted_body)
+                submitted_body.pop("n", None)
+                return self._post_json("/images", submitted_body), submitted_body
+
+        submitted_body = dict(submitted_body)
+        submitted_body["output_format"] = "jpeg"
+        try:
+            return self._post_json("/images", submitted_body), submitted_body
+        except RuntimeError as exc:
+            if not self._should_retry_without_n(exc, submitted_body):
+                raise
+            submitted_body = dict(submitted_body)
+            submitted_body.pop("n", None)
+            return self._post_json("/images", submitted_body), submitted_body
+
+    @staticmethod
+    def _should_retry_with_jpeg(exc: RuntimeError, body: dict[str, Any]) -> bool:
+        message = str(exc).lower()
+        return (
+            str(body.get("output_format") or "").lower() != "jpeg"
+            and "output_format" in message
+            and "jpeg" in message
+        )
+
+    @staticmethod
+    def _should_retry_without_n(exc: RuntimeError, body: dict[str, Any]) -> bool:
+        message = str(exc).lower()
+        return "n" in body and (" n " in message or '"n"' in message or " n:" in message)
 
     def _post_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         settings = get_settings()

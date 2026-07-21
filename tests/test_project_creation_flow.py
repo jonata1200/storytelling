@@ -431,6 +431,29 @@ def test_story_bible_section_unlocks_when_bible_exists() -> None:
     assert reason == ""
 
 
+def test_story_bible_section_is_first_available_even_before_generation() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "bibles": 0,
+        "scripts": 1,
+        "scenes": 1,
+        "shots": 1,
+        "characters": 3,
+        "frames": 6,
+        "animatics": 1,
+        "clips": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    allowed, reason = pages._workspace_section_access("bible", counts)
+
+    assert allowed is True
+    assert reason == ""
+    assert pages._first_available_workspace_section(counts) == "bible"
+
+
 def test_production_steps_show_script_before_story_bible() -> None:
     step_keys = [step.key for step in pages.PRODUCTION_STEPS]
 

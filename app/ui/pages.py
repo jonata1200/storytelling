@@ -1089,7 +1089,7 @@ def _render_project_card(project: Project, redirect_to: str) -> None:
     with (
         ui.element("article")
         .classes("entity-card rounded-2xl overflow-hidden cursor-pointer")
-        .on("click", lambda p=project.id: ui.navigate.to(f"/projects/{p}/script"))
+        .on("click", lambda p=project.id: ui.navigate.to(f"/projects/{p}/bible"))
     ):
         with ui.element("div").classes("visual-placeholder aspect-video p-5 flex items-end"):
             ui.icon("play_circle").classes("text-4xl acid")
@@ -1112,13 +1112,10 @@ def _render_project_card(project: Project, redirect_to: str) -> None:
 
 
 def _workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool, str]:
-    bible_ready = _step_ready("bible", counts)
     script_ready = _step_ready("script", counts)
     assets_ready = _step_ready("visual", counts)
     storyboard_ready = _step_ready("storyboard", counts)
     if section == "bible":
-        if not bible_ready:
-            return False, "Crie a Story Bible antes de acessar esta etapa."
         return True, ""
     if section == "script":
         return True, ""
@@ -1144,11 +1141,11 @@ def _workspace_section_access(section: str, counts: dict[str, int]) -> tuple[boo
 
 
 def _first_available_workspace_section(counts: dict[str, int]) -> str:
-    for section in ["video", "storyboard", "assets", "script", "bible"]:
+    for section in ["bible", "script", "assets", "storyboard", "video"]:
         allowed, _ = _workspace_section_access(section, counts)
         if allowed:
             return section
-    return "script"
+    return "bible"
 
 
 def _render_header(title: str, subtitle: str) -> None:
@@ -1772,7 +1769,7 @@ async def _create_project_from_form(
         if generate_initial_story_bible:
             destination = f"/projects/{project_id}/bible"
         elif generate_initial_script:
-            destination = f"/projects/{project_id}/script"
+            destination = f"/projects/{project_id}/bible"
         else:
             destination = f"/projects/{project_id}"
         ui.navigate.to(destination)

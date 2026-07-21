@@ -52,6 +52,46 @@ def test_openrouter_image_provider_writes_generated_image(
     assert result.estimated_cost == "0.02"
 
 
+def test_openrouter_image_provider_retries_with_jpeg_when_png_is_rejected(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    provider = OpenRouterImageProvider()
+    pixel = base64.b64encode(b"fake-jpeg").decode("ascii")
+    posted_bodies: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+
+    def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
+        assert path == "/images"
+        posted_bodies.append(dict(body))
+        if len(posted_bodies) == 1:
+            raise RuntimeError(
+                "OpenRouter Images HTTP 400: output_format not supported. Accepted: jpeg"
+            )
+        return {"data": [{"b64_json": pixel}], "usage": {"cost": 0.03}}
+
+    monkeypatch.setattr(provider, "_post_json", fake_post)
+
+    result = provider._generate(
+        ImageGenerationRequest(
+            prompt="dramatic character portrait",
+            target_id="char",
+            view_type="front",
+            output_dir=tmp_path,
+            aspect_ratio="9:16",
+            model="sourceful/riverflow-v2.5-fast",
+        )
+    )
+
+    assert [body["output_format"] for body in posted_bodies] == ["png", "jpeg"]
+    assert result.content_type == "image/jpeg"
+    assert result.file_path.suffix == ".jpg"
+    assert result.file_path.read_bytes() == b"fake-jpeg"
+
+
 def test_openrouter_video_provider_downloads_completed_video(
     monkeypatch: Any, tmp_path: Path
 ) -> None:
