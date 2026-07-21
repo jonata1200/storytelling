@@ -14,6 +14,7 @@ from typing import Any, cast
 from urllib.parse import quote
 from uuid import UUID
 
+from fastapi import Request
 from nicegui import app as nicegui_app
 from nicegui import background_tasks, ui
 from sqlalchemy import func, select
@@ -116,6 +117,7 @@ IDEA_COUNT_OPTIONS = list(range(1, 11))
 BLOCKING_DIALOG_PROPS = "persistent no-esc-dismiss no-backdrop-dismiss"
 UI_GENERATION_TIMEOUT_SECONDS = 90
 logger = logging.getLogger(__name__)
+SETTINGS_DATA_URL = "/settings?tab=data"
 IDEA_TITLE_PREFIX_RE = re.compile(r"^\s*ideia\s+\d+\s*[:\-–]\s*", re.IGNORECASE)
 
 IDEA_GENRES = [
@@ -130,6 +132,15 @@ IDEA_GENRES = [
     "Suspense (Thriller)",
     "Terror (ou Horror)",
 ]
+
+
+def _settings_tab_key(value: object) -> str:
+    normalized = re.sub(r"[\s_-]+", "-", str(value or "").strip().casefold())
+    if normalized in {"data", "dados"}:
+        return "data"
+    if normalized in {"ai", "ia", "inteligencia-artificial"}:
+        return "ai"
+    return "profile"
 
 
 @dataclass(frozen=True)
@@ -1745,7 +1756,7 @@ async def _delete_all_projects_from_ui() -> None:
         async with AsyncSessionLocal() as session:
             deleted_count = await delete_all_projects(session)
         ui.notify(f"{deleted_count} projeto(s) apagado(s).", color="positive")
-        ui.navigate.reload()
+        ui.navigate.to(SETTINGS_DATA_URL)
     except Exception as exc:
         ui.notify(f"Nao foi possivel apagar os projetos: {exc}", color="negative")
 
@@ -1754,7 +1765,7 @@ def _delete_all_ideas_from_ui() -> None:
     try:
         deleted_count = delete_all_ideas()
         ui.notify(f"{deleted_count} ideia(s) apagada(s).", color="positive")
-        ui.navigate.reload()
+        ui.navigate.to(SETTINGS_DATA_URL)
     except Exception as exc:
         ui.notify(f"Nao foi possivel apagar as ideias: {exc}", color="negative")
 
@@ -1850,14 +1861,24 @@ async def _create_next_episode(project_id: UUID) -> None:
 
 
 STEP_LOADING_COPY = {
-    "ideas": ("Gerando ideias", "A IA esta criando caminhos narrativos para o projeto."),
+    "ideas": ("Gerando ideias", "A IA esta criando temas, generos e emocoes."),
     "script": ("Gerando roteiro", "A IA esta escrevendo o roteiro e separando cenas."),
-    "visual": ("Gerando visual", "A IA esta preparando ativos e referencias iniciais."),
-    "storyboard": ("Gerando storyboard", "A IA esta criando quadros e animatic."),
-    "video": ("Preparando video", "A IA esta verificando os prompts de video."),
+    "visual": ("Gerando ativos", "A IA esta criando personagens, locais, objetos e referencias."),
+    "storyboard": ("Gerando storyboard", "A IA esta criando quadros, planos e animatic."),
+    "video": ("Preparando video", "A IA esta verificando prompts e deixando os clipes prontos."),
     "finalization": ("Finalizando projeto", "A IA esta montando narracao, legendas e export."),
     "quality": ("Revisando qualidade", "A IA esta checando continuidade e riscos."),
 }
+
+
+def _generation_loading_dialog(title: str, message: str) -> Any:
+    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as loading_dialog, ui.card().classes(
+        "entity-card rounded-2xl p-6 min-w-80 items-center text-center"
+    ):
+        ui.spinner("dots", size="lg", color="primary")
+        ui.label(title).classes("brand-type text-xl font-bold mt-3")
+        ui.label(message).classes("text-sm text-[#8f9590]")
+    return loading_dialog
 
 
 async def _run_step(
@@ -2201,12 +2222,7 @@ def _render_step_card(project_id: UUID, step: ProductionStep, counts: dict[str, 
                 on_click=lambda: ui.navigate.to("/dashboard"),
             ).classes(_button_classes())
         else:
-            with ui.dialog().props(BLOCKING_DIALOG_PROPS) as loading_dialog, ui.card().classes(
-                "entity-card rounded-2xl p-6 min-w-80 items-center text-center"
-            ):
-                ui.spinner("dots", size="lg", color="primary")
-                ui.label(loading_title).classes("brand-type text-xl font-bold mt-3")
-                ui.label(loading_message).classes("text-sm text-[#8f9590]")
+            loading_dialog = _generation_loading_dialog(loading_title, loading_message)
             ui.button(
                 step.action_label,
                 icon="play_arrow",
@@ -2983,6 +2999,25 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
         or should_resume_stale_script
     )
     if generation_in_progress:
+        loading_title = (
+            "Gerando cenas"
+            if missing_scenes
+            else (
+                "Retomando roteiro"
+                if should_resume_stale_script
+                else STEP_LOADING_COPY["script"][0]
+            )
+        )
+        loading_message = (
+            "A IA esta criando cenas e planos para o roteiro."
+            if missing_scenes
+            else str(
+                ai_action.get("message")
+                or "A IA esta desenvolvendo o roteiro com base na ideia."
+            )
+        )
+        loading_dialog = _generation_loading_dialog(loading_title, loading_message)
+        loading_dialog.open()
         ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
     edit_dialog = None
     if script is not None:
@@ -3015,30 +3050,7 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     )
     with ui.row().classes("w-full gap-4 items-start"):
         with ui.column().classes("flex-1 gap-4"):
-            if generation_in_progress:
-                with ui.element("div").classes(
-                    "entity-card rounded-2xl p-4 w-full flex items-center gap-3"
-                ):
-                    ui.spinner("dots", size="md", color="primary")
-                    with ui.column().classes("gap-0"):
-                        ui.label(
-                            "IA criando cenas"
-                            if missing_scenes
-                            else (
-                                "IA retomando o roteiro"
-                                if should_resume_stale_script
-                                else "IA criando o roteiro"
-                            )
-                        ).classes("font-semibold")
-                        ui.label(
-                            "A IA esta criando cenas e planos para o roteiro."
-                            if missing_scenes
-                            else str(
-                                ai_action.get("message")
-                                or "A IA esta desenvolvendo o roteiro com base na ideia."
-                            )
-                        ).classes("text-sm text-[#858b86]")
-            elif script is None and ai_status == "failed":
+            if script is None and ai_status == "failed":
                 def retry_initial_script() -> None:
                     background_tasks.create(
                         _resume_initial_script_in_background(project_id),
@@ -3710,14 +3722,11 @@ def register_ui_pages() -> None:
                             value="Esperança",
                         ).props("outlined")
 
-                    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as loading_dialog, ui.card().classes(
-                        "entity-card rounded-2xl p-6 min-w-80 items-center text-center"
-                    ):
-                        ui.spinner("dots", size="lg", color="primary")
-                        ui.label("Gerando ideias").classes("brand-type text-xl font-bold mt-3")
-                        ui.label("A IA esta criando temas, generos e emocoes.").classes(
-                            "text-sm text-[#8f9590]"
-                        )
+                    loading_title, loading_message = STEP_LOADING_COPY["ideas"]
+                    loading_dialog = _generation_loading_dialog(
+                        loading_title,
+                        loading_message,
+                    )
 
                     async def generate() -> None:
                         loading_dialog.open()
@@ -3855,9 +3864,10 @@ def register_ui_pages() -> None:
                 saved_results()
 
     @ui.page("/settings", response_timeout=15)
-    async def settings_page() -> None:
+    async def settings_page(request: Request) -> None:
         _body_style()
         current = get_settings()
+        active_settings_tab = _settings_tab_key(request.query_params.get("tab"))
         saved_idea_count = len(load_saved_ideas())
         generated_idea_count = len(load_generated_ideas())
         project_count = len(await _project_cards())
@@ -3880,7 +3890,10 @@ def register_ui_pages() -> None:
                     profile_tab = ui.tab("Perfil", icon="person")
                     ai_tab = ui.tab("Inteligência artificial", icon="auto_awesome")
                     data_tab = ui.tab("Dados", icon="delete_sweep")
-                with ui.tab_panels(settings_tabs, value=profile_tab).classes(
+                initial_settings_tab = {"profile": profile_tab, "ai": ai_tab, "data": data_tab}[
+                    active_settings_tab
+                ]
+                with ui.tab_panels(settings_tabs, value=initial_settings_tab).classes(
                     "w-full bg-transparent p-0"
                 ):
                     with ui.tab_panel(profile_tab).classes("px-0"):

@@ -2,6 +2,11 @@ from app.providers.llm.types import LLMRequest, LLMResult
 from app.video_generation.durations import video_clip_durations
 
 
+def _expected_scene_count(target_duration_seconds: int) -> int:
+    target_minutes = max(1, target_duration_seconds / 60)
+    return max(5, min(24, int(round(target_minutes * 0.8))))
+
+
 class MockLLMProvider:
     provider_name = "mock"
 
@@ -115,42 +120,52 @@ class MockLLMProvider:
         title = str(idea.get("title") or contract.get("title") or "Historia")
         language = str(variables.get("language") or "pt-BR")
         target_duration_seconds = int(variables.get("target_duration_seconds") or 240)
-        content = (
-            f"TITULO: {title}\n\n"
-            "FADE IN:\n\n"
-            "CENA 01\n"
-            "INT. CASA DA FAMILIA - FIM DE TARDE\n\n"
-            "A sala simples respira poeira e luz fria. Fotografias antigas cobrem a mesa.\n\n"
-            "CLARA, exausta mas atenta, encontra uma carta azul escondida atras de um "
-            "porta-retratos rachado. A mao dela treme antes de abrir o envelope.\n\n"
-            "CLARA\n"
-            "Isso nao podia estar aqui.\n\n"
-            "CENA 02\n"
-            "EXT. RUA ESTREITA - NOITE\n\n"
-            "Postes falham sobre o asfalto molhado. Clara atravessa a rua com a carta "
-            "dobrada no bolso do casaco.\n\n"
-            "Cada porta fechada parece saber mais do que ela. Clara para diante de uma "
-            "casa sem numero e escuta uma fita antiga tocar la dentro.\n\n"
-            "CENA 03\n"
-            "INT. SALA DA FAMILIA - MADRUGADA\n\n"
-            "A carta aberta repousa sob a luz de um abajur. A parede de fotografias vira "
-            "um tribunal silencioso.\n\n"
-            "Clara termina de ouvir a fita. A raiva dela cede lugar a uma compreensao "
-            "dolorosa.\n\n"
-            "CLARA\n"
-            "Eu passei anos odiando a pessoa errada.\n\n"
-            "CENA 04\n"
-            "INT. CASA DA FAMILIA - AMANHECER\n\n"
-            "A mesma sala ganha luz quente. Clara encaixa a fotografia restaurada no "
-            "porta-retratos e deixa a carta azul ao lado.\n\n"
-            "Ela olha para a janela aberta. Nao ha vitoria facil no rosto dela, apenas "
-            "a decisao de contar a verdade.\n\n"
-            "CENA 05\n"
-            "EXT. FRENTE DA CASA - MANHA\n\n"
-            "Clara sai com a carta no bolso. A porta permanece aberta atras dela.\n\n"
-            "Ela atravessa a primeira luz do dia sem esconder o passado.\n\n"
-            "FADE OUT."
+        scene_count = int(
+            variables.get("expected_scene_count")
+            or _expected_scene_count(target_duration_seconds)
         )
+        scene_templates = [
+            (
+                "INT. CASA DA FAMILIA - FIM DE TARDE",
+                "A sala simples respira poeira e luz fria. Fotografias antigas cobrem a mesa. "
+                "CLARA, exausta mas atenta, encontra uma carta azul escondida atras de um "
+                "porta-retratos rachado.\n\nCLARA\nIsso nao podia estar aqui.",
+            ),
+            (
+                "EXT. RUA ESTREITA - NOITE",
+                "Postes falham sobre o asfalto molhado. Clara atravessa a rua com a carta "
+                "dobrada no bolso do casaco, seguindo uma pista que a familia sempre evitou.",
+            ),
+            (
+                "INT. SALA DA FAMILIA - MADRUGADA",
+                "A carta aberta repousa sob a luz de um abajur. A parede de fotografias vira "
+                "um tribunal silencioso enquanto Clara entende uma nova camada da verdade.",
+            ),
+            (
+                "INT. CASA DA FAMILIA - AMANHECER",
+                "A mesma sala ganha luz quente. Clara encara a fotografia restaurada e decide "
+                "que a proxima conversa nao sera adiada outra vez.",
+            ),
+            (
+                "EXT. FRENTE DA CASA - MANHA",
+                "Clara sai com a carta no bolso. A porta permanece aberta atras dela, como se "
+                "a casa finalmente respirasse junto.",
+            ),
+        ]
+        scenes = []
+        for index in range(scene_count):
+            slugline, action = scene_templates[index % len(scene_templates)]
+            bridge = (
+                "\n\nA escolha anterior muda o peso da cena, acrescentando uma virada "
+                "emocional antes do proximo passo."
+                if index >= len(scene_templates)
+                else ""
+            )
+            ending = "\n\nFADE OUT." if index == scene_count - 1 else ""
+            scenes.append(
+                f"CENA {index + 1:02d}\n{slugline}\n\n{action}{bridge}{ending}"
+            )
+        content = "\n\n".join([f"TITULO: {title}", "FADE IN:", *scenes])
         return {
             "title": title,
             "language": language,
@@ -183,11 +198,23 @@ class MockLLMProvider:
     def _scenes_and_shots(self, variables: dict) -> dict:
         total_duration = int(variables.get("target_duration_seconds") or 240)
         durations = video_clip_durations(total_duration)
-        scene_specs = [
+        scene_count = int(
+            variables.get("expected_scene_count") or _expected_scene_count(total_duration)
+        )
+        base_scene_specs = [
             ("O gancho", "Uma pista rompe a rotina da protagonista.", "curiosidade"),
             ("A busca", "Ela segue rastros que a familia evitava.", "ansiedade"),
             ("A revelacao", "O segredo muda o sentido do abandono.", "choque"),
+            ("A escolha", "A protagonista precisa agir apesar do medo.", "coragem"),
             ("O payoff", "A verdade permite uma reconciliacao possivel.", "catarse"),
+        ]
+        scene_specs = [
+            (
+                f"{base_scene_specs[index % len(base_scene_specs)][0]} {index + 1}",
+                base_scene_specs[index % len(base_scene_specs)][1],
+                base_scene_specs[index % len(base_scene_specs)][2],
+            )
+            for index in range(scene_count)
         ]
         grouped: list[list[int]] = [[] for _ in scene_specs]
         for index, duration in enumerate(durations):

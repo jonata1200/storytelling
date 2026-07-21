@@ -41,6 +41,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         "clip_max_seconds": 15,
         "clip_target_seconds": 15,
         "expected_clip_count": 20,
+        "expected_scene_count": 5,
         "clip_durations": "15s, 15s",
         "retry_guidance": "",
     }
@@ -56,6 +57,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
     assert "FADE IN:" in compiled["generate_script"]
     assert "slugline" in compiled["generate_script"]
     assert "Nao use listas tecnicas" in compiled["generate_script"]
+    assert "exatamente 5 cenas" in compiled["generate_script"]
     assert "entre 4s e 15s" in compiled["generate_scenes_and_shots"]
     assert "ROTEIRO CINEMATOGRAFICO REVISADO COMPLETO AQUI" in compiled["revise_script"]
     assert '"scenes"' in compiled["generate_scenes_and_shots"]

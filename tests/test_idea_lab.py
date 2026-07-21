@@ -8,6 +8,7 @@ from app.config.settings import Settings
 from app.providers.llm.types import LLMRequest, LLMResult
 from app.storytelling import idea_lab
 from app.storytelling.idea_lab import (
+    build_idea_lab_prompt,
     delete_all_ideas,
     delete_generated_idea,
     delete_saved_idea,
@@ -17,6 +18,27 @@ from app.storytelling.idea_lab import (
     replace_generated_ideas,
     save_idea,
 )
+
+
+def test_idea_lab_prompt_guides_quality_and_output_contract() -> None:
+    prompt = build_idea_lab_prompt(
+        "historias sobre escolhas impossiveis",
+        count=4,
+        genre="Drama",
+        duration_minutes=20,
+        retry_guidance="campo obrigatorio vazio: conflict",
+    )
+
+    assert "gere exatamente 4 ideias" in prompt
+    assert "Duracao obrigatoria" in prompt
+    assert "20 minutos" in prompt
+    assert "Genero obrigatorio" in prompt
+    assert "Drama" in prompt
+    assert "Nao numere os titulos" in prompt
+    assert "somente JSON valido" in prompt
+    assert '"ideas"' in prompt
+    assert "duration_minutes igual a 20" in prompt
+    assert "campo obrigatorio vazio: conflict" in prompt
 
 
 @pytest.mark.asyncio

@@ -704,47 +704,65 @@ def _idea_script_contract(idea: StoryIdea, briefing: Briefing) -> dict:
     }
 
 
+def expected_script_scene_count(target_duration_seconds: int) -> int:
+    target_minutes = max(1, target_duration_seconds / 60)
+    return max(5, min(24, int(round(target_minutes * 0.8))))
+
+
 def _fallback_script_content_from_idea(
     idea_payload: dict, title: str, target_duration_seconds: int
 ) -> str:
-    del target_duration_seconds
     premise = str(idea_payload.get("premise") or "").strip()
     hook = str(idea_payload.get("hook") or "").strip()
     protagonist = str(idea_payload.get("protagonist") or "Clara").strip() or "Clara"
     protagonist_upper = protagonist.split(",", 1)[0].strip().upper() or "CLARA"
     conflict = str(idea_payload.get("conflict") or premise or "a verdade chega tarde demais")
     payoff = str(idea_payload.get("payoff") or idea_payload.get("resolution") or "").strip()
+    scene_count = expected_script_scene_count(target_duration_seconds)
+    base_beats = [
+        (
+            "INT. CASA DA FAMILIA - FIM DE TARDE",
+            f"{protagonist_upper} percebe um detalhe fora do lugar. "
+            f"{hook or 'Uma pista simples muda o peso da casa inteira.'}\n\n"
+            f"{protagonist_upper}\n"
+            "Isso nao podia estar aqui.",
+        ),
+        (
+            "INT. CORREDOR DA CASA - NOITE",
+            f"A busca transforma cada fotografia em suspeita. {conflict}. "
+            "A duvida avanca mais rapido do que a coragem.",
+        ),
+        (
+            "INT. SALA DA FAMILIA - MADRUGADA",
+            f"{protagonist_upper} junta as pistas e entende que a historia escondida "
+            "nao era sobre culpa simples. Era sobre uma escolha que feriu todos ao redor.",
+        ),
+        (
+            "EXT. RUA DIANTE DA CASA - AMANHECER",
+            f"{protagonist_upper} atravessa a primeira luz do dia decidido a contar "
+            f"a verdade. {payoff or 'A reparacao nao apaga a dor, mas abre uma porta.'}",
+        ),
+    ]
+    expanded_beats: list[str] = []
+    for index in range(scene_count):
+        slugline, action = base_beats[index % len(base_beats)]
+        turn = (
+            "O conflito ganha nova camada, com uma escolha concreta que empurra "
+            "a historia para a proxima virada."
+            if index >= len(base_beats)
+            else ""
+        )
+        ending = "\n\nFADE OUT." if index == scene_count - 1 else ""
+        expanded_beats.append(
+            f"CENA {index + 1:02d}\n{slugline}\n\n{action}"
+            + (f"\n\n{turn}" if turn else "")
+            + ending
+        )
     return "\n\n".join(
         [
             f"TITULO: {title}",
             "FADE IN:",
-            (
-                "CENA 01\n"
-                "INT. CASA DA FAMILIA - FIM DE TARDE\n\n"
-                f"{protagonist_upper} percebe um detalhe fora do lugar. "
-                f"{hook or 'Uma pista simples muda o peso da casa inteira.'}\n\n"
-                f"{protagonist_upper}\n"
-                "Isso nao podia estar aqui."
-            ),
-            (
-                "CENA 02\n"
-                "INT. CORREDOR DA CASA - NOITE\n\n"
-                f"A busca transforma cada fotografia em suspeita. {conflict}. "
-                "A duvida avanca mais rapido do que a coragem."
-            ),
-            (
-                "CENA 03\n"
-                "INT. SALA DA FAMILIA - MADRUGADA\n\n"
-                f"{protagonist_upper} junta as pistas e entende que a historia escondida "
-                "nao era sobre culpa simples. Era sobre uma escolha que feriu todos ao redor."
-            ),
-            (
-                "CENA 04\n"
-                "EXT. FRENTE DA CASA - MANHA\n\n"
-                f"{protagonist_upper} atravessa a primeira luz do dia decidido a contar "
-                f"a verdade. {payoff or 'A reparacao nao apaga a dor, mas abre uma porta.'}\n\n"
-                "FADE OUT."
-            ),
+            *expanded_beats,
         ]
     )
 
@@ -1872,6 +1890,7 @@ async def generate_script(
 
     target_duration_seconds = int(briefing.desired_duration_minutes * Decimal("60"))
     clip_durations = video_clip_durations(target_duration_seconds)
+    scene_count = expected_script_scene_count(target_duration_seconds)
     narrative_contract = _idea_script_contract(idea, briefing)
     variables = {
         "narrative_contract": narrative_contract,
@@ -1883,6 +1902,7 @@ async def generate_script(
         "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
         "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
         "expected_clip_count": len(clip_durations),
+        "expected_scene_count": scene_count,
         "clip_durations": format_clip_durations(clip_durations),
         "retry_guidance": "",
     }

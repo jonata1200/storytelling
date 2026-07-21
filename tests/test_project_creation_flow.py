@@ -11,8 +11,10 @@ from app.storytelling.service import (
     GenerationOutputError,
     _bounded_required_str,
     _fallback_script_content_from_bible,
+    _fallback_script_content_from_idea,
     _shot_narration_text,
     coerce_duration_minutes,
+    expected_script_scene_count,
     normalize_scene_plan_payload,
     normalize_scene_plan_payload_from_script,
     normalize_script_payload,
@@ -24,6 +26,13 @@ from app.storytelling.service import (
 )
 from app.ui import pages
 from app.ui.pages import DEFAULT_STORY_DURATION_MINUTES, _asset_url, _compact_project_title
+
+
+def test_settings_tab_key_keeps_data_tab_after_destructive_actions() -> None:
+    assert pages._settings_tab_key("data") == "data"
+    assert pages._settings_tab_key("Dados") == "data"
+    assert pages._settings_tab_key("ia") == "ai"
+    assert pages._settings_tab_key(None) == "profile"
 
 
 def test_chat_prompt_title_is_compact() -> None:
@@ -953,6 +962,23 @@ def test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_s
     assert "INT. CASA DA FAMILIA - FIM DE TARDE" in content
     assert "Indicacao para video" not in content
     assert "Objetivo dramatico" not in content
+
+
+def test_fallback_script_content_from_idea_scales_scene_count_with_duration() -> None:
+    content = _fallback_script_content_from_idea(
+        {
+            "title": "A promessa longa",
+            "premise": "Uma familia precisa sustentar uma verdade dificil.",
+            "protagonist": "Clara",
+        },
+        "A promessa longa",
+        900,
+    )
+
+    assert expected_script_scene_count(300) == 5
+    assert expected_script_scene_count(900) == 12
+    assert content.count("CENA ") == 12
+    assert "CENA 12" in content
 
 
 @pytest.mark.asyncio

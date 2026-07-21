@@ -23,6 +23,68 @@ GENERATED_IDEAS_PATH = Path(".runtime/idea_lab_generated.json")
 IDEA_PROVIDER_TIMEOUT_SECONDS = 60
 
 
+def build_idea_lab_prompt(
+    theme: str,
+    count: int,
+    genre: str,
+    duration_minutes: float,
+    retry_guidance: str = "",
+) -> str:
+    duration = f"{duration_minutes:g}"
+    genre_instruction = (
+        f"Genero obrigatorio: todas as ideias devem ser de {genre}."
+        if genre
+        else "Genero livre: escolha generos variados e adequados a cada ideia."
+    )
+    theme_instruction = (
+        f"Contexto criativo informado pelo usuario: {theme.strip()}."
+        if theme.strip()
+        else (
+            "Contexto criativo informado pelo usuario: nenhum. Crie temas especificos, "
+            "concretos e diferentes entre si."
+        )
+    )
+    retry_instruction = (
+        f"\nCorrecao obrigatoria da tentativa anterior: {retry_guidance}"
+        if retry_guidance
+        else ""
+    )
+
+    return (
+        "Voce e um diretor de desenvolvimento narrativo especializado em historias "
+        "curtas para video. Gere ideias originais, cinematograficas e prontas para "
+        "virar roteiro.\n\n"
+        f"Tarefa: gere exatamente {count} ideias em portugues do Brasil.\n"
+        f"Duracao obrigatoria: cada ideia deve sustentar exatamente {duration} minutos "
+        "de historia, com complexidade proporcional ao tempo escolhido.\n"
+        f"{genre_instruction}\n"
+        f"{theme_instruction}\n\n"
+        "Regras de qualidade:\n"
+        "- Nao numere os titulos e nao use prefixos como 'Ideia 01'.\n"
+        "- Cada titulo deve funcionar sozinho em um card: curto, claro e intrigante.\n"
+        "- Cada ideia deve ter protagonista, desejo, conflito, obstaculos, risco, "
+        "virada, climax e payoff emocional bem definidos.\n"
+        "- As ideias precisam ser realmente diferentes entre si em tema, mundo, "
+        "tipo de protagonista, dilema central, emocao principal e revelacao final.\n"
+        "- Evite modelos genericos como segredo do passado, heranca misteriosa ou "
+        "mensagem que muda tudo, a menos que haja uma abordagem muito especifica.\n"
+        "- O hook deve prender nos primeiros segundos; a premise deve explicar a "
+        "historia em 2 ou 3 frases objetivas.\n"
+        "- Para duracoes maiores, aumente a escalada, o numero de obstaculos e a "
+        "profundidade emocional, sem transformar a ideia em serie.\n\n"
+        "Retorne somente JSON valido, sem markdown, sem comentarios e sem texto fora "
+        "do objeto. O objeto raiz deve ter a chave \"ideas\". Cada item em \"ideas\" "
+        "deve conter exatamente estes campos: title, genre, primary_emotion, theme, "
+        "hook, premise, protagonist, duration_minutes, conflict, obstacles, stakes, "
+        "twist, climax, payoff, resolution, retention_potential, cliche_risk e "
+        "production_complexity.\n"
+        f"Use duration_minutes igual a {duration} em todas as ideias. "
+        "retention_potential, cliche_risk e production_complexity devem ser numeros "
+        "de 0 a 100. obstacles deve ser uma lista com 2 a 4 obstaculos concretos."
+        f"{retry_instruction}"
+    )
+
+
 async def generate_freeform_ideas(
     theme: str = "",
     count: int = 10,
@@ -33,32 +95,11 @@ async def generate_freeform_ideas(
     provider = OpenRouterLLMProvider() if settings.openrouter_api_key else MockLLMProvider()
     count = max(1, min(10, int(count)))
     duration = coerce_duration_minutes(target_duration_minutes)
-    genre_instruction = (
-        f"Todas as ideias devem pertencer ao genero selecionado: {genre}. "
-        if genre
-        else "A IA pode escolher generos variados. "
-    )
     retry_guidance = ""
     request = LLMRequest(
         task="generate_story_ideas",
         model=settings.openrouter_default_model,
-        prompt=(
-            f"Gere exatamente {count} ideias de historias originais em portugues do Brasil. "
-            f"Todas as ideias devem ter potencial narrativo para exatamente {duration:g} "
-            "minutos de historia, com conflito, virada e payoff adequados para esse tempo. "
-            f"{genre_instruction}"
-            "A IA deve criar tambem temas diferentes para cada historia, sem depender "
-            "de um tema informado pelo usuario. "
-            "Cada ideia deve ser claramente diferente das outras em tema, genero, "
-            "conflito, protagonista e emocao principal. "
-            "Retorne JSON com a chave ideas; cada ideia deve ter title, genre, "
-            "primary_emotion, theme, hook, premise, protagonist, duration_minutes, "
-            "conflict, obstacles, stakes, twist, climax, payoff, resolution, "
-            "retention_potential, cliche_risk e production_complexity. "
-            f"Use duration_minutes igual a {duration:g} em todas as ideias. "
-            f"{retry_guidance}"
-            f"Contexto opcional do usuario: {theme or 'nenhum'}."
-        ),
+        prompt=build_idea_lab_prompt(theme, count, genre, duration, retry_guidance),
         variables={
             "theme": theme or "tema livre criado pela IA",
             "count": count,
@@ -77,7 +118,7 @@ async def generate_freeform_ideas(
         retry_guidance = _story_idea_retry_guidance([str(exc)])
         retry_request = request.model_copy(
             update={
-                "prompt": f"{request.prompt} {retry_guidance}",
+                "prompt": build_idea_lab_prompt(theme, count, genre, duration, retry_guidance),
                 "variables": request.variables | {"retry_guidance": retry_guidance},
             }
         )

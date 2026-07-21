@@ -41,7 +41,7 @@ async def test_mock_llm_generates_scenes_with_shots() -> None:
     )
 
     scenes = result.content["scenes"]
-    assert len(scenes) == 4
+    assert len(scenes) == 5
     shots = [shot for scene in scenes for shot in scene["shots"]]
     assert sum(shot["duration_seconds"] for shot in shots) == 240
     assert all(
@@ -82,3 +82,26 @@ async def test_mock_llm_generates_cinematic_script_format() -> None:
     assert " - 300s" not in content
     assert "OBJETIVO DRAMATICO" not in content
     assert "INDICACAO PARA STORYBOARD" not in content
+
+
+@pytest.mark.asyncio
+async def test_mock_llm_scales_script_scene_count_with_duration() -> None:
+    provider = MockLLMProvider()
+
+    result = await provider.generate_structured(
+        LLMRequest(
+            task="generate_script",
+            prompt="",
+            variables={
+                "idea": {"title": "A promessa longa"},
+                "narrative_contract": {"title": "A promessa longa"},
+                "language": "pt-BR",
+                "target_duration_seconds": 900,
+                "expected_scene_count": 12,
+            },
+        )
+    )
+
+    content = result.content["content"]
+    assert content.count("CENA ") == 12
+    assert "CENA 12" in content
