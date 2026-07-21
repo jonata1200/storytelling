@@ -46,6 +46,17 @@ async def test_generate_freeform_ideas_respects_selected_genre(
 
 
 @pytest.mark.asyncio
+async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(idea_lab, "get_settings", lambda: Settings(openrouter_api_key=None))
+    ideas = await generate_freeform_ideas(count=99, target_duration_minutes=25)
+
+    assert len(ideas) == 10
+    assert {int(idea.get("duration_minutes", 0)) for idea in ideas} == {25}
+
+
+@pytest.mark.asyncio
 async def test_generate_freeform_ideas_falls_back_when_openrouter_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -139,7 +139,7 @@ def coerce_duration_minutes(value: object, default: float = 5.0) -> float:
         duration = float(str(value).replace(",", "."))
     except ValueError:
         return default
-    return max(3.0, min(8.0, duration))
+    return max(5.0, min(25.0, duration))
 
 
 def _script_block_to_text(value: object) -> str:
@@ -1083,8 +1083,8 @@ def story_idea_validation_errors(payload: dict) -> list[str]:
             errors.append(f"campo obrigatorio vazio: {field}")
 
     duration = coerce_duration_minutes(payload.get("duration_minutes"))
-    if not 3 <= duration <= 8:
-        errors.append("duration_minutes deve ficar entre 3 e 8")
+    if not 5 <= duration <= 25:
+        errors.append("duration_minutes deve ficar entre 5 e 25")
 
     for field in ("retention_potential", "cliche_risk", "production_complexity"):
         value = payload.get(field)

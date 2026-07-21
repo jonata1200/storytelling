@@ -14,7 +14,7 @@ class BriefingCreate(BaseModel):
     ending_type: str = Field(min_length=1, max_length=120)
     language: str = Field(default="pt-BR", min_length=2, max_length=16)
     country_context: str = Field(default="Brasil", min_length=1, max_length=120)
-    desired_duration_minutes: Decimal = Field(ge=Decimal("3.0"), le=Decimal("8.0"))
+    desired_duration_minutes: Decimal = Field(ge=Decimal("5.0"), le=Decimal("25.0"))
     has_narrator: bool = True
     visual_style: str = Field(min_length=1, max_length=220)
     content_objective: str = Field(min_length=1, max_length=220)

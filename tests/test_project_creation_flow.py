@@ -466,6 +466,11 @@ def test_workspace_tabs_show_story_bible_before_script() -> None:
     assert tab_keys[:2] == ["bible", "script"]
 
 
+def test_idea_lab_duration_and_count_options_match_generation_controls() -> None:
+    assert pages.STORY_DURATION_OPTIONS == [5, 10, 15, 20, 25]
+    assert pages.IDEA_COUNT_OPTIONS == list(range(1, 11))
+
+
 def test_story_bible_items_present_named_sections() -> None:
     items = pages._story_bible_items(
         [
@@ -509,7 +514,8 @@ def test_story_idea_payload_preserves_selected_duration() -> None:
     )
 
     assert payload["duration_minutes"] == 7
-    assert coerce_duration_minutes("20") == 8.0
+    assert coerce_duration_minutes("20") == 20.0
+    assert coerce_duration_minutes("30") == 25.0
 
 
 def test_story_idea_payload_coerces_non_integer_scores() -> None:

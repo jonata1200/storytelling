@@ -84,7 +84,7 @@ class MockLLMProvider:
                         else genres[(index - 1) % len(genres)]
                     ),
                     "primary_emotion": emotions[(index - 1) % len(emotions)],
-                    "duration_minutes": max(3, min(8, target_duration)),
+                    "duration_minutes": max(5, min(25, target_duration)),
                     "hook": "Ela encontra uma mensagem que muda tudo nos primeiros segundos.",
                     "premise": (
                         "Uma pessoa comum precisa encarar uma revelacao inesperada "

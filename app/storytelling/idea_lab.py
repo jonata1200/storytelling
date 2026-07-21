@@ -31,6 +31,7 @@ async def generate_freeform_ideas(
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     provider = OpenRouterLLMProvider() if settings.openrouter_api_key else MockLLMProvider()
+    count = max(1, min(10, int(count)))
     duration = coerce_duration_minutes(target_duration_minutes)
     genre_instruction = (
         f"Todas as ideias devem pertencer ao genero selecionado: {genre}. "

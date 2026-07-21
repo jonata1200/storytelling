@@ -115,7 +115,8 @@ from app.visual_bible.service import (
 
 BRAND_MARK_URL = "/ui-assets/favicon.png"
 DEFAULT_STORY_DURATION_MINUTES = 5.0
-STORY_DURATION_OPTIONS = [3, 4, 5, 6, 7, 8]
+STORY_DURATION_OPTIONS = [5, 10, 15, 20, 25]
+IDEA_COUNT_OPTIONS = list(range(1, 11))
 BLOCKING_DIALOG_PROPS = "persistent no-esc-dismiss no-backdrop-dismiss"
 UI_GENERATION_TIMEOUT_SECONDS = 90
 logger = logging.getLogger(__name__)
@@ -4093,7 +4094,7 @@ def register_ui_pages() -> None:
                             generated = await asyncio.wait_for(
                                 generate_freeform_ideas(
                                     "",
-                                    count=10,
+                                    count=int(idea_count_select.value or 10),
                                     genre=str(genre_select.value or ""),
                                     target_duration_minutes=coerce_duration_minutes(
                                         duration_select.value
@@ -4103,7 +4104,20 @@ def register_ui_pages() -> None:
                             )
                             ideas.clear()
                             ideas.extend(replace_generated_ideas(generated))
+                            for generated_idea in generated:
+                                saved = save_idea(generated_idea)
+                                saved_ideas[:] = [
+                                    existing
+                                    for existing in saved_ideas
+                                    if existing.get("id") != saved["id"]
+                                ]
+                                saved_ideas.insert(0, saved)
                             idea_results.refresh()
+                            saved_results.refresh()
+                            ui.notify(
+                                f"{len(generated)} ideia(s) gerada(s) e salva(s).",
+                                color="positive",
+                            )
                         except TimeoutError:
                             ui.notify(
                                 "A geracao demorou demais. Tente novamente ou use mock.",
@@ -4130,8 +4144,17 @@ def register_ui_pages() -> None:
                             .props("outlined suffix='min'")
                             .classes("w-36")
                         )
+                        idea_count_select = (
+                            ui.select(
+                                IDEA_COUNT_OPTIONS,
+                                label="Quantidade",
+                                value=10,
+                            )
+                            .props("outlined suffix='ideias'")
+                            .classes("w-40")
+                        )
                     ui.button(
-                        "Gerar 10 ideias",
+                        "Gerar ideias",
                         icon="auto_awesome",
                         on_click=generate,
                     ).props("unelevated no-caps size=lg").classes(
@@ -4143,19 +4166,6 @@ def register_ui_pages() -> None:
                         ideas.remove(idea)
                     delete_generated_idea(str(idea.get("id") or ""))
                     idea_results.refresh()
-
-                def save_generated(idea: dict[str, Any]) -> None:
-                    saved = save_idea(idea)
-                    saved_ideas[:] = [
-                        existing for existing in saved_ideas if existing.get("id") != saved["id"]
-                    ]
-                    saved_ideas.insert(0, saved)
-                    if idea in ideas:
-                        ideas.remove(idea)
-                    delete_generated_idea(str(idea.get("id") or saved["id"]))
-                    idea_results.refresh()
-                    saved_results.refresh()
-                    ui.notify("Ideia salva.", color="positive")
 
                 def delete_saved(idea_id: str) -> None:
                     delete_saved_idea(idea_id)
@@ -4213,13 +4223,8 @@ def register_ui_pages() -> None:
                                 ui.space()
                                 with ui.row().classes("gap-2 mt-4"):
                                     ui.button(
-                                        "Salvar",
-                                        icon="bookmark_add",
-                                        on_click=lambda item=idea: save_generated(item),
-                                    ).props("flat no-caps").classes("acid")
-                                    ui.button(
-                                        "Descartar",
-                                        icon="close",
+                                        "Ocultar",
+                                        icon="visibility_off",
                                         on_click=lambda item=idea: discard_generated(item),
                                     ).props("flat no-caps").classes("text-[#aeb3ae]")
                                     ui.button(
