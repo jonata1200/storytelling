@@ -4,6 +4,7 @@ from typing import NoReturn
 import pytest
 
 from app.config.settings import Settings
+from app.providers.llm.types import LLMRequest, LLMResult
 from app.storytelling import idea_lab
 from app.storytelling.idea_lab import (
     delete_all_ideas,
@@ -64,6 +65,82 @@ async def test_generate_freeform_ideas_falls_back_when_openrouter_fails(
 
     assert len(ideas) == 3
     assert {idea.get("genre") for idea in ideas} == {"Suspense"}
+
+
+@pytest.mark.asyncio
+async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class InvalidThenValidProvider:
+        provider_name = "openrouter"
+
+        def __init__(self) -> None:
+            self.prompts: list[str] = []
+
+        async def generate_structured(self, request: LLMRequest) -> LLMResult:
+            self.prompts.append(request.prompt)
+            if len(self.prompts) == 1:
+                content = {
+                    "ideas": [
+                        {
+                            "title": "A porta verde",
+                            "genre": "Suspense",
+                            "primary_emotion": "Curiosidade",
+                            "hook": "Uma porta aparece onde antes havia uma parede.",
+                            "premise": (
+                                "Uma zeladora encontra uma sala apagada da memoria do predio."
+                            ),
+                            "protagonist": "Nina, uma zeladora observadora",
+                            "duration_minutes": 5,
+                            "retention_potential": 80,
+                            "cliche_risk": 20,
+                            "production_complexity": 30,
+                        }
+                    ]
+                }
+            else:
+                content = {
+                    "ideas": [
+                        {
+                            "title": "A porta verde",
+                            "genre": "Suspense",
+                            "primary_emotion": "Curiosidade",
+                            "theme": "memoria coletiva",
+                            "hook": "Uma porta aparece onde antes havia uma parede.",
+                            "premise": (
+                                "Uma zeladora encontra uma sala apagada da memoria do predio."
+                            ),
+                            "protagonist": "Nina, uma zeladora observadora",
+                            "conflict": "Abrir a sala pode devolver uma tragedia ao predio.",
+                            "obstacles": ["medo dos moradores", "registros adulterados"],
+                            "stakes": "O predio inteiro pode perder sua historia.",
+                            "twist": "Nina foi quem pediu para apagar a sala.",
+                            "climax": "Ela abre a porta durante uma reuniao dos moradores.",
+                            "payoff": "A memoria volta como cuidado, nao como culpa.",
+                            "resolution": "Os moradores transformam a sala em arquivo vivo.",
+                            "duration_minutes": 5,
+                            "retention_potential": 82,
+                            "cliche_risk": 18,
+                            "production_complexity": 34,
+                        }
+                    ]
+                }
+            return LLMResult(content=content, model=request.model, provider=self.provider_name)
+
+    provider = InvalidThenValidProvider()
+    monkeypatch.setattr(
+        idea_lab,
+        "get_settings",
+        lambda: Settings(openrouter_api_key="key", openrouter_default_model="free-model"),
+    )
+    monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", lambda: provider)
+
+    ideas = await generate_freeform_ideas(count=1, genre="Suspense")
+
+    assert len(ideas) == 1
+    assert ideas[0]["payoff"] == "A memoria volta como cuidado, nao como culpa."
+    assert len(provider.prompts) == 2
+    assert "campo obrigatorio vazio: conflict" in provider.prompts[1]
 
 
 def test_saved_ideas_can_be_saved_and_deleted(tmp_path: Path) -> None:

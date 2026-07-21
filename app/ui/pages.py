@@ -343,12 +343,7 @@ def _body_style() -> None:
             background: #181b19 !important;
             border-radius: 14px !important;
           }
-          .assistant-chat-messages {
-            overscroll-behavior:contain;
-            scrollbar-width:none;
-            -ms-overflow-style:none;
-          }
-          .assistant-chat-messages::-webkit-scrollbar { display:none; }
+          .assistant-chat-messages { overscroll-behavior:contain; }
           .assistant-chat-bubble { white-space:pre-wrap; overflow-wrap:anywhere; }
           .assistant-chat-user-bubble { color:#ffffff!important; }
           .assistant-chat-input .q-field__control { min-height:48px!important; height:auto!important; max-height:132px!important; }
@@ -362,10 +357,37 @@ def _body_style() -> None:
             resize:none!important;
             overflow-y:auto!important;
           }
-          .workspace-layout { margin:0!important; gap:0!important; }
+          body.studio-body:has(.workspace-layout) {
+            overflow:hidden;
+          }
+          .studio-body .nicegui-content:has(.workspace-layout) {
+            height:100vh;
+            height:100dvh;
+            overflow:hidden;
+          }
+          .workspace-layout {
+            margin:0!important;
+            gap:0!important;
+            height:calc(100vh - 64px);
+            height:calc(100dvh - 64px);
+            min-height:calc(100vh - 64px);
+            overflow:hidden!important;
+          }
           .workspace-layout > * { margin-top:0!important; }
-          .right-assistant { margin-top:0!important; padding-top:0!important; }
+          .workspace-main {
+            height:calc(100vh - 64px)!important;
+            height:calc(100dvh - 64px)!important;
+            min-height:0!important;
+          }
+          .right-assistant {
+            margin-top:0!important;
+            padding-top:0!important;
+            height:100%!important;
+            overflow:hidden!important;
+            box-sizing:border-box;
+          }
           .right-assistant > :first-child { margin-top:0!important; }
+          .right-assistant::-webkit-scrollbar { display:none; }
           .q-field__control::before { border-color: #303530 !important; }
           .q-field__control::after { color: var(--acid) !important; }
           .q-field--focused .q-field__label { color: var(--acid) !important; }
@@ -384,9 +406,17 @@ def _body_style() -> None:
             .workspace-titlebar { grid-area:title; }
             .workspace-nav { grid-area:nav; justify-content:flex-start; }
             .workspace-actions { grid-area:actions; }
-            .workspace-main { height:calc(100vh - 112px)!important; }
+            .workspace-layout {
+              height:calc(100vh - 112px)!important;
+              height:calc(100dvh - 112px)!important;
+              min-height:calc(100vh - 112px)!important;
+            }
+            .workspace-main {
+              height:calc(100vh - 112px)!important;
+              height:calc(100dvh - 112px)!important;
+            }
           }
-          @media(max-width:900px){.desktop-nav{display:none!important}.workspace-main{height:calc(100vh - 64px)!important;padding:18px!important}.right-assistant{display:none!important}}
+          @media(max-width:900px){.desktop-nav{display:none!important}.workspace-layout{height:calc(100vh - 64px)!important;height:calc(100dvh - 64px)!important;min-height:calc(100vh - 64px)!important}.workspace-main{height:calc(100vh - 64px)!important;height:calc(100dvh - 64px)!important;padding:18px!important}.right-assistant{display:none!important}}
         </style>
         """
     )
@@ -1334,9 +1364,25 @@ async def _run_step(project_id: UUID, step_key: str) -> None:
                 bible = await _latest(session, StoryBible, project_id)
                 if bible is None:
                     raise ValueError("gere a Story Bible primeiro")
-                await generate_visual_bible(session, project_id, bible.id)
+                visual = await generate_visual_bible(session, project_id, bible.id)
+                if visual is None:
+                    raise ValueError("nao foi possivel criar a Biblioteca visual")
+                characters, locations, props = visual
+                for target_kind, items in (
+                    ("character", characters),
+                    ("location", locations),
+                    ("prop", props),
+                ):
+                    for item in items:
+                        await approve_visual_target_and_generate_views(
+                            session,
+                            project_id,
+                            target_kind,
+                            item.id,
+                            [initial_view_for(target_kind)],
+                        )
                 ui.notify(
-                    "Ativos preparados. Aprove os prompts na Biblioteca visual para criar as imagens.",
+                    "Ativos preparados com imagens iniciais na Biblioteca visual.",
                     color="info",
                 )
                 ui.navigate.reload()

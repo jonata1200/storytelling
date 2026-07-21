@@ -98,6 +98,7 @@ class MockLLMProvider:
                     "stakes": "Perder a ultima chance de reparacao",
                     "twist": "A pessoa que parecia culpada estava protegendo Clara",
                     "climax": "Clara escolhe contar a verdade em publico",
+                    "payoff": "Clara transforma a mensagem atrasada em um gesto de reparacao",
                     "resolution": "A familia se reconcilia sem apagar a dor",
                     "final_emotion": emotion,
                     "retention_potential": min(95, 75 + index),
@@ -120,6 +121,17 @@ class MockLLMProvider:
             "tone": "intimo, humano e progressivamente catartico",
             "target_emotion": variables.get("primary_emotion", "esperanca"),
             "audience": variables.get("audience", "publico geral"),
+            "story_engine": {
+                "dramatic_question": "Clara conseguira reparar a promessa antes que seja tarde?",
+                "central_conflict": "A verdade chega quando todos ja aprenderam a evita-la.",
+                "emotional_promise": (
+                    "A dor antiga pode virar cuidado quando alguem encara o passado."
+                ),
+                "inciting_incident": "Clara encontra uma mensagem guardada no objeto de revelacao.",
+                "midpoint_turn": "Ela descobre que a pessoa culpada tentou protege-la.",
+                "climax": "Clara conta a verdade para a familia e assume sua parte na ferida.",
+                "ending_image": "A porta da casa fica aberta enquanto a luz da manha entra.",
+            },
             "world_rules": ["realismo contemporaneo", "conflitos resolvidos por escolhas humanas"],
             "visual_style": {"format": "vertical 9:16", "palette": ["azul frio", "dourado quente"]},
             "narrative_rules": [
@@ -133,16 +145,47 @@ class MockLLMProvider:
                     "id": "char_protagonist",
                     "name": str(idea.get("protagonist", "Protagonista")),
                     "role": "protagonista",
+                    "desire": "reparar uma promessa quebrada sem perder a familia",
+                    "fear": "descobrir que a culpa sempre foi dela",
+                    "secret": "ela guardou uma lembranca que muda o sentido da separacao",
                     "arc": str(idea.get("emotional_need", "mudanca emocional")),
+                    "base_outfit": {
+                        "main_piece": "camisa azul desbotada",
+                        "color": "azul frio",
+                        "fabric": "algodao gasto",
+                        "texture": "tecido opaco com marcas de uso",
+                        "wear_marks": "punhos amassados",
+                        "accessories": ["colar discreto"],
+                    },
                 }
             ],
             "locations": [
-                {"id": "loc_home", "name": "Casa da familia", "mood": "memoria e tensao"}
+                {
+                    "id": "loc_home",
+                    "name": "Casa da familia",
+                    "description": "sala pequena com fotografias antigas e mesa central",
+                    "layout": "janela lateral, corredor ao fundo e mesa no centro",
+                    "lighting": "luz natural fria no inicio e dourada no payoff",
+                    "materials": ["madeira", "papel envelhecido", "tecido gasto"],
+                }
             ],
-            "props": [{"id": "prop_reveal", "name": "objeto de revelacao", "importance": "payoff"}],
+            "props": [
+                {
+                    "id": "prop_reveal",
+                    "name": "objeto de revelacao",
+                    "material": "papel envelhecido dentro de envelope azul",
+                    "owner": "Clara",
+                    "narrative_importance": "payoff que revela a verdade familiar",
+                    "first_appearance": "incidente incitante",
+                    "visual_rules": ["sempre aparecer em detalhe antes de mudar de maos"],
+                }
+            ],
             "timeline": [],
             "relationships": [],
-            "continuity_rules": ["manter roupas consistentes por sequencia"],
+            "continuity_rules": [
+                "manter roupa azul de Clara ate o climax",
+                "o envelope azul deve aparecer sempre com a mesma dobra no canto",
+            ],
             "audio_style": {"narration": "voz calorosa e contida", "music": "piano discreto"},
             "export_profile": {"aspect_ratio": "9:16", "resolution": "1080x1920"},
         }
@@ -194,6 +237,7 @@ class MockLLMProvider:
             "target_duration_seconds": target_duration_seconds,
             "word_count": len(content.split()),
             "content": content,
+            "production_plan": self._scenes_and_shots(variables),
         }
 
     def _revise_script(self, variables: dict) -> dict:

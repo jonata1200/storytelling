@@ -22,7 +22,11 @@ from app.storytelling.service import (
 )
 from app.video_generation.models import VideoClip
 from app.visual_bible.models import Character, Location, Prop, VisualReference
-from app.visual_bible.service import generate_visual_bible
+from app.visual_bible.service import (
+    approve_visual_target_and_generate_views,
+    generate_visual_bible,
+    initial_view_for,
+)
 
 ProjectChatAction = Literal[
     "chat",
@@ -371,6 +375,21 @@ async def _ensure_visual_pipeline(
                 "Nao consegui criar personagens e referencias visuais.",
                 "generate_assets",
             )
+        characters, locations, props = visual
+        await _emit_progress(progress, "Vou criar as imagens iniciais de referencia.")
+        for target_kind, items in (
+            ("character", characters),
+            ("location", locations),
+            ("prop", props),
+        ):
+            for item in items:
+                await approve_visual_target_and_generate_views(
+                    session,
+                    project_id,
+                    target_kind,
+                    item.id,
+                    [initial_view_for(target_kind)],
+                )
 
     visual_refs = await _count(session, VisualReference, project_id)
     if visual_refs == 0:

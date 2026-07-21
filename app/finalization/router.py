@@ -71,7 +71,10 @@ async def post_final_timeline(
     payload: FinalTimelineRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TimelineRead:
-    timeline = await create_final_timeline(session, project_id, payload.animatic_id)
+    try:
+        timeline = await create_final_timeline(session, project_id, payload.animatic_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if timeline is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

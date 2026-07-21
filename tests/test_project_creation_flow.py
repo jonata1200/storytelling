@@ -18,6 +18,9 @@ from app.storytelling.service import (
     normalize_script_payload,
     normalize_story_bible_payload,
     normalize_story_idea_payload,
+    screenplay_validation_errors,
+    story_bible_validation_errors,
+    story_idea_validation_errors,
 )
 from app.ui import pages
 from app.ui.pages import DEFAULT_STORY_DURATION_MINUTES, _asset_url, _compact_project_title
@@ -540,6 +543,54 @@ def test_story_idea_payload_defaults_unknown_scores() -> None:
     assert payload["production_complexity"] == 35
 
 
+def test_story_idea_validation_requires_narrative_engine_fields() -> None:
+    payload = normalize_story_idea_payload(
+        {
+            "title": "A carta",
+            "genre": "Drama",
+            "primary_emotion": "Saudade",
+            "hook": "Uma carta antiga aparece em uma mesa vazia.",
+            "premise": "Uma filha precisa decidir se abre a ultima carta da mae.",
+            "protagonist": "Lia, uma professora que evita despedidas",
+            "retention_potential": 82,
+            "cliche_risk": 18,
+            "production_complexity": 30,
+        }
+    )
+
+    errors = story_idea_validation_errors(payload)
+
+    assert "campo obrigatorio vazio: conflict" in errors
+    assert "campo obrigatorio vazio: twist" in errors
+    assert "campo obrigatorio vazio: payoff" in errors
+    assert "campo obrigatorio vazio: resolution" in errors
+
+
+def test_story_idea_validation_accepts_complete_payload() -> None:
+    payload = normalize_story_idea_payload(
+        {
+            "title": "A carta",
+            "genre": "Drama",
+            "primary_emotion": "Saudade",
+            "hook": "Uma carta antiga aparece em uma mesa vazia.",
+            "premise": "Uma filha precisa decidir se abre a ultima carta da mae.",
+            "protagonist": "Lia, uma professora que evita despedidas",
+            "conflict": "Abrir a carta pode destruir a imagem que ela guarda da mae.",
+            "obstacles": ["culpa", "silencio familiar"],
+            "stakes": "Perder a ultima chance de entender a propria historia.",
+            "twist": "A carta foi escrita pela filha quando crianca.",
+            "climax": "Lia le a carta diante da familia reunida.",
+            "payoff": "Ela entende que a despedida era tambem uma permissao para viver.",
+            "resolution": "Lia guarda a carta em um album aberto.",
+            "retention_potential": 82,
+            "cliche_risk": 18,
+            "production_complexity": 30,
+        }
+    )
+
+    assert story_idea_validation_errors(payload) == []
+
+
 def test_story_bible_payload_is_normalized_to_structured_model() -> None:
     payload = normalize_story_bible_payload(
         {
@@ -582,6 +633,79 @@ def test_story_bible_payload_is_normalized_to_structured_model() -> None:
     assert payload["characters"][0]["base_outfit"]["main_piece"] == "vestido azul"
     assert payload["locations"][0]["name"] == "Local principal"
     assert payload["props"][0]["name"] == "Objeto de revelacao"
+    assert "script_contract" in payload
+    assert "visual_contract" in payload
+    assert payload["quality_report"]["completeness_score"] < 80
+
+
+def test_complete_story_bible_payload_has_contracts_and_passes_validation() -> None:
+    payload = normalize_story_bible_payload(
+        {
+            "title": "A carta azul",
+            "logline": "Uma filha recebe uma mensagem atrasada do pai.",
+            "theme": "perdao",
+            "genre": "drama",
+            "story_engine": {
+                "dramatic_question": "Clara conseguira contar a verdade?",
+                "central_conflict": "A carta muda a memoria da familia.",
+                "emotional_promise": "A verdade dolorosa permite reconciliacao.",
+                "inciting_incident": "Clara encontra a carta azul na sala.",
+                "midpoint_turn": "Ela percebe que culpou a pessoa errada.",
+                "climax": "Clara le a carta diante da familia.",
+                "ending_image": "A porta da casa fica aberta ao amanhecer.",
+            },
+            "characters": [
+                {
+                    "name": "Clara",
+                    "role": "protagonista",
+                    "desire": "entender por que o pai partiu",
+                    "fear": "descobrir que foi abandonada",
+                    "arc": "troca culpa por coragem",
+                    "base_outfit": {
+                        "main_piece": "camisa azul",
+                        "color": "azul frio",
+                        "fabric": "algodao",
+                        "texture": "tecido gasto",
+                        "wear_marks": "punhos amassados",
+                    },
+                }
+            ],
+            "locations": [
+                {
+                    "name": "Casa da familia",
+                    "description": "sala pequena com fotos antigas",
+                    "lighting": "luz fria de fim de tarde",
+                }
+            ],
+            "props": [
+                {
+                    "name": "Carta azul",
+                    "narrative_importance": "revela o segredo familiar",
+                }
+            ],
+            "continuity_rules": ["a carta sempre aparece com a mesma dobra"],
+        }
+    )
+
+    assert payload["story_engine"]["midpoint_turn"] == "Ela percebe que culpou a pessoa errada."
+    assert payload["script_contract"]["title"] == "A carta azul"
+    assert payload["visual_contract"]["characters"][0]["name"] == "Clara"
+    assert payload["quality_report"]["completeness_score"] >= 80
+    assert story_bible_validation_errors(payload) == []
+
+
+def test_story_bible_validation_reports_missing_production_fields() -> None:
+    payload = normalize_story_bible_payload(
+        {
+            "title": "A carta",
+            "logline": "Uma carta muda uma familia.",
+        }
+    )
+
+    errors = story_bible_validation_errors(payload)
+
+    assert "characters[].name/role/desire/arc/base_outfit" in errors
+    assert "story_engine.inciting_incident" in errors
 
 
 def test_story_bible_payload_accepts_named_location_and_prop_maps() -> None:
@@ -640,6 +764,72 @@ def test_script_payload_preserves_briefing_duration_over_model_output() -> None:
     )
 
     assert payload["target_duration_seconds"] == 420
+
+
+def test_screenplay_validator_rejects_technical_planning_document() -> None:
+    errors = screenplay_validation_errors(
+        """
+ROTEIRO DE PRODUCAO
+
+CENA 1 - GANCHO
+Objetivo: apresentar conflito.
+Acao: Clara abre a carta.
+Indicacao para video: push-in lento.
+"""
+    )
+
+    assert "faltou FADE IN" in errors
+    assert "faltou slugline INT./EXT." in errors
+    assert "conteudo contem rotulos tecnicos" in errors
+
+
+def test_script_payload_preserves_embedded_production_plan_separately() -> None:
+    payload = normalize_script_payload(
+        {
+            "title": "A carta azul",
+            "content": """
+TITULO: A carta azul
+
+FADE IN:
+
+CENA 01
+INT. SALA - DIA
+
+Clara encontra uma carta azul sobre a mesa e percebe que a mensagem chegou tarde.
+
+FADE OUT.
+""",
+            "production_plan": {
+                "scenes": [
+                    {
+                        "scene_number": 1,
+                        "title": "A chegada",
+                        "summary": "Clara encontra a carta.",
+                        "duration_seconds": 60,
+                        "shots": [
+                            {
+                                "shot_number": 1,
+                                "duration_seconds": 60,
+                                "narration_text": "Clara encontra a carta.",
+                                "dialogue_text": "",
+                                "action": "Clara pega a carta sobre a mesa.",
+                                "emotion": "descoberta",
+                                "visual_composition": "Plano vertical com carta e rosto.",
+                                "camera_movement": "push-in lento",
+                                "generation_type": "IMAGE_TO_VIDEO",
+                            }
+                        ],
+                    }
+                ]
+            },
+        },
+        default_title="A carta azul",
+        language="pt-BR",
+        target_duration_seconds=60,
+    )
+
+    assert payload["production_plan"]["scenes"][0]["shots"][0]["duration_seconds"] == 15
+    assert "production_plan" not in payload["content"]
 
 
 def test_scene_plan_payload_normalizes_shots_to_seedance_duration_range() -> None:

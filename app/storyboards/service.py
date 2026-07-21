@@ -1,3 +1,4 @@
+import hashlib
 import json
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -12,12 +13,14 @@ from app.generation.models import PromptExecution
 from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
+from app.projects.versioning import create_artifact_version
 from app.providers.image.mock import MockImageProvider
 from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.timeline import build_visual_timeline_items, build_word_alignment
 from app.storytelling.models import Scene, Script, Shot
+from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
 
@@ -62,6 +65,15 @@ async def _create_artifact(
 
 
 async def _add_dependency(session: AsyncSession, upstream: UUID, downstream: UUID) -> None:
+    result = await session.execute(
+        select(ArtifactDependency.id).where(
+            ArtifactDependency.upstream_artifact_id == upstream,
+            ArtifactDependency.downstream_artifact_id == downstream,
+            ArtifactDependency.dependency_kind == DependencyKind.DERIVED_FROM,
+        )
+    )
+    if result.scalar_one_or_none() is not None:
+        return
     session.add(
         ArtifactDependency(
             upstream_artifact_id=upstream,
@@ -83,13 +95,194 @@ async def _ordered_shots_for_script(
     return [(row[0], row[1]) for row in result.all()]
 
 
-def _storyboard_prompt(shot: Shot, scene: Scene) -> str:
+def _prompt_hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _compact_prompt_value(value: object, max_length: int = 140) -> str:
+    if isinstance(value, list):
+        text = ", ".join(_compact_prompt_value(item, max_length) for item in value)
+    elif isinstance(value, dict):
+        text = "; ".join(
+            f"{key}: {_compact_prompt_value(item, max_length)}"
+            for key, item in value.items()
+            if item not in (None, "", [], {})
+        )
+    else:
+        text = str(value or "").strip()
+    text = " ".join(text.split())
+    if len(text) <= max_length:
+        return text
+    return f"{text[: max_length - 3].rstrip()}..."
+
+
+def _visual_context_items(items: list[Character] | list[Location] | list[Prop]) -> list[dict]:
+    compacted: list[dict] = []
+    for item in items[:8]:
+        profile = item.canonical_profile or {}
+        compacted.append(
+            {
+                "id": str(item.id),
+                "name": item.name,
+                "role": getattr(item, "role", ""),
+                "description": getattr(item, "description", ""),
+                "narrative_importance": getattr(item, "narrative_importance", ""),
+                "profile": {
+                    key: _compact_prompt_value(profile.get(key))
+                    for key in (
+                        "hair",
+                        "base_outfit",
+                        "palette",
+                        "lighting",
+                        "layout",
+                        "material",
+                        "color",
+                    )
+                    if profile.get(key) not in (None, "", [], {})
+                },
+            }
+        )
+    return compacted
+
+
+async def _storyboard_visual_context(session: AsyncSession, project_id: UUID) -> dict:
+    character_rows = await session.execute(
+        select(Character).where(Character.project_id == project_id).order_by(Character.created_at)
+    )
+    location_rows = await session.execute(
+        select(Location).where(Location.project_id == project_id).order_by(Location.created_at)
+    )
+    prop_rows = await session.execute(
+        select(Prop).where(Prop.project_id == project_id).order_by(Prop.created_at)
+    )
+    reference_rows = await session.execute(
+        select(VisualReference).where(VisualReference.project_id == project_id)
+    )
+    reference_views: dict[str, list[str]] = {}
+    for reference in reference_rows.scalars():
+        key = f"{reference.target_kind}:{reference.target_id}"
+        reference_views.setdefault(key, []).append(reference.view_type)
+
+    context = {
+        "characters": _visual_context_items(list(character_rows.scalars())),
+        "locations": _visual_context_items(list(location_rows.scalars())),
+        "props": _visual_context_items(list(prop_rows.scalars())),
+        "reference_views": reference_views,
+    }
+    return context
+
+
+def _storyboard_visual_context_text(visual_context: dict | None) -> str:
+    if not visual_context:
+        return ""
+    parts: list[str] = []
+    for label, key in (
+        ("Personagens canonicos", "characters"),
+        ("Locais canonicos", "locations"),
+        ("Objetos canonicos", "props"),
+    ):
+        items = visual_context.get(key)
+        if not isinstance(items, list) or not items:
+            continue
+        descriptions: list[str] = []
+        for item in items[:6]:
+            if not isinstance(item, dict):
+                continue
+            raw_profile = item.get("profile")
+            profile: dict = raw_profile if isinstance(raw_profile, dict) else {}
+            details = ", ".join(
+                str(value)
+                for value in profile.values()
+                if str(value or "").strip()
+            )
+            name = str(item.get("name") or "").strip()
+            role = str(
+                item.get("role")
+                or item.get("description")
+                or item.get("narrative_importance")
+                or ""
+            ).strip()
+            descriptions.append(
+                " - ".join(part for part in (name, role, details) if part)
+            )
+        if descriptions:
+            parts.append(f"{label}: {'; '.join(descriptions)}")
+    if not parts:
+        return ""
+    return " Continuidade visual obrigatoria: " + " | ".join(parts) + "."
+
+
+def _storyboard_prompt(shot: Shot, scene: Scene, visual_context: dict | None = None) -> str:
+    visual_context_text = _storyboard_visual_context_text(visual_context)
     return (
         f"Storyboard frame for scene {scene.scene_number}, shot {shot.shot_number}. "
         f"Action: {shot.action}. Emotion: {shot.emotion}. "
         f"Composition: {shot.visual_composition}. Camera: {shot.camera_movement}. "
-        "Vertical 9:16 cinematic storyboard, clear staging, consistent characters."
+        "Vertical 9:16 cinematic storyboard, clear staging, consistent characters. "
+        "Prepare este quadro como primeiro frame util para image-to-video: sujeito principal "
+        "legivel, continuidade de figurino e objetos, ambiente coerente, acao filmavel em clipe "
+        "curto e sem texto na imagem."
+        f"{visual_context_text}"
     )
+
+
+def _storyboard_frame_payload(
+    scene: Scene,
+    shot: Shot,
+    asset_id: UUID,
+    prompt: str,
+) -> dict:
+    return {
+        "scene_number": scene.scene_number,
+        "shot_number": shot.shot_number,
+        "shot_id": str(shot.id),
+        "asset_id": str(asset_id),
+        "duration_seconds": shot.duration_seconds,
+        "prompt": prompt,
+        "prompt_hash": _prompt_hash(prompt),
+        "frame_fingerprint": _prompt_hash(
+            json.dumps(
+                {
+                    "shot_id": str(shot.id),
+                    "duration_seconds": shot.duration_seconds,
+                    "narration_text": shot.narration_text,
+                    "dialogue_text": shot.dialogue_text,
+                    "prompt": prompt,
+                },
+                sort_keys=True,
+                ensure_ascii=True,
+            )
+        ),
+    }
+
+
+def storyboard_coverage_errors(
+    shot_rows: list[tuple[Shot, Scene]], frames: list[StoryboardFrame]
+) -> list[str]:
+    errors: list[str] = []
+    expected_shot_ids = [shot.id for shot, _scene in shot_rows]
+    frame_by_shot = {frame.shot_id: frame for frame in frames}
+    missing = [shot_id for shot_id in expected_shot_ids if shot_id not in frame_by_shot]
+    if missing:
+        errors.append(f"{len(missing)} plano(s) sem frame de storyboard")
+    if len(frame_by_shot) != len(frames):
+        errors.append("frames duplicados para o mesmo plano")
+    expected_duration = sum(shot.duration_seconds for shot, _scene in shot_rows)
+    actual_duration = sum(frame.duration_seconds for frame in frames)
+    if expected_duration != actual_duration:
+        errors.append(
+            f"duracao dos frames ({actual_duration}s) difere dos planos ({expected_duration}s)"
+        )
+    expected_order = expected_shot_ids
+    actual_order = [frame.shot_id for frame in sorted(frames, key=lambda item: item.frame_number)]
+    if actual_order != expected_order:
+        errors.append("ordem dos frames nao segue cena/plano")
+    for frame in frames:
+        if frame.asset_id is None:
+            errors.append(f"frame {frame.frame_number} sem asset")
+        if len(str(frame.prompt or "").split()) < 10:
+            errors.append(f"frame {frame.frame_number} com prompt generico")
+    return errors
 
 
 async def generate_storyboard_frames(
@@ -106,87 +299,165 @@ async def generate_storyboard_frames(
 
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
     output_dir = get_settings().local_storage_path / image_dir_name / str(project_id)
+    visual_context = await _storyboard_visual_context(session, project_id)
+    existing_frames = await list_storyboard_frames(session, project_id, script_id)
+    existing_by_shot = {frame.shot_id: frame for frame in existing_frames}
     frames: list[StoryboardFrame] = []
 
     for frame_number, (shot, scene) in enumerate(shot_rows, start=1):
-        prompt = _storyboard_prompt(shot, scene)
-        image = await provider.generate(
-            ImageGenerationRequest(
-                prompt=prompt,
-                target_id=str(shot.id),
-                view_type=f"storyboard_{frame_number:03d}",
-                output_dir=output_dir,
-                model=image_model,
+        prompt = _storyboard_prompt(shot, scene, visual_context)
+        existing_frame = existing_by_shot.get(shot.id)
+        existing_prompt_hash = (
+            (existing_frame.metadata_json or {}).get("prompt_hash")
+            if existing_frame is not None
+            else None
+        )
+        needs_image = existing_frame is None or existing_prompt_hash != _prompt_hash(prompt)
+        if needs_image:
+            image = await provider.generate(
+                ImageGenerationRequest(
+                    prompt=prompt,
+                    target_id=str(shot.id),
+                    view_type=f"storyboard_{frame_number:03d}",
+                    output_dir=output_dir,
+                    model=image_model,
+                )
             )
-        )
-        asset = Asset(
-            project_id=project_id,
-            artifact_id=shot.artifact_id,
-            kind=AssetKind.IMAGE,
-            name=f"Storyboard frame {frame_number:03d}",
-            storage_uri=image.storage_uri,
-            content_type=image.content_type,
-            sha256=image.sha256,
-            metadata_json={"provider": image.provider, "model": image.model},
-        )
-        session.add(asset)
-        await session.flush()
-        session.add(
-            AssetVersion(
-                asset_id=asset.id,
-                version_number=1,
-                storage_uri=asset.storage_uri,
-                sha256=asset.sha256,
-                metadata_json=asset.metadata_json,
+            asset_artifact_id = (
+                existing_frame.artifact_id if existing_frame is not None else shot.artifact_id
             )
-        )
-        payload = {
-            "scene_number": scene.scene_number,
-            "shot_number": shot.shot_number,
-            "shot_id": str(shot.id),
-            "asset_id": str(asset.id),
-            "duration_seconds": shot.duration_seconds,
-            "prompt": prompt,
-        }
-        artifact = await _create_artifact(
-            session,
-            project_id,
-            ArtifactType.STORYBOARD,
-            f"Storyboard {scene.scene_number}.{shot.shot_number}",
-            payload,
-        )
-        await _add_dependency(session, shot.artifact_id, artifact.id)
-        session.add(
-            PromptExecution(
+            asset = Asset(
+                project_id=project_id,
+                artifact_id=asset_artifact_id,
+                kind=AssetKind.IMAGE,
+                name=f"Storyboard frame {frame_number:03d}",
+                storage_uri=image.storage_uri,
+                content_type=image.content_type,
+                sha256=image.sha256,
+                metadata_json={"provider": image.provider, "model": image.model},
+            )
+            session.add(asset)
+            await session.flush()
+            session.add(
+                AssetVersion(
+                    asset_id=asset.id,
+                    version_number=1,
+                    storage_uri=asset.storage_uri,
+                    sha256=asset.sha256,
+                    metadata_json=asset.metadata_json,
+                )
+            )
+            asset_id = asset.id
+        else:
+            assert existing_frame is not None
+            image = None
+            asset = None
+            asset_id = existing_frame.asset_id
+
+        payload = _storyboard_frame_payload(scene, shot, asset_id, prompt)
+        if existing_frame is not None:
+            previous_fingerprint = (existing_frame.metadata_json or {}).get("frame_fingerprint")
+            existing_frame.frame_number = frame_number
+            existing_frame.duration_seconds = shot.duration_seconds
+            existing_frame.prompt = prompt
+            existing_frame.narration_text = shot.narration_text
+            existing_frame.dialogue_text = shot.dialogue_text
+            existing_frame.metadata_json = payload
+            metadata_changed = previous_fingerprint != payload["frame_fingerprint"]
+            if needs_image:
+                existing_frame.asset_id = asset_id
+                artifact = await session.get(Artifact, existing_frame.artifact_id)
+                if artifact is not None:
+                    artifact.name = f"Storyboard {scene.scene_number}.{shot.shot_number}"
+                    await create_artifact_version(
+                        session,
+                        artifact,
+                        payload,
+                        change_note="Storyboard frame regenerated after prompt change",
+                    )
+                session.add(
+                    PromptExecution(
+                        project_id=project_id,
+                        artifact_id=existing_frame.artifact_id,
+                        prompt_template_id=None,
+                        template_version=None,
+                        provider=image.provider if image is not None else "reused",
+                        model=image.model if image is not None else image_model,
+                        prompt=prompt,
+                        variables={"shot_id": str(shot.id), "scene_id": str(scene.id)},
+                        response={
+                            "asset_id": str(asset_id),
+                            "storage_uri": asset.storage_uri if asset is not None else "",
+                        },
+                        parameters={"reused": False},
+                        estimated_cost=Decimal("0.000000"),
+                        duration_ms=None,
+                    )
+                )
+            elif metadata_changed:
+                artifact = await session.get(Artifact, existing_frame.artifact_id)
+                if artifact is not None:
+                    artifact.name = f"Storyboard {scene.scene_number}.{shot.shot_number}"
+                    await create_artifact_version(
+                        session,
+                        artifact,
+                        payload,
+                        change_note="Storyboard frame metadata updated",
+                    )
+            else:
+                artifact = await session.get(Artifact, existing_frame.artifact_id)
+                if artifact is not None and artifact.name != (
+                    f"Storyboard {scene.scene_number}.{shot.shot_number}"
+                ):
+                    artifact.name = f"Storyboard {scene.scene_number}.{shot.shot_number}"
+            await _add_dependency(session, shot.artifact_id, existing_frame.artifact_id)
+            frame = existing_frame
+        else:
+            artifact = await _create_artifact(
+                session,
+                project_id,
+                ArtifactType.STORYBOARD,
+                f"Storyboard {scene.scene_number}.{shot.shot_number}",
+                payload,
+            )
+            await _add_dependency(session, shot.artifact_id, artifact.id)
+            session.add(
+                PromptExecution(
+                    project_id=project_id,
+                    artifact_id=artifact.id,
+                    prompt_template_id=None,
+                    template_version=None,
+                    provider=image.provider if image is not None else "reused",
+                    model=image.model if image is not None else image_model,
+                    prompt=prompt,
+                    variables={"shot_id": str(shot.id), "scene_id": str(scene.id)},
+                    response={
+                        "asset_id": str(asset_id),
+                        "storage_uri": asset.storage_uri if asset is not None else "",
+                    },
+                    parameters={"reused": False},
+                    estimated_cost=Decimal("0.000000"),
+                    duration_ms=None,
+                )
+            )
+            frame = StoryboardFrame(
                 project_id=project_id,
                 artifact_id=artifact.id,
-                prompt_template_id=None,
-                template_version=None,
-                provider=image.provider,
-                model=image.model,
+                shot_id=shot.id,
+                asset_id=asset_id,
+                frame_number=frame_number,
+                duration_seconds=shot.duration_seconds,
                 prompt=prompt,
-                variables={"shot_id": str(shot.id), "scene_id": str(scene.id)},
-                response={"asset_id": str(asset.id), "storage_uri": asset.storage_uri},
-                parameters={},
-                estimated_cost=Decimal("0.000000"),
-                duration_ms=None,
+                narration_text=shot.narration_text,
+                dialogue_text=shot.dialogue_text,
+                metadata_json=payload,
             )
-        )
-        frame = StoryboardFrame(
-            project_id=project_id,
-            artifact_id=artifact.id,
-            shot_id=shot.id,
-            asset_id=asset.id,
-            frame_number=frame_number,
-            duration_seconds=shot.duration_seconds,
-            prompt=prompt,
-            narration_text=shot.narration_text,
-            dialogue_text=shot.dialogue_text,
-            metadata_json=payload,
-        )
-        session.add(frame)
+            session.add(frame)
         frames.append(frame)
 
+    errors = storyboard_coverage_errors(shot_rows, frames)
+    if errors:
+        raise ValueError("Storyboard incompleto: " + "; ".join(errors))
     advance_project_status(project, ProjectStatus.STORYBOARD_APPROVAL)
     await session.commit()
     for frame in frames:
@@ -245,6 +516,69 @@ async def _create_provisional_narration(
     return track
 
 
+def _animatic_frame_signature(frames: list[StoryboardFrame]) -> list[dict]:
+    return [
+        {
+            "frame_id": str(frame.id),
+            "asset_id": str(frame.asset_id),
+            "duration_seconds": frame.duration_seconds,
+            "frame_fingerprint": (frame.metadata_json or {}).get("frame_fingerprint")
+            or _prompt_hash(
+                json.dumps(
+                    {
+                        "shot_id": str(frame.shot_id),
+                        "duration_seconds": frame.duration_seconds,
+                        "narration_text": frame.narration_text,
+                        "dialogue_text": frame.dialogue_text,
+                        "prompt": frame.prompt,
+                    },
+                    sort_keys=True,
+                    ensure_ascii=True,
+                )
+            ),
+        }
+        for frame in sorted(frames, key=lambda item: item.frame_number)
+    ]
+
+
+def _animatic_fingerprint(frames: list[StoryboardFrame]) -> str:
+    return _prompt_hash(
+        json.dumps(_animatic_frame_signature(frames), sort_keys=True, ensure_ascii=True)
+    )
+
+
+async def _existing_animatic_bundle(
+    session: AsyncSession, project_id: UUID, fingerprint: str
+) -> tuple[AudioTrack, Animatic, Timeline, list[TimelineItem]] | None:
+    result = await session.execute(
+        select(Animatic)
+        .where(Animatic.project_id == project_id)
+        .order_by(Animatic.created_at.desc())
+    )
+    for animatic in result.scalars():
+        if (animatic.manifest or {}).get("frames_fingerprint") != fingerprint:
+            continue
+        if animatic.audio_track_id is None:
+            continue
+        audio_track = await session.get(AudioTrack, animatic.audio_track_id)
+        timeline_result = await session.execute(
+            select(Timeline)
+            .where(Timeline.project_id == project_id, Timeline.animatic_id == animatic.id)
+            .order_by(Timeline.created_at.desc())
+            .limit(1)
+        )
+        timeline = timeline_result.scalars().first()
+        if audio_track is None or timeline is None:
+            continue
+        item_result = await session.execute(
+            select(TimelineItem)
+            .where(TimelineItem.timeline_id == timeline.id)
+            .order_by(TimelineItem.order_index)
+        )
+        return audio_track, animatic, timeline, list(item_result.scalars())
+    return None
+
+
 async def generate_animatic_bundle(
     session: AsyncSession, project_id: UUID, script_id: UUID
 ) -> tuple[AudioTrack, Animatic, Timeline, list[TimelineItem]] | None:
@@ -258,6 +592,11 @@ async def generate_animatic_bundle(
         frames = await generate_storyboard_frames(session, project_id, script_id) or []
     if not frames:
         return None
+
+    frames_fingerprint = _animatic_fingerprint(frames)
+    existing_bundle = await _existing_animatic_bundle(session, project_id, frames_fingerprint)
+    if existing_bundle is not None:
+        return existing_bundle
 
     audio_track = await _create_provisional_narration(session, project_id, frames)
     await session.flush()
@@ -276,12 +615,14 @@ async def generate_animatic_bundle(
     manifest = {
         "version": 1,
         "duration_seconds": duration_seconds,
+        "frames_fingerprint": frames_fingerprint,
         "frames": [
             {
                 "frame_id": str(frame.id),
                 "asset_id": str(frame.asset_id),
                 "duration_seconds": frame.duration_seconds,
                 "narration_text": frame.narration_text,
+                "frame_fingerprint": (frame.metadata_json or {}).get("frame_fingerprint"),
             }
             for frame in frames
         ],

@@ -1,6 +1,8 @@
 import hashlib
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import select
@@ -65,6 +67,15 @@ async def _create_artifact(
 
 
 async def _add_dependency(session: AsyncSession, upstream: UUID, downstream: UUID) -> None:
+    result = await session.execute(
+        select(ArtifactDependency.id).where(
+            ArtifactDependency.upstream_artifact_id == upstream,
+            ArtifactDependency.downstream_artifact_id == downstream,
+            ArtifactDependency.dependency_kind == DependencyKind.DERIVED_FROM,
+        )
+    )
+    if result.scalar_one_or_none() is not None:
+        return
     session.add(
         ArtifactDependency(
             upstream_artifact_id=upstream,
@@ -79,9 +90,103 @@ def video_idempotency_key(
     variant_index: int,
     provider: str,
     model: str,
+    fingerprint: str = "",
 ) -> str:
-    raw = f"{storyboard_frame_id}:{variant_index}:{provider}:{model}"
+    raw = f"{storyboard_frame_id}:{variant_index}:{provider}:{model}:{fingerprint}"
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _video_request_fingerprint(
+    frame: StoryboardFrame,
+    source_image_uri: str | None,
+    provider: str,
+    model: str,
+    aspect_ratio: str,
+    size: str,
+) -> str:
+    frame_metadata = frame.metadata_json if isinstance(frame.metadata_json, dict) else {}
+    payload = {
+        "storyboard_frame_id": str(frame.id),
+        "storyboard_frame_fingerprint": frame_metadata.get("frame_fingerprint"),
+        "source_image_asset_id": str(frame.asset_id),
+        "source_image_uri": source_image_uri,
+        "prompt": frame.prompt,
+        "duration_seconds": frame.duration_seconds,
+        "provider": provider,
+        "model": model,
+        "aspect_ratio": aspect_ratio,
+        "size": size,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=True).encode()
+    ).hexdigest()
+
+
+def _local_storage_path(storage_uri: str | None) -> Path | None:
+    if not storage_uri:
+        return None
+    path = Path(storage_uri)
+    if path.is_absolute() and path.exists():
+        return path
+    settings = get_settings()
+    candidate = settings.local_storage_path / storage_uri
+    if candidate.exists():
+        return candidate
+    if path.exists():
+        return path
+    return None
+
+
+def video_generation_validation_errors(
+    frame: StoryboardFrame,
+    source_image_uri: str | None,
+    provider: VideoProvider,
+    aspect_ratio: str,
+) -> list[str]:
+    errors: list[str] = []
+    if frame.asset_id is None:
+        errors.append("frame sem asset_id")
+    if not str(frame.prompt or "").strip():
+        errors.append("prompt vazio")
+    elif len(str(frame.prompt).split()) < 10:
+        errors.append("prompt generico demais")
+    if not source_image_uri:
+        errors.append("imagem fonte ausente")
+    elif _local_storage_path(source_image_uri) is None and not source_image_uri.startswith(
+        ("http://", "https://", "data:", "asset://")
+    ):
+        errors.append("imagem fonte nao encontrada no armazenamento local")
+    capabilities = provider.capabilities
+    if capabilities.supported_durations and (
+        frame.duration_seconds not in capabilities.supported_durations
+    ):
+        errors.append(
+            f"duracao {frame.duration_seconds}s nao suportada pelo provider"
+        )
+    if (
+        capabilities.supported_aspect_ratios
+        and aspect_ratio not in capabilities.supported_aspect_ratios
+    ):
+        errors.append(f"aspect_ratio {aspect_ratio} nao suportado pelo provider")
+    if not capabilities.image_to_video:
+        errors.append("provider nao suporta image-to-video")
+    return errors
+
+
+def _failed_job_payload(
+    frame: StoryboardFrame,
+    variant_index: int,
+    reason: str,
+    attempts: int,
+) -> dict:
+    return {
+        "storyboard_frame_id": str(frame.id),
+        "frame_number": frame.frame_number,
+        "variant_index": variant_index,
+        "reason": reason,
+        "retry_after_seconds": exponential_backoff_seconds(attempts),
+        "retry_available": "manual",
+    }
 
 
 async def estimate_video_batch_cost(
@@ -190,25 +295,51 @@ async def generate_video_clips(
     for frame in frames:
         source_image_uri = await _asset_storage_uri(session, frame.asset_id)
         for variant_index in range(1, variants_per_frame + 1):
+            request_fingerprint = _video_request_fingerprint(
+                frame,
+                source_image_uri,
+                resolved_provider,
+                resolved_model,
+                aspect_ratio,
+                video_size,
+            )
             idempotency_key = video_idempotency_key(
-                frame.id, variant_index, resolved_provider, resolved_model
+                frame.id,
+                variant_index,
+                resolved_provider,
+                resolved_model,
+                request_fingerprint,
             )
             existing = await session.execute(
                 select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
             )
             existing_job = existing.scalars().first()
             if existing_job is not None:
-                jobs.append(existing_job)
-                existing_clip = await session.execute(
-                    select(VideoClip).where(VideoClip.generation_job_id == existing_job.id)
-                )
-                clip = existing_clip.scalars().first()
-                if clip is not None:
-                    clips.append(clip)
-                continue
+                if (
+                    existing_job.status != GenerationJobStatus.FAILED
+                    or existing_job.attempts >= existing_job.max_attempts
+                ):
+                    jobs.append(existing_job)
+                    existing_clip = await session.execute(
+                        select(VideoClip).where(VideoClip.generation_job_id == existing_job.id)
+                    )
+                    clip = existing_clip.scalars().first()
+                    if clip is not None:
+                        clips.append(clip)
+                    continue
+                existing_job.status = GenerationJobStatus.RUNNING
+                existing_job.progress = 5
+                existing_job.attempts += 1
+                existing_job.error = None
+                existing_job.started_at = datetime.now(UTC)
+                existing_job.completed_at = None
+                job = existing_job
+            else:
+                job = None
 
             request_payload = {
                 "storyboard_frame_id": str(frame.id),
+                "frame_number": frame.frame_number,
                 "duration_seconds": frame.duration_seconds,
                 "prompt": frame.prompt,
                 "variant_index": variant_index,
@@ -216,27 +347,47 @@ async def generate_video_clips(
                 "source_image_uri": source_image_uri,
                 "provider": resolved_provider,
                 "model": resolved_model,
+                "aspect_ratio": aspect_ratio,
+                "size": video_size,
+                "request_fingerprint": request_fingerprint,
             }
-            job = GenerationJob(
-                project_id=project_id,
-                source_artifact_id=frame.artifact_id,
-                job_type=GenerationJobType.VIDEO,
-                status=GenerationJobStatus.RUNNING,
-                progress=5,
-                attempts=1,
-                max_attempts=3,
-                provider=resolved_provider,
-                model=resolved_model,
-                idempotency_key=idempotency_key,
-                request_payload=request_payload,
-                response_payload={},
-                cost_estimate=calculate_total_cost(
-                    Decimal(frame.duration_seconds), MOCK_VIDEO_UNIT_COST_PER_SECOND
-                ),
-                started_at=datetime.now(UTC),
+            validation_errors = video_generation_validation_errors(
+                frame, source_image_uri, provider, aspect_ratio
             )
-            session.add(job)
+            if job is None:
+                job = GenerationJob(
+                    project_id=project_id,
+                    source_artifact_id=frame.artifact_id,
+                    job_type=GenerationJobType.VIDEO,
+                    status=GenerationJobStatus.RUNNING,
+                    progress=5,
+                    attempts=1,
+                    max_attempts=3,
+                    provider=resolved_provider,
+                    model=resolved_model,
+                    idempotency_key=idempotency_key,
+                    request_payload=request_payload,
+                    response_payload={},
+                    cost_estimate=calculate_total_cost(
+                        Decimal(frame.duration_seconds), MOCK_VIDEO_UNIT_COST_PER_SECOND
+                    ),
+                    started_at=datetime.now(UTC),
+                )
+                session.add(job)
+            else:
+                job.request_payload = request_payload
+                job.response_payload = {}
             await session.flush()
+            if validation_errors:
+                reason = "; ".join(validation_errors)
+                job.status = GenerationJobStatus.FAILED
+                job.error = reason
+                job.response_payload = _failed_job_payload(
+                    frame, variant_index, reason, job.attempts
+                )
+                job.completed_at = datetime.now(UTC)
+                jobs.append(job)
+                continue
 
             try:
                 result = await provider.generate_from_image(
@@ -253,10 +404,9 @@ async def generate_video_clips(
             except Exception as exc:
                 job.status = GenerationJobStatus.FAILED
                 job.error = str(exc)
-                job.response_payload = {
-                    "retry_after_seconds": exponential_backoff_seconds(job.attempts),
-                    "retry_available": "manual",
-                }
+                job.response_payload = _failed_job_payload(
+                    frame, variant_index, str(exc), job.attempts
+                )
                 job.completed_at = datetime.now(UTC)
                 jobs.append(job)
                 continue
@@ -289,6 +439,7 @@ async def generate_video_clips(
                 "duration_seconds": frame.duration_seconds,
                 "variant_index": variant_index,
                 "external_job_id": result.external_job_id,
+                "request_fingerprint": request_fingerprint,
             }
             artifact = await _create_artifact(
                 session,

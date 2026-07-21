@@ -27,10 +27,16 @@ DEFAULT_TEMPLATES: dict[str, str] = {
     "generate_story_ideas": (
         "Gere tres ideias estruturadas para uma historia vertical de {target_duration_minutes} "
         "minutos. Cada ideia precisa sustentar a duracao escolhida com conflito, virada e payoff. "
-        "Tema: {theme}. Publico: {audience}. Emocao: {primary_emotion}. "
+        "Tema: {theme}. Genero preferido: {genre}. Publico: {audience}. "
+        "Emocao: {primary_emotion}. "
+        "Cada ideia deve deixar claro conflito, obstaculos, stakes, twist, climax, payoff "
+        "e resolucao para que Story Bible e roteiro consigam preservar a proposta original. "
+        "{retry_guidance}"
         "Responda somente JSON neste formato: "
         '{{"ideas":[{{"title":"...","genre":"...","primary_emotion":"...",'
         '"theme":"...","hook":"...","premise":"...","protagonist":"...",'
+        '"conflict":"...","obstacles":["..."],"stakes":"...","twist":"...",'
+        '"climax":"...","payoff":"...","resolution":"...",'
         '"duration_minutes":5,"retention_potential":80,"cliche_risk":20,'
         '"production_complexity":35}}]}}'
     ),
@@ -58,13 +64,18 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "timeline deve ter beats ordenados com act, beat, purpose e emotional_turn. "
         "relationships deve ter source, target, relationship e tension. "
         "continuity_rules deve ser array de regras objetivas. "
-        "export_profile deve conter aspect_ratio '9:16', resolution '1080x1920' e language 'pt-BR'."
+        "export_profile deve conter aspect_ratio '9:16', resolution '1080x1920' "
+        "e language 'pt-BR'. "
+        "Inclua tambem script_contract com personagens essenciais, locais permitidos, objetos "
+        "de payoff, beats obrigatorios, regras proibidas, tom e promessa emocional; inclua "
+        "visual_contract com regras de figurino, paleta, locais, props e continuidade visual. "
+        "{retry_guidance}"
     ),
     "generate_script": (
         "Crie um roteiro cinematografico profissional em {language}, no padrao de roteiro "
         "de filme, para uma historia vertical 9:16 "
-        "com duracao total fixa de {target_duration_seconds}s. Use a Story Bible em "
-        "{story_bible}. A etapa de video usa Seedance 2.0 Fast, portanto os planos finais "
+        "com duracao total fixa de {target_duration_seconds}s. Use o contrato narrativo em "
+        "{story_bible_contract}. A etapa de video usa Seedance 2.0 Fast, portanto os planos finais "
         "serao clipes independentes de {clip_min_seconds}s a {clip_max_seconds}s, com alvo "
         "pratico de {clip_target_seconds}s por clipe. Escreva o roteiro para sustentar "
         "aproximadamente {expected_clip_count} clipes, sem tentar colocar um plano unico "
@@ -82,9 +93,18 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "com ritmo de filme: gancho visual, incidente incitante, escalada, virada central, "
         "climax e imagem final. Evite exposicao longa e descricao abstrata; cada paragrafo "
         "de acao deve ser filmavel. "
+        "Tambem retorne production_plan separado do roteiro, com cenas e planos tecnicos "
+        "derivados do roteiro para uso interno. Esse plano deve seguir exatamente "
+        "{expected_clip_count} planos com duracoes nesta ordem: {clip_durations}. "
+        "Nao misture production_plan dentro de content. {retry_guidance}"
         "Responda somente JSON neste formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
-        '"word_count":650,"content":"ROTEIRO CINEMATOGRAFICO COMPLETO AQUI"}}'
+        '"word_count":650,"content":"ROTEIRO CINEMATOGRAFICO COMPLETO AQUI",'
+        '"production_plan":{{"scenes":[{{"scene_number":1,"title":"...",'
+        '"summary":"...","duration_seconds":45,"shots":[{{"shot_number":1,'
+        '"duration_seconds":15,"narration_text":"...","dialogue_text":"",'
+        '"action":"...","emotion":"...","visual_composition":"...",'
+        '"camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}}]}}]}}}}'
     ),
     "generate_scenes_and_shots": (
         "Divida o roteiro em {script} em cenas e planos prontos para geracao de video "
@@ -117,7 +137,7 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "acao filmavel no presente, primeira aparicao de personagem em caixa alta, "
         "dialogos em bloco com nome do personagem, parenteticos raros e transicoes discretas. "
         "Nao transforme o roteiro em lista tecnica com campos de objetivo/personagens/local/"
-        "duracao/storyboard/video/camera. "
+        "duracao/storyboard/video/camera. {retry_guidance}"
         "Responda somente JSON neste formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
         '"word_count":650,"content":"ROTEIRO CINEMATOGRAFICO REVISADO COMPLETO AQUI"}}'

@@ -24,6 +24,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
     variables = {
         "target_duration_minutes": 5,
         "theme": "perdao",
+        "genre": "drama",
         "audience": "publico geral",
         "primary_emotion": "esperanca",
         "idea_title": "A carta",
@@ -31,6 +32,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         "language": "pt-BR",
         "target_duration_seconds": 300,
         "story_bible": {"title": "A carta"},
+        "story_bible_contract": {"title": "A carta"},
         "script": "Roteiro atual",
         "instruction": "melhore o gancho",
         "project_context": {"project": "A carta"},
@@ -40,6 +42,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         "clip_target_seconds": 15,
         "expected_clip_count": 20,
         "clip_durations": "15s, 15s",
+        "retry_guidance": "",
     }
 
     compiled = {
@@ -48,6 +51,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
     }
 
     assert '"content":"ROTEIRO CINEMATOGRAFICO COMPLETO AQUI"' in compiled["generate_script"]
+    assert '"production_plan"' in compiled["generate_script"]
     assert "Seedance 2.0 Fast" in compiled["generate_script"]
     assert "FADE IN:" in compiled["generate_script"]
     assert "slugline" in compiled["generate_script"]
@@ -56,6 +60,10 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
     assert "ROTEIRO CINEMATOGRAFICO REVISADO COMPLETO AQUI" in compiled["revise_script"]
     assert '"scenes"' in compiled["generate_scenes_and_shots"]
     assert '"ideas"' in compiled["generate_story_ideas"]
+    assert "Genero preferido: drama" in compiled["generate_story_ideas"]
+    assert '"payoff"' in compiled["generate_story_ideas"]
+    assert "script_contract" in compiled["generate_story_bible"]
+    assert "visual_contract" in compiled["generate_story_bible"]
 
 
 def test_generation_fallback_detects_openrouter_resource_exhaustion() -> None:

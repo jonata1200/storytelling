@@ -1,5 +1,6 @@
 import re
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -235,6 +236,33 @@ def _looks_like_screenplay(content: str) -> bool:
     )
 
 
+def screenplay_validation_errors(content: str) -> list[str]:
+    text = str(content or "").strip()
+    errors: list[str] = []
+    if not text:
+        return ["content vazio"]
+    if not re.search(r"(?im)^\s*FADE IN\s*:?", text):
+        errors.append("faltou FADE IN")
+    if not re.search(r"(?im)^\s*CENA\s+0*1\b", text):
+        errors.append("faltou marcador CENA 01")
+    if not SCREENPLAY_SLUGLINE_RE.search(text):
+        errors.append("faltou slugline INT./EXT.")
+    if SCRIPT_TECHNICAL_LABEL_RE.search(text):
+        errors.append("conteudo contem rotulos tecnicos")
+    if len(text.split()) < 12:
+        errors.append("conteudo curto demais para roteiro")
+    return errors
+
+
+def validate_screenplay_content(content: str, context: str) -> None:
+    errors = screenplay_validation_errors(content)
+    if errors:
+        details = "; ".join(errors)
+        raise GenerationOutputError(
+            f"{context}: roteiro fora do formato de filme ({details})"
+        )
+
+
 def _clean_screenplay_location(value: object, fallback: str) -> str:
     text = re.sub(r"\s+", " ", str(value or fallback)).strip(" .:-")
     text = re.sub(r"(?i)^(?:int|ext|int/ext|ext/int)\.\s*", "", text)
@@ -429,6 +457,36 @@ def _script_content_from_payload(
     return ""
 
 
+def _production_plan_candidate(payload: dict) -> object:
+    for key in (
+        "production_plan",
+        "scene_plan",
+        "technical_plan",
+        "plano_producao",
+        "plano_de_producao",
+        "cenas_e_planos",
+    ):
+        value = payload.get(key)
+        if value not in (None, "", [], {}):
+            return value
+    return None
+
+
+def _normalize_embedded_production_plan(
+    payload: dict, *, target_duration_seconds: int, script_content: str
+) -> dict | None:
+    candidate = _production_plan_candidate(payload)
+    if isinstance(candidate, list):
+        candidate = {"scenes": candidate}
+    if not isinstance(candidate, dict):
+        return None
+    return normalize_scene_plan_payload_from_script(
+        candidate,
+        target_duration_seconds,
+        script_content,
+    )
+
+
 def _fallback_script_content_from_bible(
     story_bible_payload: dict, title: str, target_duration_seconds: int
 ) -> str:
@@ -502,6 +560,105 @@ def _fallback_script_content_from_bible(
     )
 
 
+def _compact_named_items(items: object, keys: tuple[str, ...]) -> list[dict]:
+    if not isinstance(items, list):
+        return []
+    compacted: list[dict] = []
+    for item in items[:8]:
+        if isinstance(item, dict):
+            compacted.append(
+                {
+                    key: item[key]
+                    for key in keys
+                    if key in item and item[key] not in (None, "", [], {})
+                }
+            )
+        elif str(item).strip():
+            compacted.append({"name": str(item).strip()})
+    return compacted
+
+
+def _story_bible_script_contract(story_bible_payload: dict) -> dict:
+    return {
+        "title": story_bible_payload.get("title"),
+        "logline": story_bible_payload.get("logline"),
+        "theme": story_bible_payload.get("theme"),
+        "genre": story_bible_payload.get("genre"),
+        "tone": story_bible_payload.get("tone"),
+        "target_emotion": story_bible_payload.get("target_emotion"),
+        "story_engine": story_bible_payload.get("story_engine"),
+        "characters": _compact_named_items(
+            story_bible_payload.get("characters"),
+            ("id", "name", "role", "desire", "fear", "secret", "arc", "base_outfit"),
+        ),
+        "locations": _compact_named_items(
+            story_bible_payload.get("locations"),
+            ("id", "name", "description", "layout", "lighting", "props_in_scene"),
+        ),
+        "props": _compact_named_items(
+            story_bible_payload.get("props"),
+            ("id", "name", "owner", "narrative_importance", "first_appearance"),
+        ),
+        "narrative_rules": story_bible_payload.get("narrative_rules"),
+        "continuity_rules": story_bible_payload.get("continuity_rules"),
+        "forbidden_elements": story_bible_payload.get("forbidden_elements"),
+        "visual_style": story_bible_payload.get("visual_style"),
+        "audio_style": story_bible_payload.get("audio_style"),
+    }
+
+
+def _story_bible_visual_contract(story_bible_payload: dict) -> dict:
+    return {
+        "visual_style": story_bible_payload.get("visual_style"),
+        "characters": _compact_named_items(
+            story_bible_payload.get("characters"),
+            (
+                "id",
+                "name",
+                "role",
+                "apparent_age",
+                "gender",
+                "height_cm",
+                "body_type",
+                "face_shape",
+                "skin_tone",
+                "eyes",
+                "hair",
+                "base_outfit",
+                "palette",
+            ),
+        ),
+        "locations": _compact_named_items(
+            story_bible_payload.get("locations"),
+            (
+                "id",
+                "name",
+                "description",
+                "layout",
+                "materials",
+                "palette",
+                "lighting",
+                "spatial_rules",
+                "forbidden_elements",
+            ),
+        ),
+        "props": _compact_named_items(
+            story_bible_payload.get("props"),
+            (
+                "id",
+                "name",
+                "dimensions",
+                "material",
+                "color",
+                "state",
+                "owner",
+                "visual_rules",
+            ),
+        ),
+        "continuity_rules": story_bible_payload.get("continuity_rules"),
+    }
+
+
 def normalize_script_payload(
     payload: dict,
     *,
@@ -518,6 +675,19 @@ def normalize_script_payload(
         default_title=default_title,
         target_duration_seconds=target_duration_seconds,
     )
+    validate_screenplay_content(normalized["content"], "generate_script")
+    try:
+        production_plan = _normalize_embedded_production_plan(
+            normalized,
+            target_duration_seconds=target_duration_seconds,
+            script_content=normalized["content"],
+        )
+    except GenerationOutputError as exc:
+        normalized.pop("production_plan", None)
+        normalized["production_plan_error"] = str(exc)
+    else:
+        if production_plan is not None:
+            normalized["production_plan"] = production_plan
     content_word_count = len(normalized["content"].split())
     normalized["word_count"] = max(
         _coerce_positive_int(normalized.get("word_count"), content_word_count),
@@ -854,13 +1024,47 @@ async def get_latest_briefing(session: AsyncSession, project_id: UUID) -> Briefi
     return result.scalars().first()
 
 
-def normalize_story_idea_payload(payload: dict) -> dict:
+STORY_IDEA_REQUIRED_TEXT_FIELDS = (
+    "title",
+    "genre",
+    "primary_emotion",
+    "hook",
+    "premise",
+    "protagonist",
+    "conflict",
+    "twist",
+    "payoff",
+    "resolution",
+)
+
+
+def normalize_story_idea_payload(
+    payload: dict, default_duration_minutes: float = 5.0
+) -> dict:
     normalized = dict(payload)
     title = _required_str(normalized, "title", "story_idea")
+    normalized.setdefault("genre", "Drama")
+    normalized.setdefault("primary_emotion", normalized.get("final_emotion") or "Curiosidade")
     normalized.setdefault("hook", normalized.get("premise") or title)
     normalized.setdefault("premise", normalized.get("hook") or title)
     normalized.setdefault("protagonist", "Protagonista a definir")
-    normalized["duration_minutes"] = coerce_duration_minutes(normalized.get("duration_minutes"))
+    if normalized.get("payoff") in (None, "", [], {}) and normalized.get("resolution") not in (
+        None,
+        "",
+        [],
+        {},
+    ):
+        normalized["payoff"] = normalized["resolution"]
+    if normalized.get("resolution") in (None, "", [], {}) and normalized.get("payoff") not in (
+        None,
+        "",
+        [],
+        {},
+    ):
+        normalized["resolution"] = normalized["payoff"]
+    normalized["duration_minutes"] = coerce_duration_minutes(
+        normalized.get("duration_minutes"), default_duration_minutes
+    )
     normalized["retention_potential"] = _coerce_score(
         normalized.get("retention_potential"), 75
     )
@@ -870,6 +1074,70 @@ def normalize_story_idea_payload(payload: dict) -> dict:
     )
     normalized["title"] = title
     return normalized
+
+
+def story_idea_validation_errors(payload: dict) -> list[str]:
+    errors: list[str] = []
+    for field in STORY_IDEA_REQUIRED_TEXT_FIELDS:
+        if not str(payload.get(field) or "").strip():
+            errors.append(f"campo obrigatorio vazio: {field}")
+
+    duration = coerce_duration_minutes(payload.get("duration_minutes"))
+    if not 3 <= duration <= 8:
+        errors.append("duration_minutes deve ficar entre 3 e 8")
+
+    for field in ("retention_potential", "cliche_risk", "production_complexity"):
+        value = payload.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100:
+            errors.append(f"{field} deve ser inteiro entre 0 e 100")
+
+    obstacles = payload.get("obstacles")
+    if obstacles is not None and (
+        not isinstance(obstacles, list)
+        or not any(str(item).strip() for item in obstacles)
+    ):
+        errors.append("obstacles deve ser uma lista nao vazia quando informado")
+
+    if payload.get("hook") == payload.get("premise"):
+        errors.append("hook e premise precisam ter funcoes narrativas diferentes")
+
+    return errors
+
+
+def _story_idea_retry_guidance(errors: list[str]) -> str:
+    return (
+        "A resposta anterior nao serve para o pipeline. Corrija estes pontos e retorne "
+        "novamente somente JSON, mantendo exatamente a chave ideas: "
+        f"{'; '.join(errors)}. "
+    )
+
+
+def _normalize_generated_story_ideas(
+    content: dict, default_duration_minutes: float
+) -> list[dict]:
+    items: list[dict] = []
+    errors: list[str] = []
+    raw_ideas = _required_list(content, "ideas", "generate_story_ideas")
+    for index, raw_item in enumerate(raw_ideas, 1):
+        context = f"generate_story_ideas.ideas[{index}]"
+        try:
+            item = normalize_story_idea_payload(
+                _required_mapping(raw_item, context),
+                default_duration_minutes=default_duration_minutes,
+            )
+        except GenerationOutputError as exc:
+            errors.append(str(exc))
+            continue
+        item_errors = story_idea_validation_errors(item)
+        if item_errors:
+            errors.extend(f"{context}: {error}" for error in item_errors)
+            continue
+        items.append(item)
+    if len(items) < 3:
+        errors.append("generate_story_ideas: esperado pelo menos 3 ideias validas")
+    if errors:
+        raise GenerationOutputError("; ".join(errors))
+    return items
 
 
 STORY_BIBLE_DETAIL_PREFIXES = (
@@ -1154,6 +1422,137 @@ def _normalize_story_bible_props(payload: dict) -> list[dict]:
     return normalized
 
 
+STORY_BIBLE_DEFAULT_MARKERS = {
+    "",
+    "desejo claro",
+    "arco emocional claro",
+    "figurino principal definido pela historia",
+    "local importante para a historia",
+    "ambiente central da historia",
+    "layout definido",
+    "iluminacao cinematografica coerente",
+    "objeto com funcao narrativa clara",
+    "Objeto de revelacao",
+    "Qual escolha emocional define a historia?",
+    "realismo emocional",
+    "manter continuidade de figurino e objetos",
+}
+
+
+def _story_bible_meaningful_text(value: object) -> bool:
+    text = _story_bible_text(value).strip()
+    return bool(text and text not in STORY_BIBLE_DEFAULT_MARKERS)
+
+
+def story_bible_quality_report(payload: dict) -> dict:
+    missing_fields: list[str] = []
+    risk_flags: list[str] = []
+    checks: list[bool] = []
+
+    raw_characters = payload.get("characters")
+    raw_locations = payload.get("locations")
+    raw_props = payload.get("props")
+    raw_story_engine = payload.get("story_engine")
+    raw_continuity_rules = payload.get("continuity_rules")
+    characters = cast(list, raw_characters) if isinstance(raw_characters, list) else []
+    locations = cast(list, raw_locations) if isinstance(raw_locations, list) else []
+    props = cast(list, raw_props) if isinstance(raw_props, list) else []
+    story_engine = (
+        cast(dict, raw_story_engine) if isinstance(raw_story_engine, dict) else {}
+    )
+    continuity_rules = (
+        cast(list, raw_continuity_rules) if isinstance(raw_continuity_rules, list) else []
+    )
+
+    character_ready = bool(characters) and any(
+        isinstance(character, dict)
+        and _story_bible_meaningful_text(character.get("name"))
+        and _story_bible_meaningful_text(character.get("role"))
+        and _story_bible_meaningful_text(character.get("desire"))
+        and _story_bible_meaningful_text(character.get("arc"))
+        and isinstance(character.get("base_outfit"), dict)
+        and _story_bible_meaningful_text(character["base_outfit"].get("main_piece"))
+        for character in characters
+    )
+    checks.append(character_ready)
+    if not character_ready:
+        missing_fields.append("characters[].name/role/desire/arc/base_outfit")
+
+    location_ready = bool(locations) and any(
+        isinstance(location, dict)
+        and _story_bible_meaningful_text(location.get("name"))
+        and _story_bible_meaningful_text(location.get("description"))
+        and _story_bible_meaningful_text(location.get("lighting"))
+        for location in locations
+    )
+    checks.append(location_ready)
+    if not location_ready:
+        missing_fields.append("locations[].name/description/lighting")
+
+    prop_ready = bool(props) and any(
+        isinstance(prop, dict)
+        and _story_bible_meaningful_text(prop.get("name"))
+        and _story_bible_meaningful_text(prop.get("narrative_importance"))
+        for prop in props
+    )
+    checks.append(prop_ready)
+    if not prop_ready:
+        missing_fields.append("props[].name/narrative_importance")
+
+    required_engine_keys = ("inciting_incident", "midpoint_turn", "climax", "ending_image")
+    missing_engine = [
+        key
+        for key in required_engine_keys
+        if not _story_bible_meaningful_text(story_engine.get(key))
+    ]
+    engine_ready = not missing_engine
+    checks.append(engine_ready)
+    if not engine_ready:
+        missing_fields.extend(f"story_engine.{key}" for key in missing_engine)
+
+    continuity_ready = bool(continuity_rules) and any(
+        _story_bible_meaningful_text(rule) for rule in continuity_rules
+    )
+    checks.append(continuity_ready)
+    if not continuity_ready:
+        missing_fields.append("continuity_rules")
+
+    visual_contract_ready = bool(payload.get("visual_contract"))
+    checks.append(visual_contract_ready)
+    if not visual_contract_ready:
+        risk_flags.append("visual_contract ausente")
+
+    script_contract_ready = bool(payload.get("script_contract"))
+    checks.append(script_contract_ready)
+    if not script_contract_ready:
+        risk_flags.append("script_contract ausente")
+
+    score = int(round((sum(1 for check in checks if check) / len(checks)) * 100))
+    if score < 80:
+        risk_flags.append("Story Bible incompleta para roteiro e producao visual")
+    return {
+        "completeness_score": score,
+        "missing_fields": missing_fields,
+        "risk_flags": risk_flags,
+    }
+
+
+def story_bible_validation_errors(payload: dict) -> list[str]:
+    report = story_bible_quality_report(payload)
+    errors = list(report["missing_fields"])
+    if int(report["completeness_score"]) < 80:
+        errors.append(f"completeness_score abaixo de 80 ({report['completeness_score']})")
+    return errors
+
+
+def validate_story_bible_payload(payload: dict, context: str) -> None:
+    errors = story_bible_validation_errors(payload)
+    if errors:
+        raise GenerationOutputError(
+            f"{context}: Story Bible incompleta ({'; '.join(errors)})"
+        )
+
+
 def normalize_story_bible_payload(
     payload: dict,
     idea_payload: dict | None = None,
@@ -1163,6 +1562,8 @@ def normalize_story_bible_payload(
     logline = _required_str(payload, "logline", "generate_story_bible")
     raw_export_profile = payload.get("export_profile")
     export_profile_payload = raw_export_profile if isinstance(raw_export_profile, dict) else {}
+    raw_story_engine = payload.get("story_engine")
+    story_engine_payload = raw_story_engine if isinstance(raw_story_engine, dict) else {}
     normalized = {
         "title": title,
         "logline": logline,
@@ -1175,17 +1576,33 @@ def normalize_story_bible_payload(
         "audience": _story_bible_text(payload.get("audience"), getattr(briefing, "audience", "")),
         "story_engine": {
             "dramatic_question": _story_bible_text(
-                (payload.get("story_engine") or {}).get("dramatic_question")
-                if isinstance(payload.get("story_engine"), dict)
-                else payload.get("dramatic_question"),
+                story_engine_payload.get("dramatic_question") or payload.get("dramatic_question"),
                 "Qual escolha emocional define a historia?",
             ),
-            "central_conflict": _story_bible_text(payload.get("central_conflict"), logline),
-            "emotional_promise": _story_bible_text(payload.get("emotional_promise"), logline),
-            "inciting_incident": _story_bible_text(payload.get("inciting_incident"), ""),
-            "midpoint_turn": _story_bible_text(payload.get("midpoint_turn"), ""),
-            "climax": _story_bible_text(payload.get("climax"), ""),
-            "ending_image": _story_bible_text(payload.get("ending_image"), ""),
+            "central_conflict": _story_bible_text(
+                story_engine_payload.get("central_conflict") or payload.get("central_conflict"),
+                logline,
+            ),
+            "emotional_promise": _story_bible_text(
+                story_engine_payload.get("emotional_promise") or payload.get("emotional_promise"),
+                logline,
+            ),
+            "inciting_incident": _story_bible_text(
+                story_engine_payload.get("inciting_incident") or payload.get("inciting_incident"),
+                "",
+            ),
+            "midpoint_turn": _story_bible_text(
+                story_engine_payload.get("midpoint_turn") or payload.get("midpoint_turn"),
+                "",
+            ),
+            "climax": _story_bible_text(
+                story_engine_payload.get("climax") or payload.get("climax"),
+                "",
+            ),
+            "ending_image": _story_bible_text(
+                story_engine_payload.get("ending_image") or payload.get("ending_image"),
+                "",
+            ),
         },
         "world_rules": _story_bible_string_list(payload.get("world_rules"), ["realismo emocional"]),
         "visual_style": payload.get("visual_style")
@@ -1215,6 +1632,9 @@ def normalize_story_bible_payload(
         "resolution": str(export_profile_payload.get("resolution") or "1080x1920"),
         "language": str(export_profile_payload.get("language") or "pt-BR"),
     }
+    normalized["script_contract"] = _story_bible_script_contract(normalized)
+    normalized["visual_contract"] = _story_bible_visual_contract(normalized)
+    normalized["quality_report"] = story_bible_quality_report(normalized)
     return normalized
 
 
@@ -1266,17 +1686,35 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
         "primary_emotion": briefing.primary_emotion,
         "genre": briefing.genre,
         "target_duration_minutes": float(briefing.desired_duration_minutes),
+        "retry_guidance": "",
     }
     provider, model = await llm_provider_for_task(session, project_id, "generate_story_ideas")
-    result, execution = await run_structured_generation(
-        session, provider, project_id, "generate_story_ideas", variables, model=model
-    )
-    ideas: list[StoryIdea] = []
-    content = _required_mapping(result.content, "generate_story_ideas")
-    for index, raw_item in enumerate(_required_list(content, "ideas", "generate_story_ideas"), 1):
-        item = normalize_story_idea_payload(
-            _required_mapping(raw_item, f"generate_story_ideas.ideas[{index}]")
+    normalized_items: list[dict] | None = None
+    last_error: GenerationOutputError | None = None
+    for attempt in range(2):
+        result, execution = await run_structured_generation(
+            session, provider, project_id, "generate_story_ideas", variables, model=model
         )
+        try:
+            content = _required_mapping(result.content, "generate_story_ideas")
+            normalized_items = _normalize_generated_story_ideas(
+                content, float(briefing.desired_duration_minutes)
+            )
+            execution.response = result.content
+            break
+        except GenerationOutputError as exc:
+            last_error = exc
+            if attempt == 0:
+                variables["retry_guidance"] = _story_idea_retry_guidance([str(exc)])
+                continue
+            raise
+    if normalized_items is None:
+        if last_error is not None:
+            raise last_error
+        raise GenerationOutputError("generate_story_ideas: resposta vazia")
+
+    ideas: list[StoryIdea] = []
+    for index, item in enumerate(normalized_items, 1):
         artifact = await _create_artifact(
             session,
             project_id,
@@ -1305,7 +1743,6 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
         )
         session.add(idea)
         ideas.append(idea)
-    execution.response = result.content
     advance_project_status(project, ProjectStatus.IDEA_APPROVAL)
     await session.commit()
     for idea in ideas:
@@ -1334,16 +1771,32 @@ async def generate_story_bible(
 
     variables = _briefing_payload(
         BriefingCreate.model_validate(briefing, from_attributes=True)
-    ) | {"idea": idea.payload, "idea_title": idea.title}
+    ) | {"idea": idea.payload, "idea_title": idea.title, "retry_guidance": ""}
     provider, model = await llm_provider_for_task(session, project_id, "generate_story_bible")
-    result, _execution = await run_structured_generation(
-        session, provider, project_id, "generate_story_bible", variables, model=model
-    )
-    payload = normalize_story_bible_payload(
-        _required_mapping(result.content, "generate_story_bible"),
-        idea.payload,
-        briefing,
-    )
+    payload: dict | None = None
+    for attempt in range(2):
+        result, _execution = await run_structured_generation(
+            session, provider, project_id, "generate_story_bible", variables, model=model
+        )
+        try:
+            payload = normalize_story_bible_payload(
+                _required_mapping(result.content, "generate_story_bible"),
+                idea.payload,
+                briefing,
+            )
+            validate_story_bible_payload(payload, "generate_story_bible")
+            break
+        except GenerationOutputError as exc:
+            payload = None
+            if attempt == 1:
+                break
+            variables["retry_guidance"] = (
+                "A resposta anterior foi recusada porque a Story Bible ficou incompleta: "
+                f"{exc}. Recrie preenchendo campos narrativos, visuais e contratos "
+                "sem usar valores genericos."
+            )
+    if payload is None:
+        return None
     title = _required_str(payload, "title", "generate_story_bible")
     artifact = await _create_artifact(
         session, project_id, ArtifactType.STORY_BIBLE, title, payload
@@ -1380,8 +1833,11 @@ async def generate_script(
 
     target_duration_seconds = int(briefing.desired_duration_minutes * Decimal("60"))
     clip_durations = video_clip_durations(target_duration_seconds)
+    story_bible_contract = story_bible.payload.get("script_contract")
+    if not isinstance(story_bible_contract, dict):
+        story_bible_contract = _story_bible_script_contract(story_bible.payload)
     variables = {
-        "story_bible": story_bible.payload,
+        "story_bible_contract": story_bible_contract,
         "language": briefing.language,
         "target_duration_seconds": target_duration_seconds,
         "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
@@ -1389,17 +1845,42 @@ async def generate_script(
         "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
         "expected_clip_count": len(clip_durations),
         "clip_durations": format_clip_durations(clip_durations),
+        "retry_guidance": "",
     }
     provider, model = await llm_provider_for_task(session, project_id, "generate_script")
-    result, _execution = await run_structured_generation(
-        session, provider, project_id, "generate_script", variables, model=model
-    )
-    payload = normalize_script_payload(
-        _required_mapping(result.content, "generate_script"),
-        default_title=story_bible.title,
-        language=briefing.language,
-        target_duration_seconds=target_duration_seconds,
-    )
+    payload: dict | None = None
+    for attempt in range(2):
+        result, _execution = await run_structured_generation(
+            session, provider, project_id, "generate_script", variables, model=model
+        )
+        try:
+            payload = normalize_script_payload(
+                _required_mapping(result.content, "generate_script"),
+                default_title=story_bible.title,
+                language=briefing.language,
+                target_duration_seconds=target_duration_seconds,
+            )
+            break
+        except GenerationOutputError as exc:
+            if attempt == 1:
+                break
+            variables["retry_guidance"] = (
+                "A resposta anterior foi recusada porque nao seguiu o formato exigido: "
+                f"{exc}. Reescreva mantendo content como roteiro de filme limpo e "
+                "production_plan separado."
+            )
+    if payload is None:
+        payload = {
+            "title": story_bible.title,
+            "language": briefing.language,
+            "target_duration_seconds": target_duration_seconds,
+            "content": _fallback_script_content_from_bible(
+                story_bible.payload,
+                story_bible.title,
+                target_duration_seconds,
+            ),
+        }
+        payload["word_count"] = len(payload["content"].split())
     title = _required_str(payload, "title", "generate_script")
     if not str(payload.get("content") or "").strip():
         payload["content"] = _fallback_script_content_from_bible(
@@ -1467,23 +1948,38 @@ async def revise_script(
         "current_script": script.content,
         "instruction": instruction,
         "project_context": project_context or {},
+        "retry_guidance": "",
     }
     provider, model = await llm_provider_for_task(session, project_id, "revise_script")
-    result, execution = await run_structured_generation(
-        session,
-        provider,
-        project_id,
-        "revise_script",
-        variables,
-        artifact_id=script.artifact_id,
-        model=model,
-    )
-    payload = normalize_script_payload(
-        _required_mapping(result.content, "revise_script"),
-        default_title=script.title,
-        language=script.language,
-        target_duration_seconds=script.target_duration_seconds,
-    )
+    payload: dict | None = None
+    execution = None
+    for attempt in range(2):
+        result, execution = await run_structured_generation(
+            session,
+            provider,
+            project_id,
+            "revise_script",
+            variables,
+            artifact_id=script.artifact_id,
+            model=model,
+        )
+        try:
+            payload = normalize_script_payload(
+                _required_mapping(result.content, "revise_script"),
+                default_title=script.title,
+                language=script.language,
+                target_duration_seconds=script.target_duration_seconds,
+            )
+            break
+        except GenerationOutputError as exc:
+            if attempt == 1:
+                break
+            variables["retry_guidance"] = (
+                "A resposta anterior foi recusada porque nao seguiu o formato exigido: "
+                f"{exc}. Reescreva mantendo apenas roteiro de filme em content."
+            )
+    if payload is None or execution is None:
+        return None
     title = _required_str(payload, "title", "revise_script")
     content = _required_str(payload, "content", "revise_script")
     script.title = title
@@ -1515,6 +2011,22 @@ async def revise_script(
     return script
 
 
+async def _script_embedded_production_plan(
+    session: AsyncSession, script: Script
+) -> dict | None:
+    result = await session.execute(
+        select(ScriptVersion)
+        .where(ScriptVersion.script_id == script.id)
+        .order_by(ScriptVersion.version_number.desc())
+    )
+    version = result.scalars().first()
+    if version is None:
+        return None
+    payload = version.payload if isinstance(version.payload, dict) else {}
+    production_plan = payload.get("production_plan")
+    return production_plan if isinstance(production_plan, dict) else None
+
+
 async def generate_scenes_and_shots(
     session: AsyncSession, project_id: UUID, script_id: UUID
 ) -> list[Scene] | None:
@@ -1524,30 +2036,43 @@ async def generate_scenes_and_shots(
         return None
 
     clip_durations = video_clip_durations(script.target_duration_seconds)
-    provider, model = await llm_provider_for_task(session, project_id, "generate_scenes_and_shots")
-    result, _execution = await run_structured_generation(
-        session,
-        provider,
-        project_id,
-        "generate_scenes_and_shots",
-        {
-            "script": script.content,
-            "target_duration_seconds": script.target_duration_seconds,
-            "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
-            "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
-            "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
-            "expected_clip_count": len(clip_durations),
-            "clip_durations": format_clip_durations(clip_durations),
-        },
-        model=model,
-    )
+    embedded_plan = await _script_embedded_production_plan(session, script)
 
     scenes: list[Scene] = []
-    content = normalize_scene_plan_payload_from_script(
-        _required_mapping(result.content, "generate_scenes_and_shots"),
-        script.target_duration_seconds,
-        script.content,
-    )
+    if embedded_plan is not None:
+        try:
+            content = normalize_scene_plan_payload_from_script(
+                embedded_plan,
+                script.target_duration_seconds,
+                script.content,
+            )
+        except GenerationOutputError:
+            embedded_plan = None
+    if embedded_plan is None:
+        provider, model = await llm_provider_for_task(
+            session, project_id, "generate_scenes_and_shots"
+        )
+        result, _execution = await run_structured_generation(
+            session,
+            provider,
+            project_id,
+            "generate_scenes_and_shots",
+            {
+                "script": script.content,
+                "target_duration_seconds": script.target_duration_seconds,
+                "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
+                "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
+                "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
+                "expected_clip_count": len(clip_durations),
+                "clip_durations": format_clip_durations(clip_durations),
+            },
+            model=model,
+        )
+        content = normalize_scene_plan_payload_from_script(
+            _required_mapping(result.content, "generate_scenes_and_shots"),
+            script.target_duration_seconds,
+            script.content,
+        )
     for scene_index, raw_scene_payload in enumerate(
         _required_list(content, "scenes", "generate_scenes_and_shots"), 1
     ):

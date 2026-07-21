@@ -8,8 +8,14 @@ from typing import Any
 from app.config.settings import get_settings
 from app.providers.llm.mock import MockLLMProvider
 from app.providers.llm.openrouter import OpenRouterLLMProvider
-from app.providers.llm.types import LLMRequest
-from app.storytelling.service import coerce_duration_minutes
+from app.providers.llm.types import LLMRequest, LLMResult
+from app.storytelling.service import (
+    GenerationOutputError,
+    _story_idea_retry_guidance,
+    coerce_duration_minutes,
+    normalize_story_idea_payload,
+    story_idea_validation_errors,
+)
 
 SAVED_IDEAS_PATH = Path(".runtime/idea_lab_saved.json")
 GENERATED_IDEAS_PATH = Path(".runtime/idea_lab_generated.json")
@@ -29,6 +35,7 @@ async def generate_freeform_ideas(
         if genre
         else "A IA pode escolher generos variados. "
     )
+    retry_guidance = ""
     request = LLMRequest(
         task="generate_story_ideas",
         model=settings.openrouter_default_model,
@@ -43,8 +50,10 @@ async def generate_freeform_ideas(
             "conflito, protagonista e emocao principal. "
             "Retorne JSON com a chave ideas; cada ideia deve ter title, genre, "
             "primary_emotion, theme, hook, premise, protagonist, duration_minutes, "
+            "conflict, obstacles, stakes, twist, climax, payoff, resolution, "
             "retention_potential, cliche_risk e production_complexity. "
             f"Use duration_minutes igual a {duration:g} em todas as ideias. "
+            f"{retry_guidance}"
             f"Contexto opcional do usuario: {theme or 'nenhum'}."
         ),
         variables={
@@ -54,19 +63,67 @@ async def generate_freeform_ideas(
             "duration_range_minutes": f"{duration:g}",
             "target_duration_minutes": duration,
             "audience": "publico geral",
+            "retry_guidance": retry_guidance,
         },
         output_schema={"type": "object", "properties": {"ideas": {"type": "array"}}},
     )
+    result = await _generate_with_runtime_fallback(provider, request)
     try:
-        result = await provider.generate_structured(request)
+        return _normalize_generated_ideas(result, count, duration)
+    except GenerationOutputError as exc:
+        retry_guidance = _story_idea_retry_guidance([str(exc)])
+        retry_request = request.model_copy(
+            update={
+                "prompt": f"{request.prompt} {retry_guidance}",
+                "variables": request.variables | {"retry_guidance": retry_guidance},
+            }
+        )
+        result = await _generate_with_runtime_fallback(provider, retry_request)
+        return _normalize_generated_ideas(result, count, duration)
+
+
+async def _generate_with_runtime_fallback(
+    provider: OpenRouterLLMProvider | MockLLMProvider, request: LLMRequest
+) -> LLMResult:
+    try:
+        return await provider.generate_structured(request)
     except RuntimeError:
         if getattr(provider, "provider_name", "") == "mock":
             raise
-        result = await MockLLMProvider().generate_structured(
+        return await MockLLMProvider().generate_structured(
             request.model_copy(update={"model": "mock-llm"})
         )
-    ideas = list(result.content.get("ideas") or [])[:count]
-    return [_normalize_idea(idea, duration) for idea in ideas if isinstance(idea, dict)]
+
+
+def _normalize_generated_ideas(
+    result: LLMResult, count: int, default_duration_minutes: float
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    errors: list[str] = []
+    raw_ideas = result.content.get("ideas")
+    if not isinstance(raw_ideas, list) or not raw_ideas:
+        raise GenerationOutputError("generate_story_ideas: missing non-empty list 'ideas'")
+    for index, raw_idea in enumerate(raw_ideas[:count], 1):
+        if not isinstance(raw_idea, dict):
+            errors.append(f"generate_story_ideas.ideas[{index}]: expected JSON object")
+            continue
+        try:
+            idea = _normalize_idea(raw_idea, default_duration_minutes)
+        except GenerationOutputError as exc:
+            errors.append(str(exc))
+            continue
+        idea_errors = story_idea_validation_errors(idea)
+        if idea_errors:
+            errors.extend(
+                f"generate_story_ideas.ideas[{index}]: {error}" for error in idea_errors
+            )
+            continue
+        normalized.append(idea)
+    if len(normalized) < count:
+        errors.append(f"generate_story_ideas: esperado {count} ideias validas")
+    if errors:
+        raise GenerationOutputError("; ".join(errors))
+    return normalized
 
 
 def load_saved_ideas(path: Path = SAVED_IDEAS_PATH) -> list[dict[str, Any]]:
@@ -111,7 +168,15 @@ def _load_ideas(path: Path, label: str) -> list[dict[str, Any]]:
         return []
     if not isinstance(payload, list):
         return []
-    return [_normalize_idea(item) for item in payload if isinstance(item, dict)]
+    ideas: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        try:
+            ideas.append(_normalize_idea(item))
+        except GenerationOutputError:
+            continue
+    return ideas
 
 
 def save_idea(idea: dict[str, Any], path: Path = SAVED_IDEAS_PATH) -> dict[str, Any]:
@@ -128,13 +193,10 @@ def delete_saved_idea(idea_id: str, path: Path = SAVED_IDEAS_PATH) -> None:
 
 
 def _normalize_idea(idea: dict[str, Any], default_duration_minutes: float = 5.0) -> dict[str, Any]:
-    normalized = dict(idea)
-    normalized.setdefault("id", uuid.uuid4().hex)
-    normalized.setdefault("genre", "Drama")
-    normalized.setdefault("primary_emotion", normalized.get("final_emotion") or "Curiosidade")
-    normalized["duration_minutes"] = coerce_duration_minutes(
-        normalized.get("duration_minutes"), default_duration_minutes
+    normalized = normalize_story_idea_payload(
+        idea, default_duration_minutes=default_duration_minutes
     )
+    normalized.setdefault("id", uuid.uuid4().hex)
     return normalized
 
 

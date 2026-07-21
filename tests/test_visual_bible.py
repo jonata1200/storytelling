@@ -9,6 +9,7 @@ from app.visual_bible.models import Character, CharacterVersion
 from app.visual_bible.service import (
     _character_profile,
     _location_profile,
+    _merge_profile_items,
     _payload_section,
     _profile_items,
     _prop_profile,
@@ -21,6 +22,7 @@ from app.visual_bible.service import (
     regenerate_visual_reference,
     update_visual_target_prompt,
     validated_visual_reference_views,
+    visual_profile_validation_errors,
     visual_reference_aspect_ratio,
     visual_reference_prompt,
 )
@@ -112,6 +114,8 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     assert (
         "Fotorrealista, hiper realista, foto de uma pessoa" in character["canonical_prompt"]
     )
+    assert character["narrative_profile"]["name"] == "Clara"
+    assert character["visual_profile"]["hair"] == "cabelo castanho curto"
     assert "cabelo castanho curto" in character["canonical_prompt"]
     assert "Figurino base exclusivo" in character["canonical_prompt"]
     assert (
@@ -121,6 +125,62 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     assert "Nenhuma pessoa presente" in location["canonical_prompt"]
     assert "Fotorrealista, hiper realista, fotografia de produto" in prop["canonical_prompt"]
     assert "papel amassado" in prop["canonical_prompt"]
+    assert location["narrative_profile"]["name"] == "Casa da familia"
+    assert prop["visual_profile"]["material"] == "papel amassado"
+
+
+def test_visual_profile_validation_rejects_generic_profiles() -> None:
+    location = _location_profile({"name": "Local principal"})
+    prop = _prop_profile({"name": "Objeto de revelacao"})
+
+    assert "name generico: Local principal" in visual_profile_validation_errors(
+        "location", location
+    )
+    assert "name generico: Objeto de revelacao" in visual_profile_validation_errors(
+        "prop", prop
+    )
+
+
+def test_visual_profile_validation_accepts_specific_profiles() -> None:
+    character = _character_profile(
+        {
+            "name": "Clara",
+            "role": "filha",
+            "hair": "cabelo castanho curto",
+            "base_outfit": "casaco verde gasto",
+            "palette": ["verde", "creme"],
+        }
+    )
+    location = _location_profile(
+        {
+            "name": "Cozinha de Dona Lourdes",
+            "description": "cozinha antiga onde a promessa reaparece",
+            "layout": "fogao ao fundo e mesa no centro",
+            "lighting": "luz fria pela janela lateral",
+        }
+    )
+    prop = _prop_profile(
+        {
+            "name": "Carta azul",
+            "material": "papel envelhecido",
+            "color": "azul desbotado",
+            "narrative_importance": "revela a promessa quebrada",
+        }
+    )
+
+    assert visual_profile_validation_errors("character", character) == []
+    assert visual_profile_validation_errors("location", location) == []
+    assert visual_profile_validation_errors("prop", prop) == []
+
+
+def test_merge_profile_items_replaces_generic_story_bible_items_with_script_fallbacks() -> None:
+    merged = _merge_profile_items(
+        "location",
+        [{"name": "Local principal"}],
+        [{"name": "Cozinha De Dona Lourdes"}, {"name": "Quintal"}],
+    )
+
+    assert [item["name"] for item in merged] == ["Cozinha De Dona Lourdes", "Quintal"]
 
 
 def test_character_profile_formats_structured_outfit_as_prompt_text() -> None:

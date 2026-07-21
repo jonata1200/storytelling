@@ -140,6 +140,15 @@ async def _create_artifact(
 
 
 async def _add_dependency(session: AsyncSession, upstream: UUID, downstream: UUID) -> None:
+    result = await session.execute(
+        select(ArtifactDependency.id).where(
+            ArtifactDependency.upstream_artifact_id == upstream,
+            ArtifactDependency.downstream_artifact_id == downstream,
+            ArtifactDependency.dependency_kind == DependencyKind.DERIVED_FROM,
+        )
+    )
+    if result.scalar_one_or_none() is not None:
+        return
     session.add(
         ArtifactDependency(
             upstream_artifact_id=upstream,
@@ -157,6 +166,21 @@ def _fingerprint(payload: dict) -> dict:
         "canonical_prompt": payload.get("canonical_prompt", ""),
         "reference_asset_ids": [],
     }
+
+
+def _profile_sha256(payload: dict) -> str:
+    return str(_fingerprint(payload)["sha256"])
+
+
+def _visual_key(value: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").strip().lower())
+
+
+def _visual_profile_identity(profile: dict) -> str:
+    permanent_id = _visual_key(profile.get("permanent_id"))
+    if permanent_id:
+        return permanent_id
+    return _visual_key(profile.get("name"))
 
 
 def _profile_items(value: object) -> list[dict]:
@@ -542,6 +566,26 @@ def _character_profile(raw: object) -> dict:
         "personalidade",
         fallback="personalidade especifica e coerente com a historia",
     )
+    narrative_profile = {
+        "name": name,
+        "role": role,
+        "personality": personality,
+        "arc": _first_value(raw, "arc", "arco", fallback=""),
+        "voice": raw.get("voice", "voz humana calorosa"),
+    }
+    visual_profile = {
+        "gender": gender,
+        "origin": origin,
+        "height_cm": height_cm,
+        "apparent_age": apparent_age,
+        "body_type": body_type,
+        "face_shape": face_shape,
+        "skin_tone": skin_tone,
+        "eyes": eyes,
+        "hair": hair,
+        "base_outfit": base_outfit,
+        "palette": palette,
+    }
     return {
         "permanent_id": raw.get("id", f"char_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
@@ -559,7 +603,9 @@ def _character_profile(raw: object) -> dict:
         "palette": palette,
         "voice": raw.get("voice", "voz humana calorosa"),
         "personality": personality,
-        "arc": _first_value(raw, "arc", "arco", fallback=""),
+        "arc": narrative_profile["arc"],
+        "narrative_profile": narrative_profile,
+        "visual_profile": visual_profile,
         "asset_kind": "character",
         "visual_constraints": [
             "manter idade aparente",
@@ -624,6 +670,16 @@ def _location_profile(raw: object) -> dict:
         "luz",
         fallback="luz natural suave com contraste cinematografico",
     )
+    narrative_profile = {
+        "name": name,
+        "description": description,
+    }
+    visual_profile = {
+        "layout": layout,
+        "materials": materials,
+        "palette": palette,
+        "lighting": lighting,
+    }
     return {
         "permanent_id": raw.get("id", f"loc_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
@@ -632,6 +688,8 @@ def _location_profile(raw: object) -> dict:
         "materials": materials,
         "palette": palette,
         "lighting": lighting,
+        "narrative_profile": narrative_profile,
+        "visual_profile": visual_profile,
         "asset_kind": "location",
         "spatial_rules": ["manter portas, janelas e moveis na mesma posicao"],
         "canonical_prompt": (
@@ -677,6 +735,17 @@ def _prop_profile(raw: object) -> dict:
         "objeto de payoff narrativo",
         220,
     )
+    narrative_profile = {
+        "name": name,
+        "owner": owner,
+        "narrative_importance": narrative_importance,
+    }
+    visual_profile = {
+        "dimensions": dimensions,
+        "material": material,
+        "color": color,
+        "state": state,
+    }
     return {
         "permanent_id": raw.get("id", f"prop_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
@@ -686,6 +755,8 @@ def _prop_profile(raw: object) -> dict:
         "state": state,
         "owner": owner,
         "narrative_importance": narrative_importance,
+        "narrative_profile": narrative_profile,
+        "visual_profile": visual_profile,
         "asset_kind": "prop",
         "canonical_prompt": (
             "Fotorrealista, hiper realista, fotografia de produto. "
@@ -700,6 +771,78 @@ def _prop_profile(raw: object) -> dict:
             "acabamento coerente com o uso na historia, iluminacao de estudio profissional."
         ),
     }
+
+
+GENERIC_VISUAL_NAMES = {
+    "character": {"", "item", "personagem", "personagem 1", "protagonista"},
+    "location": {"", "item", "local", "local 1", "local principal", "cenario", "cenário"},
+    "prop": {"", "item", "objeto", "objeto 1", "objeto de revelacao", "objeto de revelação"},
+}
+
+
+def visual_profile_validation_errors(target_kind: str, profile: dict) -> list[str]:
+    errors: list[str] = []
+    name = str(profile.get("name") or "").strip()
+    normalized_name = name.lower()
+    if not name:
+        errors.append("name vazio")
+    elif normalized_name in GENERIC_VISUAL_NAMES.get(target_kind, set()):
+        errors.append(f"name generico: {name}")
+    if profile.get("asset_kind") != target_kind:
+        errors.append(f"asset_kind deve ser {target_kind}")
+    if not str(profile.get("canonical_prompt") or "").strip():
+        errors.append("canonical_prompt vazio")
+
+    if target_kind == "character":
+        for key in ("role", "hair", "base_outfit", "palette"):
+            if profile.get(key) in (None, "", [], {}):
+                errors.append(f"{key} vazio")
+    elif target_kind == "location":
+        for key in ("description", "layout", "lighting"):
+            if profile.get(key) in (None, "", [], {}):
+                errors.append(f"{key} vazio")
+    elif target_kind == "prop":
+        for key in ("narrative_importance", "material", "color"):
+            if profile.get(key) in (None, "", [], {}):
+                errors.append(f"{key} vazio")
+    else:
+        errors.append(f"target_kind invalido: {target_kind}")
+    return errors
+
+
+def _generic_visual_item(target_kind: str, item: dict) -> bool:
+    name = str(item.get("name") or item.get("nome") or "").strip().lower()
+    return name in GENERIC_VISUAL_NAMES.get(target_kind, set())
+
+
+def _merge_profile_items(target_kind: str, primary: list[dict], fallback: list[dict]) -> list[dict]:
+    merged = [
+        item
+        for item in primary
+        if not fallback or not _generic_visual_item(target_kind, item)
+    ]
+    seen = {
+        _visual_key(item.get("id") or item.get("permanent_id") or item.get("name"))
+        for item in merged
+    }
+    for item in fallback:
+        key = _visual_key(item.get("id") or item.get("permanent_id") or item.get("name"))
+        if not key or key in seen:
+            continue
+        merged.append(item)
+        seen.add(key)
+    return merged
+
+
+def _raise_visual_profile_errors(target_kind: str, profiles: list[dict]) -> None:
+    errors: list[str] = []
+    for index, profile in enumerate(profiles, 1):
+        errors.extend(
+            f"{target_kind}[{index}]: {error}"
+            for error in visual_profile_validation_errors(target_kind, profile)
+        )
+    if errors:
+        raise ValueError("Biblioteca visual incompleta: " + "; ".join(errors))
 
 
 SCENE_LOCATION_RE = re.compile(
@@ -877,6 +1020,199 @@ def _repair_missing_character_names(
     return repaired
 
 
+def _match_visual_target(
+    existing: list[Character] | list[Location] | list[Prop], profile: dict
+) -> Character | Location | Prop | None:
+    identity = _visual_profile_identity(profile)
+    name_key = _visual_key(profile.get("name"))
+    for item in existing:
+        item_profile = item.canonical_profile or {}
+        if identity and _visual_profile_identity(item_profile) == identity:
+            return item
+        if name_key and _visual_key(item.name) == name_key:
+            return item
+    return None
+
+
+async def _upsert_character_profile(
+    session: AsyncSession,
+    project_id: UUID,
+    story_bible_artifact_id: UUID,
+    profile: dict,
+    existing_characters: list[Character],
+) -> Character:
+    existing = _match_visual_target(existing_characters, profile)
+    if isinstance(existing, Character):
+        if _profile_sha256(existing.canonical_profile or {}) != _profile_sha256(profile):
+            existing.name = str(profile["name"])
+            existing.role = str(profile["role"])
+            existing.canonical_profile = profile
+            existing.character_fingerprint = _fingerprint(profile)
+            existing.current_version += 1
+            session.add(
+                CharacterVersion(
+                    character_id=existing.id,
+                    version_number=existing.current_version,
+                    canonical_profile=profile,
+                    change_note="Canonical character profile updated from Story Bible",
+                )
+            )
+            artifact = await session.get(Artifact, existing.artifact_id)
+            if artifact is not None:
+                artifact.name = existing.name
+                await create_artifact_version(
+                    session,
+                    artifact,
+                    profile,
+                    change_note="Canonical character profile updated from Story Bible",
+                )
+        await _add_dependency(session, story_bible_artifact_id, existing.artifact_id)
+        return existing
+
+    artifact = await _create_artifact(
+        session, project_id, ArtifactType.CHARACTER, profile["name"], profile
+    )
+    await _add_dependency(session, story_bible_artifact_id, artifact.id)
+    character = Character(
+        project_id=project_id,
+        artifact_id=artifact.id,
+        name=profile["name"],
+        role=profile["role"],
+        canonical_profile=profile,
+        character_fingerprint=_fingerprint(profile),
+    )
+    session.add(character)
+    await session.flush()
+    session.add(
+        CharacterVersion(
+            character_id=character.id,
+            version_number=1,
+            canonical_profile=profile,
+            change_note="Initial canonical character profile",
+        )
+    )
+    existing_characters.append(character)
+    return character
+
+
+async def _upsert_location_profile(
+    session: AsyncSession,
+    project_id: UUID,
+    story_bible_artifact_id: UUID,
+    profile: dict,
+    existing_locations: list[Location],
+) -> Location:
+    existing = _match_visual_target(existing_locations, profile)
+    if isinstance(existing, Location):
+        if _profile_sha256(existing.canonical_profile or {}) != _profile_sha256(profile):
+            existing.name = str(profile["name"])
+            existing.description = str(profile["description"])
+            existing.canonical_profile = profile
+            existing.current_version += 1
+            session.add(
+                LocationVersion(
+                    location_id=existing.id,
+                    version_number=existing.current_version,
+                    canonical_profile=profile,
+                    change_note="Canonical location profile updated from Story Bible",
+                )
+            )
+            artifact = await session.get(Artifact, existing.artifact_id)
+            if artifact is not None:
+                artifact.name = existing.name
+                await create_artifact_version(
+                    session,
+                    artifact,
+                    profile,
+                    change_note="Canonical location profile updated from Story Bible",
+                )
+        await _add_dependency(session, story_bible_artifact_id, existing.artifact_id)
+        return existing
+
+    artifact = await _create_artifact(
+        session, project_id, ArtifactType.LOCATION, profile["name"], profile
+    )
+    await _add_dependency(session, story_bible_artifact_id, artifact.id)
+    location = Location(
+        project_id=project_id,
+        artifact_id=artifact.id,
+        name=profile["name"],
+        description=profile["description"],
+        canonical_profile=profile,
+    )
+    session.add(location)
+    await session.flush()
+    session.add(
+        LocationVersion(
+            location_id=location.id,
+            version_number=1,
+            canonical_profile=profile,
+            change_note="Initial canonical location profile",
+        )
+    )
+    existing_locations.append(location)
+    return location
+
+
+async def _upsert_prop_profile(
+    session: AsyncSession,
+    project_id: UUID,
+    story_bible_artifact_id: UUID,
+    profile: dict,
+    existing_props: list[Prop],
+) -> Prop:
+    existing = _match_visual_target(existing_props, profile)
+    if isinstance(existing, Prop):
+        if _profile_sha256(existing.canonical_profile or {}) != _profile_sha256(profile):
+            existing.name = str(profile["name"])
+            existing.narrative_importance = str(profile["narrative_importance"])
+            existing.canonical_profile = profile
+            existing.current_version += 1
+            session.add(
+                PropVersion(
+                    prop_id=existing.id,
+                    version_number=existing.current_version,
+                    canonical_profile=profile,
+                    change_note="Canonical prop profile updated from Story Bible",
+                )
+            )
+            artifact = await session.get(Artifact, existing.artifact_id)
+            if artifact is not None:
+                artifact.name = existing.name
+                await create_artifact_version(
+                    session,
+                    artifact,
+                    profile,
+                    change_note="Canonical prop profile updated from Story Bible",
+                )
+        await _add_dependency(session, story_bible_artifact_id, existing.artifact_id)
+        return existing
+
+    artifact = await _create_artifact(
+        session, project_id, ArtifactType.PROP, profile["name"], profile
+    )
+    await _add_dependency(session, story_bible_artifact_id, artifact.id)
+    prop = Prop(
+        project_id=project_id,
+        artifact_id=artifact.id,
+        name=profile["name"],
+        narrative_importance=profile["narrative_importance"],
+        canonical_profile=profile,
+    )
+    session.add(prop)
+    await session.flush()
+    session.add(
+        PropVersion(
+            prop_id=prop.id,
+            version_number=1,
+            canonical_profile=profile,
+            change_note="Initial canonical prop profile",
+        )
+    )
+    existing_props.append(prop)
+    return prop
+
+
 async def generate_visual_bible(
     session: AsyncSession, project_id: UUID, story_bible_id: UUID
 ) -> tuple[list[Character], list[Location], list[Prop]] | None:
@@ -908,31 +1244,22 @@ async def generate_visual_bible(
     character_items = _repair_missing_character_names(
         character_items, script_content, protagonist_hint
     )
-    for raw in character_items:
-        profile = _character_profile(raw)
-        artifact = await _create_artifact(
-            session, project_id, ArtifactType.CHARACTER, profile["name"], profile
-        )
-        await _add_dependency(session, story_bible.artifact_id, artifact.id)
-        character = Character(
-            project_id=project_id,
-            artifact_id=artifact.id,
-            name=profile["name"],
-            role=profile["role"],
-            canonical_profile=profile,
-            character_fingerprint=_fingerprint(profile),
-        )
-        session.add(character)
-        await session.flush()
-        session.add(
-            CharacterVersion(
-                character_id=character.id,
-                version_number=1,
-                canonical_profile=profile,
-                change_note="Initial canonical character profile",
+    character_profiles = [_character_profile(raw) for raw in character_items]
+    _raise_visual_profile_errors("character", character_profiles)
+    existing_character_result = await session.execute(
+        select(Character).where(Character.project_id == project_id)
+    )
+    existing_characters = list(existing_character_result.scalars())
+    for profile in character_profiles:
+        characters.append(
+            await _upsert_character_profile(
+                session,
+                project_id,
+                story_bible.artifact_id,
+                profile,
+                existing_characters,
             )
         )
-        characters.append(character)
 
     locations: list[Location] = []
     location_items = _profile_items(
@@ -941,32 +1268,26 @@ async def generate_visual_bible(
             ("locations", "locais", "lugares", "settings", "places", "cenarios", "cenários"),
         )
     )
-    if not location_items and script_content:
-        location_items = _script_location_profiles(script_content)
-    for raw in location_items:
-        profile = _location_profile(raw)
-        artifact = await _create_artifact(
-            session, project_id, ArtifactType.LOCATION, profile["name"], profile
+    if script_content:
+        location_items = _merge_profile_items(
+            "location", location_items, _script_location_profiles(script_content)
         )
-        await _add_dependency(session, story_bible.artifact_id, artifact.id)
-        location = Location(
-            project_id=project_id,
-            artifact_id=artifact.id,
-            name=profile["name"],
-            description=profile["description"],
-            canonical_profile=profile,
-        )
-        session.add(location)
-        await session.flush()
-        session.add(
-            LocationVersion(
-                location_id=location.id,
-                version_number=1,
-                canonical_profile=profile,
-                change_note="Initial canonical location profile",
+    location_profiles = [_location_profile(raw) for raw in location_items]
+    _raise_visual_profile_errors("location", location_profiles)
+    existing_location_result = await session.execute(
+        select(Location).where(Location.project_id == project_id)
+    )
+    existing_locations = list(existing_location_result.scalars())
+    for profile in location_profiles:
+        locations.append(
+            await _upsert_location_profile(
+                session,
+                project_id,
+                story_bible.artifact_id,
+                profile,
+                existing_locations,
             )
         )
-        locations.append(location)
 
     props: list[Prop] = []
     prop_items = _profile_items(
@@ -983,32 +1304,22 @@ async def generate_visual_bible(
             ),
         )
     )
-    if not prop_items and script_content:
-        prop_items = _script_prop_profiles(script_content)
-    for raw in prop_items:
-        profile = _prop_profile(raw)
-        artifact = await _create_artifact(
-            session, project_id, ArtifactType.PROP, profile["name"], profile
-        )
-        await _add_dependency(session, story_bible.artifact_id, artifact.id)
-        prop = Prop(
-            project_id=project_id,
-            artifact_id=artifact.id,
-            name=profile["name"],
-            narrative_importance=profile["narrative_importance"],
-            canonical_profile=profile,
-        )
-        session.add(prop)
-        await session.flush()
-        session.add(
-            PropVersion(
-                prop_id=prop.id,
-                version_number=1,
-                canonical_profile=profile,
-                change_note="Initial canonical prop profile",
+    if script_content:
+        prop_items = _merge_profile_items("prop", prop_items, _script_prop_profiles(script_content))
+    prop_profiles = [_prop_profile(raw) for raw in prop_items]
+    _raise_visual_profile_errors("prop", prop_profiles)
+    existing_prop_result = await session.execute(select(Prop).where(Prop.project_id == project_id))
+    existing_props = list(existing_prop_result.scalars())
+    for profile in prop_profiles:
+        props.append(
+            await _upsert_prop_profile(
+                session,
+                project_id,
+                story_bible.artifact_id,
+                profile,
+                existing_props,
             )
         )
-        props.append(prop)
 
     await session.commit()
     for item in [*characters, *locations, *props]:

@@ -1,6 +1,13 @@
 from uuid import uuid4
 
+from app.storyboards.models import StoryboardFrame
+from app.storyboards.service import (
+    _animatic_fingerprint,
+    _storyboard_prompt,
+    storyboard_coverage_errors,
+)
 from app.storyboards.timeline import build_visual_timeline_items, build_word_alignment
+from app.storytelling.models import Scene, Shot
 
 
 def test_build_visual_timeline_items_is_contiguous() -> None:
@@ -28,3 +35,95 @@ def test_build_word_alignment_spreads_words_across_duration() -> None:
     assert [item["word"] for item in alignment["words"]] == ["uma", "promessa", "esquecida"]
     assert alignment["words"][0]["start_ms"] == 0
     assert alignment["words"][-1]["end_ms"] == 3000
+
+
+def test_storyboard_prompt_includes_visual_bible_context() -> None:
+    scene = Scene(id=uuid4(), scene_number=1, title="Chegada")
+    shot = Shot(
+        id=uuid4(),
+        shot_number=1,
+        duration_seconds=5,
+        action="Clara encontra a carta azul sobre a mesa.",
+        emotion="descoberta",
+        visual_composition="Plano vertical com Clara em primeiro plano.",
+        camera_movement="push-in lento",
+        narration_text="Clara encontra a carta.",
+        dialogue_text="",
+    )
+
+    prompt = _storyboard_prompt(
+        shot,
+        scene,
+        {
+            "characters": [
+                {
+                    "name": "Clara",
+                    "role": "filha",
+                    "profile": {
+                        "hair": "cabelo castanho curto",
+                        "base_outfit": "casaco verde gasto",
+                    },
+                }
+            ],
+            "locations": [
+                {
+                    "name": "Sala da familia",
+                    "description": "ambiente de revelacao",
+                    "profile": {"lighting": "luz fria da janela"},
+                }
+            ],
+            "props": [
+                {
+                    "name": "Carta azul",
+                    "narrative_importance": "payoff da historia",
+                    "profile": {"material": "papel envelhecido"},
+                }
+            ],
+        },
+    )
+
+    assert "Continuidade visual obrigatoria" in prompt
+    assert "Clara" in prompt
+    assert "casaco verde gasto" in prompt
+    assert "Carta azul" in prompt
+    assert "primeiro frame util para image-to-video" in prompt
+
+
+def test_storyboard_coverage_errors_detect_missing_and_duration_mismatch() -> None:
+    first_shot_id = uuid4()
+    second_shot_id = uuid4()
+    scene = Scene(id=uuid4(), scene_number=1, title="Chegada")
+    first_shot = Shot(id=first_shot_id, shot_number=1, duration_seconds=5)
+    second_shot = Shot(id=second_shot_id, shot_number=2, duration_seconds=7)
+    frame = StoryboardFrame(
+        id=uuid4(),
+        shot_id=first_shot_id,
+        asset_id=uuid4(),
+        frame_number=1,
+        duration_seconds=4,
+        prompt="Prompt visual completo para um quadro de storyboard vertical.",
+    )
+
+    errors = storyboard_coverage_errors([(first_shot, scene), (second_shot, scene)], [frame])
+
+    assert "1 plano(s) sem frame de storyboard" in errors
+    assert "duracao dos frames (4s) difere dos planos (12s)" in errors
+
+
+def test_animatic_fingerprint_changes_when_frame_asset_changes() -> None:
+    frame = StoryboardFrame(
+        id=uuid4(),
+        shot_id=uuid4(),
+        asset_id=uuid4(),
+        frame_number=1,
+        duration_seconds=5,
+        prompt="Prompt visual completo para storyboard.",
+        narration_text="Clara respira fundo.",
+        dialogue_text="",
+        metadata_json={"frame_fingerprint": "frame-a"},
+    )
+    original = _animatic_fingerprint([frame])
+
+    frame.asset_id = uuid4()
+
+    assert _animatic_fingerprint([frame]) != original

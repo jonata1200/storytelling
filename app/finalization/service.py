@@ -17,7 +17,7 @@ from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.providers.speech.mock import MockSpeechProvider
 from app.providers.speech.types import SpeechRequest
-from app.storyboards.models import AudioTrack, Timeline, TimelineItem
+from app.storyboards.models import AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.video_generation.models import VideoClip
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
@@ -35,6 +35,33 @@ def export_profile(fps: int = 30, bitrate: str = "8M", embed_subtitles: bool = T
         "embed_subtitles": embed_subtitles,
         "safe_area": safe_area_profile(),
     }
+
+
+def final_timeline_coverage_errors(
+    frames: list[StoryboardFrame], selected_clips: list[VideoClip]
+) -> list[str]:
+    errors: list[str] = []
+    if not frames:
+        return ["storyboard sem frames"]
+    selected_by_frame: dict[UUID, list[VideoClip]] = {}
+    for clip in selected_clips:
+        selected_by_frame.setdefault(clip.storyboard_frame_id, []).append(clip)
+    missing = [frame for frame in frames if frame.id not in selected_by_frame]
+    duplicated = [
+        frame_id for frame_id, clips in selected_by_frame.items() if len(clips) > 1
+    ]
+    extra = [
+        frame_id
+        for frame_id in selected_by_frame
+        if frame_id not in {frame.id for frame in frames}
+    ]
+    if missing:
+        errors.append(f"{len(missing)} frame(s) sem clipe selecionado")
+    if duplicated:
+        errors.append(f"{len(duplicated)} frame(s) com mais de um clipe selecionado")
+    if extra:
+        errors.append(f"{len(extra)} clipe(s) selecionado(s) sem frame correspondente")
+    return errors
 
 
 def _local_video_asset_path(storage_uri: str) -> Path | None:
@@ -283,19 +310,24 @@ async def create_final_timeline(
     if project is None:
         return None
 
-    result = await session.execute(
-        select(VideoClip).where(VideoClip.project_id == project_id, VideoClip.selected.is_(True))
+    frame_result = await session.execute(
+        select(StoryboardFrame)
+        .where(StoryboardFrame.project_id == project_id)
+        .order_by(StoryboardFrame.frame_number)
     )
-    clips = list(result.scalars())
-    if not clips:
-        result = await session.execute(
-            select(VideoClip)
-            .where(VideoClip.project_id == project_id)
-            .order_by(VideoClip.created_at)
-        )
-        clips = list(result.scalars())
+    frames = list(frame_result.scalars())
+    clip_result = await session.execute(
+        select(VideoClip)
+        .join(StoryboardFrame, VideoClip.storyboard_frame_id == StoryboardFrame.id)
+        .where(VideoClip.project_id == project_id, VideoClip.selected.is_(True))
+        .order_by(StoryboardFrame.frame_number, VideoClip.variant_index)
+    )
+    clips = list(clip_result.scalars())
     if not clips:
         return None
+    coverage_errors = final_timeline_coverage_errors(frames, clips)
+    if coverage_errors:
+        raise ValueError("Timeline final incompleta: " + "; ".join(coverage_errors))
 
     duration_seconds = sum(clip.duration_seconds for clip in clips)
     artifact = await _create_artifact(
