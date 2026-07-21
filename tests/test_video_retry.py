@@ -2,8 +2,10 @@ from uuid import uuid4
 
 from app.providers.video.mock import MockVideoProvider
 from app.storyboards.models import StoryboardFrame
+from app.storytelling.models import Scene, Shot
 from app.video_generation.retry import exponential_backoff_seconds
 from app.video_generation.service import (
+    _video_motion_prompt,
     _video_request_fingerprint,
     video_generation_validation_errors,
     video_idempotency_key,
@@ -47,6 +49,42 @@ def test_video_idempotency_key_changes_when_frame_fingerprint_changes() -> None:
     assert video_idempotency_key(
         frame.id, 1, "mock", "mock-video", first_fingerprint
     ) != video_idempotency_key(frame.id, 1, "mock", "mock-video", second_fingerprint)
+
+
+def test_video_motion_prompt_guides_image_to_video_continuity() -> None:
+    frame = StoryboardFrame(
+        id=uuid4(),
+        shot_id=uuid4(),
+        asset_id=uuid4(),
+        frame_number=3,
+        duration_seconds=6,
+        prompt="Storyboard frame cinematografico para video vertical 9:16.",
+        narration_text="Clara abre a carta.",
+        dialogue_text="",
+    )
+    scene = Scene(id=uuid4(), scene_number=2, title="A carta")
+    shot = Shot(
+        id=frame.shot_id,
+        shot_number=4,
+        duration_seconds=6,
+        action="Clara abre a carta azul diante da janela.",
+        emotion="revelacao silenciosa",
+        visual_composition="Clara em primeiro plano, janela ao fundo.",
+        camera_movement="push-in lento",
+        narration_text="Clara abre a carta.",
+        dialogue_text="",
+    )
+
+    prompt = _video_motion_prompt(frame, shot, scene)
+
+    assert "Gere um clipe image-to-video vertical 9:16" in prompt
+    assert "Duracao obrigatoria: 6s" in prompt
+    assert "Cena 2, plano 4" in prompt
+    assert "primeiro frame como referencia visual absoluta" in prompt
+    assert "Clara abre a carta azul diante da janela" in prompt
+    assert "push-in lento" in prompt
+    assert "evite cortes, transicoes, zooms bruscos" in prompt
+    assert "sem distorcao de rosto, maos, olhos, boca ou objetos" in prompt
 
 
 def test_video_generation_validation_reports_bad_frame_inputs() -> None:

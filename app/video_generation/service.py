@@ -30,6 +30,7 @@ from app.providers.video.mock import MockVideoProvider
 from app.providers.video.openrouter import OpenRouterVideoProvider
 from app.providers.video.types import VideoProvider, VideoRequest
 from app.storyboards.models import StoryboardFrame
+from app.storytelling.models import Scene, Shot
 from app.video_generation.models import ClipReview, GenerationJob, VideoClip
 from app.video_generation.retry import exponential_backoff_seconds
 from app.workflows.models import ArtifactDependency
@@ -103,6 +104,7 @@ def _video_request_fingerprint(
     model: str,
     aspect_ratio: str,
     size: str,
+    video_prompt: str | None = None,
 ) -> str:
     frame_metadata = frame.metadata_json if isinstance(frame.metadata_json, dict) else {}
     payload = {
@@ -110,7 +112,8 @@ def _video_request_fingerprint(
         "storyboard_frame_fingerprint": frame_metadata.get("frame_fingerprint"),
         "source_image_asset_id": str(frame.asset_id),
         "source_image_uri": source_image_uri,
-        "prompt": frame.prompt,
+        "storyboard_prompt": frame.prompt,
+        "video_prompt": video_prompt or frame.prompt,
         "duration_seconds": frame.duration_seconds,
         "provider": provider,
         "model": model,
@@ -120,6 +123,66 @@ def _video_request_fingerprint(
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=True).encode()
     ).hexdigest()
+
+
+def _video_motion_prompt(
+    frame: StoryboardFrame,
+    shot: Shot | None = None,
+    scene: Scene | None = None,
+) -> str:
+    scene_label = (
+        f"Cena {scene.scene_number}" if scene is not None else f"Frame {frame.frame_number}"
+    )
+    shot_label = f"plano {shot.shot_number}" if shot is not None else "plano do storyboard"
+    action = (
+        str(getattr(shot, "action", "") or "").strip()
+        or "animar a acao descrita no storyboard"
+    )
+    emotion = str(getattr(shot, "emotion", "") or "").strip() or "emocao coerente com o plano"
+    camera_movement = (
+        str(getattr(shot, "camera_movement", "") or "").strip()
+        or "movimento suave e fisicamente plausivel"
+    )
+    composition = (
+        str(getattr(shot, "visual_composition", "") or "").strip()
+        or "preservar a composicao do primeiro frame"
+    )
+    narration = str(getattr(shot, "narration_text", "") or frame.narration_text or "").strip()
+    dialogue = str(getattr(shot, "dialogue_text", "") or frame.dialogue_text or "").strip()
+    spoken_text = " ".join(part for part in (narration, dialogue) if part)
+    audio_guidance = (
+        "Texto narrativo/de dialogo como referencia de ritmo, sem gerar legendas "
+        f"visuais: {spoken_text}."
+        if spoken_text
+        else "Sem texto visual na imagem; nao criar legendas, cartelas ou palavras na cena."
+    )
+    return (
+        "Gere um clipe image-to-video vertical 9:16 a partir do primeiro frame fornecido.\n"
+        f"Duracao obrigatoria: {frame.duration_seconds}s.\n"
+        f"Origem narrativa: {scene_label}, {shot_label}.\n\n"
+        "Use o primeiro frame como referencia visual absoluta:\n"
+        "- mantenha exatamente os mesmos personagens, rostos, idade aparente, figurino, "
+        "objetos, luz, paleta, ambiente, escala e composicao de partida\n"
+        "- nao redesenhe personagens, nao troque roupa, cabelo, cenario ou objeto\n"
+        "- nao adicione personagens, textos, logos, legendas, marcas d'agua, UI ou "
+        "elementos que nao aparecem no frame\n\n"
+        f"Movimento narrativo do clipe: {action}.\n"
+        f"Emocao dominante: {emotion}.\n"
+        f"Movimento de camera: {camera_movement}.\n"
+        f"Composicao de partida: {composition}.\n"
+        f"{audio_guidance}\n\n"
+        "Direcao temporal:\n"
+        "- comece exatamente do primeiro frame fornecido\n"
+        "- execute apenas uma acao principal clara durante o clipe\n"
+        "- mantenha movimento natural, sutil e fisicamente plausivel\n"
+        "- preserve continuidade espacial, proporcoes corporais e escala dos objetos\n"
+        "- evite cortes, transicoes, zooms bruscos, flicker, warping, morphing, "
+        "mudanca de identidade ou troca de roupa\n"
+        "- termine em um estado visual coerente com a acao do plano\n\n"
+        "Estilo: cinematografico, realista, iluminacao consistente, movimento suave, "
+        "sem distorcao de rosto, maos, olhos, boca ou objetos. O clipe deve parecer "
+        "uma extensao natural do storyboard, nao uma nova cena."
+    )
 
 
 def _local_storage_path(storage_uri: str | None) -> Path | None:
@@ -211,6 +274,20 @@ async def _storyboard_frames(
     return list(result.scalars())
 
 
+async def _shot_context_for_frames(
+    session: AsyncSession, frames: list[StoryboardFrame]
+) -> dict[UUID, tuple[Shot, Scene]]:
+    shot_ids = [frame.shot_id for frame in frames if frame.shot_id is not None]
+    if not shot_ids:
+        return {}
+    result = await session.execute(
+        select(Shot, Scene)
+        .join(Scene, Shot.scene_id == Scene.id)
+        .where(Shot.id.in_(shot_ids))
+    )
+    return {shot.id: (shot, scene) for shot, scene in result.all()}
+
+
 async def _video_provider_for_project(
     session: AsyncSession,
     project_id: UUID,
@@ -288,12 +365,15 @@ async def generate_video_clips(
     provider, resolved_provider, resolved_model, video_dir_name, aspect_ratio, video_size = (
         await _video_provider_for_project(session, project_id, provider_name, model)
     )
+    shot_context = await _shot_context_for_frames(session, frames)
     video_dir = get_settings().local_storage_path / video_dir_name / str(project_id)
     jobs: list[GenerationJob] = []
     clips: list[VideoClip] = []
 
     for frame in frames:
         source_image_uri = await _asset_storage_uri(session, frame.asset_id)
+        shot, scene = shot_context.get(frame.shot_id, (None, None))
+        video_prompt = _video_motion_prompt(frame, shot, scene)
         for variant_index in range(1, variants_per_frame + 1):
             request_fingerprint = _video_request_fingerprint(
                 frame,
@@ -302,6 +382,7 @@ async def generate_video_clips(
                 resolved_model,
                 aspect_ratio,
                 video_size,
+                video_prompt,
             )
             idempotency_key = video_idempotency_key(
                 frame.id,
@@ -341,7 +422,9 @@ async def generate_video_clips(
                 "storyboard_frame_id": str(frame.id),
                 "frame_number": frame.frame_number,
                 "duration_seconds": frame.duration_seconds,
-                "prompt": frame.prompt,
+                "prompt": video_prompt,
+                "video_prompt": video_prompt,
+                "storyboard_prompt": frame.prompt,
                 "variant_index": variant_index,
                 "source_image_asset_id": str(frame.asset_id),
                 "source_image_uri": source_image_uri,
@@ -392,7 +475,7 @@ async def generate_video_clips(
             try:
                 result = await provider.generate_from_image(
                     VideoRequest(
-                        prompt=frame.prompt,
+                        prompt=video_prompt,
                         duration_seconds=frame.duration_seconds,
                         aspect_ratio=aspect_ratio,
                         size=video_size,

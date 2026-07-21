@@ -17,6 +17,11 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("crie os personagens principais", "script") == (
         "generate_assets"
     )
+    assert classify_project_chat_action(
+        "Agora que o roteiro foi criado pode partir para a criacao dos personagens, "
+        "locais e objetos da historia",
+        "assets",
+    ) == "generate_assets"
     assert classify_project_chat_action("gere o storyboard completo", "script") == (
         "generate_storyboard"
     )

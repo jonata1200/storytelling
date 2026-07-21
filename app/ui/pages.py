@@ -355,7 +355,8 @@ def _body_style() -> None:
           }
           .assistant-chat-messages { overscroll-behavior:contain; }
           .assistant-chat-bubble { white-space:pre-wrap; overflow-wrap:anywhere; }
-          .assistant-chat-user-bubble { color:#ffffff!important; }
+          .assistant-chat-user-bubble,
+          .assistant-chat-user-bubble * { color:#ffffff!important; }
           .assistant-chat-input .q-field__control { min-height:48px!important; height:auto!important; max-height:132px!important; }
           .assistant-chat-input .q-field__native,
           .assistant-chat-input.q-textarea textarea {
@@ -611,8 +612,9 @@ def _body_style() -> None:
           }
           .assistant-chat-user-bubble {
             background:linear-gradient(135deg, var(--studio-blue), var(--studio-cyan))!important;
-            color:#031019!important;
+            color:#ffffff!important;
           }
+          .assistant-chat-user-bubble * { color:#ffffff!important; }
           .desktop-nav {
             background:
               linear-gradient(180deg, rgba(6,11,18,.98), rgba(7,18,29,.98))!important;

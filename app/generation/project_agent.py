@@ -230,10 +230,16 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
 
 
 def classify_project_chat_action(message: str, active: str) -> ProjectChatAction:
-    normalized = message.lower()
+    normalized = _normalize_match_text(message)
     generation_terms = (
+        "avancar",
+        "avance",
+        "continuar",
+        "continue",
+        "criacao",
         "crie",
         "criar",
+        "desenvolvimento",
         "gere",
         "gerar",
         "desenvolva",
@@ -243,8 +249,14 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "faça",
         "monte",
         "montar",
+        "parta",
+        "partir",
         "produza",
         "produzir",
+        "prosseguir",
+        "prossiga",
+        "seguir",
+        "siga",
         "exporte",
         "exportar",
         "finalize",
@@ -279,6 +291,8 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "personagem",
         "personagens",
         "visual",
+        "cenario",
+        "cenarios",
         "locais",
         "local",
         "objeto",
