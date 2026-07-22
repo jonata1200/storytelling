@@ -616,7 +616,8 @@ async def _visual_chat_targets(
             select(model).where(model.project_id == project_id).order_by(name_attr)
         )
         for item in result.scalars():
-            targets.append(VisualChatTarget(kind, item.id, str(item.name)))
+            visual_item = cast(Any, item)
+            targets.append(VisualChatTarget(kind, visual_item.id, str(visual_item.name)))
     return targets
 
 

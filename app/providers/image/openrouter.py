@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import binascii
 import hashlib
 import json
 import urllib.error
@@ -68,7 +69,10 @@ class OpenRouterImageProvider:
         requested_format = str(submitted_body.get("output_format") or "png").lower()
         fallback_media_type = "image/jpeg" if requested_format in {"jpg", "jpeg"} else "image/png"
         media_type = str(first_image.get("media_type") or fallback_media_type)
-        image_bytes = base64.b64decode(encoded_image.encode("ascii"))
+        try:
+            image_bytes = base64.b64decode(encoded_image.encode("ascii"), validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise RuntimeError("OpenRouter Images retornou b64_json invalido") from exc
         request.output_dir.mkdir(parents=True, exist_ok=True)
         extension = extension_from_media_type(media_type)
         safe_view = request.view_type.replace("/", "_").replace("\\", "_")
@@ -124,7 +128,13 @@ class OpenRouterImageProvider:
     @staticmethod
     def _should_retry_without_n(exc: RuntimeError, body: dict[str, Any]) -> bool:
         message = str(exc).lower()
-        return "n" in body and (" n " in message or '"n"' in message or " n:" in message)
+        return "n" in body and (
+            " n " in message
+            or '"n"' in message
+            or "'n'" in message
+            or " n:" in message
+            or "parameter: n" in message
+        )
 
     def _post_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         settings = get_settings()
@@ -146,6 +156,16 @@ class OpenRouterImageProvider:
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"OpenRouter Images HTTP {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"OpenRouter Images network error: {exc.reason}") from exc
+        except TimeoutError as exc:
+            raise RuntimeError("OpenRouter Images timeout ao aguardar resposta") from exc
+        except OSError as exc:
+            raise RuntimeError(f"OpenRouter Images connection error: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "OpenRouter Images retornou resposta HTTP que nao e JSON valido"
+            ) from exc
         if not isinstance(parsed, dict):
             raise RuntimeError("OpenRouter Images retornou resposta fora do formato esperado")
         if error := parsed.get("error"):

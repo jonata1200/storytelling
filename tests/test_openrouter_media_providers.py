@@ -1,4 +1,5 @@
 import base64
+import urllib.error
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +91,86 @@ def test_openrouter_image_provider_retries_with_jpeg_when_png_is_rejected(
     assert result.content_type == "image/jpeg"
     assert result.file_path.suffix == ".jpg"
     assert result.file_path.read_bytes() == b"fake-jpeg"
+
+
+def test_openrouter_image_provider_retries_without_n_when_rejected_with_single_quotes(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    provider = OpenRouterImageProvider()
+    pixel = base64.b64encode(b"fake-png").decode("ascii")
+    posted_bodies: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+
+    def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
+        assert path == "/images"
+        posted_bodies.append(dict(body))
+        if len(posted_bodies) == 1:
+            raise RuntimeError("OpenRouter Images HTTP 400: unsupported parameter: 'n'")
+        return {"data": [{"b64_json": pixel, "media_type": "image/png"}]}
+
+    monkeypatch.setattr(provider, "_post_json", fake_post)
+
+    result = provider._generate(
+        ImageGenerationRequest(
+            prompt="dramatic character portrait",
+            target_id="char",
+            view_type="front",
+            output_dir=tmp_path,
+            model="bytedance-seed/seedream-4.5",
+        )
+    )
+
+    assert "n" in posted_bodies[0]
+    assert "n" not in posted_bodies[1]
+    assert result.file_path.read_bytes() == b"fake-png"
+
+
+def test_openrouter_image_provider_wraps_network_errors(
+    monkeypatch: Any,
+) -> None:
+    provider = OpenRouterImageProvider()
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+
+    def raise_url_error(*args: object, **kwargs: object) -> None:
+        raise urllib.error.URLError("temporary failure in name resolution")
+
+    monkeypatch.setattr("app.providers.image.openrouter.urllib.request.urlopen", raise_url_error)
+
+    with pytest.raises(RuntimeError, match="network error"):
+        provider._post_json("/images", {"model": "model", "prompt": "prompt"})
+
+
+def test_openrouter_image_provider_rejects_invalid_base64(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    provider = OpenRouterImageProvider()
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+    monkeypatch.setattr(
+        provider,
+        "_post_json",
+        lambda path, body: {"data": [{"b64_json": "not valid base64"}]},
+    )
+
+    with pytest.raises(RuntimeError, match="b64_json invalido"):
+        provider._generate(
+            ImageGenerationRequest(
+                prompt="dramatic character portrait",
+                target_id="char",
+                view_type="front",
+                output_dir=tmp_path,
+                model="bytedance-seed/seedream-4.5",
+            )
+        )
 
 
 def test_openrouter_video_provider_downloads_completed_video(

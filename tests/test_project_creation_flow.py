@@ -14,6 +14,7 @@ from app.storytelling.service import (
     _fallback_script_content_from_bible,
     _fallback_script_content_from_idea,
     _shot_narration_text,
+    _story_idea_db_text,
     coerce_duration_minutes,
     expected_script_scene_count,
     normalize_scene_plan_payload,
@@ -869,6 +870,35 @@ def test_script_payload_preserves_briefing_duration_over_model_output() -> None:
     assert payload["target_duration_seconds"] == 420
 
 
+def test_script_payload_adds_scene_markers_to_screenplay_without_cena_labels() -> None:
+    payload = normalize_script_payload(
+        {
+            "title": "A carta azul",
+            "content": """
+TITULO: A carta azul
+
+FADE IN:
+
+INT. SALA - DIA
+
+Clara encontra uma carta azul sobre a mesa e percebe que a mensagem chegou tarde.
+
+EXT. QUINTAL - NOITE
+
+Clara encara a janela acesa e decide contar a verdade antes do amanhecer.
+
+FADE OUT.
+""",
+        },
+        default_title="A carta azul",
+        language="pt-BR",
+        target_duration_seconds=420,
+    )
+
+    assert "CENA 01\nINT. SALA - DIA" in payload["content"]
+    assert "CENA 02\nEXT. QUINTAL - NOITE" in payload["content"]
+
+
 def test_screenplay_validator_rejects_technical_planning_document() -> None:
     errors = screenplay_validation_errors(
         """
@@ -884,6 +914,22 @@ Indicacao para video: push-in lento.
     assert "faltou FADE IN" in errors
     assert "faltou slugline INT./EXT." in errors
     assert "conteudo contem rotulos tecnicos" in errors
+
+
+def test_story_idea_db_text_truncates_long_protagonist_for_varchar_column() -> None:
+    payload = {
+        "protagonist": (
+            "Tadeu, 38 anos, mergulhador de resgate, ex-fuzileiro naval, solteiro, "
+            "com pesadelos recorrentes de um naufragio que nao conseguiu evitar. "
+            "Seu desejo e provar que e capaz de salvar vidas sob pressao extrema, "
+            "mesmo quando a plataforma inteira esta prestes a explodir e todos duvidam dele."
+        )
+    }
+
+    protagonist = _story_idea_db_text(payload, "protagonist", "story_idea")
+
+    assert len(protagonist) <= 220
+    assert protagonist.endswith("...")
 
 
 def test_script_payload_preserves_embedded_production_plan_separately() -> None:

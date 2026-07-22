@@ -21,6 +21,7 @@ from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeli
 from app.storyboards.timeline import build_visual_timeline_items, build_word_alignment
 from app.storytelling.models import Scene, Script, Shot
 from app.visual_bible.models import Character, Location, Prop, VisualReference
+from app.visual_bible.service import _generate_image_with_provider_fallback
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
 
@@ -337,7 +338,8 @@ async def generate_storyboard_frames(
         )
         needs_image = existing_frame is None or existing_prompt_hash != _prompt_hash(prompt)
         if needs_image:
-            image = await provider.generate(
+            image, fallback_metadata = await _generate_image_with_provider_fallback(
+                provider,
                 ImageGenerationRequest(
                     prompt=prompt,
                     target_id=str(shot.id),
@@ -357,7 +359,11 @@ async def generate_storyboard_frames(
                 storage_uri=image.storage_uri,
                 content_type=image.content_type,
                 sha256=image.sha256,
-                metadata_json={"provider": image.provider, "model": image.model},
+                metadata_json={
+                    "provider": image.provider,
+                    "model": image.model,
+                    **fallback_metadata,
+                },
             )
             session.add(asset)
             await session.flush()
@@ -412,7 +418,7 @@ async def generate_storyboard_frames(
                             "asset_id": str(asset_id),
                             "storage_uri": asset.storage_uri if asset is not None else "",
                         },
-                        parameters={"reused": False},
+                        parameters={"reused": False, **fallback_metadata},
                         estimated_cost=Decimal("0.000000"),
                         duration_ms=None,
                     )
@@ -458,7 +464,7 @@ async def generate_storyboard_frames(
                         "asset_id": str(asset_id),
                         "storage_uri": asset.storage_uri if asset is not None else "",
                     },
-                    parameters={"reused": False},
+                    parameters={"reused": False, **fallback_metadata},
                     estimated_cost=Decimal("0.000000"),
                     duration_ms=None,
                 )
