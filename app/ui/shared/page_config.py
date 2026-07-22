@@ -1,6 +1,8 @@
 import re
 from dataclasses import dataclass
 
+from nicegui import ui
+
 BRAND_MARK_URL = "/ui-assets/favicon.png"
 DEFAULT_STORY_DURATION_MINUTES = 5.0
 STORY_DURATION_OPTIONS = [5, 10, 15, 20, 25]
@@ -161,3 +163,33 @@ def friendly_ai_error(exc: BaseException) -> str:
     if text:
         return text[:500]
     return "A IA não respondeu ou retornou um erro inesperado. Tente novamente."
+
+
+def show_ai_error_popup(
+    message: str | None = None,
+    *,
+    title: str = "Falha na IA",
+    details: str | None = None,
+) -> None:
+    safe_message = (
+        message or "A IA não retornou nenhuma resposta. Tente novamente ou escolha outro modelo."
+    )
+    try:
+        with ui.dialog() as dialog, ui.card().classes(
+            "entity-card rounded-2xl p-6 w-[min(560px,92vw)] gap-4"
+        ):
+            with ui.row().classes("items-start gap-3 w-full"):
+                ui.icon("error_outline").classes("text-3xl text-red-300 shrink-0")
+                with ui.column().classes("gap-1 flex-1"):
+                    ui.label(title).classes("brand-type text-2xl font-bold text-red-100")
+                    ui.label(safe_message).classes("text-sm text-[#d8dbd8] leading-6")
+            if details and details.strip() and details.strip() != safe_message:
+                with ui.expansion("Detalhes técnicos").classes("w-full text-sm text-[#9aa19b]"):
+                    ui.label(details.strip()[:1200]).classes("whitespace-pre-wrap")
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Entendi", on_click=dialog.close).props("unelevated no-caps").classes(
+                    "acid-bg rounded-xl font-semibold"
+                )
+        dialog.open()
+    except RuntimeError:
+        ui.notify(f"{title}: {safe_message}", color="negative", timeout=9000, close_button=True)

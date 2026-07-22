@@ -155,6 +155,9 @@ from app.ui.shared.page_config import (
 from app.ui.shared.page_config import (
     settings_tab_key as _settings_tab_key,
 )
+from app.ui.shared.page_config import (
+    show_ai_error_popup as _show_ai_error_popup,
+)
 from app.ui.visual.actions import (  # noqa: F401
     _approve_all_visual_targets_from_ui as _approve_all_visual_targets_from_ui,
 )
@@ -573,11 +576,9 @@ def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) ->
         return
     seen.append(notification_key)
     nicegui_app.storage.user["seen_ai_error_notifications"] = seen[-80:]
-    ui.notify(
-        f"Falha na IA: {error or 'a IA não respondeu. Tente novamente.'}",
-        color="negative",
-        timeout=9000,
-        close_button=True,
+    _show_ai_error_popup(
+        error or "A IA não respondeu. Tente novamente ou escolha outro modelo.",
+        details=error,
     )
 
 

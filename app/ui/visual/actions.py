@@ -6,6 +6,7 @@ from nicegui import ui
 from sqlalchemy import select
 
 from app.database.session import AsyncSessionLocal
+from app.ui.shared.page_config import friendly_ai_error, show_ai_error_popup
 from app.ui.visual.helpers import visual_reference_views_for as _visual_reference_views_for
 from app.video_generation.service import generate_video_clips
 from app.visual_bible.models import Character, Location, Prop, VisualReference
@@ -50,7 +51,7 @@ async def _approve_visual_target_from_ui(
             )
         ui.navigate.reload()
     except Exception as exc:
-        _notify_visual_action(f"Não foi possível aprovar o ativo: {exc}", color="negative")
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
 def _visual_reference_used_fallback(reference: VisualReference) -> bool:
@@ -128,7 +129,7 @@ async def _regenerate_visual_reference_from_ui(
             _notify_visual_action("Imagem gerada novamente.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
-        _notify_visual_action(f"Não foi possível gerar novamente: {exc}", color="negative")
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
 def _visual_library_cards_ready(summary: dict[str, Any]) -> bool:
@@ -217,7 +218,7 @@ async def _approve_all_visual_targets_from_ui(
             )
         ui.navigate.reload()
     except Exception as exc:
-        _notify_visual_action(f"Não foi possível gerar as imagens em lote: {exc}", color="negative")
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
 async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]) -> None:
@@ -244,7 +245,7 @@ async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]
             ui.notify("Todos os clipes selecionados já estavam criados.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
-        ui.notify(f"Não foi possível gerar os clipes: {exc}", color="negative")
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
 

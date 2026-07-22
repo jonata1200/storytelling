@@ -20,6 +20,8 @@ from app.ui.shared.page_config import (
     STEP_LOADING_COPY,
     STORY_DURATION_OPTIONS,
     UI_GENERATION_TIMEOUT_SECONDS,
+    friendly_ai_error,
+    show_ai_error_popup,
 )
 
 BodyStyle = Callable[[], None]
@@ -252,12 +254,12 @@ def register_home_pages(
                                 color="positive",
                             )
                         except TimeoutError:
-                            ui.notify(
-                                "A geracao demorou demais. Tente novamente ou use mock.",
-                                color="warning",
+                            show_ai_error_popup(
+                                "A geração demorou demais. Tente novamente ou escolha outro modelo.",
+                                title="A IA demorou demais",
                             )
                         except Exception as exc:
-                            ui.notify(f"Não foi possível gerar ideias: {exc}", color="negative")
+                            show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
                         finally:
                             loading_dialog.close()
 

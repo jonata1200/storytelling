@@ -12,7 +12,7 @@ from app.ui.shared.assistant_state import load_assistant_messages as _load_assis
 from app.ui.shared.assistant_state import safe_client_navigation as _safe_client_navigation
 from app.ui.shared.assistant_state import safe_refresh as _safe_refresh
 from app.ui.shared.assistant_state import save_assistant_messages as _save_assistant_messages
-from app.ui.shared.page_config import STEP_LOADING_COPY
+from app.ui.shared.page_config import STEP_LOADING_COPY, friendly_ai_error, show_ai_error_popup
 
 logger = logging.getLogger(__name__)
 LoadingDialogFactory = Callable[[str, str], Any]
@@ -142,6 +142,7 @@ def render_assistant_panel(
             loading_dialog = action_loading_dialogs.get(predicted_action)
             if loading_dialog is not None:
                 loading_dialog.open()
+            error_popup: tuple[str, str | None, str] | None = None
 
             async def report_progress(content: str) -> None:
                 progress_message = content.strip()
@@ -164,15 +165,29 @@ def render_assistant_panel(
                     )
                     response = result.message
                     should_reload = result.changed
+                    if result.failed:
+                        error_popup = (
+                            result.message,
+                            None,
+                            "A IA não concluiu a solicitação",
+                        )
             except Exception as exc:
                 logger.exception(
                     "Não foi possível responder ao chat do projeto %s na etapa %s",
                     project_id,
                     active,
                 )
-                response = f"Não consegui responder agora ({type(exc).__name__}). Tente novamente."
+                response = friendly_ai_error(exc)
+                error_popup = (response, str(exc), "Falha na IA")
             if loading_dialog is not None:
                 loading_dialog.close()
+            if error_popup is not None:
+                popup_message, popup_details, popup_title = error_popup
+                show_ai_error_popup(
+                    popup_message,
+                    details=popup_details,
+                    title=popup_title,
+                )
             if pending_message in messages:
                 messages.remove(pending_message)
             messages.append({"role": "assistant", "content": response})

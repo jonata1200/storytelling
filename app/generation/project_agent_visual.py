@@ -222,6 +222,7 @@ async def _approve_visual_prompt_from_chat(
             "Nao consegui aprovar nenhum ativo visual com esse pedido.",
             "approve_visual_prompt",
             False,
+            True,
         )
     if created_count == 0:
         return ProjectChatResult(

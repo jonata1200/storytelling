@@ -77,6 +77,7 @@ class ProjectChatResult:
     message: str
     action: ProjectChatAction
     changed: bool = False
+    failed: bool = False
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,21 @@ class ProjectChatIntent:
 
 
 ProgressCallback = Callable[[str], Awaitable[None]]
+
+
+def _is_ai_generation_failure_message(message: str) -> bool:
+    normalized = message.casefold()
+    return any(
+        marker in normalized
+        for marker in (
+            "não consegui",
+            "nao consegui",
+            "não foi gerado",
+            "nao foi gerado",
+            "não foram gerados",
+            "nao foram gerados",
+        )
+    )
 
 
 ACTION_PROGRESS_MESSAGES: dict[ProjectChatAction, str] = {
@@ -566,7 +582,11 @@ async def _ensure_ideas_pipeline(
     await _emit_progress(progress, "Vou criar ideias narrativas a partir do briefing.")
     ideas = await generate_story_ideas(session, project_id)
     if not ideas:
-        return ProjectChatResult("Nao consegui gerar ideias para este projeto.", "generate_ideas")
+        return ProjectChatResult(
+            "Não consegui gerar ideias para este projeto.",
+            "generate_ideas",
+            failed=True,
+        )
     return ProjectChatResult(f"Criei {len(ideas)} ideia(s) para o projeto.", "generate_ideas", True)
 
 
@@ -586,7 +606,7 @@ async def _ensure_script_pipeline(
             await _emit_progress(progress, "O roteiro ja existe. Vou dividir em cenas e planos.")
             scenes = await generate_scenes_and_shots(session, project_id, script.id)
             if scenes is None:
-                return script, "O roteiro existe, mas nao consegui criar cenas e planos.", True
+                return script, "O roteiro existe, mas não consegui criar cenas e planos.", True
             return script, "O roteiro ja existia; criei cenas e planos para ele.", True
         return script, "O projeto ja tem roteiro e cenas.", False
 
@@ -595,7 +615,7 @@ async def _ensure_script_pipeline(
         await _emit_progress(progress, "Vou criar uma ideia base para orientar o roteiro.")
         ideas = await generate_story_ideas(session, project_id)
         if not ideas:
-            return None, "Nao consegui gerar uma ideia base para este projeto.", False
+            return None, "Não consegui gerar uma ideia base para este projeto.", False
         idea = ideas[0]
 
     await _emit_progress(
@@ -604,11 +624,11 @@ async def _ensure_script_pipeline(
     )
     script = await generate_script(session, project_id, idea.id)
     if script is None:
-        return None, "Nao consegui gerar o roteiro para este projeto.", False
+        return None, "Não consegui gerar o roteiro para este projeto.", False
     await _emit_progress(progress, "Roteiro criado. Agora vou separar em cenas e planos.")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
-        return script, "Roteiro criado, mas as cenas e planos nao foram gerados.", True
+        return script, "Roteiro criado, mas as cenas e planos não foram gerados.", True
     return script, "Roteiro criado e dividido em cenas e planos.", True
 
 
@@ -620,7 +640,12 @@ async def _ensure_visual_pipeline(
 ) -> ProjectChatResult:
     script, message, changed = await _ensure_script_pipeline(session, project_id, progress)
     if script is None:
-        return ProjectChatResult(message, "generate_assets", changed)
+        return ProjectChatResult(
+            message,
+            "generate_assets",
+            changed,
+            failed=_is_ai_generation_failure_message(message),
+        )
 
     existing_characters = await _count(session, Character, project_id)
     existing_locations = await _count(session, Location, project_id)
@@ -640,8 +665,9 @@ async def _ensure_visual_pipeline(
         visual = await generate_visual_bible(session, project_id, script.id)
         if visual is None:
             return ProjectChatResult(
-                "Nao consegui criar personagens, locais e objetos.",
+                "Não consegui criar personagens, locais e objetos.",
                 "generate_assets",
+                failed=True,
             )
         await _emit_progress(
             progress,
@@ -672,7 +698,12 @@ async def _ensure_storyboard_pipeline(
 ) -> ProjectChatResult:
     script, message, changed = await _ensure_script_pipeline(session, project_id, progress)
     if script is None:
-        return ProjectChatResult(message, "generate_storyboard", changed)
+        return ProjectChatResult(
+            message,
+            "generate_storyboard",
+            changed,
+            failed=_is_ai_generation_failure_message(message),
+        )
 
     frames = await _count(session, StoryboardFrame, project_id)
     if force or frames == 0:
@@ -680,9 +711,10 @@ async def _ensure_storyboard_pipeline(
         generated_frames = await generate_storyboard_frames(session, project_id, script.id)
         if generated_frames is None:
             return ProjectChatResult(
-                "Nao consegui gerar o storyboard.",
+                "Não consegui gerar o storyboard.",
                 "generate_storyboard",
                 changed,
+                True,
             )
         changed = True
 
@@ -692,8 +724,9 @@ async def _ensure_storyboard_pipeline(
         bundle = await generate_animatic_bundle(session, project_id, script.id)
         if bundle is None:
             return ProjectChatResult(
-                "Storyboard criado, mas o animatic nao foi gerado.",
+                "Storyboard criado, mas o animatic não foi gerado.",
                 "generate_storyboard",
+                True,
                 True,
             )
         changed = True
@@ -762,9 +795,10 @@ async def _ensure_finalization_pipeline(
     )
     if final_audio is None:
         return ProjectChatResult(
-            "Nao consegui gerar a narracao final.",
+            "Não consegui gerar a narração final.",
             "generate_finalization",
             changed,
+            True,
         )
     changed = True
 
@@ -787,7 +821,7 @@ async def _ensure_finalization_pipeline(
             return ProjectChatResult(str(exc), "generate_finalization", changed)
         if timeline is None:
             return ProjectChatResult(
-                "Finalizacao preparada, mas ainda faltam clipes selecionados para a timeline.",
+                "Finalização preparada, mas ainda faltam clipes selecionados para a timeline.",
                 "generate_finalization",
                 changed,
             )
@@ -802,9 +836,10 @@ async def _ensure_finalization_pipeline(
     )
     if exported is None:
         return ProjectChatResult(
-            "Timeline criada, mas nao consegui exportar o projeto.",
+            "Timeline criada, mas não consegui exportar o projeto.",
             "generate_finalization",
             changed,
+            True,
         )
     return ProjectChatResult(
         "Finalizacao criada e exportacao salva no projeto.",
@@ -816,7 +851,11 @@ async def _ensure_finalization_pipeline(
 async def _ensure_quality_pipeline(session: AsyncSession, project_id: UUID) -> ProjectChatResult:
     check = await run_quality_check(session, project_id)
     if check is None:
-        return ProjectChatResult("Nao consegui rodar o controle de qualidade.", "run_quality")
+        return ProjectChatResult(
+            "Não consegui rodar o controle de qualidade.",
+            "run_quality",
+            failed=True,
+        )
     return ProjectChatResult(
         f"Controle de qualidade concluido com score {check.score} ({check.status}).",
         "run_quality",
@@ -855,16 +894,31 @@ async def handle_project_chat(
         _script, result_message, changed = await _ensure_script_pipeline(
             session, project_id, progress
         )
-        return ProjectChatResult(result_message, action, changed)
+        return ProjectChatResult(
+            result_message,
+            action,
+            changed,
+            failed=_is_ai_generation_failure_message(result_message),
+        )
     if action == "revise_script":
         script, result_message, changed = await _ensure_script_pipeline(
             session, project_id, progress
         )
         if script is None:
-            return ProjectChatResult(result_message, action, changed)
+            return ProjectChatResult(
+                result_message,
+                action,
+                changed,
+                failed=_is_ai_generation_failure_message(result_message),
+            )
         revised = await revise_script(session, project_id, script.id, message, project_context)
         if revised is None:
-            return ProjectChatResult("Nao consegui aplicar a revisao no roteiro.", action, changed)
+            return ProjectChatResult(
+                "Não consegui aplicar a revisão no roteiro.",
+                action,
+                changed,
+                True,
+            )
         return ProjectChatResult("Roteiro revisado e nova versao salva no projeto.", action, True)
     if action == "generate_assets":
         return await _ensure_visual_pipeline(

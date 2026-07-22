@@ -117,7 +117,7 @@ def test_expected_ai_timeout_logs_warning_without_traceback(
 def test_ai_failure_notification_is_shown_once(monkeypatch: pytest.MonkeyPatch) -> None:
     project_id = uuid4()
     storage: dict[str, Any] = {}
-    notifications: list[str] = []
+    popups: list[tuple[str, str | None]] = []
     monkeypatch.setattr(
         pages,
         "nicegui_app",
@@ -126,7 +126,12 @@ def test_ai_failure_notification_is_shown_once(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(
         pages.ui,
         "notify",
-        lambda message, **kwargs: notifications.append(str(message)),
+        lambda message, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        pages,
+        "_show_ai_error_popup",
+        lambda message, **kwargs: popups.append((str(message), kwargs.get("details"))),
     )
     summary = {
         "production_settings": SimpleNamespace(
@@ -145,8 +150,11 @@ def test_ai_failure_notification_is_shown_once(monkeypatch: pytest.MonkeyPatch) 
     pages._notify_ai_action_failure_once(project_id, summary)
     pages._notify_ai_action_failure_once(project_id, summary)
 
-    assert notifications == [
-        "Falha na IA: O modelo de IA demorou demais para responder."
+    assert popups == [
+        (
+            "O modelo de IA demorou demais para responder.",
+            "O modelo de IA demorou demais para responder.",
+        )
     ]
 
 

@@ -25,7 +25,11 @@ from app.ui.project.data import latest as _latest
 from app.ui.shared.assistant_state import (
     append_assistant_message_to_chat as _append_assistant_message_to_chat,
 )
-from app.ui.shared.page_config import UI_GENERATION_TIMEOUT_SECONDS
+from app.ui.shared.page_config import (
+    UI_GENERATION_TIMEOUT_SECONDS,
+    friendly_ai_error,
+    show_ai_error_popup,
+)
 from app.visual_bible.service import generate_visual_bible
 
 
@@ -163,12 +167,20 @@ async def _run_step(
         ui.notify("Etapa executada com sucesso.", color="positive")
         ui.navigate.reload()
     except TimeoutError:
-        message = f"Etapa demorou mais de {UI_GENERATION_TIMEOUT_SECONDS}s e foi interrompida."
+        message = (
+            f"A etapa demorou mais de {UI_GENERATION_TIMEOUT_SECONDS}s e foi interrompida. "
+            "Tente novamente ou escolha outro modelo de IA nas configurações."
+        )
         _append_assistant_message_to_chat(project_id, message)
-        ui.notify(message, color="warning")
+        if loading_dialog is not None:
+            loading_dialog.close()
+        show_ai_error_popup(message, title="A IA demorou demais")
     except Exception as exc:
-        _append_assistant_message_to_chat(project_id, f"Não consegui concluir a etapa: {exc}")
-        ui.notify(f"Acao interrompida: {exc}", color="warning")
+        message = friendly_ai_error(exc)
+        _append_assistant_message_to_chat(project_id, f"Não consegui concluir a etapa: {message}")
+        if loading_dialog is not None:
+            loading_dialog.close()
+        show_ai_error_popup(message, details=str(exc))
     finally:
         if loading_dialog is not None:
             loading_dialog.close()
