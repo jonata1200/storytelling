@@ -68,6 +68,234 @@ async def delete_project(session: AsyncSession, project_id: UUID) -> bool:
     return True
 
 
+TARGET_PROJECTS_CTE = """
+WITH RECURSIVE target_projects(id) AS (
+    SELECT id
+    FROM projects
+    WHERE id = :project_id
+    UNION
+    SELECT project_production_settings.project_id
+    FROM project_production_settings
+    JOIN target_projects
+        ON project_production_settings.parent_project_id = target_projects.id
+)
+"""
+
+
+PROJECT_GRAPH_DELETE_STATEMENTS = (
+    """
+    DELETE FROM clip_reviews
+    WHERE video_clip_id IN (
+        SELECT video_clips.id
+        FROM video_clips
+        JOIN target_projects ON video_clips.project_id = target_projects.id
+    )
+    """,
+    "DELETE FROM exports WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM subtitle_tracks WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM video_clips WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM generation_jobs WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM continuity_issues WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM continuity_states WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM quality_checks WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM timeline_items WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM timelines WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM animatics WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM audio_tracks WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM storyboard_frames WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM visual_references WHERE project_id IN (SELECT id FROM target_projects)",
+    """
+    DELETE FROM character_versions
+    WHERE character_id IN (
+        SELECT characters.id
+        FROM characters
+        JOIN target_projects ON characters.project_id = target_projects.id
+    )
+    """,
+    "DELETE FROM characters WHERE project_id IN (SELECT id FROM target_projects)",
+    """
+    DELETE FROM location_versions
+    WHERE location_id IN (
+        SELECT locations.id
+        FROM locations
+        JOIN target_projects ON locations.project_id = target_projects.id
+    )
+    """,
+    "DELETE FROM locations WHERE project_id IN (SELECT id FROM target_projects)",
+    """
+    DELETE FROM prop_versions
+    WHERE prop_id IN (
+        SELECT props.id
+        FROM props
+        JOIN target_projects ON props.project_id = target_projects.id
+    )
+    """,
+    "DELETE FROM props WHERE project_id IN (SELECT id FROM target_projects)",
+    """
+    DELETE FROM asset_versions
+    WHERE asset_id IN (
+        SELECT assets.id
+        FROM assets
+        JOIN target_projects ON assets.project_id = target_projects.id
+    )
+    """,
+    "DELETE FROM assets WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM cost_entries WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM prompt_executions WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM project_model_settings WHERE project_id IN (SELECT id FROM target_projects)",
+    """
+    DELETE FROM project_production_settings
+    WHERE project_id IN (SELECT id FROM target_projects)
+       OR parent_project_id IN (SELECT id FROM target_projects)
+    """,
+    """
+    DELETE FROM artifact_dependencies
+    WHERE upstream_artifact_id IN (
+        SELECT artifacts.id
+        FROM artifacts
+        JOIN target_projects ON artifacts.project_id = target_projects.id
+    )
+       OR downstream_artifact_id IN (
+        SELECT artifacts.id
+        FROM artifacts
+        JOIN target_projects ON artifacts.project_id = target_projects.id
+    )
+    """,
+    """
+    DELETE FROM approvals
+    WHERE artifact_id IN (
+        SELECT artifacts.id
+        FROM artifacts
+        JOIN target_projects ON artifacts.project_id = target_projects.id
+    )
+       OR artifact_version_id IN (
+        SELECT artifact_versions.id
+        FROM artifact_versions
+        JOIN artifacts ON artifact_versions.artifact_id = artifacts.id
+        JOIN target_projects ON artifacts.project_id = target_projects.id
+    )
+    """,
+    """
+    DELETE FROM script_versions
+    WHERE script_id IN (
+        SELECT scripts.id
+        FROM scripts
+        JOIN target_projects ON scripts.project_id = target_projects.id
+    )
+    """,
+    "DELETE FROM shots WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM scenes WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM scripts WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM story_ideas WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM briefings WHERE project_id IN (SELECT id FROM target_projects)",
+    """
+    DELETE FROM artifact_versions
+    WHERE artifact_id IN (
+        SELECT artifacts.id
+        FROM artifacts
+        JOIN target_projects ON artifacts.project_id = target_projects.id
+    )
+    """,
+    "DELETE FROM artifacts WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM project_versions WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM projects WHERE id IN (SELECT id FROM target_projects)",
+)
+
+
+IDEA_GRAPH_TRUNCATE_TABLES = (
+    "clip_reviews",
+    "exports",
+    "subtitle_tracks",
+    "video_clips",
+    "generation_jobs",
+    "continuity_issues",
+    "continuity_states",
+    "quality_checks",
+    "timeline_items",
+    "timelines",
+    "animatics",
+    "audio_tracks",
+    "storyboard_frames",
+    "visual_references",
+    "character_versions",
+    "characters",
+    "location_versions",
+    "locations",
+    "prop_versions",
+    "props",
+    "asset_versions",
+    "assets",
+    "script_versions",
+    "shots",
+    "scenes",
+    "scripts",
+    "story_ideas",
+)
+
+
+NON_BRIEFING_ARTIFACT_DELETE_STATEMENTS = (
+    """
+    DELETE FROM approvals
+    WHERE artifact_id IN (SELECT id FROM artifacts WHERE artifact_type <> 'BRIEFING')
+       OR artifact_version_id IN (
+        SELECT artifact_versions.id
+        FROM artifact_versions
+        JOIN artifacts ON artifact_versions.artifact_id = artifacts.id
+        WHERE artifacts.artifact_type <> 'BRIEFING'
+    )
+    """,
+    """
+    DELETE FROM artifact_dependencies
+    WHERE upstream_artifact_id IN (SELECT id FROM artifacts WHERE artifact_type <> 'BRIEFING')
+       OR downstream_artifact_id IN (SELECT id FROM artifacts WHERE artifact_type <> 'BRIEFING')
+    """,
+    """
+    DELETE FROM cost_entries
+    WHERE artifact_id IN (SELECT id FROM artifacts WHERE artifact_type <> 'BRIEFING')
+    """,
+    """
+    DELETE FROM prompt_executions
+    WHERE artifact_id IN (SELECT id FROM artifacts WHERE artifact_type <> 'BRIEFING')
+    """,
+    """
+    DELETE FROM artifact_versions
+    WHERE artifact_id IN (SELECT id FROM artifacts WHERE artifact_type <> 'BRIEFING')
+    """,
+    "DELETE FROM artifacts WHERE artifact_type <> 'BRIEFING'",
+)
+
+
+async def hard_delete_project(session: AsyncSession, project_id: UUID) -> bool:
+    await session.execute(text("DROP TABLE IF EXISTS tmp_target_projects"))
+    await session.execute(
+        text(
+            """
+            CREATE TEMP TABLE tmp_target_projects (
+                id uuid PRIMARY KEY
+            ) ON COMMIT DROP
+            """
+        )
+    )
+    await session.execute(
+        text(
+            f"""
+            INSERT INTO tmp_target_projects (id)
+            {TARGET_PROJECTS_CTE}
+            SELECT id FROM target_projects
+            """
+        ),
+        {"project_id": project_id},
+    )
+    project_count = await session.scalar(text("SELECT count(*) FROM tmp_target_projects"))
+    if not project_count:
+        await session.rollback()
+        return False
+    for statement in PROJECT_GRAPH_DELETE_STATEMENTS:
+        await session.execute(text(statement.replace("target_projects", "tmp_target_projects")))
+    await session.commit()
+    return True
+
+
 async def delete_all_projects(session: AsyncSession) -> int:
     result = await session.execute(select(Project).where(Project.deleted_at.is_(None)))
     projects = list(result.scalars())
@@ -103,6 +331,73 @@ async def purge_application_data(session: AsyncSession) -> dict[str, int]:
     await session.execute(text("TRUNCATE TABLE projects RESTART IDENTITY CASCADE"))
     await session.commit()
     return counts
+
+
+async def hard_delete_all_story_ideas(session: AsyncSession) -> dict[str, int]:
+    counts = await application_data_counts(session)
+    table_list = ", ".join(IDEA_GRAPH_TRUNCATE_TABLES)
+    await session.execute(text(f"TRUNCATE TABLE {table_list} RESTART IDENTITY CASCADE"))
+    for statement in NON_BRIEFING_ARTIFACT_DELETE_STATEMENTS:
+        await session.execute(text(statement))
+    await session.commit()
+    return counts
+
+
+async def hard_delete_story_idea_by_payload_id(session: AsyncSession, idea_id: str) -> bool:
+    story_idea = await session.scalar(
+        select(StoryIdea).where(StoryIdea.payload["id"].as_string() == idea_id).limit(1)
+    )
+    if story_idea is None:
+        return False
+    script_count = await session.scalar(
+        select(func.count()).select_from(Script).where(Script.story_idea_id == story_idea.id)
+    )
+    if script_count:
+        return False
+    await session.execute(
+        text(
+            """
+            DELETE FROM approvals
+            WHERE artifact_id = :artifact_id
+               OR artifact_version_id IN (
+                SELECT id FROM artifact_versions WHERE artifact_id = :artifact_id
+            )
+            """
+        ),
+        {"artifact_id": story_idea.artifact_id},
+    )
+    await session.execute(
+        text(
+            """
+            DELETE FROM artifact_dependencies
+            WHERE upstream_artifact_id = :artifact_id
+               OR downstream_artifact_id = :artifact_id
+            """
+        ),
+        {"artifact_id": story_idea.artifact_id},
+    )
+    await session.execute(
+        text("DELETE FROM cost_entries WHERE artifact_id = :artifact_id"),
+        {"artifact_id": story_idea.artifact_id},
+    )
+    await session.execute(
+        text("DELETE FROM prompt_executions WHERE artifact_id = :artifact_id"),
+        {"artifact_id": story_idea.artifact_id},
+    )
+    await session.execute(
+        text("DELETE FROM story_ideas WHERE id = :story_idea_id"),
+        {"story_idea_id": story_idea.id},
+    )
+    await session.execute(
+        text("DELETE FROM artifact_versions WHERE artifact_id = :artifact_id"),
+        {"artifact_id": story_idea.artifact_id},
+    )
+    await session.execute(
+        text("DELETE FROM artifacts WHERE id = :artifact_id"),
+        {"artifact_id": story_idea.artifact_id},
+    )
+    await session.commit()
+    return True
 
 
 async def create_artifact(

@@ -263,7 +263,7 @@ async def run_structured_generation(
             task, fallback_on_runtime_error or should_fallback_to_mock(exc)
         )
         if getattr(provider, "provider_name", "") == "mock" or not should_fallback:
-            raise
+            raise exc
         fallback_error = str(exc)
         result = await MockLLMProvider().generate_structured(
             LLMRequest(

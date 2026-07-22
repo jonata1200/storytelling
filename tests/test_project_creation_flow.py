@@ -87,6 +87,49 @@ def test_project_ai_action_reads_production_metadata() -> None:
     assert action["message"] == "Criando roteiro"
 
 
+def test_friendly_ai_error_explains_timeout() -> None:
+    message = pages._friendly_ai_error(RuntimeError("Provider demorou mais de 60s"))
+
+    assert "demorou demais" in message
+    assert "modelo" in message
+
+
+def test_ai_failure_notification_is_shown_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    project_id = uuid4()
+    storage: dict[str, Any] = {}
+    notifications: list[str] = []
+    monkeypatch.setattr(
+        pages,
+        "nicegui_app",
+        SimpleNamespace(storage=SimpleNamespace(user=storage)),
+    )
+    monkeypatch.setattr(
+        pages.ui,
+        "notify",
+        lambda message, **kwargs: notifications.append(str(message)),
+    )
+    summary = {
+        "production_settings": SimpleNamespace(
+            metadata_json={
+                "ai_action": {
+                    "action": "create_initial_script",
+                    "status": "failed",
+                    "message": "A IA nao conseguiu criar o roteiro inicial.",
+                    "error": "O modelo de IA demorou demais para responder.",
+                    "updated_at": "2026-07-22T10:00:00+00:00",
+                }
+            }
+        )
+    }
+
+    pages._notify_ai_action_failure_once(project_id, summary)
+    pages._notify_ai_action_failure_once(project_id, summary)
+
+    assert notifications == [
+        "Falha na IA: O modelo de IA demorou demais para responder."
+    ]
+
+
 def test_ai_action_sync_adds_only_one_chat_message_per_action(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

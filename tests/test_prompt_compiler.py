@@ -191,6 +191,42 @@ async def test_structured_generation_falls_back_to_mock_when_provider_times_out(
 
 
 @pytest.mark.asyncio
+async def test_creative_structured_generation_reports_timeout_without_mock_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SlowProvider:
+        provider_name = "openrouter"
+
+        async def generate_structured(self, request: LLMRequest) -> object:
+            await asyncio.sleep(0.05)
+            raise AssertionError("provider should time out first")
+
+    class FakeSession:
+        def add(self, item: object) -> None:
+            raise AssertionError("PromptExecution should not be created")
+
+        async def flush(self) -> None:
+            raise AssertionError("flush should not be called")
+
+    async def fake_template(session: object, task: str) -> SimpleNamespace:
+        return SimpleNamespace(id=uuid4(), version=1, template_text="{prompt}", output_schema={})
+
+    monkeypatch.setattr(generation_service, "get_or_create_prompt_template", fake_template)
+    monkeypatch.setattr(generation_service, "LLM_PROVIDER_TIMEOUT_SECONDS", 0.001)
+
+    with pytest.raises(RuntimeError, match="Provider demorou mais"):
+        await run_structured_generation(
+            FakeSession(),  # type: ignore[arg-type]
+            SlowProvider(),  # type: ignore[arg-type]
+            uuid4(),
+            "generate_script",
+            {"prompt": "Gere roteiro"},
+            model="slow-model",
+            fallback_on_runtime_error=True,
+        )
+
+
+@pytest.mark.asyncio
 async def test_structured_generation_keeps_schema_errors_without_chat_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

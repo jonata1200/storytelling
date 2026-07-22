@@ -55,7 +55,9 @@ from app.projects.repository import ProjectRepository
 from app.projects.schemas import ProjectCreate
 from app.projects.service import (
     create_project,
-    delete_project,
+    hard_delete_all_story_ideas,
+    hard_delete_project,
+    hard_delete_story_idea_by_payload_id,
     list_projects,
     purge_application_data,
     rename_project,
@@ -73,6 +75,7 @@ from app.storyboards.models import (
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
 from app.storytelling.idea_lab import (
     delete_all_ideas,
+    delete_generated_idea,
     delete_saved_idea,
     generate_freeform_ideas,
     load_generated_ideas,
@@ -1348,7 +1351,7 @@ async def _generate_initial_script_in_background(
                 message="Roteiro inicial criado.",
                 record_event=False,
             )
-    except Exception:
+    except Exception as exc:
         logger.exception("Nao foi possivel gerar roteiro inicial do projeto %s", project_id)
         async with AsyncSessionLocal() as session:
             await _set_project_ai_action_status(
@@ -1356,7 +1359,7 @@ async def _generate_initial_script_in_background(
                 project_id,
                 status="failed",
                 message="A IA nao conseguiu criar o roteiro inicial.",
-                error="Consulte o terminal para ver o erro completo.",
+                error=_friendly_ai_error(exc),
             )
 
 
@@ -1449,7 +1452,7 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                 project_id,
                 status="failed",
                 message="A IA nao conseguiu criar o roteiro inicial.",
-                error=str(exc),
+                error=_friendly_ai_error(exc),
             )
 
 
@@ -1491,7 +1494,7 @@ async def _generate_missing_scenes_in_background(project_id: UUID, script_id: UU
                 message="Cenas e planos criados para o roteiro.",
                 action="create_script_scenes",
             )
-    except Exception:
+    except Exception as exc:
         logger.exception("Nao foi possivel gerar cenas do roteiro %s", script_id)
         async with AsyncSessionLocal() as session:
             await _set_project_ai_action_status(
@@ -1500,7 +1503,7 @@ async def _generate_missing_scenes_in_background(project_id: UUID, script_id: UU
                 status="failed",
                 message="A IA nao conseguiu criar cenas e planos.",
                 action="create_script_scenes",
-                error="Consulte o terminal para ver o erro completo.",
+                error=_friendly_ai_error(exc),
             )
 
 
@@ -1743,11 +1746,11 @@ async def _rename_project_from_ui(project_id: UUID, title: str, redirect_to: str
 async def _delete_project_from_ui(project_id: UUID, redirect_to: str) -> None:
     try:
         async with AsyncSessionLocal() as session:
-            deleted = await delete_project(session, project_id)
+            deleted = await hard_delete_project(session, project_id)
         if not deleted:
             ui.notify("Projeto não encontrado.", color="negative")
             return
-        ui.notify("Projeto excluído.", color="positive")
+        ui.notify("Projeto excluido definitivamente.", color="positive")
         ui.navigate.to(redirect_to)
     except Exception as exc:
         ui.notify(f"Não foi possível excluir o projeto: {exc}", color="negative")
@@ -1770,6 +1773,56 @@ async def _purge_application_data_from_ui() -> None:
         ui.navigate.to(SETTINGS_DATA_URL)
     except Exception as exc:
         ui.notify(f"Nao foi possivel limpar definitivamente os dados: {exc}", color="negative")
+
+
+async def _purge_all_ideas_from_ui() -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            counts = await hard_delete_all_story_ideas(session)
+        deleted_local_ideas = delete_all_ideas()
+        story_ideas = counts.get("story_ideas", 0)
+        ui.notify(
+            (
+                f"Ideias apagadas definitivamente: {story_ideas} registro(s) do banco "
+                f"e {deleted_local_ideas} ideia(s) do laboratorio removidos."
+            ),
+            color="positive",
+        )
+        ui.navigate.to(SETTINGS_DATA_URL)
+    except Exception as exc:
+        ui.notify(f"Nao foi possivel apagar definitivamente as ideias: {exc}", color="negative")
+
+
+async def _purge_all_projects_from_ui() -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            counts = await purge_application_data(session)
+        projects = counts.get("projects", 0)
+        artifacts = counts.get("artifacts", 0)
+        ui.notify(
+            (
+                f"Projetos apagados definitivamente: {projects} projeto(s) "
+                f"e {artifacts} artefato(s) removidos do banco."
+            ),
+            color="positive",
+        )
+        ui.navigate.to(SETTINGS_DATA_URL)
+    except Exception as exc:
+        ui.notify(f"Nao foi possivel apagar definitivamente os projetos: {exc}", color="negative")
+
+
+async def _delete_lab_idea_from_ui(idea_id: str, source: str) -> bool:
+    try:
+        if source == "saved":
+            delete_saved_idea(idea_id)
+        else:
+            delete_generated_idea(idea_id)
+        async with AsyncSessionLocal() as session:
+            await hard_delete_story_idea_by_payload_id(session, idea_id)
+        return True
+    except Exception as exc:
+        ui.notify(f"Nao foi possivel apagar definitivamente a ideia: {exc}", color="negative")
+        return False
 
 
 async def _save_model_setting(
@@ -2697,6 +2750,63 @@ def _safe_client_navigation(client: Any, target: str | None = None) -> None:
             raise
 
 
+def _friendly_ai_error(exc: BaseException) -> str:
+    text = str(exc).strip()
+    normalized = text.lower()
+    if isinstance(exc, TimeoutError) or "demorou mais" in normalized or "timed out" in normalized:
+        return (
+            "O modelo de IA demorou demais para responder. Tente novamente ou escolha "
+            "um modelo de texto mais estavel nas configuracoes."
+        )
+    if "rate limit" in normalized or "429" in normalized or "resourceexhausted" in normalized:
+        return (
+            "O provedor de IA recusou a chamada por limite de uso. Aguarde alguns minutos "
+            "ou troque para um modelo com mais disponibilidade."
+        )
+    if "openrouter" in normalized and (
+        "network" in normalized
+        or "connection" in normalized
+        or "dns" in normalized
+        or "temporarily unavailable" in normalized
+    ):
+        return (
+            "Nao foi possivel conectar ao provedor de IA. Verifique a internet, a chave "
+            "do OpenRouter e tente novamente."
+        )
+    if "json" in normalized:
+        return (
+            "O modelo respondeu fora do formato esperado pela aplicacao. Tente novamente "
+            "ou use um modelo com melhor suporte a JSON estruturado."
+        )
+    if "api_key" in normalized or "api key" in normalized or "chave" in normalized:
+        return "A chave da IA parece ausente ou invalida. Confira as configuracoes de IA."
+    if text:
+        return text[:500]
+    return "A IA nao respondeu ou retornou um erro inesperado. Tente novamente."
+
+
+def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) -> None:
+    ai_action = _project_ai_action(summary)
+    if str(ai_action.get("status") or "") != "failed":
+        return
+    action = str(ai_action.get("action") or "ai_action")
+    updated_at = str(ai_action.get("updated_at") or "")
+    error = str(ai_action.get("error") or ai_action.get("message") or "").strip()
+    notification_key = f"{project_id}:{action}:{updated_at}:{error}"
+    store = nicegui_app.storage.user.setdefault("seen_ai_error_notifications", [])
+    seen = [str(item) for item in store if isinstance(item, str)]
+    if notification_key in seen:
+        return
+    seen.append(notification_key)
+    nicegui_app.storage.user["seen_ai_error_notifications"] = seen[-80:]
+    ui.notify(
+        f"Falha na IA: {error or 'a IA nao respondeu. Tente novamente.'}",
+        color="negative",
+        timeout=9000,
+        close_button=True,
+    )
+
+
 def _sync_ai_action_events_to_chat(project_id: UUID, summary: dict[str, Any]) -> None:
     ai_action = _project_ai_action(summary)
     raw_events = ai_action.get("events", [])
@@ -2794,6 +2904,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
         for action, (title, message) in chat_loading_copy.items()
     }
     _sync_ai_action_events_to_chat(project_id, summary)
+    _notify_ai_action_failure_once(project_id, summary)
     messages = _load_assistant_messages(project_id, active, assistant_suggestions)
 
     with ui.element("aside").classes(
@@ -3904,13 +4015,15 @@ def register_ui_pages() -> None:
                         "acid-bg rounded-2xl px-10 py-5 text-lg font-bold"
                     )
 
-                def delete_saved(idea_id: str) -> None:
-                    delete_saved_idea(idea_id)
+                async def delete_saved(idea_id: str) -> None:
+                    deleted = await _delete_lab_idea_from_ui(idea_id, "saved")
+                    if not deleted:
+                        return
                     saved_ideas[:] = [
                         idea for idea in saved_ideas if str(idea.get("id")) != idea_id
                     ]
                     saved_results.refresh()
-                    ui.notify("Ideia descartada.", color="warning")
+                    ui.notify("Ideia apagada definitivamente.", color="warning")
 
                 @ui.refreshable
                 def saved_results() -> None:
@@ -4147,9 +4260,13 @@ def register_ui_pages() -> None:
                                 "Ações destrutivas para limpar ideias e projetos do estúdio."
                             ).classes("text-sm text-[#858b86] mb-4")
 
-                            async def confirm_purge_data() -> None:
-                                purge_dialog.close()
-                                await _purge_application_data_from_ui()
+                            async def confirm_purge_ideas() -> None:
+                                ideas_dialog.close()
+                                await _purge_all_ideas_from_ui()
+
+                            async def confirm_purge_projects() -> None:
+                                projects_dialog.close()
+                                await _purge_all_projects_from_ui()
 
                             with ui.dialog() as ideas_dialog, ui.card().classes(
                                 "entity-card rounded-2xl p-6 min-w-96"
@@ -4158,8 +4275,9 @@ def register_ui_pages() -> None:
                                     "text-xl font-semibold"
                                 )
                                 ui.label(
-                                    "Isso remove ideias salvas e ideias geradas na página "
-                                    "de ideias. Projetos já criados não serão apagados."
+                                    "Isso remove ideias salvas, ideias geradas e registros "
+                                    "de ideias no banco. Projetos serao mantidos, mas "
+                                    "conteudos derivados das ideias serao removidos."
                                 ).classes("text-sm text-[#858b86]")
                                 with ui.row().classes("w-full justify-end gap-2 mt-4"):
                                     ui.button("Cancelar", on_click=ideas_dialog.close).props(
@@ -4168,7 +4286,7 @@ def register_ui_pages() -> None:
                                     ui.button(
                                         "Apagar ideias",
                                         icon="delete",
-                                        on_click=confirm_purge_data,
+                                        on_click=confirm_purge_ideas,
                                     ).props("unelevated no-caps").classes(
                                         "bg-red-600 text-white rounded-xl"
                                     )
@@ -4190,7 +4308,7 @@ def register_ui_pages() -> None:
                                     ui.button(
                                         "Apagar projetos",
                                         icon="delete_forever",
-                                        on_click=confirm_purge_data,
+                                        on_click=confirm_purge_projects,
                                     ).props("unelevated no-caps").classes(
                                         "bg-red-600 text-white rounded-xl"
                                     )
@@ -4213,13 +4331,15 @@ def register_ui_pages() -> None:
                                     ui.button(
                                         "Limpar definitivamente",
                                         icon="delete_forever",
-                                        on_click=confirm_purge_data,
+                                        on_click=_purge_application_data_from_ui,
                                     ).props("unelevated no-caps").classes(
                                         "bg-red-700 text-white rounded-xl"
                                     )
 
                             with ui.column().classes("w-full gap-3"):
-                                with ui.element("div").classes("hidden"):
+                                with ui.element("div").classes(
+                                    "border border-red-950 rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+                                ):
                                     with ui.column().classes("gap-1"):
                                         ui.label("Ideias").classes("font-semibold")
                                         ui.label(
@@ -4234,7 +4354,9 @@ def register_ui_pages() -> None:
                                         "text-red-300 border-red-900 rounded-xl"
                                     )
 
-                                with ui.element("div").classes("hidden"):
+                                with ui.element("div").classes(
+                                    "border border-red-950 rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+                                ):
                                     with ui.column().classes("gap-1"):
                                         ui.label("Projetos").classes("font-semibold")
                                         ui.label(
@@ -4248,9 +4370,7 @@ def register_ui_pages() -> None:
                                         "text-red-300 border-red-900 rounded-xl"
                                     )
 
-                                with ui.element("div").classes(
-                                    "border border-red-950 rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
-                                ):
+                                with ui.element("div").classes("hidden"):
                                     with ui.column().classes("gap-1"):
                                         ui.label("Projetos e ideias").classes("font-semibold")
                                         ui.label(
