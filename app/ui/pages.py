@@ -39,22 +39,12 @@ from app.storytelling.service import (
     generate_script,
     generate_story_ideas,
 )
-from app.ui import assistant_state
-from app.ui.workspace.assets_area import _entity_card as _entity_card
-from app.ui.workspace.assets_area import render_assets_area
-from app.ui.shared.assistant_state import (  # noqa: F401
-    safe_client_navigation as _safe_client_navigation,
-)
-from app.ui.shared.assistant_state import (  # noqa: F401
-    safe_refresh as _safe_refresh,
-)
 from app.ui.layout.components import (
     button_classes as _button_classes,
 )
 from app.ui.layout.components import (
     card_classes as _card_classes,
 )
-from app.ui.routes.home_pages import register_home_pages
 from app.ui.layout.navigation import (
     home_sidebar as _home_sidebar,
 )
@@ -73,31 +63,7 @@ from app.ui.layout.navigation import (
 from app.ui.layout.navigation import (
     workspace_header as _workspace_header,
 )
-from app.ui.shared.page_config import (
-    BLOCKING_DIALOG_PROPS,
-    DEFAULT_STORY_DURATION_MINUTES,
-    STEP_LOADING_COPY,
-    ProductionStep,
-)
-from app.ui.shared.page_config import IDEA_COUNT_OPTIONS as IDEA_COUNT_OPTIONS  # noqa: F401
-from app.ui.shared.page_config import IDEA_GENRES as IDEA_GENRES  # noqa: F401
-from app.ui.shared.page_config import (
-    PRODUCTION_STEPS as PAGE_PRODUCTION_STEPS,
-)
-from app.ui.shared.page_config import STORY_DURATION_OPTIONS as STORY_DURATION_OPTIONS  # noqa: F401
-from app.ui.shared.page_config import (
-    WORKSPACE_TABS as PAGE_WORKSPACE_TABS,
-)
-from app.ui.shared.page_config import (
-    clean_idea_title as _clean_idea_title,
-)
-from app.ui.shared.page_config import (
-    friendly_ai_error as _page_friendly_ai_error,
-)
-from app.ui.shared.page_config import (
-    settings_tab_key as _settings_tab_key,
-)
-from app.ui.project.production_steps import _run_step
+from app.ui.layout.theme import apply_body_style as _body_style
 from app.ui.project.actions import (
     _create_next_episode as _project_action_create_next_episode,
 )
@@ -139,6 +105,7 @@ from app.ui.project.data import (
 from app.ui.project.data import (
     scalar_count as _scalar_count,
 )
+from app.ui.project.production_steps import _run_step
 from app.ui.project.text import (
     compact_project_title as _compact_project_title,
 )
@@ -154,11 +121,40 @@ from app.ui.project.workflows import (
 from app.ui.project.workflows import (
     _log_ai_background_failure as _workflow_log_ai_background_failure,
 )
+from app.ui.routes.home_pages import register_home_pages
 from app.ui.routes.project_workspace_page import register_project_workspace_pages
-from app.ui.workspace.script_area import render_script_area, save_script_from_ui
 from app.ui.routes.settings_page import register_settings_page
-from app.ui.workspace.storyboard_video_area import render_storyboard_area, render_video_area
-from app.ui.layout.theme import apply_body_style as _body_style
+from app.ui.shared import assistant_state
+from app.ui.shared.assistant_state import (  # noqa: F401
+    safe_client_navigation as _safe_client_navigation,
+)
+from app.ui.shared.assistant_state import (  # noqa: F401
+    safe_refresh as _safe_refresh,
+)
+from app.ui.shared.page_config import (
+    BLOCKING_DIALOG_PROPS,
+    DEFAULT_STORY_DURATION_MINUTES,
+    STEP_LOADING_COPY,
+    ProductionStep,
+)
+from app.ui.shared.page_config import IDEA_COUNT_OPTIONS as IDEA_COUNT_OPTIONS  # noqa: F401
+from app.ui.shared.page_config import IDEA_GENRES as IDEA_GENRES  # noqa: F401
+from app.ui.shared.page_config import (
+    PRODUCTION_STEPS as PAGE_PRODUCTION_STEPS,
+)
+from app.ui.shared.page_config import STORY_DURATION_OPTIONS as STORY_DURATION_OPTIONS  # noqa: F401
+from app.ui.shared.page_config import (
+    WORKSPACE_TABS as PAGE_WORKSPACE_TABS,
+)
+from app.ui.shared.page_config import (
+    clean_idea_title as _clean_idea_title,
+)
+from app.ui.shared.page_config import (
+    friendly_ai_error as _page_friendly_ai_error,
+)
+from app.ui.shared.page_config import (
+    settings_tab_key as _settings_tab_key,
+)
 from app.ui.visual.actions import (  # noqa: F401
     _approve_all_visual_targets_from_ui as _approve_all_visual_targets_from_ui,
 )
@@ -204,6 +200,8 @@ from app.ui.visual.helpers import (  # noqa: F401
 from app.ui.visual.helpers import (  # noqa: F401
     visual_references_for as _visual_references_for,
 )
+from app.ui.workspace.assets_area import _entity_card as _entity_card
+from app.ui.workspace.assets_area import render_assets_area
 from app.ui.workspace.rules import (
     first_available_workspace_section as _first_available_workspace_section,
 )
@@ -213,6 +211,8 @@ from app.ui.workspace.rules import (
 from app.ui.workspace.rules import (
     workspace_section_access as _workspace_section_access,
 )
+from app.ui.workspace.script_area import render_script_area, save_script_from_ui
+from app.ui.workspace.storyboard_video_area import render_storyboard_area, render_video_area
 
 logger = logging.getLogger(__name__)
 PRODUCTION_STEPS = PAGE_PRODUCTION_STEPS

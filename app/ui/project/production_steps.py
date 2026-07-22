@@ -21,11 +21,11 @@ from app.storytelling.service import (
     generate_script,
     generate_story_ideas,
 )
+from app.ui.project.data import latest as _latest
 from app.ui.shared.assistant_state import (
     append_assistant_message_to_chat as _append_assistant_message_to_chat,
 )
 from app.ui.shared.page_config import UI_GENERATION_TIMEOUT_SECONDS
-from app.ui.project.data import latest as _latest
 from app.visual_bible.service import generate_visual_bible
 
 

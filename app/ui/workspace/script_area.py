@@ -8,12 +8,12 @@ from app.database.session import AsyncSessionLocal
 from app.projects.models import Artifact
 from app.projects.versioning import create_artifact_version
 from app.storytelling.models import Script, ScriptVersion
-from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, STEP_LOADING_COPY
 from app.ui.project.workflows import (
     _generate_missing_scenes_in_background,
     _reload_project_when_script_ready,
     _resume_initial_script_in_background,
 )
+from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, STEP_LOADING_COPY
 
 LoadingDialogFactory = Callable[[str, str], Any]
 ProjectAiActionReader = Callable[[dict[str, Any]], dict[str, Any]]
