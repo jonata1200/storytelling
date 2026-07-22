@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -92,6 +93,24 @@ def test_friendly_ai_error_explains_timeout() -> None:
 
     assert "demorou demais" in message
     assert "modelo" in message
+
+
+def test_expected_ai_timeout_logs_warning_without_traceback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    project_id = uuid4()
+
+    with caplog.at_level(logging.WARNING):
+        pages._log_ai_background_failure(
+            "Nao foi possivel gerar roteiro inicial do projeto",
+            project_id,
+            RuntimeError("Provider demorou mais de 150s"),
+        )
+
+    assert caplog.records
+    assert caplog.records[-1].levelno == logging.WARNING
+    assert caplog.records[-1].exc_info is None
+    assert "demorou demais" in caplog.records[-1].getMessage()
 
 
 def test_ai_failure_notification_is_shown_once(monkeypatch: pytest.MonkeyPatch) -> None:

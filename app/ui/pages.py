@@ -232,6 +232,25 @@ def _render_project_card(project: Project, redirect_to: str) -> None:
     )
 
 
+def _log_ai_background_failure(message: str, identifier: UUID, exc: Exception) -> None:
+    normalized = str(exc).lower()
+    expected_terms = (
+        "demorou mais",
+        "timeout",
+        "timed out",
+        "openrouter",
+        "rate limit",
+        "429",
+        "network",
+        "connection",
+        "dns",
+    )
+    if any(term in normalized for term in expected_terms):
+        logger.warning("%s %s: %s", message, identifier, _friendly_ai_error(exc))
+        return
+    logger.exception("%s %s", message, identifier)
+
+
 async def _generate_initial_script(
     session: AsyncSession,
     project_id: UUID,
@@ -342,7 +361,11 @@ async def _generate_initial_script_in_background(
                 record_event=False,
             )
     except Exception as exc:
-        logger.exception("Nao foi possivel gerar roteiro inicial do projeto %s", project_id)
+        _log_ai_background_failure(
+            "Nao foi possivel gerar roteiro inicial do projeto",
+            project_id,
+            exc,
+        )
         async with AsyncSessionLocal() as session:
             await _set_project_ai_action_status(
                 session,
@@ -435,7 +458,11 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                 message="Roteiro inicial criado.",
             )
     except Exception as exc:
-        logger.exception("Nao foi possivel retomar roteiro inicial do projeto %s", project_id)
+        _log_ai_background_failure(
+            "Nao foi possivel retomar roteiro inicial do projeto",
+            project_id,
+            exc,
+        )
         async with AsyncSessionLocal() as session:
             await _set_project_ai_action_status(
                 session,
@@ -485,7 +512,7 @@ async def _generate_missing_scenes_in_background(project_id: UUID, script_id: UU
                 action="create_script_scenes",
             )
     except Exception as exc:
-        logger.exception("Nao foi possivel gerar cenas do roteiro %s", script_id)
+        _log_ai_background_failure("Nao foi possivel gerar cenas do roteiro", script_id, exc)
         async with AsyncSessionLocal() as session:
             await _set_project_ai_action_status(
                 session,

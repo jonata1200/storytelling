@@ -6,7 +6,7 @@ DEFAULT_STORY_DURATION_MINUTES = 5.0
 STORY_DURATION_OPTIONS = [5, 10, 15, 20, 25]
 IDEA_COUNT_OPTIONS = list(range(1, 11))
 BLOCKING_DIALOG_PROPS = "persistent no-esc-dismiss no-backdrop-dismiss"
-UI_GENERATION_TIMEOUT_SECONDS = 90
+UI_GENERATION_TIMEOUT_SECONDS = 150
 SETTINGS_DATA_URL = "/settings?tab=data"
 IDEA_TITLE_PREFIX_RE = re.compile(r"^\s*ideia\s+\d+\s*[:\-–]\s*", re.IGNORECASE)
 
