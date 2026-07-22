@@ -18,6 +18,7 @@ from app.storytelling.idea_lab import (
     replace_generated_ideas,
     save_idea,
 )
+from app.storytelling.story_idea_normalization import _normalize_generated_story_ideas
 
 
 def test_idea_lab_prompt_guides_quality_and_output_contract() -> None:
@@ -39,6 +40,42 @@ def test_idea_lab_prompt_guides_quality_and_output_contract() -> None:
     assert '"ideas"' in prompt
     assert "duration_minutes igual a 20" in prompt
     assert "campo obrigatorio vazio: conflict" in prompt
+
+
+def test_project_story_idea_normalization_accepts_one_valid_idea() -> None:
+    ideas = _normalize_generated_story_ideas(
+        {
+            "ideas": [
+                {
+                    "title": "A ponte de vidro",
+                    "genre": "Drama",
+                    "primary_emotion": "Coragem",
+                    "theme": "reconciliação pública",
+                    "hook": "Uma engenheira precisa atravessar a ponte que jurou demolir.",
+                    "premise": (
+                        "Após um acidente antigo, ela volta à cidade para provar que a "
+                        "estrutura ainda pode salvar pessoas."
+                    ),
+                    "protagonist": "Marta, uma engenheira de pontes",
+                    "conflict": "Assinar o laudo reacende a culpa pelo acidente.",
+                    "obstacles": ["moradores hostis", "provas incompletas"],
+                    "stakes": "A cidade pode ficar isolada durante uma enchente.",
+                    "twist": "O erro original não foi dela, mas ela encobriu o responsável.",
+                    "climax": "Marta atravessa a ponte durante a evacuação.",
+                    "payoff": "Ela escolhe verdade em vez de reputação.",
+                    "resolution": "A ponte é reparada e recebe o nome das vítimas.",
+                    "duration_minutes": 5,
+                    "retention_potential": 78,
+                    "cliche_risk": 22,
+                    "production_complexity": 40,
+                }
+            ]
+        },
+        5,
+    )
+
+    assert len(ideas) == 1
+    assert ideas[0]["title"] == "A ponte de vidro"
 
 
 @pytest.mark.asyncio
@@ -196,6 +233,59 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     assert ideas[0]["payoff"] == "A memoria volta como cuidado, nao como culpa."
     assert len(provider.prompts) == 2
     assert "campo obrigatorio vazio: conflict" in provider.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_generate_freeform_ideas_keeps_partial_valid_openrouter_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class PartialProvider:
+        provider_name = "openrouter"
+
+        async def generate_structured(self, request: LLMRequest) -> LLMResult:
+            return LLMResult(
+                content={
+                    "ideas": [
+                        {
+                            "title": "O farol apagado",
+                            "genre": "Drama",
+                            "primary_emotion": "Esperança",
+                            "theme": "luto e recomeço",
+                            "hook": "Uma faroleira acende a luz para um barco que não existe.",
+                            "premise": (
+                                "Depois de perder o pai no mar, uma jovem mantém o farol ligado "
+                                "até descobrir quem ainda depende daquela luz."
+                            ),
+                            "protagonist": "Lia, uma faroleira teimosa",
+                            "conflict": "A cidade quer desligar o farol para sempre.",
+                            "obstacles": ["tempestade", "pressão dos moradores"],
+                            "stakes": "A memória do pai pode virar apenas ruína.",
+                            "twist": "O barco era um pedido antigo de socorro registrado errado.",
+                            "climax": "Lia sobe ao farol durante a maior tempestade do ano.",
+                            "payoff": "Ela entende que manter a luz acesa também salva os vivos.",
+                            "resolution": "O farol vira estação de resgate comunitária.",
+                            "duration_minutes": 5,
+                            "retention_potential": 80,
+                            "cliche_risk": 20,
+                            "production_complexity": 35,
+                        }
+                    ]
+                },
+                model=request.model,
+                provider=self.provider_name,
+            )
+
+    monkeypatch.setattr(
+        idea_lab,
+        "get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test", openrouter_default_model="free-model"),
+    )
+    monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", PartialProvider)
+
+    ideas = await generate_freeform_ideas(count=3, genre="Drama")
+
+    assert len(ideas) == 1
+    assert ideas[0]["title"] == "O farol apagado"
 
 
 def test_saved_ideas_can_be_saved_and_deleted(tmp_path: Path) -> None:

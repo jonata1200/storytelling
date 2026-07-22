@@ -213,9 +213,9 @@ def _normalize_generated_story_ideas(
             errors.extend(f"{context}: {error}" for error in item_errors)
             continue
         items.append(item)
-    if len(items) < 3:
-        errors.append("generate_story_ideas: esperado pelo menos 3 ideias validas")
-    if not errors:
+    if not items:
+        errors.append("generate_story_ideas: esperado pelo menos 1 ideia valida")
+    if not errors and len(items) > 1:
         errors.extend(story_idea_diversity_errors(items))
     if errors:
         raise GenerationOutputError("; ".join(errors))

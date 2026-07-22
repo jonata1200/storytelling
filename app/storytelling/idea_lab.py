@@ -21,7 +21,7 @@ from app.storytelling.service import (
 
 SAVED_IDEAS_PATH = Path(".runtime/idea_lab_saved.json")
 GENERATED_IDEAS_PATH = Path(".runtime/idea_lab_generated.json")
-IDEA_PROVIDER_TIMEOUT_SECONDS = 60
+IDEA_PROVIDER_TIMEOUT_SECONDS = 120
 
 
 def build_idea_lab_prompt(
@@ -177,9 +177,9 @@ def _normalize_generated_ideas(
             )
             continue
         normalized.append(idea)
-    if len(normalized) < count:
-        errors.append(f"generate_story_ideas: esperado {count} ideias validas")
-    if not errors:
+    if not normalized:
+        errors.append(f"generate_story_ideas: esperado ao menos 1 ideia valida de {count}")
+    if not errors and len(normalized) > 1:
         errors.extend(story_idea_diversity_errors(normalized))
     if errors:
         raise GenerationOutputError("; ".join(errors))
