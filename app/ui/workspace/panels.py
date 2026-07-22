@@ -15,10 +15,10 @@ from app.production.service import (
     resolve_image_model,
 )
 from app.storyboards.models import StoryboardFrame, Timeline, TimelineItem
-from app.ui.components import button_classes as _button_classes
-from app.ui.components import card_classes as _card_classes
-from app.ui.components import muted as _muted
-from app.ui.project_actions import (
+from app.ui.layout.components import button_classes as _button_classes
+from app.ui.layout.components import card_classes as _card_classes
+from app.ui.layout.components import muted as _muted
+from app.ui.project.actions import (
     _save_model_setting,
     _save_production_setup,
 )
@@ -236,5 +236,6 @@ def _render_timeline_strip(timeline: Timeline | None, items: list[TimelineItem])
                 ui.label(item.layer).classes(
                     f"{color} text-xs text-slate-100 rounded px-2 py-3 text-center"
                 ).style(f"width: {width}px")
+
 
 

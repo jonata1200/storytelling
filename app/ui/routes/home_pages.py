@@ -1,0 +1,364 @@
+﻿# ruff: noqa: E501
+
+import asyncio
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from nicegui import ui
+
+from app.storytelling.idea_lab import (
+    generate_freeform_ideas,
+    load_saved_ideas,
+    replace_generated_ideas,
+    save_idea,
+)
+from app.storytelling.service import coerce_duration_minutes
+from app.ui.shared.page_config import (
+    DEFAULT_STORY_DURATION_MINUTES,
+    IDEA_COUNT_OPTIONS,
+    IDEA_GENRES,
+    STEP_LOADING_COPY,
+    STORY_DURATION_OPTIONS,
+    UI_GENERATION_TIMEOUT_SECONDS,
+)
+
+BodyStyle = Callable[[], None]
+ProjectCardsLoader = Callable[[], Awaitable[list[Any]]]
+ProjectCardRenderer = Callable[[Any, str], None]
+ChatProjectCreator = Callable[[str], Awaitable[None]]
+IdeaProjectCreator = Callable[[dict[str, Any]], Awaitable[None]]
+IdeaDeleter = Callable[[str, str], Awaitable[bool]]
+LoadingDialogFactory = Callable[[str, str], Any]
+TextCleaner = Callable[[Any, str], str]
+
+
+def register_home_pages(
+    *,
+    body_style: BodyStyle,
+    project_cards: ProjectCardsLoader,
+    render_project_card: ProjectCardRenderer,
+    create_project_from_chat_prompt: ChatProjectCreator,
+    create_project_from_idea: IdeaProjectCreator,
+    delete_lab_idea_from_ui: IdeaDeleter,
+    loading_dialog_factory: LoadingDialogFactory,
+    clean_idea_title: TextCleaner,
+    home_sidebar: Callable[[str], None],
+    studio_logo: Callable[[], None],
+    theme_toggle: Callable[[], Any],
+    user_avatar: Callable[..., Any],
+) -> None:
+    @ui.page("/dashboard", response_timeout=15)
+    async def dashboard() -> None:
+        body_style()
+        projects = await project_cards()
+        home_sidebar("create")
+        with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
+            with ui.column().classes("w-full px-5 md:px-10 lg:px-14 py-6 gap-9"):
+                with ui.row().classes(
+                    "w-full max-w-6xl mx-auto items-center justify-between min-h-14"
+                ):
+                    studio_logo()
+                    with ui.row().classes("items-center gap-3"):
+                        theme_toggle()
+                        user_avatar(size="48px")
+                with ui.column().classes("w-full max-w-4xl mx-auto items-center text-center gap-4"):
+                    with ui.element("div").classes(
+                        "chat-shell glass rounded-3xl p-4 w-full min-h-[240px] flex flex-col"
+                    ):
+                        idea = (
+                            ui.textarea(
+                                placeholder="Descreva sua histÃ³ria, cole um roteiro ou peÃ§a uma ideia..."
+                            )
+                            .props("borderless autogrow input-style='min-height:140px'")
+                            .classes("w-full text-lg flex-1 text-left")
+                        )
+                        with ui.row().classes("w-full items-center px-2 pb-1 gap-2"):
+                            ui.space()
+                            ui.button(
+                                icon="arrow_upward",
+                                on_click=lambda: create_project_from_chat_prompt(
+                                    str(idea.value or "")
+                                ),
+                            ).props("round unelevated").classes("acid-bg")
+                with (
+                    ui.column().props("id=projects").classes("w-full max-w-6xl mx-auto gap-4 pt-3")
+                ):
+                    with ui.row().classes("w-full items-center justify-between"):
+                        with ui.column().classes("gap-0"):
+                            ui.label("Projetos recentes").classes(
+                                "brand-type text-2xl md:text-3xl font-bold"
+                            )
+                            ui.label("Continue de onde parou ou comece uma nova produÃ§Ã£o.").classes(
+                                "text-sm text-[#7f8580]"
+                            )
+                    if not projects:
+                        with (
+                            ui.element("div")
+                            .classes(
+                                "w-full border border-dashed border-[#363b36] rounded-2xl min-h-48 flex flex-col items-center justify-center cursor-pointer text-[#969c97] bg-[#0d100e]"
+                            )
+                            .on("click", lambda: ui.navigate.to("/dashboard"))
+                        ):
+                            ui.icon("add_circle_outline").classes("text-4xl acid")
+                            ui.label("Crie seu primeiro projeto").classes(
+                                "mt-3 text-lg font-semibold text-[#d7dbd7]"
+                            )
+                            ui.label(
+                                "Sua histÃ³ria, personagens e storyboards aparecerÃ£o aqui."
+                            ).classes("mt-1 text-sm text-[#747a75]")
+                    else:
+                        with ui.grid().classes(
+                            "w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                        ):
+                            for project in projects:
+                                render_project_card(project, "/dashboard")
+                            with (
+                                ui.element("div")
+                                .classes(
+                                    "border border-dashed border-[#363b36] rounded-2xl min-h-52 flex flex-col items-center justify-center cursor-pointer text-[#969c97]"
+                                )
+                                .on("click", lambda: ui.navigate.to("/dashboard"))
+                            ):
+                                ui.icon("add_circle_outline").classes("text-4xl acid")
+                                ui.label("Criar novo projeto").classes("mt-2 font-semibold")
+
+    @ui.page("/projects", response_timeout=15)
+    async def projects_page() -> None:
+        body_style()
+        projects = await project_cards()
+        home_sidebar("projects")
+        with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
+            with ui.column().classes("w-full max-w-6xl mx-auto px-6 py-8 gap-7"):
+                with ui.row().classes("w-full items-center justify-between"):
+                    with ui.column().classes("gap-1"):
+                        ui.label("Projetos").classes("brand-type text-4xl font-bold")
+                        ui.label("Acompanhe e continue suas produÃ§Ãµes de vÃ­deo.").classes(
+                            "text-[#8f9590]"
+                        )
+                    with ui.row().classes("items-center gap-2"):
+                        theme_toggle()
+                        ui.button(
+                            "Novo projeto",
+                            icon="add",
+                            on_click=lambda: ui.navigate.to("/dashboard"),
+                        ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                if not projects:
+                    with ui.element("div").classes(
+                        "w-full border border-dashed border-[#363b36] rounded-2xl min-h-64 flex flex-col items-center justify-center text-[#969c97]"
+                    ):
+                        ui.icon("folder_open").classes("text-5xl")
+                        ui.label("Nenhum projeto criado ainda.").classes(
+                            "mt-3 text-lg font-semibold"
+                        )
+                        ui.button(
+                            "ComeÃ§ar uma criaÃ§Ã£o",
+                            icon="auto_awesome",
+                            on_click=lambda: ui.navigate.to("/dashboard"),
+                        ).props("flat no-caps").classes("acid mt-2")
+                else:
+                    with ui.grid().classes(
+                        "w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                    ):
+                        for project in projects:
+                            render_project_card(project, "/projects")
+
+    @ui.page("/", response_timeout=15)
+    @ui.page("/ideas", response_timeout=15)
+    async def ideas_page() -> None:
+        body_style()
+        home_sidebar("ideas")
+        saved_ideas = load_saved_ideas()
+        with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
+            with ui.column().classes("w-full max-w-6xl mx-auto px-6 py-8 gap-7"):
+                with ui.row().classes("w-full items-center justify-between"):
+                    with ui.column().classes("gap-1"):
+                        with ui.row().classes("items-center gap-3"):
+                            ui.icon("lightbulb").classes("text-4xl acid")
+                            ui.label("LaboratÃ³rio de Ideias").classes(
+                                "brand-type text-4xl font-bold"
+                            )
+                        ui.label(
+                            "Explore histÃ³rias livremente, sem criar um projeto de vÃ­deo."
+                        ).classes("text-[#8f9590]")
+                    theme_toggle()
+
+                with ui.element("div").classes("hidden"):
+                    _ = (
+                        ui.textarea(
+                            "Sobre o que vocÃª quer contar?",
+                            placeholder="Ex.: uma astronauta encontra uma mensagem enviada por ela mesma...",
+                        )
+                        .props("outlined autogrow stack-label")
+                        .classes("hidden")
+                    )
+                    with ui.grid().classes("hidden"):
+                        _ = ui.select(
+                            [
+                                "Drama",
+                                "FicÃ§Ã£o cientÃ­fica",
+                                "Suspense",
+                                "ComÃ©dia",
+                                "Terror",
+                                "Romance",
+                            ],
+                            label="GÃªnero",
+                            value="Drama",
+                        ).props("outlined")
+                        _ = ui.select(
+                            [
+                                "EsperanÃ§a",
+                                "Curiosidade",
+                                "TensÃ£o",
+                                "Alegria",
+                                "Melancolia",
+                                "Surpresa",
+                            ],
+                            label="EmoÃ§Ã£o principal",
+                            value="EsperanÃ§a",
+                        ).props("outlined")
+
+                    loading_title, loading_message = STEP_LOADING_COPY["ideas"]
+                    loading_dialog = loading_dialog_factory(
+                        loading_title,
+                        loading_message,
+                    )
+
+                    async def generate() -> None:
+                        loading_dialog.open()
+                        try:
+                            generated = await asyncio.wait_for(
+                                generate_freeform_ideas(
+                                    "",
+                                    count=int(idea_count_select.value or 10),
+                                    genre=str(genre_select.value or ""),
+                                    target_duration_minutes=coerce_duration_minutes(
+                                        duration_select.value
+                                    ),
+                                ),
+                                timeout=UI_GENERATION_TIMEOUT_SECONDS,
+                            )
+                            replace_generated_ideas([])
+                            for generated_idea in generated:
+                                saved = save_idea(generated_idea)
+                                saved_ideas[:] = [
+                                    existing
+                                    for existing in saved_ideas
+                                    if existing.get("id") != saved["id"]
+                                ]
+                                saved_ideas.insert(0, saved)
+                            saved_results.refresh()
+                            ui.notify(
+                                f"{len(generated)} ideia(s) gerada(s) e salva(s).",
+                                color="positive",
+                            )
+                        except TimeoutError:
+                            ui.notify(
+                                "A geracao demorou demais. Tente novamente ou use mock.",
+                                color="warning",
+                            )
+                        except Exception as exc:
+                            ui.notify(f"NÃ£o foi possÃ­vel gerar ideias: {exc}", color="negative")
+                        finally:
+                            loading_dialog.close()
+
+                with ui.column().classes("w-full items-center gap-4 py-8"):
+                    with ui.row().classes("w-full max-w-2xl gap-3 items-end justify-center"):
+                        genre_select = (
+                            ui.select(IDEA_GENRES, label="GÃªnero", value=IDEA_GENRES[0])
+                            .props("outlined")
+                            .classes("flex-1 min-w-64")
+                        )
+                        duration_select = (
+                            ui.select(
+                                STORY_DURATION_OPTIONS,
+                                label="DuraÃ§Ã£o",
+                                value=int(DEFAULT_STORY_DURATION_MINUTES),
+                            )
+                            .props("outlined suffix='min'")
+                            .classes("w-36")
+                        )
+                        idea_count_select = (
+                            ui.select(
+                                IDEA_COUNT_OPTIONS,
+                                label="Quantidade",
+                                value=10,
+                            )
+                            .props("outlined suffix='ideias'")
+                            .classes("w-40")
+                        )
+                    ui.button(
+                        "Gerar ideias",
+                        icon="auto_awesome",
+                        on_click=generate,
+                    ).props("unelevated no-caps size=lg").classes(
+                        "acid-bg rounded-2xl px-10 py-5 text-lg font-bold"
+                    )
+
+                async def delete_saved(idea_id: str) -> None:
+                    deleted = await delete_lab_idea_from_ui(idea_id, "saved")
+                    if not deleted:
+                        return
+                    saved_ideas[:] = [
+                        idea for idea in saved_ideas if str(idea.get("id")) != idea_id
+                    ]
+                    saved_results.refresh()
+                    ui.notify("Ideia apagada definitivamente.", color="warning")
+
+                @ui.refreshable
+                def saved_results() -> None:
+                    ui.label("Ideias salvas").classes("brand-type text-2xl font-bold")
+                    if not saved_ideas:
+                        ui.label("Nenhuma ideia salva ainda.").classes("text-sm text-[#777d78]")
+                        return
+                    with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-3 gap-4"):
+                        for idea in saved_ideas:
+                            with ui.element("article").classes(
+                                "entity-card rounded-2xl p-5 flex flex-col min-h-80"
+                            ):
+                                ui.label(
+                                    clean_idea_title(idea.get("title"), "Historia sem titulo")
+                                ).classes(
+                                    "brand-type text-2xl font-bold"
+                                )
+                                with ui.row().classes("gap-2 mt-3 flex-wrap"):
+                                    ui.label(str(idea.get("genre") or "Genero sugerido")).classes(
+                                        "idea-badge-genre rounded-md px-2 py-0.5 text-xs font-medium"
+                                    )
+                                    ui.label(
+                                        str(idea.get("primary_emotion") or "Emocao sugerida")
+                                    ).classes(
+                                        "idea-badge-emotion rounded-md px-2 py-0.5 text-xs font-medium"
+                                    )
+                                    ui.label(
+                                        f"{coerce_duration_minutes(idea.get('duration_minutes')):g} min"
+                                    ).classes(
+                                        "idea-badge-duration rounded-md px-2 py-0.5 text-xs font-medium"
+                                    )
+                                if idea.get("theme"):
+                                    ui.label(f"Tema: {idea['theme']}").classes(
+                                        "text-xs text-[#9aa29b] mt-3"
+                                    )
+                                ui.label(str(idea.get("hook") or "")).classes(
+                                    "text-sm text-[#d4d8d4] mt-3 font-medium"
+                                )
+                                ui.label(str(idea.get("premise") or "")).classes(
+                                    "text-sm text-[#8d938e] mt-3 leading-6"
+                                )
+                                ui.space()
+                                with ui.row().classes("gap-2 mt-4"):
+                                    saved_idea_id = str(idea.get("id"))
+                                    ui.button(
+                                        "Descartar",
+                                        icon="delete",
+                                        on_click=lambda idea_id=saved_idea_id: delete_saved(idea_id),
+                                    ).props("flat no-caps").classes("text-red-300")
+                                    ui.button(
+                                        "Desenvolver",
+                                        icon="arrow_forward",
+                                        on_click=lambda item=idea: create_project_from_idea(item),
+                                    ).props("flat no-caps").classes("acid")
+
+                saved_results()
+
+
+

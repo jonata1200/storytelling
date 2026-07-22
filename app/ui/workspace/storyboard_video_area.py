@@ -4,9 +4,9 @@ from uuid import UUID
 
 from nicegui import ui
 
-from app.ui.page_config import BLOCKING_DIALOG_PROPS
-from app.ui.visual_actions import _approve_video_prompts_from_ui
-from app.ui.workspace_panels import _render_timeline_strip
+from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS
+from app.ui.visual.actions import _approve_video_prompts_from_ui
+from app.ui.workspace.panels import _render_timeline_strip
 
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
 
@@ -130,6 +130,7 @@ def render_video_area(
             ).classes("text-[#858b86]")
     ui.label("Timeline").classes("brand-type text-2xl font-bold mt-6")
     _render_timeline_strip(summary["timeline"], summary["timeline_items"])
+
 
 
 

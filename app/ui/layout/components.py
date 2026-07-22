@@ -1,6 +1,6 @@
-from nicegui import ui
+﻿from nicegui import ui
 
-from app.ui.navigation import theme_toggle
+from app.ui.layout.navigation import theme_toggle
 
 
 def card_classes(extra: str = "") -> str:
@@ -32,3 +32,4 @@ def render_header(title: str, subtitle: str) -> None:
             ui.link("API docs", "/docs").classes(
                 "text-slate-100 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-md"
             )
+

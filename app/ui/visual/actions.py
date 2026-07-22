@@ -6,7 +6,7 @@ from nicegui import ui
 from sqlalchemy import select
 
 from app.database.session import AsyncSessionLocal
-from app.ui.visual_helpers import visual_reference_views_for as _visual_reference_views_for
+from app.ui.visual.helpers import visual_reference_views_for as _visual_reference_views_for
 from app.video_generation.service import generate_video_clips
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (
@@ -245,5 +245,6 @@ async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]
         ui.navigate.reload()
     except Exception as exc:
         ui.notify(f"Nao foi possivel gerar os clipes: {exc}", color="negative")
+
 
 

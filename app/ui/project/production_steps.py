@@ -21,11 +21,11 @@ from app.storytelling.service import (
     generate_script,
     generate_story_ideas,
 )
-from app.ui.assistant_state import (
+from app.ui.shared.assistant_state import (
     append_assistant_message_to_chat as _append_assistant_message_to_chat,
 )
-from app.ui.page_config import UI_GENERATION_TIMEOUT_SECONDS
-from app.ui.project_data import latest as _latest
+from app.ui.shared.page_config import UI_GENERATION_TIMEOUT_SECONDS
+from app.ui.project.data import latest as _latest
 from app.visual_bible.service import generate_visual_bible
 
 
@@ -172,5 +172,6 @@ async def _run_step(
     finally:
         if loading_dialog is not None:
             loading_dialog.close()
+
 
 

@@ -17,10 +17,10 @@ from app.storytelling.service import (
     generate_script,
     generate_story_ideas,
 )
-from app.ui.page_config import friendly_ai_error as _friendly_ai_error
-from app.ui.project_data import latest as _latest
-from app.ui.project_data import latest_many as _latest_many
-from app.ui.project_data import scalar_count as _scalar_count
+from app.ui.shared.page_config import friendly_ai_error as _friendly_ai_error
+from app.ui.project.data import latest as _latest
+from app.ui.project.data import latest_many as _latest_many
+from app.ui.project.data import scalar_count as _scalar_count
 
 logger = logging.getLogger(__name__)
 
@@ -396,5 +396,6 @@ async def _develop_script_for_existing_project(
     if scenes is None:
         return "O roteiro foi criado, mas nao consegui gerar as cenas e planos.", True
     return "Roteiro criado e dividido em cenas e planos.", True
+
 
 

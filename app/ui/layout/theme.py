@@ -1,9 +1,9 @@
-# ruff: noqa: E501
+﻿# ruff: noqa: E501
 
 from nicegui import ui
 
 from app.config.settings import get_settings
-from app.ui.page_config import BRAND_MARK_URL
+from app.ui.shared.page_config import BRAND_MARK_URL
 
 
 def apply_body_style() -> None:
@@ -659,6 +659,7 @@ def apply_body_style() -> None:
         </style>
         """
     )
+
 
 
 

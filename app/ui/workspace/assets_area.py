@@ -5,27 +5,27 @@ from uuid import UUID
 from nicegui import ui
 
 from app.assets.models import Asset
-from app.ui.page_config import BLOCKING_DIALOG_PROPS
-from app.ui.visual_actions import (
+from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS
+from app.ui.visual.actions import (
     _approve_all_visual_targets_from_ui,
     _approve_visual_target_from_ui,
     _regenerate_visual_reference_from_ui,
     _update_visual_prompt_from_ui,
     _visual_batch_requests,
 )
-from app.ui.visual_helpers import (
+from app.ui.visual.helpers import (
     asset_url,
 )
-from app.ui.visual_helpers import (
+from app.ui.visual.helpers import (
     visual_card_detail as _visual_card_detail,
 )
-from app.ui.visual_helpers import (
+from app.ui.visual.helpers import (
     visual_reference_asset as _visual_reference_asset,
 )
-from app.ui.visual_helpers import (
+from app.ui.visual.helpers import (
     visual_reference_views_for as _visual_reference_views_for,
 )
-from app.ui.visual_helpers import (
+from app.ui.visual.helpers import (
     visual_references_for as _visual_references_for,
 )
 from app.visual_bible.models import VisualReference
@@ -359,6 +359,7 @@ def render_assets_area(
                             ui.label(
                                 "O Diretor IA pode criar esta coleção a partir do roteiro."
                             ).classes("text-sm text-[#888e89]")
+
 
 
 

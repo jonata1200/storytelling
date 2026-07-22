@@ -20,8 +20,8 @@ from app.storytelling.idea_lab import delete_all_ideas, delete_generated_idea, d
 from app.storytelling.models import Briefing
 from app.storytelling.schemas import BriefingCreate
 from app.storytelling.service import create_briefing
-from app.ui.page_config import SETTINGS_DATA_URL
-from app.ui.project_data import latest as _latest
+from app.ui.shared.page_config import SETTINGS_DATA_URL
+from app.ui.project.data import latest as _latest
 
 
 async def _rename_project_from_ui(project_id: UUID, title: str, redirect_to: str) -> None:
@@ -207,5 +207,6 @@ async def _create_next_episode(project_id: UUID) -> None:
         ui.navigate.to(f"/projects/{next_project.id}")
     except Exception as exc:
         ui.notify(f"Nao foi possivel criar proximo episodio: {exc}", color="negative")
+
 
 

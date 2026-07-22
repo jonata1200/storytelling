@@ -1,4 +1,4 @@
-import base64
+﻿import base64
 import mimetypes
 from pathlib import Path
 from typing import Any
@@ -8,8 +8,8 @@ from nicegui import ui
 from app.config.preferences import save_preferences
 from app.config.settings import get_settings
 from app.projects.models import Project
-from app.ui.page_config import BRAND_MARK_URL, WORKSPACE_TABS
-from app.ui.workspace_rules import workspace_section_access
+from app.ui.shared.page_config import BRAND_MARK_URL, WORKSPACE_TABS
+from app.ui.workspace.rules import workspace_section_access
 
 
 def studio_logo(compact: bool = False) -> None:
@@ -145,3 +145,4 @@ def workspace_header(project: Project, active: str, counts: dict[str, int]) -> N
             ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
                 "acid-bg workspace-export-button rounded-xl font-semibold shrink-0"
             )
+

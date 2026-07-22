@@ -1,7 +1,7 @@
-from typing import Any
+﻿from typing import Any
 
 from app.storytelling.service import coerce_duration_minutes
-from app.ui.page_config import clean_idea_title
+from app.ui.shared.page_config import clean_idea_title
 
 
 def compact_project_title(text: str) -> str:
@@ -11,13 +11,13 @@ def compact_project_title(text: str) -> str:
         return "Novo projeto de storytelling"
     common_prefixes = [
         "quero criar uma historia sobre ",
-        "quero criar uma história sobre ",
+        "quero criar uma histÃ³ria sobre ",
         "quero desenvolver uma historia sobre ",
-        "quero desenvolver uma história sobre ",
+        "quero desenvolver uma histÃ³ria sobre ",
         "crie uma historia sobre ",
-        "crie uma história sobre ",
+        "crie uma histÃ³ria sobre ",
         "uma historia sobre ",
-        "uma história sobre ",
+        "uma histÃ³ria sobre ",
     ]
     lower_cleaned = cleaned.lower()
     for prefix in common_prefixes:
@@ -81,3 +81,4 @@ def format_idea_payload_for_project(idea: dict[str, Any]) -> str:
             value_text = f"{coerce_duration_minutes(value):g} minutos"
         lines.append(f"{labels.get(key, key)}: {value_text}")
     return "\n".join(lines)
+
