@@ -15,6 +15,7 @@ from app.storytelling.service import (
     _story_idea_retry_guidance,
     coerce_duration_minutes,
     normalize_story_idea_payload,
+    story_idea_diversity_errors,
     story_idea_validation_errors,
 )
 
@@ -65,9 +66,13 @@ def build_idea_lab_prompt(
         "- Cada ideia deve ter protagonista, desejo, conflito, obstaculos, risco, "
         "virada, climax e payoff emocional bem definidos.\n"
         "- As ideias precisam ser realmente diferentes entre si em tema, mundo, "
-        "tipo de protagonista, dilema central, emocao principal e revelacao final.\n"
+        "tipo de protagonista, profissao, faixa de vida, local principal, objeto "
+        "dramatico, antagonismo, dilema central, emocao principal e revelacao final.\n"
+        "- Nao reutilize a mesma personagem com nome diferente; cada protagonista "
+        "deve ter identidade, desejo, medo e contexto social proprios.\n"
         "- Evite modelos genericos como segredo do passado, heranca misteriosa ou "
-        "mensagem que muda tudo, a menos que haja uma abordagem muito especifica.\n"
+        "mensagem que muda tudo, carta atrasada, casa de familia ou reconciliacao "
+        "familiar, a menos que haja uma abordagem muito especifica.\n"
         "- O hook deve prender nos primeiros segundos; a premise deve explicar a "
         "historia em 2 ou 3 frases objetivas.\n"
         "- Para duracoes maiores, aumente a escalada, o numero de obstaculos e a "
@@ -134,12 +139,18 @@ async def _generate_with_runtime_fallback(
         if getattr(provider, "provider_name", "") == "mock":
             return await provider_call
         return await asyncio.wait_for(provider_call, timeout=IDEA_PROVIDER_TIMEOUT_SECONDS)
-    except (RuntimeError, TimeoutError):
+    except TimeoutError as exc:
+        raise RuntimeError(
+            f"OpenRouter demorou mais de {IDEA_PROVIDER_TIMEOUT_SECONDS}s ao gerar ideias. "
+            "Tente novamente ou escolha um modelo de texto mais estavel."
+        ) from exc
+    except RuntimeError as exc:
         if getattr(provider, "provider_name", "") == "mock":
             raise
-        return await MockLLMProvider().generate_structured(
-            request.model_copy(update={"model": "mock-llm"})
-        )
+        raise RuntimeError(
+            "Nao foi possivel gerar ideias com o modelo configurado. "
+            f"Detalhe do provedor: {exc}"
+        ) from exc
 
 
 def _normalize_generated_ideas(
@@ -168,6 +179,8 @@ def _normalize_generated_ideas(
         normalized.append(idea)
     if len(normalized) < count:
         errors.append(f"generate_story_ideas: esperado {count} ideias validas")
+    if not errors:
+        errors.extend(story_idea_diversity_errors(normalized))
     if errors:
         raise GenerationOutputError("; ".join(errors))
     return normalized

@@ -28,6 +28,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         "genre": "drama",
         "audience": "publico geral",
         "primary_emotion": "esperanca",
+        "diversity_memory": "nenhuma ideia anterior",
         "idea_title": "A carta",
         "idea": {"title": "A carta"},
         "language": "pt-BR",
@@ -68,6 +69,8 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
     assert '"ideas"' in compiled["generate_story_ideas"]
     assert "Genero preferido: drama" in compiled["generate_story_ideas"]
     assert '"payoff"' in compiled["generate_story_ideas"]
+    assert "radicalmente diferentes entre si" in compiled["generate_story_ideas"]
+    assert "nenhuma ideia anterior" in compiled["generate_story_ideas"]
     assert "contrato narrativo" in compiled["generate_script"]
 
 
@@ -90,6 +93,12 @@ def test_generation_fallback_ignores_schema_errors() -> None:
     error = RuntimeError("generate_script: empty field 'content'")
 
     assert should_fallback_to_mock(error) is False
+
+
+def test_creative_narrative_tasks_do_not_allow_runtime_mock_fallback() -> None:
+    assert generation_service.allow_runtime_mock_fallback("generate_story_ideas", True) is False
+    assert generation_service.allow_runtime_mock_fallback("generate_script", True) is False
+    assert generation_service.allow_runtime_mock_fallback("director_agent_chat", True) is True
 
 
 @pytest.mark.asyncio

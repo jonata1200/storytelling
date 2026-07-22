@@ -63,7 +63,12 @@ async def test_mock_llm_generates_cinematic_script_format() -> None:
             task="generate_script",
             prompt="",
             variables={
-                "idea": {"title": "A promessa"},
+                "idea": {
+                    "title": "A promessa",
+                    "protagonist": "Nina, uma maquinista noturna",
+                    "hook": "O painel mostra uma estacao impossivel.",
+                    "conflict": "Frear o trem coloca vidas em risco.",
+                },
                 "narrative_contract": {"title": "A promessa"},
                 "language": "pt-BR",
                 "target_duration_seconds": 300,
@@ -74,9 +79,9 @@ async def test_mock_llm_generates_cinematic_script_format() -> None:
     content = result.content["content"]
     assert "FADE IN:" in content
     assert "CENA 01" in content
-    assert "INT. CASA DA FAMILIA" in content
-    assert "EXT. RUA ESTREITA" in content
-    assert "CLARA\n" in content
+    assert "NINA\n" in content
+    assert "O painel mostra uma estacao impossivel." in content
+    assert "Frear o trem coloca vidas em risco." in content
     assert "FADE OUT." in content
     assert " - 60s" not in content
     assert " - 300s" not in content

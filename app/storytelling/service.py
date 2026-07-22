@@ -1190,6 +1190,10 @@ def story_idea_validation_errors(payload: dict) -> list[str]:
         if not str(payload.get(field) or "").strip():
             errors.append(f"campo obrigatorio vazio: {field}")
 
+    protagonist = str(payload.get("protagonist") or "").strip().casefold()
+    if protagonist in {"protagonista", "protagonista a definir", "personagem a definir"}:
+        errors.append("protagonist precisa ser especifico, nao placeholder")
+
     duration = coerce_duration_minutes(payload.get("duration_minutes"))
     if not 5 <= duration <= 25:
         errors.append("duration_minutes deve ficar entre 5 e 25")
@@ -1212,12 +1216,132 @@ def story_idea_validation_errors(payload: dict) -> list[str]:
     return errors
 
 
+def _idea_similarity_key(value: object) -> str:
+    text = str(value or "").casefold()
+    text = re.sub(r"[^a-z0-9áéíóúâêôãõç]+", " ", text)
+    stopwords = {
+        "a",
+        "o",
+        "as",
+        "os",
+        "um",
+        "uma",
+        "de",
+        "da",
+        "do",
+        "das",
+        "dos",
+        "em",
+        "no",
+        "na",
+        "nos",
+        "nas",
+        "para",
+        "por",
+        "com",
+        "que",
+        "e",
+        "ou",
+        "sua",
+        "seu",
+        "suas",
+        "seus",
+        "ela",
+        "ele",
+        "precisa",
+        "descobre",
+        "encontra",
+    }
+    tokens = [token for token in text.split() if token and token not in stopwords]
+    return " ".join(tokens[:16])
+
+
+def _idea_protagonist_identity(value: object) -> str:
+    text = str(value or "").casefold()
+    text = re.split(r"[,;(\n]", text, maxsplit=1)[0]
+    return _idea_similarity_key(text)
+
+
+def story_idea_diversity_errors(items: list[dict]) -> list[str]:
+    errors: list[str] = []
+    seen: dict[tuple[str, str], int] = {}
+    fields = (
+        ("protagonist", "protagonista"),
+        ("conflict", "conflito"),
+        ("twist", "virada"),
+        ("payoff", "payoff"),
+        ("resolution", "resolucao"),
+    )
+    for index, item in enumerate(items, 1):
+        for field, label in fields:
+            key_text = (
+                _idea_protagonist_identity(item.get(field))
+                if field == "protagonist"
+                else _idea_similarity_key(item.get(field))
+            )
+            if not key_text:
+                continue
+            key = (field, key_text)
+            previous = seen.get(key)
+            if previous is not None:
+                errors.append(
+                    f"ideias {previous} e {index} repetem {label}: {item.get(field)}"
+                )
+            else:
+                seen[key] = index
+
+    generic_patterns = (
+        "mensagem que muda tudo",
+        "verdade chega tarde demais",
+        "pessoa comum precisa encarar uma revelacao",
+        "segredo do passado",
+        "heranca misteriosa",
+        "carta azul",
+        "casa da familia",
+    )
+    for index, item in enumerate(items, 1):
+        combined = " ".join(str(item.get(field) or "") for field, _ in fields).casefold()
+        for pattern in generic_patterns:
+            if pattern in combined:
+                errors.append(f"ideia {index} usa motor narrativo generico: {pattern}")
+    return errors
+
+
 def _story_idea_retry_guidance(errors: list[str]) -> str:
     return (
         "A resposta anterior nao serve para o pipeline. Corrija estes pontos e retorne "
         "novamente somente JSON, mantendo exatamente a chave ideas: "
         f"{'; '.join(errors)}. "
     )
+
+
+async def _story_idea_diversity_memory(session: AsyncSession, project_id: UUID) -> str:
+    result = await session.execute(
+        select(StoryIdea)
+        .where(StoryIdea.project_id == project_id)
+        .order_by(StoryIdea.created_at.desc())
+        .limit(12)
+    )
+    ideas = list(result.scalars())
+    if not ideas:
+        return "nenhuma ideia anterior neste projeto"
+    fragments: list[str] = []
+    for idea in ideas:
+        payload = idea.payload or {}
+        fragments.append(
+            " | ".join(
+                str(value)
+                for value in (
+                    idea.title,
+                    payload.get("protagonist") or idea.protagonist,
+                    payload.get("conflict"),
+                    payload.get("twist"),
+                    payload.get("payoff") or payload.get("resolution"),
+                )
+                if value not in (None, "", [], {})
+            )
+        )
+    return "; ".join(fragments)
 
 
 def _normalize_generated_story_ideas(
@@ -1243,6 +1367,8 @@ def _normalize_generated_story_ideas(
         items.append(item)
     if len(items) < 3:
         errors.append("generate_story_ideas: esperado pelo menos 3 ideias validas")
+    if not errors:
+        errors.extend(story_idea_diversity_errors(items))
     if errors:
         raise GenerationOutputError("; ".join(errors))
     return items
@@ -1794,6 +1920,7 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
         "primary_emotion": briefing.primary_emotion,
         "genre": briefing.genre,
         "target_duration_minutes": float(briefing.desired_duration_minutes),
+        "diversity_memory": await _story_idea_diversity_memory(session, project_id),
         "retry_guidance": "",
     }
     provider, model = await llm_provider_for_task(session, project_id, "generate_story_ideas")
@@ -1908,6 +2035,7 @@ async def generate_script(
     }
     provider, model = await llm_provider_for_task(session, project_id, "generate_script")
     payload: dict | None = None
+    last_error: GenerationOutputError | None = None
     for attempt in range(2):
         result, _execution = await run_structured_generation(
             session,
@@ -1927,6 +2055,7 @@ async def generate_script(
             )
             break
         except GenerationOutputError as exc:
+            last_error = exc
             if attempt == 1:
                 break
             variables["retry_guidance"] = (
@@ -1935,17 +2064,12 @@ async def generate_script(
                 "production_plan separado."
             )
     if payload is None:
-        payload = {
-            "title": idea.title,
-            "language": briefing.language,
-            "target_duration_seconds": target_duration_seconds,
-            "content": _fallback_script_content_from_idea(
-                idea.payload,
-                idea.title,
-                target_duration_seconds,
-            ),
-        }
-        payload["word_count"] = len(payload["content"].split())
+        if last_error is not None:
+            raise GenerationOutputError(
+                "generate_script: o modelo nao entregou um roteiro valido apos "
+                f"retentativa ({last_error})"
+            ) from last_error
+        raise GenerationOutputError("generate_script: resposta vazia do modelo")
     title = _required_str(payload, "title", "generate_script")
     if not str(payload.get("content") or "").strip():
         payload["content"] = _fallback_script_content_from_idea(

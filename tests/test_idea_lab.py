@@ -79,7 +79,7 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_falls_back_when_openrouter_fails(
+async def test_generate_freeform_ideas_reports_openrouter_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FailingOpenRouterProvider:
@@ -95,14 +95,12 @@ async def test_generate_freeform_ideas_falls_back_when_openrouter_fails(
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", FailingOpenRouterProvider)
 
-    ideas = await generate_freeform_ideas(count=3, genre="Suspense")
-
-    assert len(ideas) == 3
-    assert {idea.get("genre") for idea in ideas} == {"Suspense"}
+    with pytest.raises(RuntimeError, match="Nao foi possivel gerar ideias"):
+        await generate_freeform_ideas(count=3, genre="Suspense")
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_falls_back_when_openrouter_times_out(
+async def test_generate_freeform_ideas_reports_openrouter_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class SlowOpenRouterProvider:
@@ -120,10 +118,8 @@ async def test_generate_freeform_ideas_falls_back_when_openrouter_times_out(
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", SlowOpenRouterProvider)
     monkeypatch.setattr(idea_lab, "IDEA_PROVIDER_TIMEOUT_SECONDS", 0.001)
 
-    ideas = await generate_freeform_ideas(count=3, genre="Drama")
-
-    assert len(ideas) == 3
-    assert {idea.get("genre") for idea in ideas} == {"Drama"}
+    with pytest.raises(RuntimeError, match="demorou mais"):
+        await generate_freeform_ideas(count=3, genre="Drama")
 
 
 @pytest.mark.asyncio

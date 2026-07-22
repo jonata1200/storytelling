@@ -24,13 +24,29 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
 }
 
 LLM_PROVIDER_TIMEOUT_SECONDS = 60
+CREATIVE_NARRATIVE_TASKS = {
+    "generate_story_ideas",
+    "generate_script",
+    "generate_scenes_and_shots",
+    "revise_script",
+}
 
 DEFAULT_TEMPLATES: dict[str, str] = {
     "generate_story_ideas": (
-        "Gere tres ideias estruturadas para uma historia vertical de {target_duration_minutes} "
+        "Voce e uma sala de desenvolvimento narrativo com repertorio amplo. Gere tres "
+        "ideias estruturadas para uma historia vertical de {target_duration_minutes} "
         "minutos. Cada ideia precisa sustentar a duracao escolhida com conflito, virada e payoff. "
         "Tema: {theme}. Genero preferido: {genre}. Publico: {audience}. "
         "Emocao: {primary_emotion}. "
+        "Memoria de ideias/personagens ja usados que devem ser evitados: {diversity_memory}. "
+        "As tres ideias precisam ser radicalmente diferentes entre si: mude protagonista, "
+        "profissao, idade/faixa de vida, mundo social, local principal, objeto dramatico, "
+        "fonte de antagonismo, tipo de segredo/revelacao, dilema moral, ritmo e imagem final. "
+        "Nao use a mesma pessoa com nomes diferentes. Nao repita cuidadora, carta/mensagem "
+        "atrasada, casa de familia, segredo do passado, heranca misteriosa ou reconciliacao "
+        "familiar como motor padrao, a menos que o briefing exija explicitamente. "
+        "Antes de responder, descarte mentalmente qualquer ideia que compartilhe protagonista, "
+        "conflito, twist ou payoff com outra. "
         "Cada ideia deve deixar claro conflito, obstaculos, stakes, twist, climax, payoff "
         "e resolucao para que o roteiro consiga preservar a proposta original. "
         "{retry_guidance}"
@@ -172,6 +188,12 @@ def should_fallback_to_mock(exc: Exception) -> bool:
     return any(term in message for term in transient_terms)
 
 
+def allow_runtime_mock_fallback(task: str, requested: bool) -> bool:
+    if not requested:
+        return False
+    return task not in CREATIVE_NARRATIVE_TASKS
+
+
 async def get_or_create_prompt_template(session: AsyncSession, task: str) -> PromptTemplate:
     result = await session.execute(
         select(PromptTemplate)
@@ -237,7 +259,9 @@ async def run_structured_generation(
             exc = RuntimeError(
                 f"Provider demorou mais de {LLM_PROVIDER_TIMEOUT_SECONDS}s"
             )
-        should_fallback = fallback_on_runtime_error or should_fallback_to_mock(exc)
+        should_fallback = allow_runtime_mock_fallback(
+            task, fallback_on_runtime_error or should_fallback_to_mock(exc)
+        )
         if getattr(provider, "provider_name", "") == "mock" or not should_fallback:
             raise
         fallback_error = str(exc)

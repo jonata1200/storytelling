@@ -115,6 +115,8 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     assert "fotografia de referencia de elenco" in character["canonical_prompt"]
     assert "Manter exatamente o mesmo rosto" in character["canonical_prompt"]
     assert character["narrative_profile"]["name"] == "Clara"
+    assert character["gender"] == "personagem feminino"
+    assert "Genero visual obrigatorio: feminino" in character["canonical_prompt"]
     assert character["visual_profile"]["hair"] == "cabelo castanho curto"
     assert "cabelo castanho curto" in character["canonical_prompt"]
     assert "Figurino base exclusivo" in character["canonical_prompt"]
@@ -198,6 +200,14 @@ def test_character_profile_formats_structured_outfit_as_prompt_text() -> None:
 
     assert "peca principal: vestido azul indigio" in character["canonical_prompt"]
     assert "{'peca_principal'" not in character["canonical_prompt"]
+
+
+def test_character_profile_infers_masculine_visual_gender() -> None:
+    character = _character_profile({"name": "Lucas", "role": "filho"})
+
+    assert character["gender"] == "personagem masculino"
+    assert "Genero visual obrigatorio: masculino" in character["canonical_prompt"]
+    assert "nao feminilizar" in character["canonical_prompt"]
 
 
 def test_character_defaults_are_distinct_by_name() -> None:

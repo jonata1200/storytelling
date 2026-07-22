@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+import unicodedata
 from decimal import Decimal
 from uuid import UUID
 
@@ -463,6 +464,117 @@ def _seeded_choice(seed: str, options: list[str], offset: int = 0) -> str:
     return options[int(digest[:8], 16) % len(options)]
 
 
+def _ascii_lower(value: object) -> str:
+    text = _prompt_text(value)
+    normalized = unicodedata.normalize("NFKD", text)
+    return normalized.encode("ascii", "ignore").decode("ascii").lower()
+
+
+def _character_gender(raw_gender: object, name: str, role: object) -> str:
+    explicit = _ascii_lower(raw_gender).strip()
+    if explicit and explicit not in {"pessoa", "personagem", "indefinido", "indefinida"}:
+        if any(term in explicit for term in ("fem", "mulher", "female", "woman")):
+            return "personagem feminino"
+        if any(term in explicit for term in ("masc", "homem", "male", "man")):
+            return "personagem masculino"
+        return f"genero visual definido: {_prompt_text(raw_gender)}"
+
+    combined = f"{_ascii_lower(name)} {_ascii_lower(role)}"
+    female_terms = {
+        "dona",
+        "senhora",
+        "mae",
+        "filha",
+        "irma",
+        "tia",
+        "esposa",
+        "viuva",
+        "mulher",
+        "menina",
+        "garota",
+        "neta",
+        "professora",
+        "medica",
+    }
+    male_terms = {
+        "senhor",
+        "pai",
+        "filho",
+        "irmao",
+        "tio",
+        "marido",
+        "viuvo",
+        "homem",
+        "menino",
+        "garoto",
+        "neto",
+        "professor",
+        "medico",
+    }
+    female_names = {
+        "clara",
+        "marta",
+        "maria",
+        "ana",
+        "helena",
+        "lourdes",
+        "celia",
+        "beatriz",
+        "julia",
+        "sofia",
+        "laura",
+        "luiza",
+        "alice",
+        "mariana",
+        "teresa",
+        "rosa",
+        "cristina",
+    }
+    male_names = {
+        "lucas",
+        "pedro",
+        "joao",
+        "jose",
+        "antonio",
+        "carlos",
+        "miguel",
+        "rafael",
+        "gabriel",
+        "mateus",
+        "daniel",
+        "paulo",
+        "marcos",
+        "andre",
+        "luiz",
+    }
+    tokens = set(re.findall(r"[a-z]+", combined))
+    first_name = next(iter(re.findall(r"[a-z]+", _ascii_lower(name))), "")
+    if tokens & female_terms or first_name in female_names:
+        return "personagem feminino"
+    if tokens & male_terms or first_name in male_names:
+        return "personagem masculino"
+    if first_name.endswith("a"):
+        return "personagem feminino"
+    if first_name.endswith(("o", "os", "el")):
+        return "personagem masculino"
+    return _seeded_choice(name, ["personagem feminino", "personagem masculino"], 5)
+
+
+def _character_gender_guardrail(gender: object) -> str:
+    normalized = _ascii_lower(gender)
+    if "fem" in normalized or "mulher" in normalized:
+        return (
+            "Genero visual obrigatorio: feminino; nao masculinizar o rosto, corpo, "
+            "silhueta ou leitura visual."
+        )
+    if "masc" in normalized or "homem" in normalized:
+        return (
+            "Genero visual obrigatorio: masculino; nao feminilizar o rosto, corpo, "
+            "silhueta ou leitura visual."
+        )
+    return f"Genero visual obrigatorio: {_prompt_text(gender)}."
+
+
 def _character_visual_defaults(name: str) -> dict[str, object]:
     outfit_layers = [
         "casaco de linho verde musgo sobre camisa creme amarrotada",
@@ -531,7 +643,11 @@ def _character_profile(raw: object) -> dict:
     name = str(raw.get("name") or "Personagem")
     defaults = _character_visual_defaults(name)
     role = _short_text(_first_value(raw, "role", "funcao", "função"), "personagem", 120)
-    gender = _first_value(raw, "gender", "genero", "sexo", fallback="pessoa")
+    gender = _character_gender(
+        _first_value(raw, "gender", "genero", "sexo", fallback=""),
+        name,
+        role,
+    )
     origin = _first_value(raw, "origin", "origem", "nacionalidade", fallback=defaults["origin"])
     height_cm = _first_value(
         raw, "height_cm", "altura_cm", "altura", fallback=defaults["height_cm"]
@@ -617,6 +733,7 @@ def _character_profile(raw: object) -> dict:
             "Fotorrealista, hiper realista, foto de uma pessoa, fotografia de referencia "
             "de elenco para producao audiovisual. Uma unica pessoa, identidade visual "
             "consistente e memoravel. "
+            f"{_character_gender_guardrail(gender)} "
             f"{_prompt_text(gender).capitalize()} {_prompt_text(origin)}, "
             f"{_prompt_text(apparent_age)}, altura {_prompt_text(height_cm)}cm, "
             f"{_prompt_text(body_type)}. Rosto: {_prompt_text(face_shape)}. "
@@ -809,9 +926,16 @@ def visual_profile_validation_errors(target_kind: str, profile: dict) -> list[st
         errors.append("canonical_prompt vazio")
 
     if target_kind == "character":
-        for key in ("role", "hair", "base_outfit", "palette"):
+        for key in ("role", "gender", "hair", "base_outfit", "palette"):
             if profile.get(key) in (None, "", [], {}):
                 errors.append(f"{key} vazio")
+        if _ascii_lower(profile.get("gender")) in {
+            "pessoa",
+            "personagem",
+            "indefinido",
+            "indefinida",
+        }:
+            errors.append("gender sem leitura visual masculina ou feminina")
     elif target_kind == "location":
         for key in ("description", "layout", "lighting"):
             if profile.get(key) in (None, "", [], {}):

@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 from app.providers.llm.types import LLMRequest, LLMResult
 from app.video_generation.durations import video_clip_durations
 
@@ -55,61 +57,241 @@ class MockLLMProvider:
     def _story_ideas(self, variables: dict) -> dict:
         base_theme = str(variables.get("theme") or "tema livre criado pela IA")
         audience = str(variables.get("audience") or "publico geral")
-        emotion = str(variables.get("primary_emotion") or "esperanca")
         count = int(variables.get("count") or 3)
         target_duration = float(variables.get("target_duration_minutes") or 5)
         selected_genre = str(variables.get("genre") or "").strip()
-        genres = ["Drama", "Suspense", "Ficcao cientifica", "Romance", "Aventura"]
-        emotions = ["Esperanca", "Curiosidade", "Tensao", "Melancolia", "Surpresa"]
-        themes = [
-            "uma promessa esquecida numa cidade pequena",
-            "um sinal vindo de uma missao espacial perdida",
-            "a verdade por tras de uma foto de familia",
-            "um amor interrompido por uma escolha impossivel",
-            "a ultima entrevista de uma artista anonima",
-            "uma comunidade que decide apagar suas memorias",
-            "um objeto herdado que muda de dono a cada mentira",
-            "uma crianca que reconhece uma casa onde nunca esteve",
-            "um restaurante que so abre para despedidas",
-            "uma mensagem de voz entregue dez anos tarde demais",
+        idea_specs = [
+            {
+                "title": "O Trem Que Nao Para Na Estacao",
+                "theme": "uma maquinista descobre que cada parada apagaria um bairro inteiro",
+                "genre": "Suspense",
+                "primary_emotion": "Tensao",
+                "hook": "O painel mostra uma estacao que foi demolida ha vinte anos.",
+                "premise": (
+                    "Nina, maquinista noturna, precisa decidir se freia um trem lotado "
+                    f"quando percebe que a rota impossivel pode salvar {audience} de um apagao urbano."
+                ),
+                "protagonist": "Nina, uma maquinista noturna obsessiva por horarios",
+                "protagonist_desire": "Impedir um acidente sem abandonar os passageiros",
+                "emotional_need": "Aceitar que controle absoluto tambem pode ferir",
+                "conflict": "Frear o trem salva uma memoria coletiva, mas coloca vidas reais em risco",
+                "obstacles": ["sinalizacao contraditoria", "passageiros em panico", "um supervisor que nega a rota"],
+                "stakes": "Centenas de pessoas podem sumir dos registros da cidade",
+                "twist": "A estacao fantasma foi criada para esconder um despejo ilegal",
+                "climax": "Nina corta a energia do trem no tunel antes da ultima curva",
+                "payoff": "A cidade recupera o bairro apagado sem transformar os passageiros em prova descartavel",
+                "resolution": "Nina entrega os registros e volta a dirigir sabendo quando desobedecer",
+            },
+            {
+                "title": "A Cozinha Dos Nomes Trocados",
+                "theme": "um cozinheiro perde o proprio nome sempre que salva alguem",
+                "genre": "Fantasia urbana",
+                "primary_emotion": "Melancolia",
+                "hook": "No pedido da mesa sete aparece um nome que ninguem vivo deveria conhecer.",
+                "premise": (
+                    "Davi, cozinheiro de madrugada, percebe que seus pratos curam lutos, "
+                    "mas cada cura apaga uma parte de sua identidade."
+                ),
+                "protagonist": "Davi, um cozinheiro de lanchonete que memoriza desconhecidos",
+                "protagonist_desire": "Salvar a dona do restaurante sem desaparecer",
+                "emotional_need": "Parar de confundir sacrificio com amor",
+                "conflict": "Cada prato perfeito devolve alguem a uma familia e rouba uma lembranca de Davi",
+                "obstacles": ["clientes desesperados", "receitas que mudam sozinhas", "a dona escondendo a origem da cozinha"],
+                "stakes": "Davi pode virar um funcionario sem nome em uma cidade que esquece seus cuidadores",
+                "twist": "A primeira pessoa salva por aquela cozinha foi ele mesmo",
+                "climax": "Davi serve um prato incompleto para quebrar o pacto sem abandonar a cliente",
+                "payoff": "A cura deixa de exigir apagamento e passa a exigir testemunho",
+                "resolution": "O restaurante vira um lugar onde as pessoas deixam nomes, nao dividas",
+            },
+            {
+                "title": "Manual Para Roubar Um Minuto",
+                "theme": "uma ladra de relogios rouba tempo de corruptos para devolver a trabalhadores",
+                "genre": "Aventura",
+                "primary_emotion": "Coragem",
+                "hook": "Lia abre um relogio caro e ouve dentro dele a respiracao de uma crianca exausta.",
+                "premise": (
+                    "Lia, falsificadora de antiguidades, descobre que executivos compram minutos "
+                    "de vida de funcionarios invisiveis e decide desmontar o leilao."
+                ),
+                "protagonist": "Lia, uma falsificadora de antiguidades com maos tremulas",
+                "protagonist_desire": "Recuperar o tempo roubado da irma",
+                "emotional_need": "Confiar em aliados em vez de atuar sempre sozinha",
+                "conflict": "Para devolver o tempo roubado, Lia precisa destruir a unica prova que salvaria sua irma",
+                "obstacles": ["seguranca do leilao", "um comprador que reconhece suas falsificacoes", "o relogio falhando a cada mentira"],
+                "stakes": "Centenas de trabalhadores podem envelhecer anos em uma unica noite",
+                "twist": "A irma de Lia vendeu minutos voluntariamente para financiar a fuga das duas",
+                "climax": "Lia troca o relogio mestre por uma copia imperfeita diante de todos",
+                "payoff": "O tempo volta como escolha compartilhada, nao como resgate individual",
+                "resolution": "As irmas fogem sem riqueza, mas com dias suficientes para recomecar",
+            },
+            {
+                "title": "O Arquivo Das Vozes Baixas",
+                "theme": "uma arquivista encontra audios de pessoas que nunca foram autorizadas a falar",
+                "genre": "Drama",
+                "primary_emotion": "Indignacao",
+                "hook": "Uma fita sem etiqueta reproduz a voz de alguem que esta em silencio na sala.",
+                "premise": (
+                    "Helena, arquivista de tribunal, descobre depoimentos ocultados e precisa "
+                    "decidir entre proteger sua carreira ou expor uma cidade inteira."
+                ),
+                "protagonist": "Helena, uma arquivista judicial que fala baixo por habito",
+                "protagonist_desire": "Fazer os depoimentos chegarem as pessoas certas",
+                "emotional_need": "Reconhecer a propria voz como prova",
+                "conflict": "Publicar as fitas liberta vitimas, mas tambem incrimina alguem que a protegeu",
+                "obstacles": ["lacres adulterados", "ameacas administrativas", "uma testemunha que pede silencio"],
+                "stakes": "Um julgamento historico pode ser decidido por arquivos falsificados",
+                "twist": "A voz mais importante nas fitas e da propria Helena quando crianca",
+                "climax": "Helena reproduz o audio no alto-falante do tribunal lotado",
+                "payoff": "A verdade vira escuta publica, nao espetaculo de punicao",
+                "resolution": "Ela perde o cargo, mas cria um arquivo independente de testemunhos",
+            },
+            {
+                "title": "A Ilha Que Cabe No Elevador",
+                "theme": "moradores presos em um elevador descobrem que ele replica o predio inteiro",
+                "genre": "Ficcao cientifica",
+                "primary_emotion": "Estranhamento",
+                "hook": "O elevador abre no decimo segundo andar, mas do lado de fora ha areia e mar.",
+                "premise": (
+                    "Caio, sindico recem-eleito, entra no elevador com tres vizinhos e encontra "
+                    "uma versao comprimida do condominio que revela acordos absurdos."
+                ),
+                "protagonist": "Caio, um sindico jovem que odeia conflito presencial",
+                "protagonist_desire": "Sair do elevador antes da assembleia decisiva",
+                "emotional_need": "Parar de terceirizar decisoes que afetam outras vidas",
+                "conflict": "Cada andar impossivel mostra uma consequencia real das omissoes do condominio",
+                "obstacles": ["vizinhos acusando uns aos outros", "portas que abrem em memorias materiais", "o painel cobrando uma escolha unanime"],
+                "stakes": "O predio pode repetir para sempre a mesma assembleia sem resolver seus danos",
+                "twist": "O elevador foi instalado para transformar decisoes coletivas em experiencia fisica",
+                "climax": "Caio segura a porta aberta e obriga todos a votar olhando para os efeitos",
+                "payoff": "A comunidade entende que convivencia tambem e autoria",
+                "resolution": "O elevador volta ao normal, mas ninguem consegue fingir neutralidade",
+            },
+            {
+                "title": "O Jardim Que Recusa Flores",
+                "theme": "uma botanica cultiva plantas que so crescem com promessas cumpridas",
+                "genre": "Drama fantastico",
+                "primary_emotion": "Esperanca",
+                "hook": "Todas as flores do viveiro murcham quando a prefeita sorri para a camera.",
+                "premise": (
+                    "Rosa, botanica municipal, descobre que o jardim publico reage a mentiras "
+                    "politicas e vira prova viva de promessas quebradas."
+                ),
+                "protagonist": "Rosa, uma botanica municipal que mede afeto em solo",
+                "protagonist_desire": "Salvar o viveiro antes que a cidade o transforme em estacionamento",
+                "emotional_need": "Trocar paciencia silenciosa por confronto publico",
+                "conflict": "Expor o jardim salva a memoria ambiental, mas pode destruir o trabalho de sua equipe",
+                "obstacles": ["plantas adoecendo em cadeia", "contratos assinados as pressas", "moradores descrentes"],
+                "stakes": "A ultima area verde do bairro pode virar propaganda de sustentabilidade falsa",
+                "twist": "O jardim nao reage a mentiras, mas a promessas que ninguem pretende cobrar",
+                "climax": "Rosa planta as mudas no asfalto durante a inauguracao oficial",
+                "payoff": "A cidade entende cuidado como compromisso mensuravel",
+                "resolution": "O estacionamento vira horta-escola administrada pelos moradores",
+            },
+            {
+                "title": "A Ponte Dos Guarda-Chuvas Fechados",
+                "theme": "um cobrador de onibus escolta desconhecidos por uma chuva que revela medos",
+                "genre": "Realismo magico",
+                "primary_emotion": "Ternura",
+                "hook": "Chove para cima dentro do onibus, mas so sobre quem esta mentindo para si.",
+                "premise": (
+                    "Orlando, cobrador prestes a ser substituido por catracas digitais, percebe "
+                    "que sua ultima rota atravessa arrependimentos materializados pela chuva."
+                ),
+                "protagonist": "Orlando, um cobrador de onibus que conhece todos pelo sapato",
+                "protagonist_desire": "Completar a ultima viagem sem deixar passageiros para tras",
+                "emotional_need": "Aceitar que ser necessario nao e o mesmo que ser amado",
+                "conflict": "A rota so termina quando cada passageiro admite o medo que trouxe consigo",
+                "obstacles": ["ruas alagadas por lembrancas", "um motorista que quer abandonar a linha", "passageiros recusando ajuda"],
+                "stakes": "A linha pode desaparecer levando junto a unica conexao do bairro",
+                "twist": "Orlando tambem esta preso na rota porque nunca se despediu do proprio futuro",
+                "climax": "Ele abre todos os guarda-chuvas no teto do onibus para inverter a chuva",
+                "payoff": "A despedida vira passagem, nao apagamento",
+                "resolution": "A linha muda de numero, mas Orlando vira mapa vivo da comunidade",
+            },
+            {
+                "title": "Contrato Para Um Silencio",
+                "theme": "uma interprete de libras descobre clausulas escondidas em pausas",
+                "genre": "Thriller juridico",
+                "primary_emotion": "Desconfianca",
+                "hook": "Durante uma audiencia, a pausa de uma testemunha forma uma frase que ninguem ouviu.",
+                "premise": (
+                    "Maya, interprete de libras em audiencias remotas, percebe que silenciamentos "
+                    "editados escondem acordos ilegais entre advogados e empresas."
+                ),
+                "protagonist": "Maya, uma interprete de libras treinada para notar pausas",
+                "protagonist_desire": "Provar que o depoimento foi manipulado sem expor a testemunha",
+                "emotional_need": "Permitir que sua precisao tambem carregue raiva",
+                "conflict": "A unica prova esta em segundos de silencio que o tribunal considera irrelevantes",
+                "obstacles": ["videos comprimidos", "peritos comprados", "uma testemunha aterrorizada"],
+                "stakes": "Um acordo toxico pode condenar trabalhadores a aceitar culpa inexistente",
+                "twist": "As pausas formam um pedido de socorro feito em codigo visual",
+                "climax": "Maya reconstroi o depoimento ao vivo com os gestos omitidos",
+                "payoff": "O silencio ganha valor legal sem virar espetaculo",
+                "resolution": "A audiencia e anulada e Maya cria protocolo para provas acessiveis",
+            },
+            {
+                "title": "A Oficina Dos Mapas Que Sangram",
+                "theme": "um cartografo repara mapas que mostram feridas urbanas",
+                "genre": "Noir urbano",
+                "primary_emotion": "Inquietacao",
+                "hook": "Uma avenida desenhada no mapa começa a sangrar antes do primeiro acidente.",
+                "premise": (
+                    "Tadeu, restaurador de mapas antigos, descobre que plantas oficiais revelam "
+                    "danos futuros sempre que alguem lucra com trajetos perigosos."
+                ),
+                "protagonist": "Tadeu, um cartografo aposentado que perdeu a direcao na propria vida",
+                "protagonist_desire": "Impedir uma obra viaria antes que ela mate de novo",
+                "emotional_need": "Voltar a confiar no proprio senso de orientacao moral",
+                "conflict": "Corrigir o mapa pode salvar o bairro, mas incrimina o antigo parceiro de Tadeu",
+                "obstacles": ["mapas adulterados", "engenheiros apressando a obra", "uma memoria falhando"],
+                "stakes": "O bairro inteiro pode ser redesenhado para esconder mortes previsiveis",
+                "twist": "Tadeu assinou o primeiro mapa defeituoso sem ler a legenda escondida",
+                "climax": "Ele projeta o mapa ferido na fachada da prefeitura durante a votacao",
+                "payoff": "A cidade enxerga que rota tambem e responsabilidade",
+                "resolution": "Tadeu abre uma oficina publica de mapas corrigidos pelos moradores",
+            },
+            {
+                "title": "Ultima Aula De Gravidade",
+                "theme": "uma professora percebe que alunos flutuam quando desistem do futuro",
+                "genre": "Drama escolar",
+                "primary_emotion": "Cuidado",
+                "hook": "No meio da chamada, um aluno sobe lentamente ate encostar no ventilador desligado.",
+                "premise": (
+                    "Samira, professora substituta, descobre que a escola perde gravidade sempre "
+                    "que os alunos acreditam que ninguem espera nada deles."
+                ),
+                "protagonist": "Samira, uma professora substituta que evita criar raizes",
+                "protagonist_desire": "Manter a turma segura ate o fim do dia",
+                "emotional_need": "Entender presenca como compromisso, nao prisao",
+                "conflict": "Para devolver os alunos ao chao, Samira precisa prometer permanecer onde sempre foge",
+                "obstacles": ["direcao negando o fenomeno", "alunos transformando levitacao em desafio", "pais ausentes"],
+                "stakes": "A turma pode desaparecer pelo teto antes de acreditar em qualquer futuro",
+                "twist": "Samira tambem flutuava quando era aluna daquela escola",
+                "climax": "Ela prende a propria cadeira ao chao e da aula olhando para cima",
+                "payoff": "Os alunos descem quando percebem que alguem vai testemunhar sua queda e sua subida",
+                "resolution": "Samira fica por um semestre e transforma a sala em observatorio de futuros",
+            },
         ]
+        if base_theme != "tema livre criado pela IA":
+            for index, spec in enumerate(idea_specs, 1):
+                spec["theme"] = f"{base_theme} por uma abordagem dramatica {index}"
         return {
             "ideas": [
-                {
-                    "title": f"Ideia {index:02d}: {themes[(index - 1) % len(themes)].title()}",
-                    "theme": (
-                        themes[(index - 1) % len(themes)]
-                        if base_theme == "tema livre criado pela IA"
-                        else f"{base_theme} por um angulo {index}"
-                    ),
-                    "genre": (
-                        selected_genre
-                        if selected_genre and selected_genre != "genero livre criado pela IA"
-                        else genres[(index - 1) % len(genres)]
-                    ),
-                    "primary_emotion": emotions[(index - 1) % len(emotions)],
-                    "duration_minutes": max(5, min(25, target_duration)),
-                    "hook": "Ela encontra uma mensagem que muda tudo nos primeiros segundos.",
-                    "premise": (
-                        "Uma pessoa comum precisa encarar uma revelacao inesperada "
-                        f"diante de {audience}."
-                    ),
-                    "protagonist": "Clara, uma cuidadora exausta mas resiliente",
-                    "protagonist_desire": "Consertar uma promessa quebrada",
-                    "emotional_need": "Perdoar a si mesma",
-                    "conflict": "A verdade chega tarde demais",
-                    "obstacles": ["falta de tempo", "culpa antiga", "uma decisao familiar dificil"],
-                    "stakes": "Perder a ultima chance de reparacao",
-                    "twist": "A pessoa que parecia culpada estava protegendo Clara",
-                    "climax": "Clara escolhe contar a verdade em publico",
-                    "payoff": "Clara transforma a mensagem atrasada em um gesto de reparacao",
-                    "resolution": "A familia se reconcilia sem apagar a dor",
-                    "final_emotion": emotion,
-                    "retention_potential": min(95, 75 + index),
-                    "cliche_risk": 20 + index,
-                    "production_complexity": 25 + index,
-                    "estimated_production_cost": "low",
-                }
+                (
+                    {
+                        **idea_specs[(index - 1) % len(idea_specs)],
+                        "genre": (
+                            selected_genre
+                            if selected_genre and selected_genre != "genero livre criado pela IA"
+                            else idea_specs[(index - 1) % len(idea_specs)]["genre"]
+                        ),
+                        "duration_minutes": max(5, min(25, target_duration)),
+                        "retention_potential": min(95, 75 + index),
+                        "cliche_risk": 12 + index,
+                        "production_complexity": 30 + index,
+                        "estimated_production_cost": "low",
+                    }
+                )
                 for index in range(1, count + 1)
             ]
         }
@@ -120,36 +302,53 @@ class MockLLMProvider:
         title = str(idea.get("title") or contract.get("title") or "Historia")
         language = str(variables.get("language") or "pt-BR")
         target_duration_seconds = int(variables.get("target_duration_seconds") or 240)
+        protagonist = str(idea.get("protagonist") or "Ari, uma pessoa em conflito").strip()
+        protagonist_name = protagonist.split(",", 1)[0].strip() or "Ari"
+        protagonist_upper = protagonist_name.upper()
+        hook = str(idea.get("hook") or "Um sinal visual rompe a rotina.").strip()
+        conflict = str(idea.get("conflict") or "A escolha certa cobra um preco imediato.").strip()
+        twist = str(idea.get("twist") or "A pista mais confiavel estava incompleta.").strip()
+        payoff = str(idea.get("payoff") or idea.get("resolution") or "A decisao final muda o sentido da perda.").strip()
+        location_options = [
+            "ESTACAO SUBTERRANEA",
+            "COZINHA DE MADRUGADA",
+            "LEILAO CLANDESTINO",
+            "ARQUIVO DO TRIBUNAL",
+            "ELEVADOR ANTIGO",
+            "JARDIM MUNICIPAL",
+            "ONIBUS NOTURNO",
+            "SALA DE AUDIENCIA REMOTA",
+        ]
+        location = location_options[sum(ord(char) for char in title) % len(location_options)]
         scene_count = int(
             variables.get("expected_scene_count")
             or _expected_scene_count(target_duration_seconds)
         )
         scene_templates = [
             (
-                "INT. CASA DA FAMILIA - FIM DE TARDE",
-                "A sala simples respira poeira e luz fria. Fotografias antigas cobrem a mesa. "
-                "CLARA, exausta mas atenta, encontra uma carta azul escondida atras de um "
-                "porta-retratos rachado.\n\nCLARA\nIsso nao podia estar aqui.",
+                f"INT. {location} - FIM DE TARDE",
+                f"{protagonist_upper}, em alerta, percebe algo impossivel no espaco. "
+                f"{hook}\n\n{protagonist_upper}\nIsso muda tudo agora.",
             ),
             (
-                "EXT. RUA ESTREITA - NOITE",
-                "Postes falham sobre o asfalto molhado. Clara atravessa a rua com a carta "
-                "dobrada no bolso do casaco, seguindo uma pista que a familia sempre evitou.",
+                f"EXT. ARREDORES DE {location} - NOITE",
+                f"{protagonist_upper} atravessa a noite tentando agir antes que alguem "
+                f"transforme o medo em regra. {conflict}",
             ),
             (
-                "INT. SALA DA FAMILIA - MADRUGADA",
-                "A carta aberta repousa sob a luz de um abajur. A parede de fotografias vira "
-                "um tribunal silencioso enquanto Clara entende uma nova camada da verdade.",
+                f"INT. {location} - MADRUGADA",
+                f"O ambiente revela uma camada escondida do conflito. {twist} "
+                f"{protagonist_upper} entende que vencer nao basta; sera preciso escolher.",
             ),
             (
-                "INT. CASA DA FAMILIA - AMANHECER",
-                "A mesma sala ganha luz quente. Clara encara a fotografia restaurada e decide "
-                "que a proxima conversa nao sera adiada outra vez.",
+                f"INT. {location} - AMANHECER",
+                f"{protagonist_upper} encara a consequencia diante de todos. O gesto final "
+                "e simples, visivel e impossivel de desfazer.",
             ),
             (
-                "EXT. FRENTE DA CASA - MANHA",
-                "Clara sai com a carta no bolso. A porta permanece aberta atras dela, como se "
-                "a casa finalmente respirasse junto.",
+                f"EXT. {location} - MANHA",
+                f"{payoff} {protagonist_upper} sai diferente, sem transformar a dor em "
+                "explicacao facil.",
             ),
         ]
         scenes = []

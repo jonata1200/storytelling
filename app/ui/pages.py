@@ -55,9 +55,9 @@ from app.projects.repository import ProjectRepository
 from app.projects.schemas import ProjectCreate
 from app.projects.service import (
     create_project,
-    delete_all_projects,
     delete_project,
     list_projects,
+    purge_application_data,
     rename_project,
 )
 from app.projects.versioning import create_artifact_version
@@ -1753,23 +1753,23 @@ async def _delete_project_from_ui(project_id: UUID, redirect_to: str) -> None:
         ui.notify(f"Não foi possível excluir o projeto: {exc}", color="negative")
 
 
-async def _delete_all_projects_from_ui() -> None:
+async def _purge_application_data_from_ui() -> None:
     try:
         async with AsyncSessionLocal() as session:
-            deleted_count = await delete_all_projects(session)
-        ui.notify(f"{deleted_count} projeto(s) apagado(s).", color="positive")
+            counts = await purge_application_data(session)
+        deleted_ideas = delete_all_ideas()
+        projects = counts.get("projects", 0)
+        artifacts = counts.get("artifacts", 0)
+        ui.notify(
+            (
+                f"Limpeza definitiva concluida: {projects} projeto(s), "
+                f"{artifacts} artefato(s) e {deleted_ideas} ideia(s) do laboratorio removidos."
+            ),
+            color="positive",
+        )
         ui.navigate.to(SETTINGS_DATA_URL)
     except Exception as exc:
-        ui.notify(f"Nao foi possivel apagar os projetos: {exc}", color="negative")
-
-
-def _delete_all_ideas_from_ui() -> None:
-    try:
-        deleted_count = delete_all_ideas()
-        ui.notify(f"{deleted_count} ideia(s) apagada(s).", color="positive")
-        ui.navigate.to(SETTINGS_DATA_URL)
-    except Exception as exc:
-        ui.notify(f"Nao foi possivel apagar as ideias: {exc}", color="negative")
+        ui.notify(f"Nao foi possivel limpar definitivamente os dados: {exc}", color="negative")
 
 
 async def _save_model_setting(
@@ -2131,14 +2131,41 @@ def _visual_batch_requests(summary: dict[str, Any]) -> list[tuple[str, UUID, lis
     return requests
 
 
+async def _current_visual_batch_requests(project_id: UUID) -> list[tuple[str, UUID, list[str]]]:
+    async with AsyncSessionLocal() as session:
+        characters_result = await session.execute(
+            select(Character).where(Character.project_id == project_id)
+        )
+        locations_result = await session.execute(
+            select(Location).where(Location.project_id == project_id)
+        )
+        props_result = await session.execute(select(Prop).where(Prop.project_id == project_id))
+        refs_result = await session.execute(
+            select(VisualReference).where(VisualReference.project_id == project_id)
+        )
+        return _visual_batch_requests(
+            {
+                "characters": list(characters_result.scalars()),
+                "locations": list(locations_result.scalars()),
+                "props": list(props_result.scalars()),
+                "visual_refs": list(refs_result.scalars()),
+            }
+        )
+
+
 async def _approve_all_visual_targets_from_ui(
     project_id: UUID,
-    requests: list[tuple[str, UUID, list[str]]],
+    requests: list[tuple[str, UUID, list[str]]] | None = None,
 ) -> None:
     try:
+        current_requests = requests or await _current_visual_batch_requests(project_id)
+        if not current_requests:
+            ui.notify("Todas as imagens iniciais ja estavam criadas.", color="positive")
+            ui.navigate.reload()
+            return
         created_count = 0
         async with AsyncSessionLocal() as session:
-            for target_kind, target_id, view_types in requests:
+            for target_kind, target_id, view_types in current_requests:
                 references = await approve_visual_target_and_generate_views(
                     session,
                     project_id,
@@ -3409,6 +3436,7 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
     batch_requests = _visual_batch_requests(summary)
     if batch_requests:
         target_lookup: dict[tuple[str, UUID], str] = {}
+        target_profiles: dict[tuple[str, UUID], dict[str, Any]] = {}
         for target_kind, items in (
             ("character", summary["characters"]),
             ("location", summary["locations"]),
@@ -3416,6 +3444,13 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
         ):
             for item in items:
                 target_lookup[(target_kind, item.id)] = str(item.name)
+                target_profiles[(target_kind, item.id)] = getattr(
+                    item, "canonical_profile", {}
+                ) or {}
+        batch_loading_dialog = _generation_loading_dialog(
+            "Gerando imagens",
+            "A IA esta criando as imagens aprovadas da Biblioteca Visual.",
+        )
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_prompt_dialog, ui.card().classes(
             "entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"
         ):
@@ -3427,15 +3462,22 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
                 with ui.column().classes("w-full gap-3"):
                     for target_kind, target_id, view_types in batch_requests:
                         title = target_lookup.get((target_kind, target_id), target_kind)
+                        profile = target_profiles.get((target_kind, target_id), {})
                         with ui.element("div").classes("border border-[#343934] rounded-xl p-4"):
                             ui.label(title).classes("text-sm font-semibold")
                             ui.label(", ".join(view_types)).classes("text-xs acid")
+                            for view_type in view_types[:2]:
+                                ui.label(visual_reference_prompt(profile, view_type)).classes(
+                                    "text-xs text-[#aeb4af] whitespace-pre-wrap mt-2 line-clamp-3"
+                                )
 
-            async def confirm_batch_prompts(
-                requests: list[tuple[str, UUID, list[str]]] = batch_requests,
-            ) -> None:
+            async def confirm_batch_prompts() -> None:
                 batch_prompt_dialog.close()
-                await _approve_all_visual_targets_from_ui(project_id, requests)
+                batch_loading_dialog.open()
+                try:
+                    await _approve_all_visual_targets_from_ui(project_id)
+                finally:
+                    batch_loading_dialog.close()
 
             with ui.row().classes("w-full justify-end gap-2 mt-3"):
                 ui.button("Cancelar", on_click=batch_prompt_dialog.close).props("flat no-caps")
@@ -3449,7 +3491,7 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
             ui.button(
                 f"Aprovar prompts pendentes ({pending_count})",
                 icon="check_circle",
-                on_click=batch_prompt_dialog.open,
+                on_click=lambda: batch_prompt_dialog.open(),
             ).props("unelevated no-caps").classes("acid-bg rounded-xl")
     with (
         ui.tabs()
@@ -4105,13 +4147,9 @@ def register_ui_pages() -> None:
                                 "Ações destrutivas para limpar ideias e projetos do estúdio."
                             ).classes("text-sm text-[#858b86] mb-4")
 
-                            def confirm_delete_ideas() -> None:
-                                ideas_dialog.close()
-                                _delete_all_ideas_from_ui()
-
-                            async def confirm_delete_projects() -> None:
-                                projects_dialog.close()
-                                await _delete_all_projects_from_ui()
+                            async def confirm_purge_data() -> None:
+                                purge_dialog.close()
+                                await _purge_application_data_from_ui()
 
                             with ui.dialog() as ideas_dialog, ui.card().classes(
                                 "entity-card rounded-2xl p-6 min-w-96"
@@ -4130,7 +4168,7 @@ def register_ui_pages() -> None:
                                     ui.button(
                                         "Apagar ideias",
                                         icon="delete",
-                                        on_click=confirm_delete_ideas,
+                                        on_click=confirm_purge_data,
                                     ).props("unelevated no-caps").classes(
                                         "bg-red-600 text-white rounded-xl"
                                     )
@@ -4152,15 +4190,36 @@ def register_ui_pages() -> None:
                                     ui.button(
                                         "Apagar projetos",
                                         icon="delete_forever",
-                                        on_click=confirm_delete_projects,
+                                        on_click=confirm_purge_data,
                                     ).props("unelevated no-caps").classes(
                                         "bg-red-600 text-white rounded-xl"
                                     )
 
+                            with ui.dialog() as purge_dialog, ui.card().classes(
+                                "entity-card rounded-2xl p-6 min-w-96"
+                            ):
+                                ui.label("Limpar banco da aplicacao?").classes(
+                                    "text-xl font-semibold"
+                                )
+                                ui.label(
+                                    "Isso apaga definitivamente projetos, roteiros, cenas, "
+                                    "storyboards, assets, execucoes de prompt e ideias do "
+                                    "laboratorio. Usuarios e configuracoes globais serao mantidos."
+                                ).classes("text-sm text-[#858b86]")
+                                with ui.row().classes("w-full justify-end gap-2 mt-4"):
+                                    ui.button("Cancelar", on_click=purge_dialog.close).props(
+                                        "flat no-caps"
+                                    )
+                                    ui.button(
+                                        "Limpar definitivamente",
+                                        icon="delete_forever",
+                                        on_click=confirm_purge_data,
+                                    ).props("unelevated no-caps").classes(
+                                        "bg-red-700 text-white rounded-xl"
+                                    )
+
                             with ui.column().classes("w-full gap-3"):
-                                with ui.element("div").classes(
-                                    "border border-[#343934] rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
-                                ):
+                                with ui.element("div").classes("hidden"):
                                     with ui.column().classes("gap-1"):
                                         ui.label("Ideias").classes("font-semibold")
                                         ui.label(
@@ -4175,9 +4234,7 @@ def register_ui_pages() -> None:
                                         "text-red-300 border-red-900 rounded-xl"
                                     )
 
-                                with ui.element("div").classes(
-                                    "border border-[#343934] rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
-                                ):
+                                with ui.element("div").classes("hidden"):
                                     with ui.column().classes("gap-1"):
                                         ui.label("Projetos").classes("font-semibold")
                                         ui.label(
@@ -4187,6 +4244,24 @@ def register_ui_pages() -> None:
                                         "Apagar todos os projetos",
                                         icon="delete_forever",
                                         on_click=projects_dialog.open,
+                                    ).props("outline no-caps").classes(
+                                        "text-red-300 border-red-900 rounded-xl"
+                                    )
+
+                                with ui.element("div").classes(
+                                    "border border-red-950 rounded-2xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+                                ):
+                                    with ui.column().classes("gap-1"):
+                                        ui.label("Projetos e ideias").classes("font-semibold")
+                                        ui.label(
+                                            f"Remove fisicamente {project_count} projeto(s), "
+                                            f"{saved_idea_count} ideia(s) salva(s) e "
+                                            f"{generated_idea_count} ideia(s) gerada(s)."
+                                        ).classes("text-sm text-[#858b86]")
+                                    ui.button(
+                                        "Apagar definitivamente",
+                                        icon="delete_forever",
+                                        on_click=purge_dialog.open,
                                     ).props("outline no-caps").classes(
                                         "text-red-300 border-red-900 rounded-xl"
                                     )

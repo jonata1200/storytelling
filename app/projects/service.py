@@ -1,14 +1,17 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.assets.models import Asset
 from app.core.enums import ArtifactStatus, DependencyKind, ProjectStatus
+from app.generation.models import PromptExecution
 from app.projects.models import Artifact, ArtifactVersion, Project, ProjectVersion
 from app.projects.repository import ProjectRepository
 from app.projects.schemas import ArtifactCreate, ProjectCreate
 from app.projects.versioning import create_artifact_version, mark_dependents_stale
+from app.storytelling.models import Scene, Script, Shot, StoryIdea
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import assert_project_transition
 
@@ -73,6 +76,33 @@ async def delete_all_projects(session: AsyncSession) -> int:
         project.deleted_at = deleted_at
     await session.commit()
     return len(projects)
+
+
+APPLICATION_DATA_COUNT_MODELS = (
+    Project,
+    Artifact,
+    StoryIdea,
+    Script,
+    Scene,
+    Shot,
+    Asset,
+    PromptExecution,
+)
+
+
+async def application_data_counts(session: AsyncSession) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for model in APPLICATION_DATA_COUNT_MODELS:
+        value = await session.scalar(select(func.count()).select_from(model))
+        counts[model.__tablename__] = int(value or 0)
+    return counts
+
+
+async def purge_application_data(session: AsyncSession) -> dict[str, int]:
+    counts = await application_data_counts(session)
+    await session.execute(text("TRUNCATE TABLE projects RESTART IDENTITY CASCADE"))
+    await session.commit()
+    return counts
 
 
 async def create_artifact(
