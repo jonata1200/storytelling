@@ -824,24 +824,13 @@ async def _ensure_visual_pipeline(
         visual = await generate_visual_bible(session, project_id, script.id)
         if visual is None:
             return ProjectChatResult(
-                "Nao consegui criar personagens e referencias visuais.",
+                "Nao consegui criar personagens, locais e objetos.",
                 "generate_assets",
             )
-        characters, locations, props = visual
-        await _emit_progress(progress, "Vou criar as imagens iniciais de referencia.")
-        for target_kind, items in (
-            ("character", characters),
-            ("location", locations),
-            ("prop", props),
-        ):
-            for item in items:
-                await approve_visual_target_and_generate_views(
-                    session,
-                    project_id,
-                    target_kind,
-                    item.id,
-                    [initial_view_for(target_kind)],
-                )
+        await _emit_progress(
+            progress,
+            "Prompts visuais criados. Revise e aprove antes de gerar imagens.",
+        )
 
     visual_refs = await _count(session, VisualReference, project_id)
     if visual_refs == 0:
@@ -852,7 +841,8 @@ async def _ensure_visual_pipeline(
             changed,
         )
     return ProjectChatResult(
-        "Personagens, locais, objetos e referencias visuais estao prontos.",
+        "Personagens, locais e objetos ja existem. "
+        "Revise os prompts ou aprove-os para gerar imagens.",
         "generate_assets",
         changed,
     )

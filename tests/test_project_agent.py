@@ -212,6 +212,66 @@ async def test_project_chat_uses_project_state_for_progression_requests(
 
 
 @pytest.mark.asyncio
+async def test_visual_pipeline_creates_prompts_without_auto_generating_images(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    progress_messages: list[str] = []
+
+    async def fake_script(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+    ) -> tuple[SimpleNamespace, str, bool]:
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=script_id), "script ok", False
+
+    async def fake_count(session: AsyncSession, model: type[Any], requested_project_id: Any) -> int:
+        assert requested_project_id == project_id
+        return 0
+
+    async def fake_visual_bible(
+        session: AsyncSession,
+        requested_project_id: Any,
+        requested_script_id: Any,
+    ) -> tuple[list[SimpleNamespace], list[SimpleNamespace], list[SimpleNamespace]]:
+        assert requested_project_id == project_id
+        assert requested_script_id == script_id
+        return (
+            [SimpleNamespace(id=uuid4())],
+            [SimpleNamespace(id=uuid4())],
+            [SimpleNamespace(id=uuid4())],
+        )
+
+    async def fail_auto_approval(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("visual pipeline should not auto-generate images")
+
+    async def collect_progress(message: str) -> None:
+        progress_messages.append(message)
+
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
+    monkeypatch.setattr(project_agent, "_count", fake_count)
+    monkeypatch.setattr(project_agent, "generate_visual_bible", fake_visual_bible)
+    monkeypatch.setattr(
+        project_agent,
+        "approve_visual_target_and_generate_views",
+        fail_auto_approval,
+    )
+
+    result = await project_agent._ensure_visual_pipeline(
+        cast(AsyncSession, object()),
+        project_id,
+        progress=collect_progress,
+    )
+
+    assert result.action == "generate_assets"
+    assert result.changed is True
+    assert "Revise e aprove os prompts" in result.message
+    assert any("Prompts visuais criados" in message for message in progress_messages)
+
+
+@pytest.mark.asyncio
 async def test_project_chat_routes_script_finalization_and_quality(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

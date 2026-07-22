@@ -40,7 +40,7 @@ from app.generation.model_settings import (
     set_model_setting,
 )
 from app.generation.models import ProjectModelSetting
-from app.generation.project_agent import handle_project_chat
+from app.generation.project_agent import classify_project_chat_action, handle_project_chat
 from app.production.models import ProjectProductionSettings
 from app.production.service import (
     ASPECT_RATIOS,
@@ -1865,7 +1865,10 @@ async def _create_next_episode(project_id: UUID) -> None:
 STEP_LOADING_COPY = {
     "ideas": ("Gerando ideias", "A IA esta criando temas, generos e emocoes."),
     "script": ("Gerando roteiro", "A IA esta escrevendo o roteiro e separando cenas."),
-    "visual": ("Gerando ativos", "A IA esta criando personagens, locais, objetos e referencias."),
+    "visual": (
+        "Gerando prompts visuais",
+        "A IA esta criando personagens, locais e objetos para revisao.",
+    ),
     "storyboard": ("Gerando storyboard", "A IA esta criando quadros, planos e animatic."),
     "video": ("Preparando video", "A IA esta verificando prompts e deixando os clipes prontos."),
     "finalization": ("Finalizando projeto", "A IA esta montando narracao, legendas e export."),
@@ -1891,7 +1894,7 @@ async def _run_step(
     step_messages = {
         "ideas": "Criando ideias.",
         "script": "Criando roteiro.",
-        "visual": "Criando ativos visuais.",
+        "visual": "Criando prompts visuais.",
         "storyboard": "Criando storyboard.",
         "video": "Preparando video.",
         "finalization": "Finalizando projeto.",
@@ -1940,22 +1943,8 @@ async def _run_step(
                 )
                 if visual is None:
                     raise ValueError("nao foi possivel criar a Biblioteca visual")
-                characters, locations, props = visual
-                for target_kind, items in (
-                    ("character", characters),
-                    ("location", locations),
-                    ("prop", props),
-                ):
-                    for item in items:
-                        await approve_visual_target_and_generate_views(
-                            session,
-                            project_id,
-                            target_kind,
-                            item.id,
-                            [initial_view_for(target_kind)],
-                        )
                 ui.notify(
-                    "Ativos preparados com imagens iniciais na Biblioteca visual.",
+                    "Prompts visuais criados. Revise e aprove para gerar as imagens.",
                     color="info",
                 )
                 ui.navigate.reload()
@@ -2756,6 +2745,27 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             "orientar movimento de câmera, ajustar ritmo ou propor variações de montagem."
         ),
     }
+    chat_loading_copy = {
+        "generate_ideas": STEP_LOADING_COPY["ideas"],
+        "generate_script": STEP_LOADING_COPY["script"],
+        "revise_script": ("Revisando roteiro", "A IA esta aplicando ajustes no roteiro."),
+        "generate_assets": STEP_LOADING_COPY["visual"],
+        "approve_visual_prompt": (
+            "Gerando imagens",
+            "A IA esta criando imagens a partir dos prompts aprovados.",
+        ),
+        "generate_storyboard": STEP_LOADING_COPY["storyboard"],
+        "generate_video": (
+            "Gerando clipes",
+            "A IA esta criando clipes a partir dos prompts aprovados.",
+        ),
+        "generate_finalization": STEP_LOADING_COPY["finalization"],
+        "run_quality": STEP_LOADING_COPY["quality"],
+    }
+    action_loading_dialogs = {
+        action: _generation_loading_dialog(title, message)
+        for action, (title, message) in chat_loading_copy.items()
+    }
     _sync_ai_action_events_to_chat(project_id, summary)
     messages = _load_assistant_messages(project_id, active, assistant_suggestions)
 
@@ -2816,6 +2826,10 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
             prompt.value = ""
             _safe_refresh(conversation)
             should_reload = False
+            predicted_action = classify_project_chat_action(user_message, active)
+            loading_dialog = action_loading_dialogs.get(predicted_action)
+            if loading_dialog is not None:
+                loading_dialog.open()
 
             async def report_progress(content: str) -> None:
                 progress_message = content.strip()
@@ -2845,6 +2859,8 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
                     active,
                 )
                 response = f"Não consegui responder agora ({type(exc).__name__}). Tente novamente."
+            if loading_dialog is not None:
+                loading_dialog.close()
             if pending_message in messages:
                 messages.remove(pending_message)
             messages.append({"role": "assistant", "content": response})
@@ -3390,6 +3406,51 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
         None,
         None,
     )
+    batch_requests = _visual_batch_requests(summary)
+    if batch_requests:
+        target_lookup: dict[tuple[str, UUID], str] = {}
+        for target_kind, items in (
+            ("character", summary["characters"]),
+            ("location", summary["locations"]),
+            ("prop", summary["props"]),
+        ):
+            for item in items:
+                target_lookup[(target_kind, item.id)] = str(item.name)
+        with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_prompt_dialog, ui.card().classes(
+            "entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"
+        ):
+            ui.label("Aprovar prompts de imagem").classes("brand-type text-2xl font-bold")
+            ui.label(
+                "Confira os prompts pendentes antes de gerar as imagens da Biblioteca Visual."
+            ).classes("text-sm text-[#8d938e]")
+            with ui.scroll_area().classes("w-full max-h-[52vh] pr-2"):
+                with ui.column().classes("w-full gap-3"):
+                    for target_kind, target_id, view_types in batch_requests:
+                        title = target_lookup.get((target_kind, target_id), target_kind)
+                        with ui.element("div").classes("border border-[#343934] rounded-xl p-4"):
+                            ui.label(title).classes("text-sm font-semibold")
+                            ui.label(", ".join(view_types)).classes("text-xs acid")
+
+            async def confirm_batch_prompts(
+                requests: list[tuple[str, UUID, list[str]]] = batch_requests,
+            ) -> None:
+                batch_prompt_dialog.close()
+                await _approve_all_visual_targets_from_ui(project_id, requests)
+
+            with ui.row().classes("w-full justify-end gap-2 mt-3"):
+                ui.button("Cancelar", on_click=batch_prompt_dialog.close).props("flat no-caps")
+                ui.button(
+                    "Aprovar e gerar imagens",
+                    icon="check_circle",
+                    on_click=confirm_batch_prompts,
+                ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+        with ui.row().classes("w-full justify-end mb-3"):
+            pending_count = sum(len(view_types) for _kind, _id, view_types in batch_requests)
+            ui.button(
+                f"Aprovar prompts pendentes ({pending_count})",
+                icon="check_circle",
+                on_click=batch_prompt_dialog.open,
+            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
     with (
         ui.tabs()
         .classes("text-[#8d938e]")
