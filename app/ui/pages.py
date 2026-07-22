@@ -1,32 +1,24 @@
-# ruff: noqa: E501
+﻿# ruff: noqa: E501
 
 import asyncio
-import base64
 import logging
-import mimetypes
-import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, cast
-from urllib.parse import quote
+from typing import Any
 from uuid import UUID
 
 from fastapi import Request
 from nicegui import app as nicegui_app
 from nicegui import background_tasks, ui
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset
 from app.config.preferences import save_preferences
 from app.config.settings import get_settings
-from app.core.enums import ArtifactStatus
-from app.costs.models import CostEntry
 from app.database.session import AsyncSessionLocal
-from app.finalization.models import Export, SubtitleTrack
 from app.finalization.service import (
     create_final_timeline,
     export_timeline,
@@ -58,12 +50,10 @@ from app.projects.service import (
     hard_delete_all_story_ideas,
     hard_delete_project,
     hard_delete_story_idea_by_payload_id,
-    list_projects,
     purge_application_data,
     rename_project,
 )
 from app.projects.versioning import create_artifact_version
-from app.quality.models import ContinuityIssue, QualityCheck
 from app.quality.service import run_quality_check
 from app.storyboards.models import (
     Animatic,
@@ -88,7 +78,6 @@ from app.storytelling.models import (
     Scene,
     Script,
     ScriptVersion,
-    Shot,
     StoryIdea,
 )
 from app.storytelling.schemas import BriefingCreate
@@ -100,7 +89,122 @@ from app.storytelling.service import (
     generate_script,
     generate_story_ideas,
 )
-from app.video_generation.models import GenerationJob, VideoClip
+from app.ui import assistant_state
+from app.ui.assistant_state import (
+    append_assistant_message_to_chat as _append_assistant_message_to_chat,
+)
+from app.ui.assistant_state import (
+    load_assistant_messages as _load_assistant_messages,
+)
+from app.ui.assistant_state import (
+    safe_client_navigation as _safe_client_navigation,
+)
+from app.ui.assistant_state import (
+    safe_refresh as _safe_refresh,
+)
+from app.ui.assistant_state import (
+    save_assistant_messages as _save_assistant_messages,
+)
+from app.ui.components import (
+    button_classes as _button_classes,
+)
+from app.ui.components import (
+    card_classes as _card_classes,
+)
+from app.ui.components import (
+    muted as _muted,
+)
+from app.ui.navigation import (
+    home_sidebar as _home_sidebar,
+)
+from app.ui.navigation import (
+    save_avatar_file as _save_avatar_file,
+)
+from app.ui.navigation import (
+    studio_logo as _studio_logo,
+)
+from app.ui.navigation import (
+    theme_toggle as _theme_toggle,
+)
+from app.ui.navigation import (
+    user_avatar as _user_avatar,
+)
+from app.ui.navigation import (
+    workspace_header as _workspace_header,
+)
+from app.ui.page_config import (
+    BLOCKING_DIALOG_PROPS,
+    DEFAULT_STORY_DURATION_MINUTES,
+    IDEA_COUNT_OPTIONS,
+    IDEA_GENRES,
+    SETTINGS_DATA_URL,
+    STEP_LOADING_COPY,
+    STORY_DURATION_OPTIONS,
+    UI_GENERATION_TIMEOUT_SECONDS,
+    ProductionStep,
+)
+from app.ui.page_config import (
+    PRODUCTION_STEPS as PAGE_PRODUCTION_STEPS,
+)
+from app.ui.page_config import (
+    WORKSPACE_TABS as PAGE_WORKSPACE_TABS,
+)
+from app.ui.page_config import (
+    clean_idea_title as _clean_idea_title,
+)
+from app.ui.page_config import (
+    friendly_ai_error as _friendly_ai_error,
+)
+from app.ui.page_config import (
+    settings_tab_key as _settings_tab_key,
+)
+from app.ui.project_cards import render_project_card
+from app.ui.project_data import (
+    latest as _latest,
+)
+from app.ui.project_data import (
+    latest_many as _latest_many,
+)
+from app.ui.project_data import (
+    project_cards as _project_cards,
+)
+from app.ui.project_data import (
+    project_summary as _project_summary,
+)
+from app.ui.project_data import (
+    scalar_count as _scalar_count,
+)
+from app.ui.project_text import (
+    compact_project_title as _compact_project_title,
+)
+from app.ui.project_text import (
+    format_idea_payload_for_project as _format_idea_payload_for_project,
+)
+from app.ui.theme import apply_body_style as _body_style
+from app.ui.visual_helpers import (
+    asset_url as _visual_asset_url,
+)
+from app.ui.visual_helpers import (
+    visual_card_detail as _visual_card_detail,
+)
+from app.ui.visual_helpers import (
+    visual_reference_asset as _visual_reference_asset,
+)
+from app.ui.visual_helpers import (
+    visual_reference_views_for as _visual_reference_views_for,
+)
+from app.ui.visual_helpers import (
+    visual_references_for as _visual_references_for,
+)
+from app.ui.workspace_rules import (
+    first_available_workspace_section as _first_available_workspace_section,
+)
+from app.ui.workspace_rules import (
+    step_ready as _step_ready,
+)
+from app.ui.workspace_rules import (
+    workspace_section_access as _workspace_section_access,
+)
 from app.video_generation.service import generate_video_clips
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (
@@ -113,1133 +217,19 @@ from app.visual_bible.service import (
     visual_reference_prompt,
 )
 
-BRAND_MARK_URL = "/ui-assets/favicon.png"
-DEFAULT_STORY_DURATION_MINUTES = 5.0
-STORY_DURATION_OPTIONS = [5, 10, 15, 20, 25]
-IDEA_COUNT_OPTIONS = list(range(1, 11))
-BLOCKING_DIALOG_PROPS = "persistent no-esc-dismiss no-backdrop-dismiss"
-UI_GENERATION_TIMEOUT_SECONDS = 90
 logger = logging.getLogger(__name__)
-SETTINGS_DATA_URL = "/settings?tab=data"
-IDEA_TITLE_PREFIX_RE = re.compile(r"^\s*ideia\s+\d+\s*[:\-–]\s*", re.IGNORECASE)
-
-IDEA_GENRES = [
-    "Ação",
-    "Animação",
-    "Aventura",
-    "Comédia",
-    "Drama",
-    "Fantasia",
-    "Ficção Científica",
-    "Romance",
-    "Suspense (Thriller)",
-    "Terror (ou Horror)",
-]
-
-
-def _settings_tab_key(value: object) -> str:
-    normalized = re.sub(r"[\s_-]+", "-", str(value or "").strip().casefold())
-    if normalized in {"data", "dados"}:
-        return "data"
-    if normalized in {"ai", "ia", "inteligencia-artificial"}:
-        return "ai"
-    return "profile"
-
-
-@dataclass(frozen=True)
-class ProductionStep:
-    key: str
-    title: str
-    description: str
-    action_label: str
-    icon: str
-
-
-PRODUCTION_STEPS = [
-    ProductionStep(
-        "briefing",
-        "Briefing",
-        "Defina tema, publico, emocao, duracao e objetivo do video.",
-        "Criar novo projeto",
-        "edit_note",
-    ),
-    ProductionStep(
-        "ideas",
-        "Ideias",
-        "Gere tres caminhos narrativos e escolha a melhor promessa emocional.",
-        "Gerar ideias",
-        "tips_and_updates",
-    ),
-    ProductionStep(
-        "script",
-        "Roteiro",
-        "Crie o texto base, duracao alvo, cenas e planos estruturados.",
-        "Gerar roteiro",
-        "description",
-    ),
-    ProductionStep(
-        "visual",
-        "Visual",
-        "Crie fichas canonicas e referencias visuais aprovaveis.",
-        "Gerar visual",
-        "palette",
-    ),
-    ProductionStep(
-        "storyboard",
-        "Storyboard",
-        "Transforme planos em quadros, animatic e timeline preliminar.",
-        "Gerar storyboard",
-        "view_comfy",
-    ),
-    ProductionStep(
-        "video",
-        "Video",
-        "Gere clipes mock por plano, com jobs, assets e custos rastreados.",
-        "Gerar clipes",
-        "movie",
-    ),
-    ProductionStep(
-        "finalization",
-        "Finalizacao",
-        "Crie narracao final, legendas, timeline final e exportacao.",
-        "Finalizar",
-        "auto_awesome_motion",
-    ),
-    ProductionStep(
-        "quality",
-        "Qualidade",
-        "Rode continuity ledger, alertas, score e observabilidade do projeto.",
-        "Rodar QA",
-        "verified",
-    ),
-]
-
-
-WORKSPACE_TABS = [
-    ("Roteiro", "script"),
-    ("Personagens", "assets"),
-    ("Storyboard", "storyboard"),
-    ("Vídeo", "video"),
-]
-
-
-def _body_style() -> None:
-    ui.colors(primary="#5aa3f0")
-    ui.dark_mode(value=get_settings().user_theme != "light")
-    ui.page_title(get_settings().app_name)
-    ui.query("body").classes("studio-body")
-    ui.add_head_html(f'<link rel="icon" type="image/png" href="{BRAND_MARK_URL}">')
-    ui.add_head_html(
-        r"""
-        <meta name="theme-color" content="#090b0a">
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
-          :root { --ink:#080a09; --panel:#111412; --line:#272c28; --acid:#5aa3f0; --muted:#969c97; }
-          body.studio-body { background:var(--ink); color:#f4f5f2; font-family:'DM Sans',sans-serif; }
-          body:not(.body--dark).studio-body { background:#f4f5ef; color:#171a17; }
-          body:not(.body--dark) .glass,
-          body:not(.body--dark) .entity-card { background:#ffffff; border-color:#d9ded7; }
-          body:not(.body--dark) .chat-shell { box-shadow:0 20px 60px rgba(25,35,25,.12); }
-          body:not(.body--dark) .desktop-nav,
-          body:not(.body--dark) .right-assistant,
-          body:not(.body--dark) .bg-slate-900,
-          body:not(.body--dark) .bg-slate-800,
-          body:not(.body--dark) .bg-\[\#0b0d0c\],
-          body:not(.body--dark) .bg-\[\#090b0a\],
-          body:not(.body--dark) .bg-\[\#0d0f0e\],
-          body:not(.body--dark) .bg-\[\#0d100e\] { background:#f8faf6!important; }
-          body:not(.body--dark) .border-slate-800,
-          body:not(.body--dark) .border-\[\#222622\],
-          body:not(.body--dark) .border-\[\#242824\],
-          body:not(.body--dark) .border-\[\#252925\],
-          body:not(.body--dark) .border-\[\#343934\],
-          body:not(.body--dark) .border-\[\#363b36\] { border-color:#d9ded7!important; }
-          body:not(.body--dark) .text-slate-100,
-          body:not(.body--dark) .text-slate-300,
-          body:not(.body--dark) .text-\[\#b8bdb8\],
-          body:not(.body--dark) .text-\[\#c8ccc8\],
-          body:not(.body--dark) .text-\[\#d1d4d1\],
-          body:not(.body--dark) .text-\[\#d4d8d4\],
-          body:not(.body--dark) .text-\[\#d7dbd7\],
-          body:not(.body--dark) .text-\[\#d8dbd8\],
-          body:not(.body--dark) .text-\[\#d9dcd9\] { color:#20261f!important; }
-          body:not(.body--dark) .text-slate-400,
-          body:not(.body--dark) .text-\[\#747a75\],
-          body:not(.body--dark) .text-\[\#777d78\],
-          body:not(.body--dark) .text-\[\#7f8580\],
-          body:not(.body--dark) .text-\[\#858b86\],
-          body:not(.body--dark) .text-\[\#878d88\],
-          body:not(.body--dark) .text-\[\#8d938e\],
-          body:not(.body--dark) .text-\[\#8e948f\],
-          body:not(.body--dark) .text-\[\#8f9590\],
-          body:not(.body--dark) .text-\[\#939994\],
-          body:not(.body--dark) .text-\[\#969c97\],
-          body:not(.body--dark) .text-\[\#999f9a\],
-          body:not(.body--dark) .text-\[\#9aa29b\] { color:#626b62!important; }
-          body:not(.body--dark) .bg-\[\#243342\] { background:#edf6ff!important; }
-          body:not(.body--dark) .bg-\[\#2f3321\],
-          body:not(.body--dark) .bg-\[\#30362b\],
-          body:not(.body--dark) .bg-\[\#26301f\] { background:#eff5dc!important; }
-          body:not(.body--dark) .text-\[\#bfe2ff\] { color:#5aa3f0!important; }
-          body:not(.body--dark) .text-\[\#dff57b\],
-          body:not(.body--dark) .text-\[\#e6f59b\],
-          body:not(.body--dark) .text-\[\#eaf878\] { color:#4f6417!important; }
-          body:not(.body--dark) .visual-placeholder { background:radial-gradient(circle at 70% 15%,#e6e9c9 0,#d9ddcf 42%,#eef0e9 80%); }
-          body:not(.body--dark) .q-field__control { background:#ffffff!important; }
-          body:not(.body--dark) .q-field__native,
-          body:not(.body--dark) .q-field__input,
-          body:not(.body--dark) .q-textarea textarea { color:#171a17!important; }
-          body:not(.body--dark) .q-menu { background:#ffffff!important; color:#171a17!important; }
-          .studio-body .nicegui-content { padding:0; }
-          .brand-type { font-family:'Manrope',sans-serif; letter-spacing:-.04em; }
-          .glass { background:rgba(17,20,18,.88); border:1px solid var(--line); }
-          .acid { color:var(--acid); }
-          .acid-bg { background:var(--acid)!important; color:#10120d!important; }
-          .workspace-header {
-            display:grid;
-            grid-template-columns:minmax(260px,.75fr) minmax(420px,1.25fr) auto;
-            align-items:center;
-            gap:16px;
-            min-height:64px;
-            padding:0 20px;
-          }
-          .workspace-titlebar { min-width:0; flex-wrap:nowrap!important; }
-          .workspace-titlebar .q-btn { flex:0 0 auto; }
-          .workspace-nav {
-            min-width:0;
-            overflow-x:auto;
-            flex-wrap:nowrap!important;
-            justify-content:center;
-            scrollbar-width:none;
-          }
-          .workspace-nav::-webkit-scrollbar { display:none; }
-          .workspace-actions { flex-wrap:nowrap!important; justify-content:flex-end; min-width:max-content; }
-          .nav-pill {
-            border:1px solid transparent;
-            color:#8c918d;
-            transition:.2s ease;
-            flex:0 0 auto;
-            min-height:36px!important;
-            height:36px;
-          }
-          .nav-pill .q-btn__content { flex-wrap:nowrap; white-space:nowrap; gap:6px; }
-          .nav-pill:hover { color:#eaf3ff; background:#171a18; }
-          .nav-active { color:#ffffff!important; background:var(--acid)!important; border-color:rgba(255,255,255,.45)!important; min-width:92px; }
-          .nav-active .q-btn__content,
-          .nav-active .q-btn__content span,
-          .nav-active .q-icon { color:#ffffff!important; opacity:1!important; }
-          .nav-locked { color:#5aa3f0!important; background:transparent!important; border-color:transparent!important; }
-          .nav-locked:hover { color:#5aa3f0!important; background:transparent!important; }
-          body:not(.body--dark) .nav-pill { color:#6d756f; }
-          body:not(.body--dark) .nav-pill:hover { color:#5aa3f0; background:#edf6ff; }
-          body:not(.body--dark) .nav-active { color:#ffffff!important; background:var(--acid)!important; border-color:transparent!important; }
-          body:not(.body--dark) .nav-active .q-btn__content,
-          body:not(.body--dark) .nav-active .q-btn__content span,
-          body:not(.body--dark) .nav-active .q-icon { color:#ffffff!important; opacity:1!important; }
-          body:not(.body--dark) .nav-locked,
-          body:not(.body--dark) .nav-locked:hover { color:#5aa3f0!important; background:transparent!important; border-color:transparent!important; }
-          .idea-badge-genre { background:#243342!important; color:#dcecff!important; }
-          .idea-badge-emotion { background:#2f3321!important; color:#f1ff9f!important; }
-          .idea-badge-duration { background:#2d2636!important; color:#eadfff!important; }
-          body:not(.body--dark) .idea-badge-genre { background:#edf6ff!important; color:#5aa3f0!important; }
-          body:not(.body--dark) .idea-badge-emotion { background:#eaf5c6!important; color:#40540e!important; }
-          body:not(.body--dark) .idea-badge-duration { background:#eee4ff!important; color:#54358a!important; }
-          .entity-card { background:#151816; border:1px solid #252a26; transition:.2s ease; }
-          .entity-card:hover { transform:translateY(-2px); border-color:#555d4c; }
-          .visual-placeholder { background:radial-gradient(circle at 70% 15%,#4e5531 0,#24281e 32%,#141614 70%); }
-          .chat-shell { box-shadow:0 30px 90px rgba(0,0,0,.45); }
-          .q-field__label { color: #b9beb9 !important; }
-          .q-field__native, .q-field__input, .q-textarea textarea {
-            color: #f8fafc !important;
-          }
-          .q-field__control {
-            background: #181b19 !important;
-            border-radius: 14px !important;
-          }
-          .assistant-chat-messages { overscroll-behavior:contain; }
-          .assistant-chat-bubble { white-space:pre-wrap; overflow-wrap:anywhere; }
-          .assistant-chat-user-bubble,
-          .assistant-chat-user-bubble * { color:#ffffff!important; }
-          .assistant-chat-input .q-field__control { min-height:48px!important; height:auto!important; max-height:132px!important; }
-          .assistant-chat-input .q-field__native,
-          .assistant-chat-input.q-textarea textarea {
-            min-height:24px!important;
-            max-height:96px!important;
-            line-height:20px!important;
-            padding-top:12px!important;
-            padding-bottom:12px!important;
-            resize:none!important;
-            overflow-y:auto!important;
-          }
-          .script-editor-textarea,
-          .script-editor-textarea .q-field__control,
-          .script-editor-textarea .q-field__native,
-          .script-editor-textarea textarea {
-            height:100%!important;
-            min-height:0!important;
-          }
-          .script-editor-textarea textarea {
-            resize:none!important;
-            overflow-y:auto!important;
-          }
-          body.studio-body:has(.workspace-layout) {
-            overflow:hidden;
-          }
-          .studio-body .nicegui-content:has(.workspace-layout) {
-            height:100vh;
-            height:100dvh;
-            overflow:hidden;
-          }
-          .workspace-layout {
-            margin:0!important;
-            gap:0!important;
-            height:calc(100vh - 64px);
-            height:calc(100dvh - 64px);
-            min-height:calc(100vh - 64px);
-            overflow:hidden!important;
-          }
-          .workspace-layout > * { margin-top:0!important; }
-          .workspace-main {
-            height:calc(100vh - 64px)!important;
-            height:calc(100dvh - 64px)!important;
-            min-height:0!important;
-          }
-          .right-assistant {
-            margin-top:0!important;
-            padding-top:0!important;
-            height:100%!important;
-            overflow:hidden!important;
-            box-sizing:border-box;
-          }
-          .right-assistant > :first-child { margin-top:0!important; }
-          .right-assistant::-webkit-scrollbar { display:none; }
-          .q-field__control::before { border-color: #303530 !important; }
-          .q-field__control::after { color: var(--acid) !important; }
-          .q-field--focused .q-field__label { color: var(--acid) !important; }
-          .q-placeholder::placeholder { color: #777d78 !important; }
-          .q-menu { background: #151816 !important; color: #f8fafc !important; }
-          ::-webkit-scrollbar { width:7px; height:7px } ::-webkit-scrollbar-thumb { background:#363b36; border-radius:10px }
-          @media(max-width:1180px){
-            .workspace-header {
-              grid-template-columns:minmax(240px,1fr) auto;
-              grid-template-areas:"title actions" "nav nav";
-              height:auto!important;
-              padding-top:8px;
-              padding-bottom:8px;
-              row-gap:8px;
-            }
-            .workspace-titlebar { grid-area:title; }
-            .workspace-nav { grid-area:nav; justify-content:flex-start; }
-            .workspace-actions { grid-area:actions; }
-            .workspace-layout {
-              height:calc(100vh - 112px)!important;
-              height:calc(100dvh - 112px)!important;
-              min-height:calc(100vh - 112px)!important;
-            }
-            .workspace-main {
-              height:calc(100vh - 112px)!important;
-              height:calc(100dvh - 112px)!important;
-            }
-          }
-          @media(max-width:900px){.desktop-nav{display:none!important}.workspace-layout{height:calc(100vh - 64px)!important;height:calc(100dvh - 64px)!important;min-height:calc(100vh - 64px)!important}.workspace-main{height:calc(100vh - 64px)!important;height:calc(100dvh - 64px)!important;padding:18px!important}.right-assistant{display:none!important}}
-        </style>
-        """
-    )
-    ui.add_head_html(
-        r"""
-        <style>
-          :root {
-            --studio-bg:#05070c;
-            --studio-bg-2:#07121d;
-            --studio-panel:#0c1722;
-            --studio-panel-2:#101f2d;
-            --studio-line:rgba(90,163,240,.18);
-            --studio-line-strong:rgba(90,163,240,.46);
-            --studio-text:#eaf8ff;
-            --studio-muted:#86a1b2;
-            --studio-cyan:#5aa3f0;
-            --studio-blue:#5aa3f0;
-            --studio-aqua:#5aa3f0;
-            --studio-success:#58d6a7;
-            --studio-warning:#ffd166;
-            --studio-danger:#ff6b81;
-            --studio-glow:0 0 22px rgba(90,163,240,.28);
-            --studio-shadow:0 24px 70px rgba(0,0,0,.44);
-          }
-          html { background:var(--studio-bg); }
-          body.studio-body {
-            min-height:100vh;
-            color:var(--studio-text);
-            background:
-              linear-gradient(115deg, rgba(90,163,240,.18) 0%, rgba(90,163,240,.07) 28%, transparent 54%),
-              linear-gradient(180deg, #05070c 0%, #08131d 48%, #04070c 100%) !important;
-            font-family:'DM Sans',sans-serif;
-            overflow-x:hidden;
-          }
-          .studio-body .nicegui-content {
-            background:
-              linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
-              linear-gradient(180deg, rgba(255,255,255,.025) 1px, transparent 1px);
-            background-size:72px 72px;
-          }
-          .brand-type {
-            font-family:'Manrope',sans-serif;
-            letter-spacing:0;
-          }
-          .acid {
-            color:var(--studio-cyan)!important;
-            text-shadow:0 0 18px rgba(90,163,240,.38);
-          }
-          .acid-bg,
-          .studio-primary-button {
-            background:linear-gradient(135deg, var(--studio-cyan), var(--studio-blue))!important;
-            color:#031019!important;
-            border:1px solid rgba(90,163,240,.7)!important;
-            box-shadow:0 0 0 1px rgba(90,163,240,.18), var(--studio-glow)!important;
-            font-weight:700!important;
-          }
-          .acid-bg:hover,
-          .studio-primary-button:hover {
-            filter:brightness(1.08);
-            box-shadow:0 0 0 1px rgba(90,163,240,.4), 0 0 32px rgba(90,163,240,.38)!important;
-          }
-          .workspace-export-button,
-          .workspace-export-button .q-icon,
-          .workspace-export-button .q-btn__content,
-          .workspace-export-button .q-btn__content span {
-            color:#ffffff!important;
-          }
-          .glass,
-          .entity-card,
-          .q-card {
-            color:var(--studio-text)!important;
-            background:
-              linear-gradient(180deg, rgba(20,38,54,.88), rgba(7,15,24,.92))!important;
-            border:1px solid var(--studio-line)!important;
-            border-radius:8px!important;
-            box-shadow:0 1px 0 rgba(255,255,255,.04) inset, var(--studio-shadow)!important;
-          }
-          .entity-card {
-            position:relative;
-            overflow:hidden;
-            transition:border-color .18s ease, box-shadow .18s ease, transform .18s ease;
-          }
-          .entity-card::before {
-            content:"";
-            position:absolute;
-            inset:0;
-            pointer-events:none;
-            background:linear-gradient(90deg, rgba(90,163,240,.13), transparent 34%, rgba(90,163,240,.08));
-            opacity:.42;
-          }
-          .entity-card > *,
-          .glass > * { position:relative; }
-          .entity-card:hover {
-            transform:translateY(-1px);
-            border-color:var(--studio-line-strong)!important;
-            box-shadow:0 0 0 1px rgba(90,163,240,.15), 0 22px 68px rgba(0,0,0,.48), var(--studio-glow)!important;
-          }
-          .chat-shell {
-            border-radius:8px!important;
-            border:1px solid var(--studio-line-strong)!important;
-            background:
-              linear-gradient(180deg, rgba(15,31,45,.92), rgba(5,10,16,.94))!important;
-            box-shadow:0 0 0 1px rgba(90,163,240,.13), 0 28px 80px rgba(0,0,0,.5), var(--studio-glow)!important;
-          }
-          .visual-placeholder {
-            background:
-              linear-gradient(135deg, rgba(90,163,240,.22), rgba(90,163,240,.08) 42%, rgba(5,10,16,.96) 100%)!important;
-          }
-          .workspace-header {
-            color:var(--studio-text);
-            background:
-              linear-gradient(90deg, rgba(5,9,15,.96), rgba(10,28,43,.94) 54%, rgba(5,9,15,.96))!important;
-            border-bottom:1px solid var(--studio-line)!important;
-            box-shadow:0 12px 34px rgba(0,0,0,.34);
-            backdrop-filter:blur(18px);
-          }
-          .workspace-layout {
-            background:
-              linear-gradient(180deg, rgba(8,22,34,.72), rgba(4,7,12,.88))!important;
-          }
-          .workspace-main {
-            background:transparent!important;
-            scrollbar-gutter:stable;
-          }
-          .right-assistant {
-            position:relative;
-            width:380px!important;
-            min-width:380px!important;
-            background:transparent!important;
-            border:0!important;
-            border-radius:0!important;
-            margin:0!important;
-            height:100%!important;
-            min-height:0!important;
-            padding:22px 30px 28px 30px!important;
-            box-shadow:none!important;
-            backdrop-filter:none;
-          }
-          .right-assistant::before {
-            content:"";
-            position:absolute;
-            inset:4px 14px 14px 16px;
-            pointer-events:none;
-            border:1px solid var(--studio-line);
-            border-radius:20px;
-            background:
-              linear-gradient(180deg, rgba(8,19,29,.96), rgba(4,9,15,.98));
-            box-shadow:
-              0 0 0 1px rgba(90,163,240,.1),
-              -18px 18px 52px rgba(0,0,0,.34),
-              var(--studio-glow);
-            backdrop-filter:blur(18px);
-          }
-          .right-assistant > * {
-            position:relative;
-            z-index:1;
-          }
-          .right-assistant .assistant-chat-messages {
-            width:calc(100% + 30px)!important;
-            max-width:calc(100% + 30px)!important;
-            margin-right:-30px;
-            padding-right:30px;
-          }
-          .assistant-chat-messages {
-            scrollbar-width:thin;
-            scrollbar-color:rgba(90,163,240,.42) transparent;
-          }
-          .assistant-chat-bubble.glass,
-          .assistant-chat-bubble {
-            border-radius:8px!important;
-          }
-          .assistant-chat-user-bubble {
-            background:linear-gradient(135deg, var(--studio-blue), var(--studio-cyan))!important;
-            color:#ffffff!important;
-          }
-          .assistant-chat-user-bubble * { color:#ffffff!important; }
-          .desktop-nav {
-            background:
-              linear-gradient(180deg, rgba(6,11,18,.98), rgba(7,18,29,.98))!important;
-            border-color:var(--studio-line)!important;
-          }
-          .desktop-nav .cursor-pointer:hover {
-            background:rgba(90,163,240,.08);
-            box-shadow:inset 0 0 0 1px rgba(90,163,240,.18);
-          }
-          .nav-pill {
-            color:var(--studio-muted)!important;
-            border-radius:8px!important;
-          }
-          .nav-pill:hover {
-            color:var(--studio-text)!important;
-            background:rgba(90,163,240,.09)!important;
-            box-shadow:inset 0 0 0 1px rgba(90,163,240,.16);
-          }
-          .nav-active {
-            color:#031019!important;
-            background:linear-gradient(135deg, var(--studio-cyan), var(--studio-blue))!important;
-            border-color:rgba(90,163,240,.72)!important;
-            box-shadow:var(--studio-glow)!important;
-          }
-          .nav-active .q-btn__content,
-          .nav-active .q-btn__content span,
-          .nav-active .q-icon { color:#031019!important; }
-          .nav-locked,
-          .nav-locked:hover {
-            color:rgba(134,161,178,.72)!important;
-            background:transparent!important;
-            box-shadow:none!important;
-          }
-          .idea-badge-genre {
-            background:rgba(90,163,240,.12)!important;
-            color:#bdf5ff!important;
-            border:1px solid rgba(90,163,240,.24);
-          }
-          .idea-badge-emotion {
-            background:rgba(88,214,167,.12)!important;
-            color:#c7ffe7!important;
-            border:1px solid rgba(88,214,167,.22);
-          }
-          .idea-badge-duration {
-            background:rgba(255,209,102,.12)!important;
-            color:#ffe6a1!important;
-            border:1px solid rgba(255,209,102,.2);
-          }
-          body:not(.body--dark) .idea-badge-genre {
-            background:#e4f1ff!important;
-            color:#155f9f!important;
-            border:1px solid rgba(21,95,159,.28);
-          }
-          body:not(.body--dark) .idea-badge-emotion {
-            background:#e6f6e9!important;
-            color:#1e6a48!important;
-            border:1px solid rgba(30,106,72,.24);
-          }
-          body:not(.body--dark) .idea-badge-duration {
-            background:#fff3d0!important;
-            color:#8a5a00!important;
-            border:1px solid rgba(138,90,0,.24);
-          }
-          .idea-badge-genre,
-          .idea-badge-emotion,
-          .idea-badge-duration {
-            display:inline-flex;
-            align-items:center;
-            line-height:1.25;
-            font-weight:700!important;
-            text-shadow:none!important;
-          }
-          .q-btn {
-            border-radius:8px!important;
-            min-height:36px;
-          }
-          .q-field__control {
-            background:rgba(8,18,28,.92)!important;
-            border-radius:8px!important;
-            color:var(--studio-text)!important;
-            box-shadow:inset 0 0 0 1px rgba(90,163,240,.1);
-          }
-          .q-field__control::before {
-            border-color:rgba(90,163,240,.18)!important;
-          }
-          .q-field--focused .q-field__control {
-            box-shadow:inset 0 0 0 1px var(--studio-cyan), 0 0 24px rgba(90,163,240,.16);
-          }
-          .q-field__label,
-          .q-placeholder::placeholder {
-            color:var(--studio-muted)!important;
-          }
-          .q-field__native,
-          .q-field__input,
-          .q-textarea textarea {
-            color:var(--studio-text)!important;
-          }
-          .q-menu,
-          .q-dialog__inner > .q-card {
-            background:linear-gradient(180deg, var(--studio-panel-2), var(--studio-panel))!important;
-            color:var(--studio-text)!important;
-            border:1px solid var(--studio-line)!important;
-          }
-          .q-tab {
-            border-radius:8px 8px 0 0;
-          }
-          .q-tab--active {
-            color:var(--studio-cyan)!important;
-            text-shadow:0 0 14px rgba(90,163,240,.32);
-          }
-          .q-badge {
-            border-radius:6px!important;
-            box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
-          }
-          .text-cyan-100,
-          .text-cyan-200,
-          .text-cyan-300 {
-            color:var(--studio-cyan)!important;
-          }
-          .bg-cyan-900,
-          .bg-cyan-950 {
-            background:rgba(90,163,240,.14)!important;
-          }
-          .border-cyan-800 {
-            border-color:rgba(90,163,240,.36)!important;
-          }
-          .bg-slate-900,
-          .bg-slate-800,
-          .bg-\[\#0b0d0c\],
-          .bg-\[\#090b0a\],
-          .bg-\[\#0d0f0e\],
-          .bg-\[\#0d100e\] {
-            background:var(--studio-panel)!important;
-          }
-          .border-slate-800,
-          .border-\[\#222622\],
-          .border-\[\#242824\],
-          .border-\[\#252925\],
-          .border-\[\#292d29\],
-          .border-\[\#30362b\],
-          .border-\[\#343934\],
-          .border-\[\#363b36\] {
-            border-color:var(--studio-line)!important;
-          }
-          .text-slate-100,
-          .text-slate-300,
-          .text-\[\#b8bdb8\],
-          .text-\[\#c8ccc8\],
-          .text-\[\#d1d4d1\],
-          .text-\[\#d4d8d4\],
-          .text-\[\#d7dbd7\],
-          .text-\[\#d8dbd8\],
-          .text-\[\#d9dcd9\] {
-            color:var(--studio-text)!important;
-          }
-          .text-slate-400,
-          .text-slate-500,
-          .text-\[\#747a75\],
-          .text-\[\#777d78\],
-          .text-\[\#7f8580\],
-          .text-\[\#858b86\],
-          .text-\[\#878d88\],
-          .text-\[\#8d938e\],
-          .text-\[\#8e948f\],
-          .text-\[\#8f9590\],
-          .text-\[\#939994\],
-          .text-\[\#969c97\],
-          .text-\[\#999f9a\],
-          .text-\[\#9aa29b\],
-          .text-\[\#a9aea9\],
-          .text-\[\#aeb3ae\] {
-            color:var(--studio-muted)!important;
-          }
-          .bg-\[\#243342\],
-          .bg-\[\#26301f\],
-          .bg-\[\#2f3321\],
-          .bg-\[\#30362b\] {
-            background:rgba(90,163,240,.14)!important;
-          }
-          .text-\[\#eaf878\],
-          .text-\[\#eefa83\],
-          .text-\[\#bdc77b\],
-          .text-\[\#bfe2ff\] {
-            color:var(--studio-aqua)!important;
-          }
-          ::-webkit-scrollbar { width:8px; height:8px; }
-          ::-webkit-scrollbar-track { background:transparent; }
-          ::-webkit-scrollbar-thumb {
-            background:linear-gradient(180deg, rgba(90,163,240,.44), rgba(90,163,240,.28));
-            border-radius:8px;
-          }
-          body:not(.body--dark).studio-body {
-            background:
-              linear-gradient(135deg, rgba(90,163,240,.12), transparent 48%),
-              linear-gradient(180deg, #eef8ff, #f8fbff)!important;
-            color:#07121d!important;
-          }
-          body:not(.body--dark) .glass,
-          body:not(.body--dark) .entity-card,
-          body:not(.body--dark) .q-card {
-            background:rgba(255,255,255,.88)!important;
-            color:#07121d!important;
-            border-color:rgba(31,110,160,.16)!important;
-            box-shadow:0 20px 60px rgba(13,43,68,.13)!important;
-          }
-          body:not(.body--dark) .workspace-header {
-            color:#07121d!important;
-            background:rgba(248,251,255,.95)!important;
-            border-bottom-color:rgba(90,163,240,.22)!important;
-            box-shadow:0 12px 30px rgba(13,43,68,.12)!important;
-          }
-          body:not(.body--dark) .workspace-header label,
-          body:not(.body--dark) .workspace-header span {
-            color:#07121d!important;
-            text-shadow:none!important;
-          }
-          .workspace-header .workspace-export-button,
-          .workspace-header .workspace-export-button .q-icon,
-          .workspace-header .workspace-export-button .q-btn__content,
-          .workspace-header .workspace-export-button .q-btn__content span,
-          body:not(.body--dark) .workspace-header .workspace-export-button,
-          body:not(.body--dark) .workspace-header .workspace-export-button .q-icon,
-          body:not(.body--dark) .workspace-header .workspace-export-button .q-btn__content,
-          body:not(.body--dark) .workspace-header .workspace-export-button .q-btn__content span {
-            color:#ffffff!important;
-          }
-          body:not(.body--dark) .workspace-header .workspace-episode,
-          body:not(.body--dark) .workspace-actions label {
-            color:#5d7488!important;
-          }
-          body:not(.body--dark) .workspace-layout {
-            background:linear-gradient(180deg, #f5faff 0%, #eaf3fb 100%)!important;
-          }
-          body:not(.body--dark) .workspace-main {
-            color:#07121d!important;
-            background:transparent!important;
-          }
-          body:not(.body--dark) .right-assistant {
-            color:#07121d!important;
-            background:transparent!important;
-            border-color:transparent!important;
-            box-shadow:none!important;
-          }
-          body:not(.body--dark) .right-assistant::before {
-            border-color:rgba(90,163,240,.22)!important;
-            background:rgba(251,253,255,.96)!important;
-            box-shadow:
-              0 0 0 1px rgba(90,163,240,.08),
-              -18px 18px 42px rgba(13,43,68,.1)!important;
-          }
-          body:not(.body--dark) .right-assistant label,
-          body:not(.body--dark) .workspace-main label {
-            color:inherit;
-            text-shadow:none!important;
-          }
-        </style>
-        """
-    )
-
-
-def _card_classes(extra: str = "") -> str:
-    return f"entity-card rounded-lg shadow-none {extra}".strip()
-
-
-def _button_classes() -> str:
-    return "studio-primary-button font-semibold rounded-lg"
-
-
-def _muted(text: str) -> None:
-    ui.label(text).classes("text-sm text-slate-400")
-
-
-async def _scalar_count(
-    session: AsyncSession, model: type[Any], project_id: UUID | None = None
-) -> int:
-    statement = select(func.count()).select_from(model)
-    if project_id is not None and hasattr(model, "project_id"):
-        statement = statement.where(model.project_id == project_id)
-    value = await session.scalar(statement)
-    return int(value or 0)
-
-
-async def _latest(session: AsyncSession, model: type[Any], project_id: UUID) -> Any | None:
-    result = await session.execute(
-        select(model).where(model.project_id == project_id).order_by(model.created_at.desc())
-    )
-    return result.scalars().first()
-
-
-async def _latest_many(
-    session: AsyncSession,
-    model: type[Any],
-    project_id: UUID,
-    limit: int = 6,
-) -> list[Any]:
-    result = await session.execute(
-        select(model)
-        .where(model.project_id == project_id)
-        .order_by(model.created_at.desc())
-        .limit(limit)
-    )
-    return list(result.scalars())
-
-
-async def _project_cards() -> list[Project]:
-    try:
-        async with AsyncSessionLocal() as session:
-            return await list_projects(session)
-    except Exception:
-        return []
-
-
-async def _dashboard_metrics() -> dict[str, str]:
-    try:
-        async with AsyncSessionLocal() as session:
-            project_count = await _scalar_count(session, Project)
-            artifact_count = await _scalar_count(session, Artifact)
-            job_count = await _scalar_count(session, GenerationJob)
-            open_issues = await session.scalar(
-                select(func.count())
-                .select_from(ContinuityIssue)
-                .where(ContinuityIssue.accepted.is_(False))
-            )
-            exports = await _scalar_count(session, Export)
-    except Exception as exc:
-        return {"Banco": "indisponivel", "Detalhe": type(exc).__name__}
-    return {
-        "Projetos": str(project_count),
-        "Artefatos": str(artifact_count),
-        "Jobs": str(job_count),
-        "Alertas QA": str(open_issues or 0),
-        "Exports": str(exports),
-    }
-
-
-async def _project_summary(project_id: UUID) -> dict[str, Any] | None:
-    async with AsyncSessionLocal() as session:
-        project = await ProjectRepository(session).get_project(project_id)
-        if project is None:
-            return None
-        await ensure_default_model_settings(session, project_id)
-        production_settings = await get_or_create_production_settings(session, project_id)
-        model_result = await session.execute(
-            select(ProjectModelSetting)
-            .where(ProjectModelSetting.project_id == project_id)
-            .order_by(ProjectModelSetting.task)
-        )
-        cost_total = await session.scalar(
-            select(func.coalesce(func.sum(CostEntry.total_cost), Decimal("0.000000"))).where(
-                CostEntry.project_id == project_id
-            )
-        )
-        latest_quality = await _latest(session, QualityCheck, project_id)
-        latest_export = await _latest(session, Export, project_id)
-        latest_timeline = await _latest(session, Timeline, project_id)
-        timeline_items: list[TimelineItem] = []
-        if latest_timeline is not None:
-            item_result = await session.execute(
-                select(TimelineItem)
-                .where(TimelineItem.timeline_id == latest_timeline.id)
-                .order_by(TimelineItem.order_index)
-                .limit(12)
-            )
-            timeline_items = list(item_result.scalars())
-        visual_refs = await _latest_many(session, VisualReference, project_id, 100)
-        visual_asset_ids = {reference.asset_id for reference in visual_refs}
-        if visual_asset_ids:
-            asset_result = await session.execute(
-                select(Asset).where(
-                    Asset.project_id == project_id,
-                    Asset.id.in_(visual_asset_ids),
-                )
-            )
-            visual_assets = list(asset_result.scalars())
-        else:
-            visual_assets = []
-        return {
-            "project": project,
-            "production_settings": production_settings,
-            "counts": {
-                "briefings": await _scalar_count(session, Briefing, project_id),
-                "ideas": await _scalar_count(session, StoryIdea, project_id),
-                "scripts": await _scalar_count(session, Script, project_id),
-                "scenes": await _scalar_count(session, Scene, project_id),
-                "shots": await _scalar_count(session, Shot, project_id),
-                "characters": await _scalar_count(session, Character, project_id),
-                "visual_refs": await _scalar_count(session, VisualReference, project_id),
-                "frames": await _scalar_count(session, StoryboardFrame, project_id),
-                "animatics": await _scalar_count(session, Animatic, project_id),
-                "clips": await _scalar_count(session, VideoClip, project_id),
-                "audio": await _scalar_count(session, AudioTrack, project_id),
-                "subtitles": await _scalar_count(session, SubtitleTrack, project_id),
-                "exports": await _scalar_count(session, Export, project_id),
-                "qa_issues": await _scalar_count(session, ContinuityIssue, project_id),
-                "stale_artifacts": int(
-                    await session.scalar(
-                        select(func.count())
-                        .select_from(Artifact)
-                        .where(
-                            Artifact.project_id == project_id,
-                            Artifact.status == ArtifactStatus.STALE,
-                        )
-                    )
-                    or 0
-                ),
-            },
-            "cost_total": str(cost_total or Decimal("0.000000")),
-            "quality": latest_quality,
-            "export": latest_export,
-            "model_settings": list(model_result.scalars()),
-            "script": await _latest(session, Script, project_id),
-            "scenes": await _latest_many(session, Scene, project_id, 12),
-            "shots": await _latest_many(session, Shot, project_id, 20),
-            "characters": await _latest_many(session, Character, project_id, 4),
-            "locations": await _latest_many(session, Location, project_id, 4),
-            "props": await _latest_many(session, Prop, project_id, 4),
-            "visual_refs": visual_refs,
-            "assets": visual_assets,
-            "frames": await _latest_many(session, StoryboardFrame, project_id, 100),
-            "clips": await _latest_many(session, VideoClip, project_id, 100),
-            "timeline": latest_timeline,
-            "timeline_items": timeline_items,
-        }
-
-
-def _step_ready(step_key: str, counts: dict[str, int]) -> bool:
-    readiness = {
-        "briefing": counts["briefings"] > 0,
-        "ideas": counts["ideas"] > 0,
-        "script": counts["scripts"] > 0,
-        "visual": counts["characters"] > 0,
-        "storyboard": counts["frames"] > 0 and counts["animatics"] > 0,
-        "video": counts["clips"] > 0,
-        "finalization": counts["exports"] > 0,
-        "quality": counts["qa_issues"] >= 0,
-    }
-    return readiness[step_key]
+PRODUCTION_STEPS = PAGE_PRODUCTION_STEPS
+WORKSPACE_TABS = PAGE_WORKSPACE_TABS
+_is_legacy_assistant_greeting = assistant_state.is_legacy_assistant_greeting
 
 
 def _render_project_card(project: Project, redirect_to: str) -> None:
-    with ui.dialog() as rename_dialog, ui.card().classes("entity-card rounded-2xl p-6 min-w-96"):
-        ui.label("Renomear projeto").classes("brand-type text-2xl font-bold")
-        name_input = ui.input("Nome do projeto", value=project.title).props("outlined").classes(
-            "w-full"
-        )
-        with ui.row().classes("w-full justify-end gap-2 mt-2"):
-            ui.button("Cancelar", on_click=rename_dialog.close).props("flat no-caps")
-            ui.button(
-                "Salvar",
-                icon="save",
-                on_click=lambda p=project.id: _rename_project_from_ui(
-                    p, str(name_input.value or ""), redirect_to
-                ),
-            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-
-    with ui.dialog() as delete_dialog, ui.card().classes("entity-card rounded-2xl p-6 min-w-96"):
-        ui.label("Excluir projeto?").classes("brand-type text-2xl font-bold")
-        ui.label(
-            f'O projeto "{project.title}" será removido da lista de projetos.'
-        ).classes("text-sm text-[#8d938e]")
-        with ui.row().classes("w-full justify-end gap-2 mt-2"):
-            ui.button("Cancelar", on_click=delete_dialog.close).props("flat no-caps")
-            ui.button(
-                "Excluir",
-                icon="delete",
-                on_click=lambda p=project.id: _delete_project_from_ui(p, redirect_to),
-            ).props("unelevated no-caps").classes("bg-red-600 text-white rounded-xl")
-
-    with (
-        ui.element("article")
-        .classes("entity-card rounded-2xl overflow-hidden cursor-pointer")
-        .on("click", lambda p=project.id: ui.navigate.to(f"/projects/{p}/script"))
-    ):
-        with ui.element("div").classes("visual-placeholder aspect-video p-5 flex items-end"):
-            ui.icon("play_circle").classes("text-4xl acid")
-        with ui.column().classes("p-4 gap-2"):
-            ui.label(project.title).classes("brand-type text-xl font-bold")
-            ui.label(project.description or "Projeto em desenvolvimento").classes(
-                "text-sm text-[#8d938e] line-clamp-2"
-            )
-            with ui.row().classes("gap-2 mt-2 flex-wrap"):
-                ui.button("Renomear", icon="edit", on_click=rename_dialog.open).props(
-                    "flat no-caps"
-                ).classes("text-[#aeb3ae]").on(
-                    "click.stop", lambda: None
-                )
-                ui.button("Excluir", icon="delete", on_click=delete_dialog.open).props(
-                    "flat no-caps"
-                ).classes("text-red-300").on(
-                    "click.stop", lambda: None
-                )
-
-
-def _workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool, str]:
-    script_ready = _step_ready("script", counts)
-    assets_ready = _step_ready("visual", counts)
-    storyboard_ready = _step_ready("storyboard", counts)
-    if section == "script":
-        return True, ""
-    if section == "assets":
-        if not script_ready:
-            return False, "Crie o roteiro antes de acessar personagens."
-        return True, ""
-    if section == "storyboard":
-        if not script_ready:
-            return False, "Crie o roteiro antes de acessar o storyboard."
-        if not assets_ready:
-            return False, "Crie os personagens antes de acessar o storyboard."
-        return True, ""
-    if section == "video":
-        if not script_ready:
-            return False, "Crie o roteiro antes de acessar video."
-        if not assets_ready:
-            return False, "Crie os personagens antes de acessar video."
-        if not storyboard_ready:
-            return False, "Crie o storyboard antes de acessar video."
-        return True, ""
-    return False, "Etapa desconhecida."
-
-
-def _first_available_workspace_section(counts: dict[str, int]) -> str:
-    for section in ["script", "assets", "storyboard", "video"]:
-        allowed, _ = _workspace_section_access(section, counts)
-        if allowed:
-            return section
-    return "script"
-
-
-def _render_header(title: str, subtitle: str) -> None:
-    with ui.row().classes(
-        "w-full items-center justify-between px-6 py-4 bg-slate-900 border-b border-slate-800"
-    ):
-        with ui.row().classes("items-center gap-3"):
-            ui.icon("movie_filter").classes("text-3xl text-cyan-300")
-            with ui.column().classes("gap-0"):
-                ui.label(title).classes("text-2xl font-bold")
-                ui.label(subtitle).classes("text-sm text-slate-400")
-        with ui.row().classes("gap-2"):
-            _theme_toggle()
-            ui.button(
-                "Projetos", icon="dashboard", on_click=lambda: ui.navigate.to("/projects")
-            ).classes("bg-slate-800 hover:bg-slate-700 rounded-md")
-            ui.link("API docs", "/docs").classes(
-                "text-slate-100 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-md"
-            )
-
-
-def _compact_project_title(text: str) -> str:
-    first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
-    cleaned = " ".join((first_line or text).strip().split())
-    if not cleaned:
-        return "Novo projeto de storytelling"
-    common_prefixes = [
-        "quero criar uma historia sobre ",
-        "quero criar uma história sobre ",
-        "quero desenvolver uma historia sobre ",
-        "quero desenvolver uma história sobre ",
-        "crie uma historia sobre ",
-        "crie uma história sobre ",
-        "uma historia sobre ",
-        "uma história sobre ",
-    ]
-    lower_cleaned = cleaned.lower()
-    for prefix in common_prefixes:
-        if lower_cleaned.startswith(prefix):
-            cleaned = cleaned[len(prefix) :].strip(" ,;:-")
-            if cleaned:
-                cleaned = cleaned[:1].upper() + cleaned[1:]
-            break
-    first_sentence = cleaned
-    for separator in [".", "!", "?"]:
-        if separator in first_sentence:
-            first_sentence = first_sentence.split(separator, 1)[0].strip()
-            break
-    words = first_sentence.split()
-    if len(words) > 9:
-        first_sentence = " ".join(words[:9])
-    return first_sentence[:80].strip(" ,;:-") or "Novo projeto de storytelling"
-
-
-def _format_idea_payload_for_project(idea: dict[str, Any]) -> str:
-    labels = {
-        "title": "Titulo",
-        "theme": "Tema",
-        "genre": "Genero",
-        "primary_emotion": "Emocao principal",
-        "final_emotion": "Emocao final",
-        "hook": "Gancho",
-        "premise": "Premissa",
-        "protagonist": "Protagonista",
-        "protagonist_desire": "Desejo do protagonista",
-        "emotional_need": "Necessidade emocional",
-        "conflict": "Conflito",
-        "obstacles": "Obstaculos",
-        "stakes": "Riscos narrativos",
-        "twist": "Virada",
-        "climax": "Climax",
-        "resolution": "Resolucao",
-        "duration_minutes": "Duracao",
-        "retention_potential": "Potencial de retencao",
-        "cliche_risk": "Risco de cliche",
-        "production_complexity": "Complexidade de producao",
-    }
-    ordered_keys = [key for key in labels if key in idea]
-    ordered_keys.extend(key for key in idea if key not in labels and not key.startswith("_"))
-    lines: list[str] = []
-    for key in ordered_keys:
-        value = idea.get(key)
-        if value in (None, "", [], {}):
-            continue
-        if isinstance(value, list):
-            value_text = ", ".join(str(item) for item in value if str(item).strip())
-        elif isinstance(value, dict):
-            value_text = "; ".join(f"{item_key}: {item_value}" for item_key, item_value in value.items())
-        else:
-            value_text = str(value)
-        if key == "title":
-            value_text = _clean_idea_title(value_text)
-        if key == "duration_minutes":
-            value_text = f"{coerce_duration_minutes(value):g} minutos"
-        lines.append(f"{labels.get(key, key)}: {value_text}")
-    return "\n".join(lines)
+    render_project_card(
+        project,
+        redirect_to,
+        _rename_project_from_ui,
+        _delete_project_from_ui,
+    )
 
 
 async def _generate_initial_script(
@@ -1915,20 +905,6 @@ async def _create_next_episode(project_id: UUID) -> None:
         ui.notify(f"Nao foi possivel criar proximo episodio: {exc}", color="negative")
 
 
-STEP_LOADING_COPY = {
-    "ideas": ("Gerando ideias", "A IA esta criando temas, generos e emocoes."),
-    "script": ("Gerando roteiro", "A IA esta escrevendo o roteiro e separando cenas."),
-    "visual": (
-        "Gerando prompts visuais",
-        "A IA esta criando personagens, locais e objetos para revisao.",
-    ),
-    "storyboard": ("Gerando storyboard", "A IA esta criando quadros, planos e animatic."),
-    "video": ("Preparando video", "A IA esta verificando prompts e deixando os clipes prontos."),
-    "finalization": ("Finalizando projeto", "A IA esta montando narracao, legendas e export."),
-    "quality": ("Revisando qualidade", "A IA esta checando continuidade e riscos."),
-}
-
-
 def _generation_loading_dialog(title: str, message: str) -> Any:
     with ui.dialog().props(BLOCKING_DIALOG_PROPS) as loading_dialog, ui.card().classes(
         "entity-card rounded-2xl p-6 min-w-80 items-center text-center"
@@ -2509,282 +1485,6 @@ def _render_timeline_strip(timeline: Timeline | None, items: list[TimelineItem])
                 ).style(f"width: {width}px")
 
 
-def _studio_logo(compact: bool = False) -> None:
-    with ui.row().classes("items-center gap-3"):
-        ui.image(BRAND_MARK_URL).classes("w-9 h-9 rounded-xl object-cover")
-        if not compact:
-            ui.label("Storytelling").classes("brand-type text-xl font-extrabold")
-
-
-def _clean_idea_title(value: object, fallback: str = "Historia sem titulo") -> str:
-    title = str(value or "").strip()
-    title = IDEA_TITLE_PREFIX_RE.sub("", title).strip()
-    return title or fallback
-
-
-def _theme_toggle() -> None:
-    is_dark = get_settings().user_theme != "light"
-    mode = ui.dark_mode(value=is_dark)
-    button = ui.button(icon="light_mode" if is_dark else "dark_mode").props("flat round")
-
-    def toggle_theme() -> None:
-        next_dark = not bool(mode.value)
-        mode.set_value(next_dark)
-        save_preferences({"USER_THEME": "dark" if next_dark else "light"})
-        button.props(f"icon={'light_mode' if next_dark else 'dark_mode'}")
-        button.update()
-
-    button.on("click", toggle_theme).tooltip("Alternar entre tema claro e escuro")
-
-
-def _logout_button() -> None:
-    ui.button(icon="logout").props("flat round").classes("text-[#aeb3ae]").on(
-        "click",
-        lambda: ui.run_javascript(
-            "fetch('/auth/logout', {method: 'POST'}).then(() => window.location.href = '/login')"
-        ),
-    ).tooltip("Sair")
-
-
-def _avatar_data_uri(path_value: str) -> str | None:
-    if not path_value:
-        return None
-    path = Path(path_value)
-    if not path.is_file():
-        return None
-    mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:{mime};base64,{encoded}"
-
-
-def _save_avatar_file(filename: str, content: bytes) -> Path:
-    suffix = Path(filename).suffix.lower()
-    target_dir = Path("storage/profile")
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / f"avatar{suffix}"
-    target.write_bytes(content)
-    return target
-
-
-def _user_avatar(size: str = "44px", navigate: bool = True) -> Any:
-    current = get_settings()
-    image_source = _avatar_data_uri(current.user_avatar_path)
-    initial = (current.user_display_name or "U").strip()[:1].upper()
-    with ui.avatar(color="grey-9", size=size).classes(
-        "cursor-pointer overflow-hidden ring-1 ring-[#3a3f3a]"
-    ) as avatar:
-        if image_source:
-            ui.image(image_source).classes("w-full h-full object-cover").props("fit=cover")
-        else:
-            ui.label(initial)
-    if navigate:
-        avatar.on("click", lambda: ui.navigate.to("/settings"))
-    return avatar
-
-
-def _home_sidebar(active: str = "") -> None:
-    with ui.column().classes(
-        "desktop-nav fixed left-0 top-0 bottom-0 w-24 border-r border-[#222622] items-center py-6 gap-6 bg-[#0b0d0c] z-20"
-    ):
-        _studio_logo(compact=True)
-        for key, icon, label, target in [
-            ("ideas", "lightbulb_outline", "Ideias", "/"),
-            ("create", "chat_bubble_outline", "Criar", "/dashboard"),
-            ("projects", "folder_open", "Projetos", "/projects"),
-            ("settings", "settings", "Ajustes", "/settings"),
-        ]:
-            active_classes = "acid" if key == active else "text-[#8d928e]"
-            with (
-                ui.column()
-                .classes(
-                    "items-center gap-1 cursor-pointer rounded-xl px-3 py-2 "
-                    f"{active_classes} hover:text-white"
-                )
-                .on("click", lambda t=target: ui.navigate.to(t))
-            ):
-                ui.icon(icon).classes("text-2xl")
-                ui.label(label).classes("text-[11px]")
-        ui.space()
-        with ui.element("div").classes("mb-2"):
-            _user_avatar(size="48px")
-        _logout_button()
-
-
-def _workspace_header(project: Project, active: str, counts: dict[str, int]) -> None:
-    with ui.element("header").classes(
-        "workspace-header sticky top-0 z-30 w-full border-b border-[#242824] bg-[#090b0a]"
-    ):
-        with ui.row().classes("workspace-titlebar items-center gap-3"):
-            _studio_logo(compact=True)
-            ui.button(icon="arrow_back", on_click=lambda: ui.navigate.to("/")).props(
-                "flat round dense"
-            ).classes("text-[#9da29d] shrink-0")
-            with ui.column().classes("gap-0 min-w-0"):
-                ui.label(project.title).classes("font-semibold truncate max-w-72")
-                ui.label("Episodio 1").classes(
-                    "workspace-episode text-[11px] text-[#818681]"
-                )
-            if counts.get("stale_artifacts", 0):
-                ui.badge(f"{counts['stale_artifacts']} desatualizado(s)").classes(
-                    "bg-amber-900 text-amber-100 shrink-0"
-                ).tooltip("Alguns artefatos derivados precisam ser regenerados.")
-        with ui.row().classes("workspace-nav desktop-nav items-center gap-1"):
-            for label, key in WORKSPACE_TABS:
-                allowed, reason = _workspace_section_access(key, counts)
-                button = ui.button(
-                    label,
-                    icon=None if allowed else "lock",
-                    on_click=lambda k=key: ui.navigate.to(f"/projects/{project.id}/{k}"),
-                ).props("flat no-caps" if allowed else "flat no-caps disable").classes(
-                    f"nav-pill rounded-full px-3 {'nav-active' if active == key else ''} "
-                    f"{'nav-locked cursor-not-allowed' if not allowed else ''}"
-                )
-                if not allowed:
-                    button.tooltip(reason)
-        with ui.row().classes("workspace-actions items-center gap-3"):
-            ui.label("PT-BR").classes("desktop-nav text-sm text-[#a9aea9] shrink-0")
-            _theme_toggle()
-            ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
-                "acid-bg workspace-export-button rounded-xl font-semibold shrink-0"
-            )
-
-
-def _assistant_initial_message(active: str, assistant_suggestions: dict[str, str]) -> dict[str, str]:
-    return {
-        "role": "assistant",
-        "content": (
-            "Estou acompanhando esta etapa. Posso revisar, propor variações "
-            "e orientar a próxima ação mantendo a continuidade do projeto.\n\n"
-            f"{assistant_suggestions.get(active, '')}"
-        ),
-    }
-
-
-def _assistant_chat_store() -> dict[str, list[dict[str, str]]]:
-    raw_store = nicegui_app.storage.user.get("project_assistant_messages")
-    if not isinstance(raw_store, dict):
-        raw_store = {}
-    return cast(dict[str, list[dict[str, str]]], raw_store)
-
-
-def _is_legacy_assistant_greeting(role: str, content: str) -> bool:
-    return role == "assistant" and content.startswith("Estou acompanhando esta etapa.")
-
-
-def _load_assistant_messages(
-    project_id: UUID, active: str, assistant_suggestions: dict[str, str]
-) -> list[dict[str, str]]:
-    store = _assistant_chat_store()
-    raw_messages = store.get(str(project_id), [])
-    messages: list[dict[str, str]] = []
-    for item in raw_messages:
-        if not isinstance(item, dict):
-            continue
-        role = str(item.get("role") or "")
-        content = str(item.get("content") or "")
-        if role == "assistant_pending":
-            continue
-        if _is_legacy_assistant_greeting(role, content):
-            continue
-        if role and content:
-            message = {"role": role, "content": content}
-            event_id = item.get("event_id")
-            if event_id:
-                message["event_id"] = str(event_id)
-            event_action = item.get("event_action")
-            if event_action:
-                message["event_action"] = str(event_action)
-            messages.append(message)
-    _ = active, assistant_suggestions
-    if not messages:
-        messages.append(_assistant_initial_message(active, assistant_suggestions))
-    store[str(project_id)] = messages
-    nicegui_app.storage.user["project_assistant_messages"] = store
-    return messages
-
-
-def _save_assistant_messages(project_id: UUID, messages: list[dict[str, str]]) -> None:
-    store = _assistant_chat_store()
-    store[str(project_id)] = [
-        item for item in messages[-80:] if item["role"] != "assistant_pending"
-    ]
-    nicegui_app.storage.user["project_assistant_messages"] = store
-
-
-def _append_assistant_message_to_chat(project_id: UUID, content: str) -> None:
-    message = content.strip()
-    if not message:
-        return
-    store = _assistant_chat_store()
-    raw_messages = store.get(str(project_id), [])
-    messages = [
-        {"role": str(item.get("role") or ""), "content": str(item.get("content") or "")}
-        for item in raw_messages
-        if isinstance(item, dict)
-    ]
-    if messages and messages[-1].get("role") == "assistant" and messages[-1].get("content") == message:
-        return
-    messages.append({"role": "assistant", "content": message})
-    store[str(project_id)] = messages[-80:]
-    nicegui_app.storage.user["project_assistant_messages"] = store
-
-
-def _safe_refresh(refreshable: Any) -> None:
-    try:
-        refreshable.refresh()
-    except RuntimeError as exc:
-        if "parent element this slot belongs to has been deleted" not in str(exc).lower():
-            raise
-
-
-def _safe_client_navigation(client: Any, target: str | None = None) -> None:
-    try:
-        if getattr(client, "is_deleted", False):
-            return
-        if target:
-            client.open(target)
-        else:
-            client.run_javascript("history.go(0)")
-    except RuntimeError as exc:
-        if "parent element this slot belongs to has been deleted" not in str(exc).lower():
-            raise
-
-
-def _friendly_ai_error(exc: BaseException) -> str:
-    text = str(exc).strip()
-    normalized = text.lower()
-    if isinstance(exc, TimeoutError) or "demorou mais" in normalized or "timed out" in normalized:
-        return (
-            "O modelo de IA demorou demais para responder. Tente novamente ou escolha "
-            "um modelo de texto mais estavel nas configuracoes."
-        )
-    if "rate limit" in normalized or "429" in normalized or "resourceexhausted" in normalized:
-        return (
-            "O provedor de IA recusou a chamada por limite de uso. Aguarde alguns minutos "
-            "ou troque para um modelo com mais disponibilidade."
-        )
-    if "openrouter" in normalized and (
-        "network" in normalized
-        or "connection" in normalized
-        or "dns" in normalized
-        or "temporarily unavailable" in normalized
-    ):
-        return (
-            "Nao foi possivel conectar ao provedor de IA. Verifique a internet, a chave "
-            "do OpenRouter e tente novamente."
-        )
-    if "json" in normalized:
-        return (
-            "O modelo respondeu fora do formato esperado pela aplicacao. Tente novamente "
-            "ou use um modelo com melhor suporte a JSON estruturado."
-        )
-    if "api_key" in normalized or "api key" in normalized or "chave" in normalized:
-        return "A chave da IA parece ausente ou invalida. Confira as configuracoes de IA."
-    if text:
-        return text[:500]
-    return "A IA nao respondeu ou retornou um erro inesperado. Tente novamente."
-
-
 def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) -> None:
     ai_action = _project_ai_action(summary)
     if str(ai_action.get("status") or "") != "failed":
@@ -2807,53 +1507,14 @@ def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) ->
     )
 
 
-def _sync_ai_action_events_to_chat(project_id: UUID, summary: dict[str, Any]) -> None:
-    ai_action = _project_ai_action(summary)
-    raw_events = ai_action.get("events", [])
-    if not isinstance(raw_events, list):
-        return
-    store = _assistant_chat_store()
-    raw_messages = store.get(str(project_id), [])
-    messages = [item for item in raw_messages if isinstance(item, dict)]
-    known_event_ids = {
-        str(item.get("event_id"))
-        for item in messages
-        if item.get("event_id") is not None
-    }
-    known_event_actions = {
-        str(item.get("event_action"))
-        for item in messages
-        if item.get("event_action") is not None
-    }
-    changed = False
-    for event in raw_events:
-        if not isinstance(event, dict):
-            continue
-        event_id = str(event.get("id") or "")
-        event_action = str(event.get("action") or "")
-        message = str(event.get("message") or "").strip()
-        if (
-            not event_id
-            or not event_action
-            or not message
-            or event_id in known_event_ids
-            or event_action in known_event_actions
-        ):
-            continue
-        messages.append(
-            {
-                "role": "assistant",
-                "content": message,
-                "event_id": event_id,
-                "event_action": event_action,
-            }
-        )
-        known_event_ids.add(event_id)
-        known_event_actions.add(event_action)
-        changed = True
-    if changed:
-        store[str(project_id)] = cast(list[dict[str, str]], messages[-80:])
-        nicegui_app.storage.user["project_assistant_messages"] = store
+def _sync_ai_action_events_to_chat(project_id: UUID, summary_or_action: dict[str, Any]) -> None:
+    assistant_state.nicegui_app = nicegui_app
+    ai_action = (
+        _project_ai_action(summary_or_action)
+        if "production_settings" in summary_or_action
+        else summary_or_action
+    )
+    assistant_state.sync_ai_action_events_to_chat(project_id, ai_action)
 
 
 def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> None:
@@ -2903,7 +1564,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
         action: _generation_loading_dialog(title, message)
         for action, (title, message) in chat_loading_copy.items()
     }
-    _sync_ai_action_events_to_chat(project_id, summary)
+    _sync_ai_action_events_to_chat(project_id, _project_ai_action(summary))
     _notify_ai_action_failure_once(project_id, summary)
     messages = _load_assistant_messages(project_id, active, assistant_suggestions)
 
@@ -3067,6 +1728,10 @@ def _ai_action_is_stale(action: dict[str, Any], max_age_seconds: int = 120) -> b
 
 def _ordered_scenes(scenes: list[Any]) -> list[Any]:
     return sorted(scenes, key=lambda scene: int(getattr(scene, "scene_number", 0) or 0))
+
+
+def _asset_url(storage_uri: str) -> str:
+    return _visual_asset_url(storage_uri, get_settings().local_storage_path)
 
 
 async def _save_script_from_ui(
@@ -3238,103 +1903,6 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
                     else "A IA esta desenvolvendo o roteiro com base na ideia do projeto."
                 )
                 ui.label(content).classes("whitespace-pre-wrap leading-8 text-[#d9dcd9]")
-
-
-def _visual_reference_views_for(
-    summary: dict[str, Any], target_kind: str, target_id: UUID
-) -> set[str]:
-    return {
-        reference.view_type
-        for reference in summary["visual_refs"]
-        if reference.target_kind == target_kind and reference.target_id == target_id
-    }
-
-
-def _visual_references_for(
-    summary: dict[str, Any], target_kind: str, target_id: UUID
-) -> list[VisualReference]:
-    view_order = {view: index for index, view in enumerate(default_views_for(target_kind))}
-    references = [
-        reference
-        for reference in summary["visual_refs"]
-        if reference.target_kind == target_kind and reference.target_id == target_id
-    ]
-    return sorted(
-        references,
-        key=lambda reference: (
-            view_order.get(reference.view_type, len(view_order)),
-            -reference.created_at.timestamp(),
-        ),
-    )
-
-
-def _asset_url(storage_uri: str) -> str:
-    if not storage_uri:
-        return ""
-    storage_root = get_settings().local_storage_path.resolve()
-    candidate = Path(storage_uri)
-    if not candidate.is_absolute():
-        candidate = candidate.resolve()
-    try:
-        relative = candidate.relative_to(storage_root)
-    except ValueError:
-        return ""
-    return "/storage/" + "/".join(quote(part) for part in relative.parts)
-
-
-def _visual_reference_asset(
-    asset_map: dict[UUID, Asset], reference: VisualReference
-) -> Asset | None:
-    return asset_map.get(reference.asset_id)
-
-
-def _clean_profile_text(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, list):
-        return ", ".join(str(item).strip() for item in value if str(item).strip())
-    if isinstance(value, dict):
-        return ""
-    return str(value).strip()
-
-
-def _visual_card_detail(target_kind: str, profile: dict, fallback: str = "") -> str:
-    explicit = _clean_profile_text(
-        profile.get("description")
-        or profile.get("summary")
-        or profile.get("visual_description")
-        or profile.get("mood")
-    )
-    if explicit:
-        return explicit
-
-    if target_kind == "character":
-        parts = [
-            _clean_profile_text(profile.get("apparent_age")),
-            _clean_profile_text(profile.get("eyes")),
-            _clean_profile_text(profile.get("hair")),
-            _clean_profile_text(profile.get("base_outfit")),
-        ]
-        text = ", ".join(part for part in parts if part)
-        return text or fallback or "Perfil visual pronto para revisar e gerar imagens."
-
-    if target_kind == "location":
-        parts = [
-            _clean_profile_text(profile.get("lighting")),
-            _clean_profile_text(profile.get("materials")),
-            _clean_profile_text(profile.get("layout")),
-        ]
-        text = ", ".join(part for part in parts if part)
-        return text or fallback or "Cenario pronto para revisar e gerar referencias."
-
-    parts = [
-        _clean_profile_text(profile.get("narrative_importance")),
-        _clean_profile_text(profile.get("material")),
-        _clean_profile_text(profile.get("color")),
-        _clean_profile_text(profile.get("state")),
-    ]
-    text = ", ".join(part for part in parts if part)
-    return text or fallback or "Objeto pronto para revisar e gerar referencias."
 
 
 def _entity_card(
@@ -4432,3 +3000,6 @@ def register_ui_pages() -> None:
                 else:
                     _render_video_area(project_uuid, summary)
             _assistant_panel(project_uuid, section, summary)
+
+
+

@@ -1,0 +1,176 @@
+from decimal import Decimal
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.assets.models import Asset
+from app.core.enums import ArtifactStatus
+from app.costs.models import CostEntry
+from app.database.session import AsyncSessionLocal
+from app.finalization.models import Export, SubtitleTrack
+from app.generation.model_settings import ensure_default_model_settings
+from app.generation.models import ProjectModelSetting
+from app.production.service import get_or_create_production_settings
+from app.projects.models import Artifact, Project
+from app.projects.repository import ProjectRepository
+from app.projects.service import list_projects
+from app.quality.models import ContinuityIssue, QualityCheck
+from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
+from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
+from app.video_generation.models import GenerationJob, VideoClip
+from app.visual_bible.models import Character, Location, Prop, VisualReference
+
+
+async def scalar_count(
+    session: AsyncSession, model: type[Any], project_id: UUID | None = None
+) -> int:
+    statement = select(func.count()).select_from(model)
+    if project_id is not None and hasattr(model, "project_id"):
+        statement = statement.where(model.project_id == project_id)
+    value = await session.scalar(statement)
+    return int(value or 0)
+
+
+async def latest(session: AsyncSession, model: type[Any], project_id: UUID) -> Any | None:
+    result = await session.execute(
+        select(model).where(model.project_id == project_id).order_by(model.created_at.desc())
+    )
+    return result.scalars().first()
+
+
+async def latest_many(
+    session: AsyncSession,
+    model: type[Any],
+    project_id: UUID,
+    limit: int = 6,
+) -> list[Any]:
+    result = await session.execute(
+        select(model)
+        .where(model.project_id == project_id)
+        .order_by(model.created_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars())
+
+
+async def project_cards() -> list[Project]:
+    try:
+        async with AsyncSessionLocal() as session:
+            return await list_projects(session)
+    except Exception:
+        return []
+
+
+async def dashboard_metrics() -> dict[str, str]:
+    try:
+        async with AsyncSessionLocal() as session:
+            project_count = await scalar_count(session, Project)
+            artifact_count = await scalar_count(session, Artifact)
+            job_count = await scalar_count(session, GenerationJob)
+            open_issues = await session.scalar(
+                select(func.count())
+                .select_from(ContinuityIssue)
+                .where(ContinuityIssue.accepted.is_(False))
+            )
+            exports = await scalar_count(session, Export)
+    except Exception as exc:
+        return {"Banco": "indisponivel", "Detalhe": type(exc).__name__}
+    return {
+        "Projetos": str(project_count),
+        "Artefatos": str(artifact_count),
+        "Jobs": str(job_count),
+        "Alertas QA": str(open_issues or 0),
+        "Exports": str(exports),
+    }
+
+
+async def project_summary(project_id: UUID) -> dict[str, Any] | None:
+    async with AsyncSessionLocal() as session:
+        project = await ProjectRepository(session).get_project(project_id)
+        if project is None:
+            return None
+        await ensure_default_model_settings(session, project_id)
+        production_settings = await get_or_create_production_settings(session, project_id)
+        model_result = await session.execute(
+            select(ProjectModelSetting)
+            .where(ProjectModelSetting.project_id == project_id)
+            .order_by(ProjectModelSetting.task)
+        )
+        cost_total = await session.scalar(
+            select(func.coalesce(func.sum(CostEntry.total_cost), Decimal("0.000000"))).where(
+                CostEntry.project_id == project_id
+            )
+        )
+        latest_quality = await latest(session, QualityCheck, project_id)
+        latest_export = await latest(session, Export, project_id)
+        latest_timeline = await latest(session, Timeline, project_id)
+        timeline_items: list[TimelineItem] = []
+        if latest_timeline is not None:
+            item_result = await session.execute(
+                select(TimelineItem)
+                .where(TimelineItem.timeline_id == latest_timeline.id)
+                .order_by(TimelineItem.order_index)
+                .limit(12)
+            )
+            timeline_items = list(item_result.scalars())
+        visual_refs = await latest_many(session, VisualReference, project_id, 100)
+        visual_asset_ids = {reference.asset_id for reference in visual_refs}
+        if visual_asset_ids:
+            asset_result = await session.execute(
+                select(Asset).where(
+                    Asset.project_id == project_id,
+                    Asset.id.in_(visual_asset_ids),
+                )
+            )
+            visual_assets = list(asset_result.scalars())
+        else:
+            visual_assets = []
+        return {
+            "project": project,
+            "production_settings": production_settings,
+            "counts": {
+                "briefings": await scalar_count(session, Briefing, project_id),
+                "ideas": await scalar_count(session, StoryIdea, project_id),
+                "scripts": await scalar_count(session, Script, project_id),
+                "scenes": await scalar_count(session, Scene, project_id),
+                "shots": await scalar_count(session, Shot, project_id),
+                "characters": await scalar_count(session, Character, project_id),
+                "visual_refs": await scalar_count(session, VisualReference, project_id),
+                "frames": await scalar_count(session, StoryboardFrame, project_id),
+                "animatics": await scalar_count(session, Animatic, project_id),
+                "clips": await scalar_count(session, VideoClip, project_id),
+                "audio": await scalar_count(session, AudioTrack, project_id),
+                "subtitles": await scalar_count(session, SubtitleTrack, project_id),
+                "exports": await scalar_count(session, Export, project_id),
+                "qa_issues": await scalar_count(session, ContinuityIssue, project_id),
+                "stale_artifacts": int(
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(Artifact)
+                        .where(
+                            Artifact.project_id == project_id,
+                            Artifact.status == ArtifactStatus.STALE,
+                        )
+                    )
+                    or 0
+                ),
+            },
+            "cost_total": str(cost_total or Decimal("0.000000")),
+            "quality": latest_quality,
+            "export": latest_export,
+            "model_settings": list(model_result.scalars()),
+            "script": await latest(session, Script, project_id),
+            "scenes": await latest_many(session, Scene, project_id, 12),
+            "shots": await latest_many(session, Shot, project_id, 20),
+            "characters": await latest_many(session, Character, project_id, 4),
+            "locations": await latest_many(session, Location, project_id, 4),
+            "props": await latest_many(session, Prop, project_id, 4),
+            "visual_refs": visual_refs,
+            "assets": visual_assets,
+            "frames": await latest_many(session, StoryboardFrame, project_id, 100),
+            "clips": await latest_many(session, VideoClip, project_id, 100),
+            "timeline": latest_timeline,
+            "timeline_items": timeline_items,
+        }
