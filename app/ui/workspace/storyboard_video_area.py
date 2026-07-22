@@ -70,7 +70,7 @@ def render_video_area(
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_dialog, ui.card().classes(
             "entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"
         ):
-            ui.label("Aprovar prompts de video").classes("brand-type text-2xl font-bold")
+            ui.label("Aprovar prompts de vídeo").classes("brand-type text-2xl font-bold")
             ui.label(
                 "Confira os prompts antes de gerar os clipes a partir do storyboard."
             ).classes("text-sm text-[#8d938e]")

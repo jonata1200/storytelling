@@ -37,7 +37,7 @@ PRODUCTION_STEPS = [
     ProductionStep(
         "briefing",
         "Briefing",
-        "Defina tema, publico, emocao, duracao e objetivo do video.",
+        "Defina tema, público, emoção, duração e objetivo do vídeo.",
         "Criar novo projeto",
         "edit_note",
     ),
@@ -51,14 +51,14 @@ PRODUCTION_STEPS = [
     ProductionStep(
         "script",
         "Roteiro",
-        "Crie o texto base, duracao alvo, cenas e planos estruturados.",
+        "Crie o texto base, duração alvo, cenas e planos estruturados.",
         "Gerar roteiro",
         "description",
     ),
     ProductionStep(
         "visual",
         "Visual",
-        "Crie fichas canonicas e referencias visuais aprovaveis.",
+        "Crie fichas canônicas e referências visuais aprováveis.",
         "Gerar visual",
         "palette",
     ),
@@ -78,8 +78,8 @@ PRODUCTION_STEPS = [
     ),
     ProductionStep(
         "finalization",
-        "Finalizacao",
-        "Crie narracao final, legendas, timeline final e exportacao.",
+        "Finalização",
+        "Crie narração final, legendas, timeline final e exportação.",
         "Finalizar",
         "auto_awesome_motion",
     ),
@@ -100,16 +100,16 @@ WORKSPACE_TABS = [
 ]
 
 STEP_LOADING_COPY = {
-    "ideas": ("Gerando ideias", "A IA esta criando temas, generos e emocoes."),
-    "script": ("Gerando roteiro", "A IA esta escrevendo o roteiro e separando cenas."),
+    "ideas": ("Gerando ideias", "A IA está criando temas, gêneros e emoções."),
+    "script": ("Gerando roteiro", "A IA está escrevendo o roteiro e separando cenas."),
     "visual": (
         "Gerando prompts visuais",
-        "A IA esta criando personagens, locais e objetos para revisao.",
+        "A IA está criando personagens, locais e objetos para revisão.",
     ),
-    "storyboard": ("Gerando storyboard", "A IA esta criando quadros, planos e animatic."),
-    "video": ("Preparando video", "A IA esta verificando prompts e deixando os clipes prontos."),
-    "finalization": ("Finalizando projeto", "A IA esta montando narracao, legendas e export."),
-    "quality": ("Revisando qualidade", "A IA esta checando continuidade e riscos."),
+    "storyboard": ("Gerando storyboard", "A IA está criando quadros, planos e animatic."),
+    "video": ("Preparando vídeo", "A IA está verificando prompts e deixando os clipes prontos."),
+    "finalization": ("Finalizando projeto", "A IA está montando narração, legendas e export."),
+    "quality": ("Revisando qualidade", "A IA está checando continuidade e riscos."),
 }
 
 
@@ -122,7 +122,7 @@ def settings_tab_key(value: object) -> str:
     return "profile"
 
 
-def clean_idea_title(value: object, fallback: str = "Historia sem titulo") -> str:
+def clean_idea_title(value: object, fallback: str = "História sem título") -> str:
     title = str(value or "").strip()
     title = IDEA_TITLE_PREFIX_RE.sub("", title).strip()
     return title or fallback
@@ -134,7 +134,7 @@ def friendly_ai_error(exc: BaseException) -> str:
     if isinstance(exc, TimeoutError) or "demorou mais" in normalized or "timed out" in normalized:
         return (
             "O modelo de IA demorou demais para responder. Tente novamente ou escolha "
-            "um modelo de texto mais estavel nas configuracoes."
+            "um modelo de texto mais estável nas configurações."
         )
     if "rate limit" in normalized or "429" in normalized or "resourceexhausted" in normalized:
         return (
@@ -148,16 +148,16 @@ def friendly_ai_error(exc: BaseException) -> str:
         or "temporarily unavailable" in normalized
     ):
         return (
-            "Nao foi possivel conectar ao provedor de IA. Verifique a internet, a chave "
+            "Não foi possível conectar ao provedor de IA. Verifique a internet, a chave "
             "do OpenRouter e tente novamente."
         )
     if "json" in normalized:
         return (
-            "O modelo respondeu fora do formato esperado pela aplicacao. Tente novamente "
+            "O modelo respondeu fora do formato esperado pela aplicação. Tente novamente "
             "ou use um modelo com melhor suporte a JSON estruturado."
         )
     if "api_key" in normalized or "api key" in normalized or "chave" in normalized:
-        return "A chave da IA parece ausente ou invalida. Confira as configuracoes de IA."
+        return "A chave da IA parece ausente ou inválida. Confira as configurações de IA."
     if text:
         return text[:500]
-    return "A IA nao respondeu ou retornou um erro inesperado. Tente novamente."
+    return "A IA não respondeu ou retornou um erro inesperado. Tente novamente."

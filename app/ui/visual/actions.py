@@ -34,7 +34,7 @@ async def _approve_visual_target_from_ui(
                 view_types,
             )
         if references is None:
-            _notify_visual_action("Nao encontrei o ativo visual para aprovar.", color="negative")
+            _notify_visual_action("Não encontrei o ativo visual para aprovar.", color="negative")
             return
         if references:
             if any(_visual_reference_used_fallback(reference) for reference in references):
@@ -46,11 +46,11 @@ async def _approve_visual_target_from_ui(
                 )
         else:
             _notify_visual_action(
-                "Ativo aprovado. Todas as vistas ja estavam criadas.", color="positive"
+                "Ativo aprovado. Todas as vistas já estavam criadas.", color="positive"
             )
         ui.navigate.reload()
     except Exception as exc:
-        _notify_visual_action(f"Nao foi possivel aprovar o ativo: {exc}", color="negative")
+        _notify_visual_action(f"Não foi possível aprovar o ativo: {exc}", color="negative")
 
 
 def _visual_reference_used_fallback(reference: VisualReference) -> bool:
@@ -60,8 +60,8 @@ def _visual_reference_used_fallback(reference: VisualReference) -> bool:
 
 def _visual_fallback_notice() -> str:
     return (
-        "OpenRouter Images/Sourceful falhou temporariamente. Criei referencias mock locais "
-        "para nao travar o projeto; tente gerar novamente depois ou troque o modelo de imagem."
+        "OpenRouter Images/Sourceful falhou temporariamente. Criei referências mock locais "
+        "para não travar o projeto; tente gerar novamente depois ou troque o modelo de imagem."
     )
 
 
@@ -74,7 +74,7 @@ def _notify_visual_action(message: str, color: str, *, timeout: int | None = Non
     except RuntimeError as exc:
         if "parent element this slot belongs to has been deleted" not in str(exc):
             raise
-        logger.warning("Nao foi possivel notificar acao visual: contexto da pagina foi removido.")
+        logger.warning("Não foi possível notificar ação visual: contexto da página foi removido.")
 
 
 async def _update_visual_prompt_from_ui(
@@ -94,12 +94,12 @@ async def _update_visual_prompt_from_ui(
                 change_note="Prompt editado pela interface",
             )
         if target is None:
-            _notify_visual_action("Nao encontrei o ativo visual para editar.", color="negative")
+            _notify_visual_action("Não encontrei o ativo visual para editar.", color="negative")
             return
         _notify_visual_action("Prompt visual salvo.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
-        _notify_visual_action(f"Nao foi possivel salvar o prompt: {exc}", color="negative")
+        _notify_visual_action(f"Não foi possível salvar o prompt: {exc}", color="negative")
 
 
 async def _regenerate_visual_reference_from_ui(
@@ -119,7 +119,7 @@ async def _regenerate_visual_reference_from_ui(
             )
         if reference is None:
             _notify_visual_action(
-                "Nao encontrei a referencia visual para gerar novamente.", color="negative"
+                "Não encontrei a referência visual para gerar novamente.", color="negative"
             )
             return
         if _visual_reference_used_fallback(reference):
@@ -128,7 +128,7 @@ async def _regenerate_visual_reference_from_ui(
             _notify_visual_action("Imagem gerada novamente.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
-        _notify_visual_action(f"Nao foi possivel gerar novamente: {exc}", color="negative")
+        _notify_visual_action(f"Não foi possível gerar novamente: {exc}", color="negative")
 
 
 def _visual_library_cards_ready(summary: dict[str, Any]) -> bool:
@@ -182,7 +182,7 @@ async def _approve_all_visual_targets_from_ui(
         current_requests = requests or await _current_visual_batch_requests(project_id)
         if not current_requests:
             _notify_visual_action(
-                "Todas as imagens iniciais ja estavam criadas.", color="positive"
+                "Todas as imagens iniciais já estavam criadas.", color="positive"
             )
             ui.navigate.reload()
             return
@@ -198,7 +198,7 @@ async def _approve_all_visual_targets_from_ui(
                     view_types,
                 )
                 if references is None:
-                    raise ValueError("um ativo visual nao foi encontrado")
+                    raise ValueError("um ativo visual não foi encontrado")
                 created_count += len(references)
                 used_fallback = used_fallback or any(
                     _visual_reference_used_fallback(reference) for reference in references
@@ -213,11 +213,11 @@ async def _approve_all_visual_targets_from_ui(
                 )
         else:
             _notify_visual_action(
-                "Todas as imagens iniciais ja estavam criadas.", color="positive"
+                "Todas as imagens iniciais já estavam criadas.", color="positive"
             )
         ui.navigate.reload()
     except Exception as exc:
-        _notify_visual_action(f"Nao foi possivel gerar as imagens em lote: {exc}", color="negative")
+        _notify_visual_action(f"Não foi possível gerar as imagens em lote: {exc}", color="negative")
 
 
 async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]) -> None:
@@ -230,21 +230,21 @@ async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]
                 variants_per_frame=1,
             )
         if result is None:
-            ui.notify("Nao encontrei o projeto para gerar os clipes.", color="negative")
+            ui.notify("Não encontrei o projeto para gerar os clipes.", color="negative")
             return
         jobs, clips = result
         if clips:
             ui.notify(f"Prompts aprovados. {len(clips)} clipe(s) criado(s).", color="positive")
         elif jobs:
             ui.notify(
-                "Prompts aprovados, mas a geracao de video ficou pendente de nova tentativa.",
+                "Prompts aprovados, mas a geração de vídeo ficou pendente de nova tentativa.",
                 color="warning",
             )
         else:
-            ui.notify("Todos os clipes selecionados ja estavam criados.", color="positive")
+            ui.notify("Todos os clipes selecionados já estavam criados.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
-        ui.notify(f"Nao foi possivel gerar os clipes: {exc}", color="negative")
+        ui.notify(f"Não foi possível gerar os clipes: {exc}", color="negative")
 
 
 

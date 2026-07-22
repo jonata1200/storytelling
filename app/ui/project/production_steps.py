@@ -39,7 +39,7 @@ async def _run_step(
         "script": "Criando roteiro.",
         "visual": "Criando prompts visuais.",
         "storyboard": "Criando storyboard.",
-        "video": "Preparando video.",
+        "video": "Preparando vídeo.",
         "finalization": "Finalizando projeto.",
         "quality": "Revisando qualidade.",
     }
@@ -64,14 +64,14 @@ async def _run_step(
                         timeout=UI_GENERATION_TIMEOUT_SECONDS,
                     )
                     if not ideas:
-                        raise ValueError("nao foi possivel gerar uma ideia base")
+                        raise ValueError("não foi possível gerar uma ideia base")
                     idea = ideas[0]
                 script = await asyncio.wait_for(
                     generate_script(session, project_id, idea.id),
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
                 if script is None:
-                    raise ValueError("nao foi possivel gerar roteiro")
+                    raise ValueError("não foi possível gerar roteiro")
                 await asyncio.wait_for(
                     generate_scenes_and_shots(session, project_id, script.id),
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
@@ -85,7 +85,7 @@ async def _run_step(
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
                 if visual is None:
-                    raise ValueError("nao foi possivel criar a Biblioteca visual")
+                    raise ValueError("não foi possível criar a Biblioteca visual")
                 ui.notify(
                     "Prompts visuais criados. Revise e aprove para gerar as imagens.",
                     color="info",
@@ -114,7 +114,7 @@ async def _run_step(
                 if not frames:
                     raise ValueError("gere o storyboard primeiro")
                 ui.notify(
-                    "Prompts de video prontos. Aprove-os na aba Video para gerar os clipes.",
+                    "Prompts de vídeo prontos. Aprove-os na aba Vídeo para gerar os clipes.",
                     color="info",
                 )
                 ui.navigate.reload()
@@ -130,7 +130,7 @@ async def _run_step(
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
                 if final_audio is None:
-                    raise ValueError("nao foi possivel gerar narracao")
+                    raise ValueError("não foi possível gerar narração")
                 subtitle = await asyncio.wait_for(
                     generate_subtitles(session, project_id, final_audio.id),
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
@@ -143,7 +143,7 @@ async def _run_step(
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
                 if timeline is None:
-                    raise ValueError("gere clipes de video primeiro")
+                    raise ValueError("gere clipes de vídeo primeiro")
                 await asyncio.wait_for(
                     export_timeline(
                         session,
@@ -159,7 +159,7 @@ async def _run_step(
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,
                 )
             else:
-                raise ValueError("etapa sem acao automatica")
+                raise ValueError("etapa sem ação automática")
         ui.notify("Etapa executada com sucesso.", color="positive")
         ui.navigate.reload()
     except TimeoutError:
@@ -167,7 +167,7 @@ async def _run_step(
         _append_assistant_message_to_chat(project_id, message)
         ui.notify(message, color="warning")
     except Exception as exc:
-        _append_assistant_message_to_chat(project_id, f"Nao consegui concluir a etapa: {exc}")
+        _append_assistant_message_to_chat(project_id, f"Não consegui concluir a etapa: {exc}")
         ui.notify(f"Acao interrompida: {exc}", color="warning")
     finally:
         if loading_dialog is not None:

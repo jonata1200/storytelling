@@ -89,9 +89,9 @@ def _coerce_score(value: object, default: int) -> int:
         "baixa": 25,
         "low": 25,
         "medio": 50,
-        "mÃ©dio": 50,
+        "médio": 50,
         "media": 50,
-        "mÃ©dia": 50,
+        "média": 50,
         "medium": 50,
         "alto": 80,
         "alta": 80,
@@ -184,12 +184,12 @@ def _script_block_to_text(value: object) -> str:
 
 SCRIPT_TECHNICAL_LABEL_RE = re.compile(
     r"(?im)^\s*(?:"
-    r"numero|n[uÃº]mero|cabecalho|cabe[cÃ§]alho|resumo|"
-    r"objetivo(?: dram[aÃ¡]tico)?|personagens?|local|ambiente|"
-    r"objetos?|a[cÃ§][aÃ£]o|narra[cÃ§][aÃ£]o|di[aÃ¡]logo|"
-    r"dura[cÃ§][aÃ£]o|indicacao para (?:storyboard|video)|"
-    r"indica[cÃ§][aÃ£]o para (?:storyboard|v[iÃ­]deo)|"
-    r"storyboard|video|v[iÃ­]deo|camera|c[aÃ¢]mera|"
+    r"numero|n[uú]mero|cabecalho|cabe[cç]alho|resumo|"
+    r"objetivo(?: dram[aá]tico)?|personagens?|local|ambiente|"
+    r"objetos?|a[cç][aã]o|narra[cç][aã]o|di[aá]logo|"
+    r"dura[cç][aã]o|indicacao para (?:storyboard|video)|"
+    r"indica[cç][aã]o para (?:storyboard|v[ií]deo)|"
+    r"storyboard|video|v[ií]deo|camera|c[aâ]mera|"
     r"visual_composition|camera_movement|duration_seconds|"
     r"narration_text|dialogue_text"
     r")\s*:"
@@ -265,7 +265,7 @@ def _clean_screenplay_location(value: object, fallback: str) -> str:
     text = re.sub(r"\s+", " ", str(value or fallback)).strip(" .:-")
     text = re.sub(r"(?i)^(?:int|ext|int/ext|ext/int)\.\s*", "", text)
     text = re.sub(
-        r"\s*-\s*(?:dia|noite|manha|manh[aÃ£]|tarde|madrugada|amanhecer).*$",
+        r"\s*-\s*(?:dia|noite|manha|manh[aã]|tarde|madrugada|amanhecer).*$",
         "",
         text,
         flags=re.I,
@@ -530,7 +530,7 @@ def _fallback_script_content_from_bible(
                 f"INT. {location} - NOITE\n\n"
                 "A luz do corredor corta a sala em duas metades. Fotografias antigas, "
                 f"cartas e pequenos sinais da vida familiar cercam {protagonist}. "
-                f"Ela relÃª cada pista ate entender que {logline or 'a verdade sempre esteve ali'}."
+                f"Ela relê cada pista ate entender que {logline or 'a verdade sempre esteve ali'}."
             ),
             (
                 "CENA 03\n"
@@ -821,14 +821,14 @@ def _script_scene_sections(script_content: str) -> list[dict]:
                 (
                     line
                     for line in lines
-                    if not re.match(r"(?i)^(duracao|dura[cÃ§][aÃ£]o|objetivo)\s*:", line)
+                    if not re.match(r"(?i)^(duracao|dura[cç][aã]o|objetivo)\s*:", line)
                 ),
                 f"Cena {index + 1}",
             )
-        duration_match = re.search(r"(?i)\bdura[cÃ§][aÃ£]o\s*:\s*(\d+)\s*s", block)
+        duration_match = re.search(r"(?i)\bdura[cç][aã]o\s*:\s*(\d+)\s*s", block)
         summary_match = re.search(
-            r"(?ims)^\s*(?:objetivo(?: dramatico)?|a[cÃ§][aÃ£]o|narracao)\s*:\s*"
-            r"(.+?)(?:\n[A-ZÃÃ‰ÃÃ“ÃšÃ‚ÃŠÃ”ÃƒÃ•Ã‡ ]+\s*:|\Z)",
+            r"(?ims)^\s*(?:objetivo(?: dramatico)?|a[cç][aã]o|narracao)\s*:\s*"
+            r"(.+?)(?:\n[A-ZÁÉÍÓÚÂÊÔÃÕÇ ]+\s*:|\Z)",
             block,
         )
         summary = (

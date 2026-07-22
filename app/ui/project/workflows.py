@@ -54,25 +54,25 @@ async def _generate_initial_script(
             await progress("Vou registrar a ideia escolhida dentro deste projeto.")
         idea = await create_story_idea_from_payload(session, project_id, source_idea)
         if idea is None:
-            raise ValueError("nao foi possivel registrar a ideia selecionada")
+            raise ValueError("não foi possível registrar a ideia selecionada")
     else:
         if progress is not None:
             await progress("Vou criar uma ideia base para orientar o roteiro.")
         generated_ideas = await generate_story_ideas(session, project_id)
         if not generated_ideas:
-            raise ValueError("nao foi possivel gerar ideias iniciais")
+            raise ValueError("não foi possível gerar ideias iniciais")
         idea = generated_ideas[0]
 
     if progress is not None:
-        await progress("Vou escrever o roteiro cinematografico a partir da ideia escolhida.")
+        await progress("Vou escrever o roteiro cinematográfico a partir da ideia escolhida.")
     script = await generate_script(session, project_id, idea.id)
     if script is None:
-        raise ValueError("nao foi possivel gerar roteiro")
+        raise ValueError("não foi possível gerar roteiro")
     if progress is not None:
-        await progress("Roteiro criado. Agora vou separar a historia em cenas e planos.")
+        await progress("Roteiro criado. Agora vou separar a história em cenas e planos.")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
-        raise ValueError("nao foi possivel gerar cenas e planos")
+        raise ValueError("não foi possível gerar cenas e planos")
     return script
 
 
@@ -131,7 +131,7 @@ async def _generate_initial_script_in_background(
                 session,
                 project_id,
                 status="running",
-                message="A IA esta criando o roteiro inicial com base na ideia.",
+                message="A IA está criando o roteiro inicial com base na ideia.",
                 record_event=False,
             )
 
@@ -154,7 +154,7 @@ async def _generate_initial_script_in_background(
             )
     except Exception as exc:
         _log_ai_background_failure(
-            "Nao foi possivel gerar roteiro inicial do projeto",
+            "Não foi possível gerar roteiro inicial do projeto",
             project_id,
             exc,
         )
@@ -163,7 +163,7 @@ async def _generate_initial_script_in_background(
                 session,
                 project_id,
                 status="failed",
-                message="A IA nao conseguiu criar o roteiro inicial.",
+                message="A IA não conseguiu criar o roteiro inicial.",
                 error=_friendly_ai_error(exc),
             )
 
@@ -177,8 +177,8 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                     session,
                     project_id,
                     status="failed",
-                    message="A IA nao conseguiu criar o roteiro inicial.",
-                    error="Projeto nao encontrado ou foi apagado.",
+                    message="A IA não conseguiu criar o roteiro inicial.",
+                    error="Projeto não encontrado ou foi apagado.",
                 )
                 return
 
@@ -203,7 +203,7 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                         session, project_id, script.id
                     )
                     if generated_scenes is None:
-                        raise ValueError("nao foi possivel gerar cenas e planos")
+                        raise ValueError("não foi possível gerar cenas e planos")
                 await _set_project_ai_action_status(
                     session,
                     project_id,
@@ -222,28 +222,28 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                 )
                 generated_ideas = await generate_story_ideas(session, project_id)
                 if not generated_ideas:
-                    raise ValueError("nao foi possivel gerar ideias iniciais")
+                    raise ValueError("não foi possível gerar ideias iniciais")
                 story_idea = generated_ideas[0]
 
             await _set_project_ai_action_status(
                 session,
                 project_id,
                 status="running",
-                message="Vou escrever o roteiro cinematografico a partir da ideia aprovada.",
+                message="Vou escrever o roteiro cinematográfico a partir da ideia aprovada.",
             )
             script = await generate_script(session, project_id, story_idea.id)
             if script is None:
-                raise ValueError("nao foi possivel gerar roteiro")
+                raise ValueError("não foi possível gerar roteiro")
 
             await _set_project_ai_action_status(
                 session,
                 project_id,
                 status="running",
-                message="Roteiro criado. Agora vou separar a historia em cenas e planos.",
+                message="Roteiro criado. Agora vou separar a história em cenas e planos.",
             )
             generated_scenes = await generate_scenes_and_shots(session, project_id, script.id)
             if generated_scenes is None:
-                raise ValueError("nao foi possivel gerar cenas e planos")
+                raise ValueError("não foi possível gerar cenas e planos")
 
             await _set_project_ai_action_status(
                 session,
@@ -253,7 +253,7 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
             )
     except Exception as exc:
         _log_ai_background_failure(
-            "Nao foi possivel retomar roteiro inicial do projeto",
+            "Não foi possível retomar roteiro inicial do projeto",
             project_id,
             exc,
         )
@@ -262,7 +262,7 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                 session,
                 project_id,
                 status="failed",
-                message="A IA nao conseguiu criar o roteiro inicial.",
+                message="A IA não conseguiu criar o roteiro inicial.",
                 error=_friendly_ai_error(exc),
             )
 
@@ -283,7 +283,7 @@ async def _generate_missing_scenes_in_background(project_id: UUID, script_id: UU
                     session,
                     project_id,
                     status="completed",
-                    message="Cenas e planos ja estavam criados.",
+                    message="Cenas e planos já estavam criados.",
                     action="create_script_scenes",
                 )
                 return
@@ -292,12 +292,12 @@ async def _generate_missing_scenes_in_background(project_id: UUID, script_id: UU
                 session,
                 project_id,
                 status="running",
-                message="A IA esta criando cenas e planos para o roteiro.",
+                message="A IA está criando cenas e planos para o roteiro.",
                 action="create_script_scenes",
             )
             scenes = await generate_scenes_and_shots(session, project_id, script_id)
             if scenes is None:
-                raise ValueError("nao foi possivel gerar cenas e planos")
+                raise ValueError("não foi possível gerar cenas e planos")
             await _set_project_ai_action_status(
                 session,
                 project_id,
@@ -306,13 +306,13 @@ async def _generate_missing_scenes_in_background(project_id: UUID, script_id: UU
                 action="create_script_scenes",
             )
     except Exception as exc:
-        _log_ai_background_failure("Nao foi possivel gerar cenas do roteiro", script_id, exc)
+        _log_ai_background_failure("Não foi possível gerar cenas do roteiro", script_id, exc)
         async with AsyncSessionLocal() as session:
             await _set_project_ai_action_status(
                 session,
                 project_id,
                 status="failed",
-                message="A IA nao conseguiu criar cenas e planos.",
+                message="A IA não conseguiu criar cenas e planos.",
                 action="create_script_scenes",
                 error=_friendly_ai_error(exc),
             )
@@ -366,7 +366,7 @@ async def _develop_script_for_existing_project(
     briefing = await _latest(session, Briefing, project_id)
     if briefing is None:
         return (
-            "Este projeto ainda nao tem briefing. Crie o projeto pelo chat inicial ou "
+            "Este projeto ainda não tem briefing. Crie o projeto pelo chat inicial ou "
             "preencha o briefing primeiro.",
             False,
         )
@@ -376,9 +376,9 @@ async def _develop_script_for_existing_project(
         scenes_count = await _scalar_count(session, Scene, project_id)
         if scenes_count == 0:
             await generate_scenes_and_shots(session, project_id, script.id)
-            return "O roteiro ja existia; criei as cenas e planos para ele.", True
+            return "O roteiro já existia; criei as cenas e planos para ele.", True
         return (
-            "Este projeto ja tem roteiro e cenas. Posso ajudar a revisar ou ajustar a estrutura.",
+            "Este projeto já tem roteiro e cenas. Posso ajudar a revisar ou ajustar a estrutura.",
             False,
         )
 
@@ -386,16 +386,15 @@ async def _develop_script_for_existing_project(
     if idea is None:
         ideas = await generate_story_ideas(session, project_id)
         if not ideas:
-            return "Nao consegui gerar uma ideia base para este projeto.", False
+            return "Não consegui gerar uma ideia base para este projeto.", False
         idea = ideas[0]
 
     script = await generate_script(session, project_id, idea.id)
     if script is None:
-        return "Nao consegui gerar o roteiro para este projeto.", False
+        return "Não consegui gerar o roteiro para este projeto.", False
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
-        return "O roteiro foi criado, mas nao consegui gerar as cenas e planos.", True
+        return "O roteiro foi criado, mas não consegui gerar as cenas e planos.", True
     return "Roteiro criado e dividido em cenas e planos.", True
-
 
 

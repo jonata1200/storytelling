@@ -94,7 +94,7 @@ def story_idea_validation_errors(payload: dict) -> list[str]:
 
 def _idea_similarity_key(value: object) -> str:
     text = str(value or "").casefold()
-    text = re.sub(r"[^a-z0-9Ã¡Ã©Ã­Ã³ÃºÃ¢ÃªÃ´Ã£ÃµÃ§]+", " ", text)
+    text = re.sub(r"[^a-z0-9áéíóúâêôãõç]+", " ", text)
     stopwords = {
         "a",
         "o",

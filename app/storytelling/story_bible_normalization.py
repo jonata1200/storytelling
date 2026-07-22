@@ -21,7 +21,7 @@ STORY_BIBLE_DETAIL_PREFIXES = (
 
 def _story_bible_slug(value: object, fallback: str) -> str:
     text = str(value or "").strip().lower()
-    text = re.sub(r"[^a-z0-9Ã¡Ã©Ã­Ã³ÃºÃ¢ÃªÃ´Ã£ÃµÃ§]+", "_", text)
+    text = re.sub(r"[^a-z0-9áéíóúâêôãõç]+", "_", text)
     text = text.strip("_")
     return text or fallback
 
@@ -88,7 +88,7 @@ def _story_bible_outfit(value: object) -> dict:
             "main_piece": _story_bible_text(
                 value.get("main_piece")
                 or value.get("peca_principal")
-                or value.get("peÃ§a_principal"),
+                or value.get("peça_principal"),
                 "figurino principal definido pela historia",
             ),
             "color": _story_bible_text(value.get("color") or value.get("cor"), "cor marcante"),
@@ -102,7 +102,7 @@ def _story_bible_outfit(value: object) -> dict:
                 value.get("wear_marks") or value.get("desgaste"), "marcas coerentes de uso"
             ),
             "accessories": _story_bible_string_list(
-                value.get("accessories") or value.get("acessorios") or value.get("acessÃ³rios"),
+                value.get("accessories") or value.get("acessorios") or value.get("acessórios"),
                 [],
             ),
         }
@@ -203,7 +203,7 @@ def _normalize_story_bible_locations(payload: dict) -> list[dict]:
         or payload.get("locais")
         or payload.get("lugares")
         or payload.get("cenarios")
-        or payload.get("cenÃ¡rios")
+        or payload.get("cenários")
     )
     if not items:
         items = [{"name": "Local principal", "description": "ambiente central da historia"}]

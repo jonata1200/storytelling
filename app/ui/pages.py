@@ -248,25 +248,25 @@ async def _generate_initial_script(
             await progress("Vou registrar a ideia escolhida dentro deste projeto.")
         idea = await create_story_idea_from_payload(session, project_id, source_idea)
         if idea is None:
-            raise ValueError("nao foi possivel registrar a ideia selecionada")
+            raise ValueError("não foi possível registrar a ideia selecionada")
     else:
         if progress is not None:
             await progress("Vou criar uma ideia base para orientar o roteiro.")
         generated_ideas = await generate_story_ideas(session, project_id)
         if not generated_ideas:
-            raise ValueError("nao foi possivel gerar ideias iniciais")
+            raise ValueError("não foi possível gerar ideias iniciais")
         idea = generated_ideas[0]
 
     if progress is not None:
-        await progress("Vou escrever o roteiro cinematografico a partir da ideia escolhida.")
+        await progress("Vou escrever o roteiro cinematográfico a partir da ideia escolhida.")
     script = await generate_script(session, project_id, idea.id)
     if script is None:
-        raise ValueError("nao foi possivel gerar roteiro")
+        raise ValueError("não foi possível gerar roteiro")
     if progress is not None:
-        await progress("Roteiro criado. Agora vou separar a historia em cenas e planos.")
+        await progress("Roteiro criado. Agora vou separar a história em cenas e planos.")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
-        raise ValueError("nao foi possivel gerar cenas e planos")
+        raise ValueError("não foi possível gerar cenas e planos")
     return script
 
 
@@ -286,7 +286,7 @@ async def _develop_script_for_existing_project(
     briefing = await _latest(session, Briefing, project_id)
     if briefing is None:
         return (
-            "Este projeto ainda nao tem briefing. Crie o projeto pelo chat inicial ou preencha o briefing primeiro.",
+            "Este projeto ainda não tem briefing. Crie o projeto pelo chat inicial ou preencha o briefing primeiro.",
             False,
         )
 
@@ -295,9 +295,9 @@ async def _develop_script_for_existing_project(
         scenes_count = await _scalar_count(session, Scene, project_id)
         if scenes_count == 0:
             await generate_scenes_and_shots(session, project_id, script.id)
-            return "O roteiro ja existia; criei as cenas e planos para ele.", True
+            return "O roteiro já existia; criei as cenas e planos para ele.", True
         return (
-            "Este projeto ja tem roteiro e cenas. Posso ajudar a revisar ou ajustar a estrutura.",
+            "Este projeto já tem roteiro e cenas. Posso ajudar a revisar ou ajustar a estrutura.",
             False,
         )
 
@@ -305,15 +305,15 @@ async def _develop_script_for_existing_project(
     if idea is None:
         ideas = await generate_story_ideas(session, project_id)
         if not ideas:
-            return "Nao consegui gerar uma ideia base para este projeto.", False
+            return "Não consegui gerar uma ideia base para este projeto.", False
         idea = ideas[0]
 
     script = await generate_script(session, project_id, idea.id)
     if script is None:
-        return "Nao consegui gerar o roteiro para este projeto.", False
+        return "Não consegui gerar o roteiro para este projeto.", False
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
-        return "O roteiro foi criado, mas nao consegui gerar as cenas e planos.", True
+        return "O roteiro foi criado, mas não consegui gerar as cenas e planos.", True
     return "Roteiro criado e dividido em cenas e planos.", True
 
 
@@ -383,7 +383,7 @@ async def _create_project_from_form(
                 name=f"initial-script-{project_id}",
             )
         if generate_initial_script:
-            message = f"Projeto criado. A IA ja iniciou o roteiro de {duration:g} minutos."
+            message = f"Projeto criado. A IA já iniciou o roteiro de {duration:g} minutos."
         else:
             message = "Projeto criado com briefing inicial."
         ui.notify(message, color="positive")
@@ -393,7 +393,7 @@ async def _create_project_from_form(
             destination = f"/projects/{project_id}"
         ui.navigate.to(destination)
     except Exception as exc:
-        ui.notify(f"Nao foi possivel criar o projeto: {exc}", color="negative")
+        ui.notify(f"Não foi possível criar o projeto: {exc}", color="negative")
 
 
 async def _create_project_from_chat_prompt(prompt: str) -> None:
@@ -405,15 +405,15 @@ async def _create_project_from_chat_prompt(prompt: str) -> None:
         "title": _compact_project_title(cleaned_prompt),
         "description": cleaned_prompt[:240],
         "theme": cleaned_prompt[:220],
-        "audience": "publico geral",
+        "audience": "público geral",
         "genre": "drama emocional",
         "emotion": "curiosidade",
         "intensity": 8,
         "ending": "final com revelacao afetiva",
         "duration": DEFAULT_STORY_DURATION_MINUTES,
-        "visual_style": "cinematico realista vertical",
+        "visual_style": "cinemático realista vertical",
         "objective": (
-            f"reter audiencia com uma historia completa de "
+            f"reter audiência com uma história completa de "
             f"{DEFAULT_STORY_DURATION_MINUTES:g} minutos"
         ),
         "cta": "",
@@ -442,14 +442,14 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
         "title": title[:80] or "Novo projeto de storytelling",
         "description": premise[:240],
         "theme": theme[:220],
-        "audience": "publico geral",
+        "audience": "público geral",
         "genre": genre,
         "emotion": emotion,
         "intensity": 8,
         "ending": "final com payoff emocional",
         "duration": duration,
-        "visual_style": "cinematico realista vertical",
-        "objective": f"desenvolver uma historia completa de {duration:g} minutos",
+        "visual_style": "cinemático realista vertical",
+        "objective": f"desenvolver uma história completa de {duration:g} minutos",
         "cta": "",
         "constraints": (
             "manter ritmo forte\n"
@@ -526,7 +526,7 @@ def _render_step_card(project_id: UUID, step: ProductionStep, counts: dict[str, 
     ready = _step_ready(step.key, counts)
     loading_title, loading_message = STEP_LOADING_COPY.get(
         step.key,
-        ("Executando etapa", "A IA esta trabalhando nesta etapa."),
+        ("Executando etapa", "A IA está trabalhando nesta etapa."),
     )
     status_text = "pronto" if ready else "pendente"
     status_classes = (
@@ -574,7 +574,7 @@ def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) ->
     seen.append(notification_key)
     nicegui_app.storage.user["seen_ai_error_notifications"] = seen[-80:]
     ui.notify(
-        f"Falha na IA: {error or 'a IA nao respondeu. Tente novamente.'}",
+        f"Falha na IA: {error or 'a IA não respondeu. Tente novamente.'}",
         color="negative",
         timeout=9000,
         close_button=True,
@@ -719,4 +719,3 @@ def register_ui_pages() -> None:
         render_video_area=_render_video_area,
         assistant_panel=_assistant_panel,
     )
-

@@ -78,7 +78,7 @@ def _entity_card(
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as gallery_dialog, ui.card().classes(
             "entity-card rounded-2xl p-6 w-[min(980px,94vw)] max-h-[90vh]"
         ):
-            ui.label(f"Referencias visuais - {title}").classes("brand-type text-2xl font-bold")
+            ui.label(f"Referências visuais - {title}").classes("brand-type text-2xl font-bold")
             if reference_assets:
                 with ui.scroll_area().classes("w-full max-h-[72vh] pr-2"):
                     with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-4"):
@@ -150,7 +150,7 @@ def _entity_card(
                                     "text-sm text-[#d8dbd8] whitespace-pre-wrap"
                                 )
                         if not prompt_previews:
-                            ui.label("Todas as vistas deste ativo ja foram criadas.").classes(
+                            ui.label("Todas as vistas deste ativo já foram criadas.").classes(
                                 "text-sm text-[#8d938e]"
                             )
 
@@ -265,7 +265,7 @@ def render_assets_area(
                 ) or {}
         batch_loading_dialog = loading_dialog_factory(
             "Gerando imagens",
-            "A IA esta criando as imagens aprovadas da Biblioteca Visual.",
+            "A IA está criando as imagens aprovadas da Biblioteca Visual.",
         )
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_prompt_dialog, ui.card().classes(
             "entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"

@@ -94,7 +94,7 @@ def visual_card_detail(target_kind: str, profile: dict, fallback: str = "") -> s
             clean_profile_text(profile.get("layout")),
         ]
         text = ", ".join(part for part in parts if part)
-        return text or fallback or "Cenario pronto para revisar e gerar referencias."
+        return text or fallback or "Cenario pronto para revisar e gerar referências."
 
     parts = [
         clean_profile_text(profile.get("narrative_importance")),
@@ -103,4 +103,4 @@ def visual_card_detail(target_kind: str, profile: dict, fallback: str = "") -> s
         clean_profile_text(profile.get("state")),
     ]
     text = ", ".join(part for part in parts if part)
-    return text or fallback or "Objeto pronto para revisar e gerar referencias."
+    return text or fallback or "Objeto pronto para revisar e gerar referências."

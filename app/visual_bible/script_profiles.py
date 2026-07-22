@@ -129,7 +129,7 @@ def _script_character_names(script_content: str) -> list[str]:
         line = re.sub(r"\([^)]*\)", "", raw_line).strip(" .:-")
         if not line or len(line) > 48:
             continue
-        if not re.fullmatch(r"[A-ZÃÃ‰ÃÃ“ÃšÃ‚ÃŠÃ”ÃƒÃ•Ã‡ ]{2,}", line):
+        if not re.fullmatch(r"[A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{2,}", line):
             continue
         if line in SCRIPT_CHARACTER_EXCLUSIONS or line.startswith(("INT", "EXT")):
             continue
@@ -158,7 +158,7 @@ def _repair_missing_character_names(
     for item in items:
         profile = dict(item)
         if _is_placeholder_profile_name(profile.get("name")):
-            role = _first_value(profile, "role", "funcao", "funÃ§Ã£o", fallback="")
+            role = _first_value(profile, "role", "funcao", "função", fallback="")
             replacement = ""
             if protagonist_hint and _is_primary_protagonist_role(role):
                 replacement = protagonist_hint
@@ -172,7 +172,7 @@ def _repair_missing_character_names(
         name = str(profile.get("name") or "").strip()
         key = name.lower()
         if key and key in used_names:
-            role_name = _role_display_name(_first_value(profile, "role", "funcao", "funÃ§Ã£o"))
+            role_name = _role_display_name(_first_value(profile, "role", "funcao", "função"))
             if role_name and role_name.lower() != key:
                 profile["name"] = role_name
                 key = role_name.lower()

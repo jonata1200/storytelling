@@ -422,7 +422,7 @@ async def generate_visual_bible(
     location_items = _profile_items(
         _payload_section(
             source_payload,
-            ("locations", "locais", "lugares", "settings", "places", "cenarios", "cenÃ¡rios"),
+            ("locations", "locais", "lugares", "settings", "places", "cenarios", "cenários"),
         )
     )
     if script_content:

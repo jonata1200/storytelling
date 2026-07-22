@@ -58,16 +58,16 @@ def render_assistant_panel(
     chat_loading_copy = {
         "generate_ideas": STEP_LOADING_COPY["ideas"],
         "generate_script": STEP_LOADING_COPY["script"],
-        "revise_script": ("Revisando roteiro", "A IA esta aplicando ajustes no roteiro."),
+        "revise_script": ("Revisando roteiro", "A IA está aplicando ajustes no roteiro."),
         "generate_assets": STEP_LOADING_COPY["visual"],
         "approve_visual_prompt": (
             "Gerando imagens",
-            "A IA esta criando imagens a partir dos prompts aprovados.",
+            "A IA está criando imagens a partir dos prompts aprovados.",
         ),
         "generate_storyboard": STEP_LOADING_COPY["storyboard"],
         "generate_video": (
             "Gerando clipes",
-            "A IA esta criando clipes a partir dos prompts aprovados.",
+            "A IA está criando clipes a partir dos prompts aprovados.",
         ),
         "generate_finalization": STEP_LOADING_COPY["finalization"],
         "run_quality": STEP_LOADING_COPY["quality"],
@@ -131,7 +131,7 @@ def render_assistant_panel(
             messages.append({"role": "user", "content": user_message})
             pending_message = {
                 "role": "assistant_pending",
-                "content": "Diretor IA esta buscando a melhor resposta...",
+                "content": "Diretor IA está buscando a melhor resposta...",
             }
             messages.append(pending_message)
             _save_assistant_messages(project_id, messages)
@@ -166,7 +166,7 @@ def render_assistant_panel(
                     should_reload = result.changed
             except Exception as exc:
                 logger.exception(
-                    "Nao foi possivel responder ao chat do projeto %s na etapa %s",
+                    "Não foi possível responder ao chat do projeto %s na etapa %s",
                     project_id,
                     active,
                 )

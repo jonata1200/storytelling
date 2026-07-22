@@ -11,13 +11,13 @@ def compact_project_title(text: str) -> str:
         return "Novo projeto de storytelling"
     common_prefixes = [
         "quero criar uma historia sobre ",
-        "quero criar uma histÃ³ria sobre ",
+        "quero criar uma história sobre ",
         "quero desenvolver uma historia sobre ",
-        "quero desenvolver uma histÃ³ria sobre ",
+        "quero desenvolver uma história sobre ",
         "crie uma historia sobre ",
-        "crie uma histÃ³ria sobre ",
+        "crie uma história sobre ",
         "uma historia sobre ",
-        "uma histÃ³ria sobre ",
+        "uma história sobre ",
     ]
     lower_cleaned = cleaned.lower()
     for prefix in common_prefixes:
@@ -39,26 +39,26 @@ def compact_project_title(text: str) -> str:
 
 def format_idea_payload_for_project(idea: dict[str, Any]) -> str:
     labels = {
-        "title": "Titulo",
+        "title": "Título",
         "theme": "Tema",
-        "genre": "Genero",
-        "primary_emotion": "Emocao principal",
-        "final_emotion": "Emocao final",
+        "genre": "Gênero",
+        "primary_emotion": "Emoção principal",
+        "final_emotion": "Emoção final",
         "hook": "Gancho",
         "premise": "Premissa",
         "protagonist": "Protagonista",
         "protagonist_desire": "Desejo do protagonista",
         "emotional_need": "Necessidade emocional",
         "conflict": "Conflito",
-        "obstacles": "Obstaculos",
+        "obstacles": "Obstáculos",
         "stakes": "Riscos narrativos",
         "twist": "Virada",
-        "climax": "Climax",
-        "resolution": "Resolucao",
-        "duration_minutes": "Duracao",
-        "retention_potential": "Potencial de retencao",
-        "cliche_risk": "Risco de cliche",
-        "production_complexity": "Complexidade de producao",
+        "climax": "Clímax",
+        "resolution": "Resolução",
+        "duration_minutes": "Duração",
+        "retention_potential": "Potencial de retenção",
+        "cliche_risk": "Risco de clichê",
+        "production_complexity": "Complexidade de produção",
     }
     ordered_keys = [key for key in labels if key in idea]
     ordered_keys.extend(key for key in idea if key not in labels and not key.startswith("_"))
@@ -81,4 +81,3 @@ def format_idea_payload_for_project(idea: dict[str, Any]) -> str:
             value_text = f"{coerce_duration_minutes(value):g} minutos"
         lines.append(f"{labels.get(key, key)}: {value_text}")
     return "\n".join(lines)
-

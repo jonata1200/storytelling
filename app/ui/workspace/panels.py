@@ -38,7 +38,7 @@ def _render_model_settings(project_id: UUID, settings_list: list[ProjectModelSet
             )
         else:
             ui.label(
-                "OPENROUTER_API_KEY ausente ou invalida: modelos reais nao serao chamados"
+                "OPENROUTER_API_KEY ausente ou inválida: modelos reais não serão chamados"
             ).classes(
                 "text-xs px-2 py-1 rounded-md bg-amber-950 text-amber-200 "
                 "border border-amber-800"
@@ -124,7 +124,7 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
         with ui.grid(columns=2).classes("w-full gap-3"):
             content_type = ui.select(
                 CONTENT_TYPES,
-                label="Tipo de conteudo",
+                label="Tipo de conteúdo",
                 value=settings.content_type,
             )
             aspect_ratio = ui.select(
@@ -154,7 +154,7 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
                 max=10,
             )
             image_model = ui.input("Modelo de imagem", value=effective_image_model)
-            video_model = ui.input("Modelo de video", value=settings.video_model)
+            video_model = ui.input("Modelo de vídeo", value=settings.video_model)
 
         async def save() -> None:
             await _save_production_setup(
@@ -177,9 +177,9 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
 def _render_asset_canvas(summary: dict[str, Any]) -> None:
     groups = [
         ("Personagens", summary["characters"], "person"),
-        ("Cenarios", summary["locations"], "location_on"),
+        ("Cenários", summary["locations"], "location_on"),
         ("Objetos", summary["props"], "category"),
-        ("Referencias", summary["visual_refs"], "image"),
+        ("Referências", summary["visual_refs"], "image"),
     ]
     with ui.card().classes(_card_classes("w-full")):
         with ui.row().classes("items-center gap-2"):
@@ -204,7 +204,7 @@ def _render_storyboard_grid(frames: list[StoryboardFrame]) -> None:
         with ui.row().classes("items-center gap-2"):
             ui.icon("grid_view").classes("text-cyan-300")
             ui.label("Storyboard Grid").classes("text-lg font-semibold")
-        _muted("Revise a estrutura quadro a quadro antes de converter tudo em video.")
+        _muted("Revise a estrutura quadro a quadro antes de converter tudo em vídeo.")
         if not frames:
             ui.label("Gere storyboards para preencher a grade.").classes("text-sm text-slate-500")
             return

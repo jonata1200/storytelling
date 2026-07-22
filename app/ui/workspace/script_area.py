@@ -32,17 +32,17 @@ async def save_script_from_ui(
         clean_title = title.strip()
         clean_content = content.strip()
         if not clean_title:
-            raise ValueError("Informe um titulo para o roteiro.")
+            raise ValueError("Informe um título para o roteiro.")
         if not clean_content:
-            raise ValueError("O roteiro nao pode ficar vazio.")
+            raise ValueError("O roteiro não pode ficar vazio.")
 
         async with AsyncSessionLocal() as session:
             script = await session.get(Script, script_id)
             if script is None or script.project_id != project_id:
-                raise ValueError("Roteiro nao encontrado.")
+                raise ValueError("Roteiro não encontrado.")
             artifact = await session.get(Artifact, script.artifact_id)
             if artifact is None:
-                raise ValueError("Artefato do roteiro nao encontrado.")
+                raise ValueError("Artefato do roteiro não encontrado.")
 
             script.title = clean_title[:220]
             script.content = clean_content
@@ -74,7 +74,7 @@ async def save_script_from_ui(
         ui.notify("Roteiro salvo.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
-        ui.notify(f"Nao consegui salvar o roteiro: {exc}", color="negative")
+        ui.notify(f"Não consegui salvar o roteiro: {exc}", color="negative")
 
 
 def render_script_area(
@@ -127,11 +127,11 @@ def render_script_area(
             )
         )
         loading_message = (
-            "A IA esta criando cenas e planos para o roteiro."
+            "A IA está criando cenas e planos para o roteiro."
             if missing_scenes
             else str(
                 ai_action.get("message")
-                or "A IA esta desenvolvendo o roteiro com base na ideia."
+                or "A IA está desenvolvendo o roteiro com base na ideia."
             )
         )
         loading_dialog = loading_dialog_factory(loading_title, loading_message)
@@ -144,8 +144,8 @@ def render_script_area(
             "max-h-[92vh] flex flex-col"
         ):
             ui.label("Editar roteiro").classes("brand-type text-2xl font-bold shrink-0")
-            title_input = ui.input("Titulo", value=script.title).props("outlined").classes("w-full")
-            content_input = ui.textarea("Conteudo do roteiro", value=script.content).props(
+            title_input = ui.input("Título", value=script.title).props("outlined").classes("w-full")
+            content_input = ui.textarea("Conteúdo do roteiro", value=script.content).props(
                 "outlined"
             ).classes("script-editor-textarea w-full flex-1 min-h-0 font-mono text-sm")
             with ui.row().classes("w-full justify-end gap-2 shrink-0"):
@@ -162,7 +162,7 @@ def render_script_area(
                 ).props("unelevated no-caps").classes("acid-bg rounded-xl font-semibold")
     section_title(
         "Roteiro",
-        "Edite e revise o roteiro cinematografico que orienta as proximas etapas.",
+        "Edite e revise o roteiro cinematográfico que orienta as próximas etapas.",
         "Editar roteiro" if edit_dialog is not None else None,
         edit_dialog.open if edit_dialog is not None else None,
     )
@@ -171,7 +171,7 @@ def render_script_area(
             if script is None and ai_status == "failed":
                 retry_loading_dialog = loading_dialog_factory(
                     "Retomando roteiro",
-                    "A IA esta tentando criar o roteiro inicial novamente.",
+                    "A IA está tentando criar o roteiro inicial novamente.",
                 )
 
                 def retry_initial_script() -> None:
@@ -180,7 +180,7 @@ def render_script_area(
                 with ui.element("div").classes(
                     "border border-red-900 bg-red-950/40 rounded-2xl p-4 text-red-100"
                 ):
-                    ui.label("A IA nao conseguiu criar o roteiro inicial.").classes(
+                    ui.label("A IA não conseguiu criar o roteiro inicial.").classes(
                         "font-semibold"
                     )
                     ui.label(str(ai_action.get("error") or ai_action.get("message") or "")).classes(
@@ -198,7 +198,7 @@ def render_script_area(
                 content = (
                     script.content
                     if script
-                    else "A IA esta desenvolvendo o roteiro com base na ideia do projeto."
+                    else "A IA está desenvolvendo o roteiro com base na ideia do projeto."
                 )
                 ui.label(content).classes("whitespace-pre-wrap leading-8 text-[#d9dcd9]")
 

@@ -60,13 +60,13 @@ async def _purge_application_data_from_ui() -> None:
         ui.notify(
             (
                 f"Limpeza definitiva concluida: {projects} projeto(s), "
-                f"{artifacts} artefato(s) e {deleted_ideas} ideia(s) do laboratorio removidos."
+                f"{artifacts} artefato(s) e {deleted_ideas} ideia(s) do laboratório removidos."
             ),
             color="positive",
         )
         ui.navigate.to(SETTINGS_DATA_URL)
     except Exception as exc:
-        ui.notify(f"Nao foi possivel limpar definitivamente os dados: {exc}", color="negative")
+        ui.notify(f"Não foi possível limpar definitivamente os dados: {exc}", color="negative")
 
 
 async def _purge_all_ideas_from_ui() -> None:
@@ -78,13 +78,13 @@ async def _purge_all_ideas_from_ui() -> None:
         ui.notify(
             (
                 f"Ideias apagadas definitivamente: {story_ideas} registro(s) do banco "
-                f"e {deleted_local_ideas} ideia(s) do laboratorio removidos."
+                f"e {deleted_local_ideas} ideia(s) do laboratório removidos."
             ),
             color="positive",
         )
         ui.navigate.to(SETTINGS_DATA_URL)
     except Exception as exc:
-        ui.notify(f"Nao foi possivel apagar definitivamente as ideias: {exc}", color="negative")
+        ui.notify(f"Não foi possível apagar definitivamente as ideias: {exc}", color="negative")
 
 
 async def _purge_all_projects_from_ui() -> None:
@@ -102,7 +102,7 @@ async def _purge_all_projects_from_ui() -> None:
         )
         ui.navigate.to(SETTINGS_DATA_URL)
     except Exception as exc:
-        ui.notify(f"Nao foi possivel apagar definitivamente os projetos: {exc}", color="negative")
+        ui.notify(f"Não foi possível apagar definitivamente os projetos: {exc}", color="negative")
 
 
 async def _delete_lab_idea_from_ui(idea_id: str, source: str) -> bool:
@@ -115,7 +115,7 @@ async def _delete_lab_idea_from_ui(idea_id: str, source: str) -> bool:
             await hard_delete_story_idea_by_payload_id(session, idea_id)
         return True
     except Exception as exc:
-        ui.notify(f"Nao foi possivel apagar definitivamente a ideia: {exc}", color="negative")
+        ui.notify(f"Não foi possível apagar definitivamente a ideia: {exc}", color="negative")
         return False
 
 
@@ -130,7 +130,7 @@ async def _save_model_setting(
         ui.notify("Modelo salvo para esta etapa.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
-        ui.notify(f"Nao foi possivel salvar modelo: {exc}", color="negative")
+        ui.notify(f"Não foi possível salvar modelo: {exc}", color="negative")
 
 
 async def _save_production_setup(project_id: UUID, payload: dict[str, Any]) -> None:
@@ -140,7 +140,7 @@ async def _save_production_setup(project_id: UUID, payload: dict[str, Any]) -> N
         ui.notify("Core Setup salvo.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
-        ui.notify(f"Nao foi possivel salvar Core Setup: {exc}", color="negative")
+        ui.notify(f"Não foi possível salvar Core Setup: {exc}", color="negative")
 
 
 async def _create_next_episode(project_id: UUID) -> None:
@@ -176,7 +176,7 @@ async def _create_next_episode(project_id: UUID) -> None:
                     "metadata_json": {
                         "inherits_from_project_id": str(project.id),
                         "one_line_idea": (
-                            f"Continuar a historia de {project.title}, mantendo "
+                            f"Continuar a história de {project.title}, mantendo "
                             "personagens, tom emocional e conflitos em aberto."
                         ),
                     },
@@ -203,10 +203,10 @@ async def _create_next_episode(project_id: UUID) -> None:
                 ),
             )
             await ensure_default_model_settings(session, next_project.id)
-        ui.notify("Proximo episodio criado.", color="positive")
+        ui.notify("Próximo episódio criado.", color="positive")
         ui.navigate.to(f"/projects/{next_project.id}")
     except Exception as exc:
-        ui.notify(f"Nao foi possivel criar proximo episodio: {exc}", color="negative")
+        ui.notify(f"Não foi possível criar próximo episódio: {exc}", color="negative")
 
 
 

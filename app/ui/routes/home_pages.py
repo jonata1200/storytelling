@@ -67,7 +67,7 @@ def register_home_pages(
                     ):
                         idea = (
                             ui.textarea(
-                                placeholder="Descreva sua histÃ³ria, cole um roteiro ou peÃ§a uma ideia..."
+                                placeholder="Descreva sua história, cole um roteiro ou peça uma ideia..."
                             )
                             .props("borderless autogrow input-style='min-height:140px'")
                             .classes("w-full text-lg flex-1 text-left")
@@ -88,7 +88,7 @@ def register_home_pages(
                             ui.label("Projetos recentes").classes(
                                 "brand-type text-2xl md:text-3xl font-bold"
                             )
-                            ui.label("Continue de onde parou ou comece uma nova produÃ§Ã£o.").classes(
+                            ui.label("Continue de onde parou ou comece uma nova produção.").classes(
                                 "text-sm text-[#7f8580]"
                             )
                     if not projects:
@@ -104,7 +104,7 @@ def register_home_pages(
                                 "mt-3 text-lg font-semibold text-[#d7dbd7]"
                             )
                             ui.label(
-                                "Sua histÃ³ria, personagens e storyboards aparecerÃ£o aqui."
+                                "Sua história, personagens e storyboards aparecerão aqui."
                             ).classes("mt-1 text-sm text-[#747a75]")
                     else:
                         with ui.grid().classes(
@@ -132,7 +132,7 @@ def register_home_pages(
                 with ui.row().classes("w-full items-center justify-between"):
                     with ui.column().classes("gap-1"):
                         ui.label("Projetos").classes("brand-type text-4xl font-bold")
-                        ui.label("Acompanhe e continue suas produÃ§Ãµes de vÃ­deo.").classes(
+                        ui.label("Acompanhe e continue suas produções de vídeo.").classes(
                             "text-[#8f9590]"
                         )
                     with ui.row().classes("items-center gap-2"):
@@ -151,7 +151,7 @@ def register_home_pages(
                             "mt-3 text-lg font-semibold"
                         )
                         ui.button(
-                            "ComeÃ§ar uma criaÃ§Ã£o",
+                            "Começar uma criação",
                             icon="auto_awesome",
                             on_click=lambda: ui.navigate.to("/dashboard"),
                         ).props("flat no-caps").classes("acid mt-2")
@@ -174,18 +174,18 @@ def register_home_pages(
                     with ui.column().classes("gap-1"):
                         with ui.row().classes("items-center gap-3"):
                             ui.icon("lightbulb").classes("text-4xl acid")
-                            ui.label("LaboratÃ³rio de Ideias").classes(
+                            ui.label("Laboratório de Ideias").classes(
                                 "brand-type text-4xl font-bold"
                             )
                         ui.label(
-                            "Explore histÃ³rias livremente, sem criar um projeto de vÃ­deo."
+                            "Explore histórias livremente, sem criar um projeto de vídeo."
                         ).classes("text-[#8f9590]")
                     theme_toggle()
 
                 with ui.element("div").classes("hidden"):
                     _ = (
                         ui.textarea(
-                            "Sobre o que vocÃª quer contar?",
+                            "Sobre o que você quer contar?",
                             placeholder="Ex.: uma astronauta encontra uma mensagem enviada por ela mesma...",
                         )
                         .props("outlined autogrow stack-label")
@@ -195,26 +195,26 @@ def register_home_pages(
                         _ = ui.select(
                             [
                                 "Drama",
-                                "FicÃ§Ã£o cientÃ­fica",
+                                "Ficção científica",
                                 "Suspense",
-                                "ComÃ©dia",
+                                "Comédia",
                                 "Terror",
                                 "Romance",
                             ],
-                            label="GÃªnero",
+                            label="Gênero",
                             value="Drama",
                         ).props("outlined")
                         _ = ui.select(
                             [
-                                "EsperanÃ§a",
+                                "Esperança",
                                 "Curiosidade",
-                                "TensÃ£o",
+                                "Tensão",
                                 "Alegria",
                                 "Melancolia",
                                 "Surpresa",
                             ],
-                            label="EmoÃ§Ã£o principal",
-                            value="EsperanÃ§a",
+                            label="Emoção principal",
+                            value="Esperança",
                         ).props("outlined")
 
                     loading_title, loading_message = STEP_LOADING_COPY["ideas"]
@@ -257,21 +257,21 @@ def register_home_pages(
                                 color="warning",
                             )
                         except Exception as exc:
-                            ui.notify(f"NÃ£o foi possÃ­vel gerar ideias: {exc}", color="negative")
+                            ui.notify(f"Não foi possível gerar ideias: {exc}", color="negative")
                         finally:
                             loading_dialog.close()
 
                 with ui.column().classes("w-full items-center gap-4 py-8"):
                     with ui.row().classes("w-full max-w-2xl gap-3 items-end justify-center"):
                         genre_select = (
-                            ui.select(IDEA_GENRES, label="GÃªnero", value=IDEA_GENRES[0])
+                            ui.select(IDEA_GENRES, label="Gênero", value=IDEA_GENRES[0])
                             .props("outlined")
                             .classes("flex-1 min-w-64")
                         )
                         duration_select = (
                             ui.select(
                                 STORY_DURATION_OPTIONS,
-                                label="DuraÃ§Ã£o",
+                                label="Duração",
                                 value=int(DEFAULT_STORY_DURATION_MINUTES),
                             )
                             .props("outlined suffix='min'")
@@ -316,16 +316,16 @@ def register_home_pages(
                                 "entity-card rounded-2xl p-5 flex flex-col min-h-80"
                             ):
                                 ui.label(
-                                    clean_idea_title(idea.get("title"), "Historia sem titulo")
+                                    clean_idea_title(idea.get("title"), "História sem título")
                                 ).classes(
                                     "brand-type text-2xl font-bold"
                                 )
                                 with ui.row().classes("gap-2 mt-3 flex-wrap"):
-                                    ui.label(str(idea.get("genre") or "Genero sugerido")).classes(
+                                    ui.label(str(idea.get("genre") or "Gênero sugerido")).classes(
                                         "idea-badge-genre rounded-md px-2 py-0.5 text-xs font-medium"
                                     )
                                     ui.label(
-                                        str(idea.get("primary_emotion") or "Emocao sugerida")
+                                        str(idea.get("primary_emotion") or "Emoção sugerida")
                                     ).classes(
                                         "idea-badge-emotion rounded-md px-2 py-0.5 text-xs font-medium"
                                     )

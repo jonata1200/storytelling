@@ -33,11 +33,11 @@ def workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool
         return True, ""
     if section == "video":
         if not script_ready:
-            return False, "Crie o roteiro antes de acessar video."
+            return False, "Crie o roteiro antes de acessar vídeo."
         if not assets_ready:
-            return False, "Crie os personagens antes de acessar video."
+            return False, "Crie os personagens antes de acessar vídeo."
         if not storyboard_ready:
-            return False, "Crie o storyboard antes de acessar video."
+            return False, "Crie o storyboard antes de acessar vídeo."
         return True, ""
     return False, "Etapa desconhecida."
 

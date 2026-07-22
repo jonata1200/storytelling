@@ -156,18 +156,18 @@ def register_settings_page(
                                 and normalize_openrouter_api_key(saved_api_key) is None
                             )
                             if current.openrouter_api_key:
-                                ui.label("Chave OpenRouter valida configurada.").classes(
+                                ui.label("Chave OpenRouter válida configurada.").classes(
                                     "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 border border-emerald-800"
                                 )
                             elif saved_api_key_invalid:
                                 ui.label(
-                                    "A chave OpenRouter salva e invalida. Cole uma chave iniciada por sk-or-."
+                                    "A chave OpenRouter salva e inválida. Cole uma chave iniciada por sk-or-."
                                 ).classes(
                                     "text-xs px-2 py-1 rounded-md bg-red-950 text-red-200 border border-red-800"
                                 )
                             else:
                                 ui.label(
-                                    "Sem chave OpenRouter valida: modelos reais de imagem, video e texto nao serao chamados."
+                                    "Sem chave OpenRouter válida: modelos reais de imagem, vídeo e texto não serão chamados."
                                 ).classes(
                                     "text-xs px-2 py-1 rounded-md bg-amber-950 text-amber-200 border border-amber-800"
                                 )
@@ -205,7 +205,7 @@ def register_settings_page(
                             )
                             video_model = (
                                 ui.input(
-                                    "Modelo de video",
+                                    "Modelo de vídeo",
                                     value=current.openrouter_video_model,
                                     placeholder="google/veo-3.1",
                                 )
@@ -224,7 +224,7 @@ def register_settings_page(
                                     normalized_key = normalize_openrouter_api_key(typed_api_key)
                                     if normalized_key is None:
                                         ui.notify(
-                                            "Chave OpenRouter invalida. Ela deve comecar com sk-or-.",
+                                            "Chave OpenRouter inválida. Ela deve começar com sk-or-.",
                                             color="negative",
                                         )
                                         return
@@ -261,8 +261,8 @@ def register_settings_page(
                                 )
                                 ui.label(
                                     "Isso remove ideias salvas, ideias geradas e registros "
-                                    "de ideias no banco. Projetos serao mantidos, mas "
-                                    "conteudos derivados das ideias serao removidos."
+                                    "de ideias no banco. Projetos serão mantidos, mas "
+                                    "conteúdos derivados das ideias serão removidos."
                                 ).classes("text-sm text-[#858b86]")
                                 with ui.row().classes("w-full justify-end gap-2 mt-4"):
                                     ui.button("Cancelar", on_click=ideas_dialog.close).props(
@@ -301,13 +301,13 @@ def register_settings_page(
                             with ui.dialog() as purge_dialog, ui.card().classes(
                                 "entity-card rounded-2xl p-6 min-w-96"
                             ):
-                                ui.label("Limpar banco da aplicacao?").classes(
+                                ui.label("Limpar banco da aplicação?").classes(
                                     "text-xl font-semibold"
                                 )
                                 ui.label(
                                     "Isso apaga definitivamente projetos, roteiros, cenas, "
-                                    "storyboards, assets, execucoes de prompt e ideias do "
-                                    "laboratorio. Usuarios e configuracoes globais serao mantidos."
+                                    "storyboards, assets, execuções de prompt e ideias do "
+                                    "laboratório. Usuários e configurações globais serão mantidos."
                                 ).classes("text-sm text-[#858b86]")
                                 with ui.row().classes("w-full justify-end gap-2 mt-4"):
                                     ui.button("Cancelar", on_click=purge_dialog.close).props(
@@ -370,5 +370,4 @@ def register_settings_page(
                                     ).props("outline no-caps").classes(
                                         "text-red-300 border-red-900 rounded-xl"
                                     )
-
 

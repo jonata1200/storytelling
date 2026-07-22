@@ -83,14 +83,14 @@ PROFILE_NAME_KEYS = (
     "titulo",
     "description",
     "descricao",
-    "descriÃ§Ã£o",
+    "descrição",
 )
 PROFILE_DETAIL_KEYS = frozenset(
     {
         "id",
         "role",
         "funcao",
-        "funÃ§Ã£o",
+        "função",
         "arc",
         "arco",
         "personality",
@@ -132,18 +132,18 @@ PROFILE_DETAIL_KEYS = frozenset(
         "layout",
         "planta",
         "disposicao",
-        "disposiÃ§Ã£o",
+        "disposição",
         "materials",
         "materiais",
         "lighting",
         "iluminacao",
-        "iluminaÃ§Ã£o",
+        "iluminação",
         "luz",
         "props_in_scene",
         "spatial_rules",
         "dimensions",
         "dimensoes",
-        "dimensÃµes",
+        "dimensões",
         "tamanho",
         "material",
         "color",
@@ -152,14 +152,14 @@ PROFILE_DETAIL_KEYS = frozenset(
         "state",
         "estado",
         "condicao",
-        "condiÃ§Ã£o",
+        "condição",
         "owner",
         "dono",
         "proprietario",
-        "proprietÃ¡rio",
+        "proprietário",
         "importance",
         "importancia",
-        "importÃ¢ncia",
+        "importância",
         "narrative_importance",
     }
 )
@@ -276,7 +276,7 @@ def _profile_mapping(raw: object, fallback_name: str | None = None) -> dict:
                 _humanize_identifier(normalized.get("id")) if normalized.get("id") else ""
             )
             role_name = _role_display_name(
-                _first_value(normalized, "role", "funcao", "funÃ§Ã£o", fallback="")
+                _first_value(normalized, "role", "funcao", "função", fallback="")
             )
             normalized["name"] = (
                 normalized.get("nome") or normalized.get("title") or normalized.get("titulo")
@@ -329,7 +329,7 @@ def _location_profile(raw: object) -> dict:
         raw,
         "description",
         "descricao",
-        "descriÃ§Ã£o",
+        "descrição",
         "mood",
         "atmosfera",
         fallback="local emocional da historia",
@@ -339,7 +339,7 @@ def _location_profile(raw: object) -> dict:
         "layout",
         "planta",
         "disposicao",
-        "disposiÃ§Ã£o",
+        "disposição",
         fallback="espaco com pontos de camera claros",
     )
     materials = _first_value(
@@ -356,7 +356,7 @@ def _location_profile(raw: object) -> dict:
         raw,
         "lighting",
         "iluminacao",
-        "iluminaÃ§Ã£o",
+        "iluminação",
         "luz",
         fallback="luz natural suave com contraste cinematografico",
     )
@@ -401,7 +401,7 @@ def _prop_profile(raw: object) -> dict:
         raw,
         "dimensions",
         "dimensoes",
-        "dimensÃµes",
+        "dimensões",
         "tamanho",
         fallback="pequeno, manipulavel com uma mao",
     )
@@ -412,13 +412,13 @@ def _prop_profile(raw: object) -> dict:
         raw, "color", "cor", "cores", fallback="cor neutra com detalhe visual memoravel"
     )
     state = _first_value(
-        raw, "state", "estado", "condicao", "condiÃ§Ã£o", fallback="usado mas preservado"
+        raw, "state", "estado", "condicao", "condição", fallback="usado mas preservado"
     )
     owner = _first_value(
-        raw, "owner", "dono", "proprietario", "proprietÃ¡rio", fallback="protagonista"
+        raw, "owner", "dono", "proprietario", "proprietário", fallback="protagonista"
     )
     narrative_importance = _short_text(
-        _first_value(raw, "importance", "narrative_importance", "importancia", "importÃ¢ncia"),
+        _first_value(raw, "importance", "narrative_importance", "importancia", "importância"),
         "objeto de payoff narrativo",
         220,
     )
@@ -459,8 +459,8 @@ def _prop_profile(raw: object) -> dict:
 
 GENERIC_VISUAL_NAMES = {
     "character": {"", "item", "personagem", "personagem 1", "protagonista"},
-    "location": {"", "item", "local", "local 1", "local principal", "cenario", "cenÃ¡rio"},
-    "prop": {"", "item", "objeto", "objeto 1", "objeto de revelacao", "objeto de revelaÃ§Ã£o"},
+    "location": {"", "item", "local", "local 1", "local principal", "cenario", "cenário"},
+    "prop": {"", "item", "objeto", "objeto 1", "objeto de revelacao", "objeto de revelação"},
 }
 
 

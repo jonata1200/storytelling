@@ -128,7 +128,7 @@ def _character_visual_defaults(name: str) -> dict[str, object]:
         "cabelo ruivo cacheado preso de lado",
         "cabelo raspado nas laterais com topo natural",
         "cabelo loiro escuro comprido, levemente despenteado",
-        "tranÃ§as finas presas para tras",
+        "tranças finas presas para tras",
         "cabelo branco curto, bem alinhado",
     ]
     eye_details = [
@@ -177,7 +177,7 @@ def _character_profile(raw: object) -> dict:
     raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Personagem")
     defaults = _character_visual_defaults(name)
-    role = _short_text(_first_value(raw, "role", "funcao", "funÃ§Ã£o"), "personagem", 120)
+    role = _short_text(_first_value(raw, "role", "funcao", "função"), "personagem", 120)
     gender = _character_gender(
         _first_value(raw, "gender", "genero", "sexo", fallback=""),
         name,
