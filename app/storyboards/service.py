@@ -10,7 +10,7 @@ from app.assets.models import Asset, AssetVersion
 from app.config.settings import get_settings
 from app.core.enums import ArtifactStatus, ArtifactType, AssetKind, DependencyKind, ProjectStatus
 from app.generation.models import PromptExecution
-from app.production.service import get_or_create_production_settings
+from app.production.service import get_or_create_production_settings, resolve_image_model
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
@@ -30,10 +30,18 @@ async def _image_provider_for_project(
 ) -> tuple[ImageProvider, str, str]:
     app_settings = get_settings()
     production_settings = await get_or_create_production_settings(session, project_id)
-    model = production_settings.image_model or app_settings.openrouter_image_model
-    if app_settings.openrouter_api_key and model != "mock-image":
-        return OpenRouterImageProvider(), model, "openrouter_storyboards"
-    return MockImageProvider(), "mock-image", "mock_storyboards"
+    model = resolve_image_model(
+        production_settings.image_model,
+        app_settings.openrouter_image_model,
+    )
+    if model == "mock-image":
+        return MockImageProvider(), model, "mock_storyboards"
+    if not app_settings.openrouter_api_key:
+        raise RuntimeError(
+            "OPENROUTER_API_KEY ausente ou invalida. Configure uma chave valida para gerar "
+            f"storyboards reais com o modelo {model}."
+        )
+    return OpenRouterImageProvider(), model, "openrouter_storyboards"
 
 
 async def _create_artifact(

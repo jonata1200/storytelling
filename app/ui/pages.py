@@ -17,7 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset
 from app.config.preferences import save_preferences
-from app.config.settings import get_settings
+from app.config.runtime_preferences import load_runtime_preferences
+from app.config.settings import get_settings, normalize_openrouter_api_key
 from app.database.session import AsyncSessionLocal
 from app.finalization.service import (
     create_final_timeline,
@@ -40,6 +41,7 @@ from app.production.service import (
     RESOLUTIONS,
     WORKFLOW_MODES,
     get_or_create_production_settings,
+    resolve_image_model,
     update_production_settings,
 )
 from app.projects.models import Artifact, Project
@@ -534,6 +536,16 @@ async def _reload_project_when_script_ready(project_id: UUID) -> None:
         status = str(action.get("status") or "") if isinstance(action, dict) else ""
     if status in {"completed", "failed"} or (script is not None and scene_count > 0):
         ui.navigate.reload()
+
+
+def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -> None:
+    loading_dialog.open()
+    background_tasks.create(
+        _resume_initial_script_in_background(project_id),
+        name=f"retry initial script {project_id}",
+    )
+    ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
+    ui.notify("Retomando a criação do roteiro.", color="positive")
 
 
 def _requests_script_generation(message: str, active: str) -> bool:
@@ -1103,21 +1115,23 @@ async def _approve_visual_target_from_ui(
                 view_types,
             )
         if references is None:
-            ui.notify("Nao encontrei o ativo visual para aprovar.", color="negative")
+            _notify_visual_action("Nao encontrei o ativo visual para aprovar.", color="negative")
             return
         if references:
             if any(_visual_reference_used_fallback(reference) for reference in references):
-                ui.notify(_visual_fallback_notice(), color="warning", timeout=9000)
+                _notify_visual_action(_visual_fallback_notice(), color="warning", timeout=9000)
             else:
-                ui.notify(
+                _notify_visual_action(
                     f"Ativo aprovado. {len(references)} vista(s) complementar(es) criada(s).",
                     color="positive",
                 )
         else:
-            ui.notify("Ativo aprovado. Todas as vistas ja estavam criadas.", color="positive")
+            _notify_visual_action(
+                "Ativo aprovado. Todas as vistas ja estavam criadas.", color="positive"
+            )
         ui.navigate.reload()
     except Exception as exc:
-        ui.notify(f"Nao foi possivel aprovar o ativo: {exc}", color="negative")
+        _notify_visual_action(f"Nao foi possivel aprovar o ativo: {exc}", color="negative")
 
 
 def _visual_reference_used_fallback(reference: VisualReference) -> bool:
@@ -1130,6 +1144,18 @@ def _visual_fallback_notice() -> str:
         "OpenRouter Images/Sourceful falhou temporariamente. Criei referencias mock locais "
         "para nao travar o projeto; tente gerar novamente depois ou troque o modelo de imagem."
     )
+
+
+def _notify_visual_action(message: str, color: str, *, timeout: int | None = None) -> None:
+    try:
+        if timeout is None:
+            ui.notify(message, color=color)
+        else:
+            ui.notify(message, color=color, timeout=timeout)
+    except RuntimeError as exc:
+        if "parent element this slot belongs to has been deleted" not in str(exc):
+            raise
+        logger.warning("Nao foi possivel notificar acao visual: contexto da pagina foi removido.")
 
 
 async def _update_visual_prompt_from_ui(
@@ -1149,12 +1175,12 @@ async def _update_visual_prompt_from_ui(
                 change_note="Prompt editado pela interface",
             )
         if target is None:
-            ui.notify("Nao encontrei o ativo visual para editar.", color="negative")
+            _notify_visual_action("Nao encontrei o ativo visual para editar.", color="negative")
             return
-        ui.notify("Prompt visual salvo.", color="positive")
+        _notify_visual_action("Prompt visual salvo.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
-        ui.notify(f"Nao foi possivel salvar o prompt: {exc}", color="negative")
+        _notify_visual_action(f"Nao foi possivel salvar o prompt: {exc}", color="negative")
 
 
 async def _regenerate_visual_reference_from_ui(
@@ -1173,15 +1199,17 @@ async def _regenerate_visual_reference_from_ui(
                 view_type,
             )
         if reference is None:
-            ui.notify("Nao encontrei a referencia visual para gerar novamente.", color="negative")
+            _notify_visual_action(
+                "Nao encontrei a referencia visual para gerar novamente.", color="negative"
+            )
             return
         if _visual_reference_used_fallback(reference):
-            ui.notify(_visual_fallback_notice(), color="warning", timeout=9000)
+            _notify_visual_action(_visual_fallback_notice(), color="warning", timeout=9000)
         else:
-            ui.notify("Imagem gerada novamente.", color="positive")
+            _notify_visual_action("Imagem gerada novamente.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
-        ui.notify(f"Nao foi possivel gerar novamente: {exc}", color="negative")
+        _notify_visual_action(f"Nao foi possivel gerar novamente: {exc}", color="negative")
 
 
 def _visual_library_cards_ready(summary: dict[str, Any]) -> bool:
@@ -1234,7 +1262,9 @@ async def _approve_all_visual_targets_from_ui(
     try:
         current_requests = requests or await _current_visual_batch_requests(project_id)
         if not current_requests:
-            ui.notify("Todas as imagens iniciais ja estavam criadas.", color="positive")
+            _notify_visual_action(
+                "Todas as imagens iniciais ja estavam criadas.", color="positive"
+            )
             ui.navigate.reload()
             return
         created_count = 0
@@ -1256,17 +1286,19 @@ async def _approve_all_visual_targets_from_ui(
                 )
         if created_count:
             if used_fallback:
-                ui.notify(_visual_fallback_notice(), color="warning", timeout=9000)
+                _notify_visual_action(_visual_fallback_notice(), color="warning", timeout=9000)
             else:
-                ui.notify(
+                _notify_visual_action(
                     f"{created_count} imagem(ns) criada(s) em fila para a Biblioteca Visual.",
                     color="positive",
                 )
         else:
-            ui.notify("Todas as imagens iniciais ja estavam criadas.", color="positive")
+            _notify_visual_action(
+                "Todas as imagens iniciais ja estavam criadas.", color="positive"
+            )
         ui.navigate.reload()
     except Exception as exc:
-        ui.notify(f"Nao foi possivel gerar as imagens em lote: {exc}", color="negative")
+        _notify_visual_action(f"Nao foi possivel gerar as imagens em lote: {exc}", color="negative")
 
 
 async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]) -> None:
@@ -1346,7 +1378,7 @@ def _render_model_settings(project_id: UUID, settings_list: list[ProjectModelSet
                 "border border-emerald-800"
             )
         else:
-            ui.label("OPENROUTER_API_KEY ausente: etapas OpenRouter caem para mock").classes(
+            ui.label("OPENROUTER_API_KEY ausente ou invalida: modelos reais nao serao chamados").classes(
                 "text-xs px-2 py-1 rounded-md bg-amber-950 text-amber-200 border border-amber-800"
             )
         _muted(
@@ -1415,6 +1447,11 @@ def _render_director_cockpit(settings: ProjectProductionSettings, counts: dict[s
 
 
 def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) -> None:
+    app_settings = get_settings()
+    effective_image_model = resolve_image_model(
+        settings.image_model,
+        app_settings.openrouter_image_model,
+    )
     with ui.card().classes(_card_classes("w-full")):
         with ui.row().classes("items-center gap-2"):
             ui.icon("tune").classes("text-cyan-300")
@@ -1452,7 +1489,7 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
                 min=1,
                 max=10,
             )
-            image_model = ui.input("Modelo de imagem", value=settings.image_model)
+            image_model = ui.input("Modelo de imagem", value=effective_image_model)
             video_model = ui.input("Modelo de video", value=settings.video_model)
 
         async def save() -> None:
@@ -1924,12 +1961,13 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     with ui.row().classes("w-full gap-4 items-start"):
         with ui.column().classes("flex-1 gap-4"):
             if script is None and ai_status == "failed":
+                retry_loading_dialog = _generation_loading_dialog(
+                    "Retomando roteiro",
+                    "A IA esta tentando criar o roteiro inicial novamente.",
+                )
+
                 def retry_initial_script() -> None:
-                    background_tasks.create(
-                        _resume_initial_script_in_background(project_id),
-                        name=f"retry initial script {project_id}",
-                    )
-                    ui.notify("Retomando a criação do roteiro.", color="positive")
+                    _retry_initial_script_from_ui(project_id, retry_loading_dialog)
 
                 with ui.element("div").classes(
                     "border border-red-900 bg-red-950/40 rounded-2xl p-4 text-red-100"
@@ -2816,6 +2854,29 @@ def register_ui_pages() -> None:
                             ui.label(
                                 "Conecte sua conta e escolha modelos diferentes para cada mídia."
                             ).classes("text-sm text-[#858b86] mb-4")
+                            saved_api_key = load_runtime_preferences().get(
+                                "openrouter_api_key", ""
+                            ).strip()
+                            saved_api_key_invalid = bool(
+                                saved_api_key
+                                and normalize_openrouter_api_key(saved_api_key) is None
+                            )
+                            if current.openrouter_api_key:
+                                ui.label("Chave OpenRouter valida configurada.").classes(
+                                    "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 border border-emerald-800"
+                                )
+                            elif saved_api_key_invalid:
+                                ui.label(
+                                    "A chave OpenRouter salva e invalida. Cole uma chave iniciada por sk-or-."
+                                ).classes(
+                                    "text-xs px-2 py-1 rounded-md bg-red-950 text-red-200 border border-red-800"
+                                )
+                            else:
+                                ui.label(
+                                    "Sem chave OpenRouter valida: modelos reais de imagem, video e texto nao serao chamados."
+                                ).classes(
+                                    "text-xs px-2 py-1 rounded-md bg-amber-950 text-amber-200 border border-amber-800"
+                                )
                             api_key = (
                                 ui.input(
                                     "Chave da API",
@@ -2859,13 +2920,23 @@ def register_ui_pages() -> None:
                             )
 
                             def save_ai() -> None:
+                                typed_api_key = str(api_key.value or "").strip()
                                 values = {
                                     "OPENROUTER_DEFAULT_MODEL": text_model.value or "",
                                     "OPENROUTER_IMAGE_MODEL": image_model.value or "",
                                     "OPENROUTER_VIDEO_MODEL": video_model.value or "",
                                 }
-                                if api_key.value:
-                                    values["OPENROUTER_API_KEY"] = api_key.value
+                                if typed_api_key:
+                                    normalized_key = normalize_openrouter_api_key(typed_api_key)
+                                    if normalized_key is None:
+                                        ui.notify(
+                                            "Chave OpenRouter invalida. Ela deve comecar com sk-or-.",
+                                            color="negative",
+                                        )
+                                        return
+                                    values["OPENROUTER_API_KEY"] = normalized_key
+                                elif saved_api_key_invalid:
+                                    values["OPENROUTER_API_KEY"] = ""
                                 save_preferences(values)
                                 ui.notify("Configurações de IA salvas.", color="positive")
 

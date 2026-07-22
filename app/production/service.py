@@ -22,6 +22,7 @@ CONTENT_TYPES = {
 ASPECT_RATIOS = ["9:16", "16:9", "1:1", "3:4", "4:3"]
 RESOLUTIONS = ["720x1280", "1080x1920", "1920x1080", "3840x2160"]
 AUDIO_MODES = {"narration_subtitles"}
+MOCK_IMAGE_MODEL = "mock-image"
 
 
 def _validate_model_name(value: object, field_name: str) -> str:
@@ -63,6 +64,14 @@ def _validated_production_payload(payload: dict) -> dict:
     if "metadata_json" in validated and not isinstance(validated["metadata_json"], dict):
         raise ValueError("metadata_json deve ser um objeto")
     return validated
+
+
+def resolve_image_model(project_image_model: str | None, default_image_model: str | None) -> str:
+    project_model = str(project_image_model or "").strip()
+    default_model = str(default_image_model or "").strip()
+    if project_model and project_model != MOCK_IMAGE_MODEL:
+        return project_model
+    return default_model or MOCK_IMAGE_MODEL
 
 
 async def get_or_create_production_settings(

@@ -1,15 +1,17 @@
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
 import pytest
 
 from app.projects.models import Artifact
-from app.providers.image.types import ImageGenerationRequest
+from app.providers.image.types import ImageGenerationRequest, ImageResult
 from app.visual_bible import service as visual_bible_service
-from app.visual_bible.models import Character, CharacterVersion
+from app.visual_bible.models import Character, CharacterVersion, VisualReference
 from app.visual_bible.service import (
     _character_profile,
     _generate_image_with_provider_fallback,
+    _image_provider_for_project,
     _location_profile,
     _merge_profile_items,
     _payload_section,
@@ -21,6 +23,7 @@ from app.visual_bible.service import (
     _script_prop_profiles,
     _transient_image_provider_error,
     default_views_for,
+    generate_visual_references,
     initial_view_for,
     regenerate_visual_reference,
     update_visual_target_prompt,
@@ -53,7 +56,9 @@ def test_sourceful_502_is_treated_as_transient_image_provider_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_openrouter_image_transient_error_falls_back_to_mock(tmp_path) -> None:
+async def test_openrouter_image_transient_error_is_reported_without_mock_fallback(
+    tmp_path,
+) -> None:
     class FailingOpenRouterProvider:
         provider_name = "openrouter"
 
@@ -62,23 +67,80 @@ async def test_openrouter_image_transient_error_falls_back_to_mock(tmp_path) -> 
                 "OpenRouter Images HTTP 502: Sourceful returned an internal error"
             )
 
-    result, metadata = await _generate_image_with_provider_fallback(
-        FailingOpenRouterProvider(),  # type: ignore[arg-type]
-        ImageGenerationRequest(
-            prompt="Personagem em pe, vista frontal",
-            target_id="character-1",
-            view_type="front_portrait",
-            output_dir=tmp_path,
-            model="sourceful/sourceful-v2.5",
+    with pytest.raises(RuntimeError, match="Nenhuma imagem mock foi criada"):
+        await _generate_image_with_provider_fallback(
+            FailingOpenRouterProvider(),  # type: ignore[arg-type]
+            ImageGenerationRequest(
+                prompt="Personagem em pe, vista frontal",
+                target_id="character-1",
+                view_type="front_portrait",
+                output_dir=tmp_path,
+                model="sourceful/sourceful-v2.5",
+            ),
+        )
+
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_image_provider_uses_real_default_model_instead_of_project_mock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+
+    async def fake_settings(*args: object, **kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(image_model="mock-image")
+
+    monkeypatch.setattr(
+        visual_bible_service,
+        "get_settings",
+        lambda: SimpleNamespace(
+            openrouter_api_key="sk-or-v1-test",
+            openrouter_image_model="krea/krea-2-medium-turbo",
         ),
     )
+    monkeypatch.setattr(
+        visual_bible_service,
+        "get_or_create_production_settings",
+        fake_settings,
+    )
 
-    assert result.provider == "mock"
-    assert result.model == "mock-image"
-    assert result.file_path.is_file()
-    assert metadata["fallback_from_provider"] == "openrouter"
-    assert metadata["fallback_from_model"] == "sourceful/sourceful-v2.5"
-    assert "Sourceful" in metadata["fallback_error"]
+    provider, model, directory = await _image_provider_for_project(
+        object(),  # type: ignore[arg-type]
+        project_id,
+    )
+
+    assert provider.provider_name == "openrouter"
+    assert model == "krea/krea-2-medium-turbo"
+    assert directory == "openrouter_images"
+
+
+@pytest.mark.asyncio
+async def test_image_provider_reports_missing_key_for_real_image_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_settings(*args: object, **kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(image_model="mock-image")
+
+    monkeypatch.setattr(
+        visual_bible_service,
+        "get_settings",
+        lambda: SimpleNamespace(
+            openrouter_api_key=None,
+            openrouter_image_model="krea/krea-2-medium-turbo",
+        ),
+    )
+    monkeypatch.setattr(
+        visual_bible_service,
+        "get_or_create_production_settings",
+        fake_settings,
+    )
+
+    with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY ausente ou invalida"):
+        await _image_provider_for_project(
+            object(),  # type: ignore[arg-type]
+            uuid4(),
+        )
 
 
 def test_initial_visual_reference_is_single_canonical_view() -> None:
@@ -106,13 +168,12 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
     prompt = visual_reference_prompt(profile, "front_portrait")
 
     assert prompt.startswith(
-        "Helena, 35, expressive detective, rainy noir lighting. Vista de referencia: "
-        "front_portrait."
+        "Helena, 35, expressive detective, rainy noir lighting. Vista: imagem inicial"
     )
     assert "fundo cinza neutro de estudio" in prompt
-    assert "Proporcao obrigatoria: 9:16" in prompt
-    assert "referencia de continuidade para storyboard e video" in prompt
-    assert "identidade visual consistente" in prompt
+    assert "Proporcao: 9:16" in prompt
+    assert "Referencia de continuidade" in prompt
+    assert len(prompt) < 520
 
 
 def test_visual_reference_prompts_are_distinct_by_view_type() -> None:
@@ -149,11 +210,8 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     location = _location_profile({"name": "Casa da familia", "lighting": "luz fria da janela"})
     prop = _prop_profile({"name": "Carta azul", "material": "papel amassado"})
 
-    assert (
-        "Fotorrealista, hiper realista, foto de uma pessoa" in character["canonical_prompt"]
-    )
-    assert "fotografia de referencia de elenco" in character["canonical_prompt"]
-    assert "Manter exatamente o mesmo rosto" in character["canonical_prompt"]
+    assert "Fotorrealista, referencia de elenco" in character["canonical_prompt"]
+    assert "Manter mesmo rosto" in character["canonical_prompt"]
     assert character["narrative_profile"]["name"] == "Clara"
     assert character["gender"] == "personagem feminino"
     assert "Genero visual obrigatorio: feminino" in character["canonical_prompt"]
@@ -161,16 +219,18 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     assert "cabelo castanho curto" in character["canonical_prompt"]
     assert "Figurino base exclusivo" in character["canonical_prompt"]
     assert (
-        "Fotorrealista, hiper realista, fotografia de arquitetura"
+        "Fotorrealista, fotografia de arquitetura"
         in location["canonical_prompt"]
     )
-    assert "ambiente vazio e claramente filmavel" in location["canonical_prompt"]
-    assert "Nenhuma pessoa presente" in location["canonical_prompt"]
-    assert "Fotorrealista, hiper realista, fotografia de produto" in prop["canonical_prompt"]
-    assert "continuidade cinematografica" in prop["canonical_prompt"]
+    assert "ambiente vazio" in location["canonical_prompt"]
+    assert "Nenhuma pessoa" in location["canonical_prompt"]
+    assert "Fotorrealista, fotografia de produto" in prop["canonical_prompt"]
     assert "papel amassado" in prop["canonical_prompt"]
     assert location["narrative_profile"]["name"] == "Casa da familia"
     assert prop["visual_profile"]["material"] == "papel amassado"
+    assert len(character["canonical_prompt"]) < 700
+    assert len(location["canonical_prompt"]) < 560
+    assert len(prop["canonical_prompt"]) < 480
 
 
 def test_visual_profile_validation_rejects_generic_profiles() -> None:
@@ -267,9 +327,10 @@ def test_character_initial_reference_uses_full_body_gray_background() -> None:
     assert "personagem em pe" in prompt
     assert "corpo inteiro" in prompt
     assert "fundo cinza neutro de estudio" in prompt
-    assert "sem cortar cabeca, pes ou maos" in prompt
-    assert "Proporcao obrigatoria: 9:16" in prompt
-    assert "referencia de continuidade para storyboard e video" in prompt
+    assert "nao cortar cabeca, pes ou maos" in prompt
+    assert "Proporcao: 9:16" in prompt
+    assert "Referencia de continuidade" in prompt
+    assert len(prompt) < 900
 
 
 def test_character_multi_view_references_use_white_background_and_angles() -> None:
@@ -279,9 +340,10 @@ def test_character_multi_view_references_use_white_background_and_angles() -> No
 
     assert "fundo branco puro de estudio" in prompt
     assert "vista lateral esquerda de corpo inteiro" in prompt
-    assert "angulos diferentes" in prompt
-    assert "mantendo exatamente o mesmo rosto" in prompt
-    assert "Proporcao obrigatoria: 16:9" in prompt
+    assert "angulo solicitado" in prompt
+    assert "manter mesmo rosto" in prompt
+    assert "Proporcao: 16:9" in prompt
+    assert len(prompt) < 850
 
 
 def test_location_reference_prompt_forbids_people() -> None:
@@ -289,10 +351,11 @@ def test_location_reference_prompt_forbids_people() -> None:
 
     prompt = visual_reference_prompt(location, "establishing")
 
-    assert "Cenario vazio obrigatorio" in prompt
-    assert "nao incluir pessoas" in prompt
+    assert "cenario vazio" in prompt
+    assert "sem pessoas" in prompt
     assert "sem personagens" in prompt
-    assert "Proporcao obrigatoria: 16:9" in prompt
+    assert "Proporcao: 16:9" in prompt
+    assert len(prompt) < 720
 
 
 def test_prop_reference_prompt_requires_white_background_and_object_focus() -> None:
@@ -301,11 +364,12 @@ def test_prop_reference_prompt_requires_white_background_and_object_focus() -> N
     prompt = visual_reference_prompt(prop, "front")
 
     assert "fundo branco puro" in prompt
-    assert "objeto inteiro e centralizado" in prompt
+    assert "inteiro e centralizado" in prompt
     assert "sem pessoas" in prompt
     assert "sem maos" in prompt
-    assert "Proporcao obrigatoria: 1:1" in prompt
+    assert "Proporcao: 1:1" in prompt
     assert "detalhes principais legiveis" in prompt
+    assert len(prompt) < 620
 
 
 def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:
@@ -560,3 +624,115 @@ async def test_regenerate_visual_reference_forces_existing_view(
         ["front_portrait"],
     )
     assert captured["kwargs"] == {"force": True}
+
+
+@pytest.mark.asyncio
+async def test_generate_visual_references_reloads_created_rows_without_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    project_id = uuid4()
+    target_id = uuid4()
+    target_artifact_id = uuid4()
+
+    class FakeRepository:
+        def __init__(self, session: object) -> None:
+            self.session = session
+
+        async def get_project(self, requested_project_id: object) -> object | None:
+            return object() if requested_project_id == project_id else None
+
+    class FakeScalarResult:
+        def __init__(self, items: list[VisualReference]) -> None:
+            self.items = items
+
+        def __iter__(self):
+            return iter(self.items)
+
+    class FakeResult:
+        def __init__(self, items: list[VisualReference]) -> None:
+            self.items = items
+
+        def scalars(self) -> FakeScalarResult:
+            return FakeScalarResult(self.items)
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.added: list[Any] = []
+            self.committed = False
+            self.refreshed = False
+
+        def add(self, item: object) -> None:
+            self.added.append(item)
+
+        async def flush(self) -> None:
+            for item in self.added:
+                if getattr(item, "id", None) is None:
+                    item.id = uuid4()
+
+        async def commit(self) -> None:
+            self.committed = True
+
+        async def execute(self, statement: object) -> FakeResult:
+            return FakeResult(
+                [item for item in self.added if isinstance(item, VisualReference)]
+            )
+
+        async def refresh(self, item: object) -> None:
+            self.refreshed = True
+            raise AssertionError("generate_visual_references should not refresh references")
+
+    async def fake_target(*args: object, **kwargs: object) -> tuple[dict[str, str], object]:
+        return (
+            {"name": "Clara", "canonical_prompt": "Clara original"},
+            target_artifact_id,
+        )
+
+    async def fake_provider(*args: object, **kwargs: object) -> tuple[object, str, str]:
+        return object(), "mock-image", "mock_images"
+
+    async def fake_image(
+        provider: object, request: ImageGenerationRequest
+    ) -> tuple[ImageResult, dict]:
+        return (
+            ImageResult(
+                file_path=tmp_path / "front.svg",
+                storage_uri="storage://front.svg",
+                sha256="abc",
+                content_type="image/svg+xml",
+                provider="mock",
+                model="mock-image",
+                prompt=request.prompt,
+            ),
+            {},
+        )
+
+    async def fake_add_dependency(*args: object, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(visual_bible_service, "ProjectRepository", FakeRepository)
+    monkeypatch.setattr(visual_bible_service, "_get_visual_target", fake_target)
+    monkeypatch.setattr(visual_bible_service, "_image_provider_for_project", fake_provider)
+    monkeypatch.setattr(
+        visual_bible_service,
+        "_generate_image_with_provider_fallback",
+        fake_image,
+    )
+    monkeypatch.setattr(visual_bible_service, "_add_dependency", fake_add_dependency)
+
+    session = FakeSession()
+
+    references = await generate_visual_references(
+        session,  # type: ignore[arg-type]
+        project_id,
+        "character",
+        target_id,
+        ["front_portrait"],
+        force=True,
+    )
+
+    assert session.committed is True
+    assert session.refreshed is False
+    assert references is not None
+    assert len(references) == 1
+    assert references[0].view_type == "front_portrait"

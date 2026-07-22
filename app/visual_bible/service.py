@@ -19,7 +19,7 @@ from app.core.enums import (
     DependencyKind,
 )
 from app.generation.models import PromptExecution
-from app.production.service import get_or_create_production_settings
+from app.production.service import get_or_create_production_settings, resolve_image_model
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
@@ -107,10 +107,18 @@ async def _image_provider_for_project(
 ) -> tuple[ImageProvider, str, str]:
     app_settings = get_settings()
     production_settings = await get_or_create_production_settings(session, project_id)
-    model = production_settings.image_model or app_settings.openrouter_image_model
-    if app_settings.openrouter_api_key and model != "mock-image":
-        return OpenRouterImageProvider(), model, "openrouter_images"
-    return MockImageProvider(), "mock-image", "mock_images"
+    model = resolve_image_model(
+        production_settings.image_model,
+        app_settings.openrouter_image_model,
+    )
+    if model == "mock-image":
+        return MockImageProvider(), model, "mock_images"
+    if not app_settings.openrouter_api_key:
+        raise RuntimeError(
+            "OPENROUTER_API_KEY ausente ou invalida. Configure uma chave valida para gerar "
+            f"imagens reais com o modelo {model}."
+        )
+    return OpenRouterImageProvider(), model, "openrouter_images"
 
 
 def _transient_image_provider_error(exc: Exception) -> bool:
@@ -143,13 +151,10 @@ async def _generate_image_with_provider_fallback(
             or not _transient_image_provider_error(exc)
         ):
             raise
-        fallback_request = request.model_copy(update={"model": "mock-image"})
-        image_result = await MockImageProvider().generate(fallback_request)
-        return image_result, {
-            "fallback_from_provider": "openrouter",
-            "fallback_from_model": request.model,
-            "fallback_error": str(exc)[:1000],
-        }
+        raise RuntimeError(
+            "OpenRouter Images falhou ao gerar a imagem real. Nenhuma imagem mock foi criada "
+            f"automaticamente. Detalhes: {exc}"
+        ) from exc
 
 
 async def _create_artifact(
@@ -602,15 +607,9 @@ def _character_gender(raw_gender: object, name: str, role: object) -> str:
 def _character_gender_guardrail(gender: object) -> str:
     normalized = _ascii_lower(gender)
     if "fem" in normalized or "mulher" in normalized:
-        return (
-            "Genero visual obrigatorio: feminino; nao masculinizar o rosto, corpo, "
-            "silhueta ou leitura visual."
-        )
+        return "Genero visual obrigatorio: feminino; nao masculinizar."
     if "masc" in normalized or "homem" in normalized:
-        return (
-            "Genero visual obrigatorio: masculino; nao feminilizar o rosto, corpo, "
-            "silhueta ou leitura visual."
-        )
+        return "Genero visual obrigatorio: masculino; nao feminilizar."
     return f"Genero visual obrigatorio: {_prompt_text(gender)}."
 
 
@@ -769,26 +768,17 @@ def _character_profile(raw: object) -> dict:
             "nao reutilizar roupa de outro personagem",
         ],
         "canonical_prompt": (
-            "Fotorrealista, hiper realista, foto de uma pessoa, fotografia de referencia "
-            "de elenco para producao audiovisual. Uma unica pessoa, identidade visual "
-            "consistente e memoravel. "
+            "Fotorrealista, referencia de elenco, uma unica pessoa. "
             f"{_character_gender_guardrail(gender)} "
             f"{_prompt_text(gender).capitalize()} {_prompt_text(origin)}, "
-            f"{_prompt_text(apparent_age)}, altura {_prompt_text(height_cm)}cm, "
-            f"{_prompt_text(body_type)}. Rosto: {_prompt_text(face_shape)}. "
-            f"Pele: {_prompt_text(skin_tone)}. Olhos: {_prompt_text(eyes)}. "
-            f"Cabelo: {_prompt_text(hair)}. Papel dramatico: {_prompt_text(role)}. "
-            f"Sinal de personalidade: {_prompt_text(personality)}. "
-            f"Figurino base exclusivo e reutilizavel em todas as cenas: "
-            f"{_prompt_text(base_outfit)}. Paleta exclusiva: {_prompt_text(palette)}. "
-            "Roupa com materiais, camadas, textura, desgaste e caimento coerentes com "
-            "a historia. Silhueta reconhecivel em corpo inteiro. Expressao neutra com "
-            "leve pista emocional do personagem. Iluminacao cinematografica natural, "
-            "textura de pele realista, fotografia profissional. "
-            "Este personagem deve ser visualmente distinto dos demais, com roupa, silhueta, cabelo "
-            "e paleta exclusivos; evitar figurino generico, camiseta lisa repetida, blazer padrao "
-            "ou roupa igual a outro personagem. Manter exatamente o mesmo rosto, cabelo, "
-            "idade aparente, corpo, figurino, sapatos e paleta em todas as referencias."
+            f"{_prompt_text(apparent_age)}, "
+            f"{_prompt_text(body_type)}, {_prompt_text(height_cm)}cm. "
+            f"Rosto {_prompt_text(face_shape)}, pele {_prompt_text(skin_tone)}, "
+            f"olhos {_prompt_text(eyes)}, cabelo {_prompt_text(hair)}. "
+            f"Papel: {_prompt_text(role)}. "
+            f"Figurino base exclusivo: {_prompt_text(base_outfit)}. "
+            f"Paleta: {_prompt_text(palette)}. "
+            "Manter mesmo rosto, cabelo, corpo, figurino e paleta."
         ),
     }
 
@@ -854,21 +844,13 @@ def _location_profile(raw: object) -> dict:
         "asset_kind": "location",
         "spatial_rules": ["manter portas, janelas e moveis na mesma posicao"],
         "canonical_prompt": (
-            "Fotorrealista, hiper realista, fotografia de arquitetura cinematografica "
-            "para producao audiovisual. "
-            f"Plano geral de {name}, ambiente vazio e claramente filmavel. "
-            f"Funcao narrativa: {_prompt_text(description)}. "
-            f"Layout: {_prompt_text(layout)}. Materiais e superficies: {_prompt_text(materials)}. "
-            f"Paleta de cores: {_prompt_text(palette)}. Iluminacao: {_prompt_text(lighting)}. "
-            "Geografia espacial clara: entradas, saidas, portas, janelas, moveis principais "
-            "e areas de circulacao visiveis. Profundidade em primeiro plano, plano medio "
-            "e fundo. Objetos do ambiente em posicoes consistentes para continuidade. "
-            "Luz coerente com o tom emocional da historia. Nenhuma pessoa presente, "
-            "sem personagens, sem multidao, sem silhuetas humanas, sem retratos de pessoas "
-            "em destaque. Ambiente reconhecivel, nao generico, com detalhes especificos "
-            "que revelem historia, uso e classe social. Composicao adequada para "
-            "enquadramentos verticais 9:16 e planos de video curtos. Textura realista, "
-            "iluminacao cinematografica suave, fotografia profissional de arquitetura."
+            f"Fotorrealista, fotografia de arquitetura cinematografica. {name}, ambiente vazio. "
+            f"Funcao: {_prompt_text(description)}. Layout: {_prompt_text(layout)}. "
+            f"Materiais: {_prompt_text(materials)}. Paleta: {_prompt_text(palette)}. "
+            f"Luz: {_prompt_text(lighting)}. "
+            "Mostrar entradas, portas, janelas, moveis principais e circulacao. "
+            "Objetos em posicoes consistentes. Nenhuma pessoa, sem multidao, sem silhuetas. "
+            "Local especifico, filmavel, com textura realista."
         ),
     }
 
@@ -925,21 +907,13 @@ def _prop_profile(raw: object) -> dict:
         "visual_profile": visual_profile,
         "asset_kind": "prop",
         "canonical_prompt": (
-            "Fotorrealista, hiper realista, fotografia de produto para continuidade "
-            "cinematografica. "
-            f"Um unico {name}, inteiro, centralizado e totalmente visivel, posicionado em "
-            "angulo de tres quartos, fundo branco puro ou cor solida neutra. "
-            f"Importancia narrativa: {_prompt_text(narrative_importance)}. "
+            f"Fotorrealista, fotografia de produto. Um unico {name}, inteiro e centralizado. "
+            f"Importancia: {_prompt_text(narrative_importance)}. "
             f"Dimensoes: {_prompt_text(dimensions)}. Material: {_prompt_text(material)}. "
             f"Cor: {_prompt_text(color)}. Estado: {_prompt_text(state)}. "
-            f"Dono ou relacao narrativa: {_prompt_text(owner)}. "
-            "Silhueta reconhecivel, escala clara, detalhes funcionais legiveis. "
-            "Textura realista do material, marcas de uso coerentes com a historia, "
-            "acabamento especifico. Objeto facil de reconhecer em close-up e em planos "
-            "mais abertos. Sem maos, sem pessoas, sem cenario, sem outros objetos, sem "
-            "reflexos que escondam detalhes. Evitar objeto generico; incluir "
-            "caracteristicas visuais memoraveis ligadas ao payoff narrativo. Iluminacao "
-            "de estudio profissional, sombras suaves, contorno claro."
+            f"Relacao narrativa: {_prompt_text(owner)}. "
+            "Silhueta clara, textura realista, detalhes legiveis. "
+            "Sem maos, sem pessoas, sem cenario, sem outros objetos."
         ),
     }
 
@@ -1566,17 +1540,13 @@ def initial_view_for(target_kind: str) -> str:
 def _character_view_guardrail(view_type: str) -> str:
     if view_type == "front_portrait":
         return (
-            "Imagem inicial obrigatoria no estilo fotografia de referencia de elenco: "
             "personagem em pe, corpo inteiro, vista frontal, pose neutra, olhando para a camera, "
-            "fundo cinza neutro de estudio, iluminacao suave, uma unica pessoa, sem cenario, "
-            "sem objetos extras, corpo inteiro enquadrado dos pes ao topo da cabeca, sem cortar "
-            "cabeca, pes ou maos."
+            "fundo cinza neutro de estudio, uma unica pessoa, sem cenario, sem objetos extras, "
+            "nao cortar cabeca, pes ou maos"
         )
     return (
-        "Ficha de multiplas vistas obrigatoria: fundo branco puro de estudio, personagem em pe "
-        "e de corpo inteiro, visto pelo angulo solicitado, mantendo exatamente o mesmo rosto, "
-        "cabelo, corpo, figurino, sapatos, proporcoes e paleta. Mostrar angulos diferentes "
-        "sem mudar identidade, roupa ou idade aparente."
+        "fundo branco puro de estudio, corpo inteiro, angulo solicitado, manter mesmo rosto, "
+        "cabelo, corpo, figurino, sapatos, proporcoes e paleta"
     )
 
 
@@ -1591,28 +1561,77 @@ def visual_reference_aspect_ratio(profile: dict, view_type: str) -> str:
     return "9:16"
 
 
+def _truncate_prompt_text(text: str, max_chars: int) -> str:
+    clean = " ".join(text.split())
+    if len(clean) <= max_chars:
+        return clean
+    return clean[:max_chars].rsplit(" ", 1)[0].rstrip(" ,.;") + "."
+
+
+def _compact_visual_base_prompt(profile: dict) -> str:
+    asset_kind = str(profile.get("asset_kind") or "")
+    name = str(profile.get("name") or "").strip()
+    if asset_kind == "character":
+        parts = [
+            "Fotorrealista, referencia de elenco",
+            name,
+            _prompt_text(profile.get("gender")),
+            _prompt_text(profile.get("apparent_age")),
+            _prompt_text(profile.get("body_type")),
+            f"rosto {_prompt_text(profile.get('face_shape'))}",
+            f"pele {_prompt_text(profile.get('skin_tone'))}",
+            f"olhos {_prompt_text(profile.get('eyes'))}",
+            f"cabelo {_prompt_text(profile.get('hair'))}",
+            f"figurino {_prompt_text(profile.get('base_outfit'))}",
+            f"paleta {_prompt_text(profile.get('palette'))}",
+        ]
+        return _truncate_prompt_text(". ".join(part for part in parts if part), 420)
+    if asset_kind == "location":
+        parts = [
+            "Fotorrealista, arquitetura cinematografica",
+            name,
+            f"funcao {_prompt_text(profile.get('description'))}",
+            f"layout {_prompt_text(profile.get('layout'))}",
+            f"materiais {_prompt_text(profile.get('materials'))}",
+            f"paleta {_prompt_text(profile.get('palette'))}",
+            f"luz {_prompt_text(profile.get('lighting'))}",
+        ]
+        return _truncate_prompt_text(". ".join(part for part in parts if part), 360)
+    if asset_kind == "prop":
+        parts = [
+            "Fotorrealista, fotografia de produto",
+            name,
+            f"importancia {_prompt_text(profile.get('narrative_importance'))}",
+            f"dimensoes {_prompt_text(profile.get('dimensions'))}",
+            f"material {_prompt_text(profile.get('material'))}",
+            f"cor {_prompt_text(profile.get('color'))}",
+            f"estado {_prompt_text(profile.get('state'))}",
+        ]
+        return _truncate_prompt_text(". ".join(part for part in parts if part), 320)
+    fallback = str(profile.get("canonical_prompt") or name or "").strip()
+    return _truncate_prompt_text(fallback, 360)
+
+
 def visual_reference_prompt(profile: dict, view_type: str) -> str:
-    base_prompt = str(profile.get("canonical_prompt") or profile.get("name") or "").strip()
+    base_prompt = _compact_visual_base_prompt(profile)
     view_detail = VIEW_PROMPT_DETAILS.get(view_type, view_type.replace("_", " "))
     asset_kind = str(profile.get("asset_kind") or "")
     aspect_ratio = visual_reference_aspect_ratio(profile, view_type)
     if asset_kind == "location":
         guardrail = (
-            "Cenario vazio obrigatorio: nao incluir pessoas, personagens, corpos, rostos, "
-            "silhuetas humanas ou multidoes. Priorizar arquitetura, layout, luz e objetos do local."
+            "cenario vazio, sem pessoas, sem personagens, sem silhuetas; priorizar arquitetura, "
+            "layout, luz e objetos do local"
         )
     elif asset_kind == "prop":
         guardrail = (
-            "Objeto isolado obrigatorio: fundo branco puro, objeto inteiro e centralizado ocupando "
-            "a maior parte do quadro, sem pessoas, sem maos, sem ambiente, sem outros objetos."
+            "objeto isolado, fundo branco puro, inteiro e centralizado, sem pessoas, sem maos, "
+            "sem ambiente, sem outros objetos"
         )
     else:
         guardrail = _character_view_guardrail(view_type)
     return (
-        f"{base_prompt}. Vista de referencia: {view_type}. {view_detail}. "
-        f"{guardrail} Proporcao obrigatoria: {aspect_ratio}. Fundo limpo, "
-        "referencia de continuidade para storyboard e video, identidade visual consistente, "
-        "detalhes principais legiveis e sem variacoes indesejadas."
+        f"{base_prompt}. Vista: {view_detail}. Regras: {guardrail}. "
+        f"Proporcao: {aspect_ratio}. Referencia de continuidade; detalhes principais legiveis."
     )
 
 
@@ -1875,10 +1894,19 @@ async def generate_visual_references(
         session.add(reference)
         references.append(reference)
 
+    await session.flush()
+    reference_ids = [reference.id for reference in references]
     await session.commit()
-    for reference in references:
-        await session.refresh(reference)
-    return references
+    result = await session.execute(
+        select(VisualReference).where(VisualReference.id.in_(reference_ids))
+    )
+    references_by_id = {reference.id: reference for reference in result.scalars()}
+    reloaded_references = [
+        references_by_id[reference_id]
+        for reference_id in reference_ids
+        if reference_id in references_by_id
+    ]
+    return reloaded_references if len(reloaded_references) == len(references) else references
 
 
 async def regenerate_visual_reference(

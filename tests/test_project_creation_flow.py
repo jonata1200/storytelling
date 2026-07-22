@@ -234,6 +234,46 @@ def test_safe_refresh_ignores_deleted_slot_runtime_error() -> None:
     pages._safe_refresh(DeletedRefreshable())
 
 
+def test_retry_initial_script_opens_loading_dialog_and_watches_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    created_tasks: list[dict[str, Any]] = []
+    timers: list[dict[str, Any]] = []
+    notifications: list[str] = []
+
+    class FakeDialog:
+        opened = False
+
+        def open(self) -> None:
+            self.opened = True
+
+    def fake_create(task: object, *, name: str) -> None:
+        created_tasks.append({"task": task, "name": name})
+
+    def fake_timer(interval: float, callback: object) -> None:
+        timers.append({"interval": interval, "callback": callback})
+
+    dialog = FakeDialog()
+    monkeypatch.setattr(pages, "_resume_initial_script_in_background", lambda item_id: "task")
+    monkeypatch.setattr(pages.background_tasks, "create", fake_create)
+    monkeypatch.setattr(pages.ui, "timer", fake_timer)
+    monkeypatch.setattr(
+        pages.ui,
+        "notify",
+        lambda message, **kwargs: notifications.append(str(message)),
+    )
+
+    pages._retry_initial_script_from_ui(project_id, dialog)
+
+    assert dialog.opened is True
+    assert created_tasks == [
+        {"task": "task", "name": f"retry initial script {project_id}"}
+    ]
+    assert timers and timers[0]["interval"] == 5.0
+    assert notifications == ["Retomando a criação do roteiro."]
+
+
 def test_legacy_assistant_greeting_is_removed_from_chat_history() -> None:
     assert (
         pages._is_legacy_assistant_greeting(

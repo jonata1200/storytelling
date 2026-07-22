@@ -3,6 +3,7 @@ import pytest
 from app.production.service import (
     WORKFLOW_MODES,
     _validated_production_payload,
+    resolve_image_model,
     workflow_mode_label,
 )
 
@@ -30,3 +31,21 @@ def test_production_payload_normalizes_model_and_intensity() -> None:
 
     assert payload["image_model"] == "mock-image"
     assert payload["motion_intensity"] == 7
+
+
+def test_resolve_image_model_uses_global_default_when_project_is_mock() -> None:
+    assert (
+        resolve_image_model("mock-image", "krea/krea-2-medium-turbo")
+        == "krea/krea-2-medium-turbo"
+    )
+
+
+def test_resolve_image_model_preserves_project_specific_real_model() -> None:
+    assert (
+        resolve_image_model("google/gemini-2.5-flash-image", "krea/krea-2-medium-turbo")
+        == "google/gemini-2.5-flash-image"
+    )
+
+
+def test_resolve_image_model_falls_back_to_mock_when_no_default_exists() -> None:
+    assert resolve_image_model("mock-image", "") == "mock-image"
