@@ -1106,15 +1106,30 @@ async def _approve_visual_target_from_ui(
             ui.notify("Nao encontrei o ativo visual para aprovar.", color="negative")
             return
         if references:
-            ui.notify(
-                f"Ativo aprovado. {len(references)} vista(s) complementar(es) criada(s).",
-                color="positive",
-            )
+            if any(_visual_reference_used_fallback(reference) for reference in references):
+                ui.notify(_visual_fallback_notice(), color="warning", timeout=9000)
+            else:
+                ui.notify(
+                    f"Ativo aprovado. {len(references)} vista(s) complementar(es) criada(s).",
+                    color="positive",
+                )
         else:
             ui.notify("Ativo aprovado. Todas as vistas ja estavam criadas.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
         ui.notify(f"Nao foi possivel aprovar o ativo: {exc}", color="negative")
+
+
+def _visual_reference_used_fallback(reference: VisualReference) -> bool:
+    metadata = reference.metadata_json if isinstance(reference.metadata_json, dict) else {}
+    return bool(metadata.get("fallback_error"))
+
+
+def _visual_fallback_notice() -> str:
+    return (
+        "OpenRouter Images/Sourceful falhou temporariamente. Criei referencias mock locais "
+        "para nao travar o projeto; tente gerar novamente depois ou troque o modelo de imagem."
+    )
 
 
 async def _update_visual_prompt_from_ui(
@@ -1160,7 +1175,10 @@ async def _regenerate_visual_reference_from_ui(
         if reference is None:
             ui.notify("Nao encontrei a referencia visual para gerar novamente.", color="negative")
             return
-        ui.notify("Imagem gerada novamente.", color="positive")
+        if _visual_reference_used_fallback(reference):
+            ui.notify(_visual_fallback_notice(), color="warning", timeout=9000)
+        else:
+            ui.notify("Imagem gerada novamente.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
         ui.notify(f"Nao foi possivel gerar novamente: {exc}", color="negative")
@@ -1220,6 +1238,7 @@ async def _approve_all_visual_targets_from_ui(
             ui.navigate.reload()
             return
         created_count = 0
+        used_fallback = False
         async with AsyncSessionLocal() as session:
             for target_kind, target_id, view_types in current_requests:
                 references = await approve_visual_target_and_generate_views(
@@ -1232,11 +1251,17 @@ async def _approve_all_visual_targets_from_ui(
                 if references is None:
                     raise ValueError("um ativo visual nao foi encontrado")
                 created_count += len(references)
+                used_fallback = used_fallback or any(
+                    _visual_reference_used_fallback(reference) for reference in references
+                )
         if created_count:
-            ui.notify(
-                f"{created_count} imagem(ns) criada(s) em fila para a Biblioteca Visual.",
-                color="positive",
-            )
+            if used_fallback:
+                ui.notify(_visual_fallback_notice(), color="warning", timeout=9000)
+            else:
+                ui.notify(
+                    f"{created_count} imagem(ns) criada(s) em fila para a Biblioteca Visual.",
+                    color="positive",
+                )
         else:
             ui.notify("Todas as imagens iniciais ja estavam criadas.", color="positive")
         ui.navigate.reload()

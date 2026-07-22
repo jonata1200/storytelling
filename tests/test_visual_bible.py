@@ -4,10 +4,12 @@ from uuid import uuid4
 import pytest
 
 from app.projects.models import Artifact
+from app.providers.image.types import ImageGenerationRequest
 from app.visual_bible import service as visual_bible_service
 from app.visual_bible.models import Character, CharacterVersion
 from app.visual_bible.service import (
     _character_profile,
+    _generate_image_with_provider_fallback,
     _location_profile,
     _merge_profile_items,
     _payload_section,
@@ -17,6 +19,7 @@ from app.visual_bible.service import (
     _script_character_names,
     _script_location_profiles,
     _script_prop_profiles,
+    _transient_image_provider_error,
     default_views_for,
     initial_view_for,
     regenerate_visual_reference,
@@ -39,6 +42,43 @@ def test_default_character_views_include_required_reference_sheet_items() -> Non
     assert "expression_sheet" in views
     assert "pose_sheet" in views
     assert "scale_reference" in views
+
+
+def test_sourceful_502_is_treated_as_transient_image_provider_error() -> None:
+    error = RuntimeError(
+        "OpenRouter Images HTTP 502: Sourceful returned an internal error"
+    )
+
+    assert _transient_image_provider_error(error) is True
+
+
+@pytest.mark.asyncio
+async def test_openrouter_image_transient_error_falls_back_to_mock(tmp_path) -> None:
+    class FailingOpenRouterProvider:
+        provider_name = "openrouter"
+
+        async def generate(self, request: ImageGenerationRequest) -> object:
+            raise RuntimeError(
+                "OpenRouter Images HTTP 502: Sourceful returned an internal error"
+            )
+
+    result, metadata = await _generate_image_with_provider_fallback(
+        FailingOpenRouterProvider(),  # type: ignore[arg-type]
+        ImageGenerationRequest(
+            prompt="Personagem em pe, vista frontal",
+            target_id="character-1",
+            view_type="front_portrait",
+            output_dir=tmp_path,
+            model="sourceful/sourceful-v2.5",
+        ),
+    )
+
+    assert result.provider == "mock"
+    assert result.model == "mock-image"
+    assert result.file_path.is_file()
+    assert metadata["fallback_from_provider"] == "openrouter"
+    assert metadata["fallback_from_model"] == "sourceful/sourceful-v2.5"
+    assert "Sourceful" in metadata["fallback_error"]
 
 
 def test_initial_visual_reference_is_single_canonical_view() -> None:

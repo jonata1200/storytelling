@@ -25,7 +25,7 @@ from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
 from app.providers.image.mock import MockImageProvider
 from app.providers.image.openrouter import OpenRouterImageProvider
-from app.providers.image.types import ImageGenerationRequest, ImageProvider
+from app.providers.image.types import ImageGenerationRequest, ImageProvider, ImageResult
 from app.storytelling.models import Script, StoryIdea
 from app.visual_bible.models import (
     Character,
@@ -111,6 +111,45 @@ async def _image_provider_for_project(
     if app_settings.openrouter_api_key and model != "mock-image":
         return OpenRouterImageProvider(), model, "openrouter_images"
     return MockImageProvider(), "mock-image", "mock_images"
+
+
+def _transient_image_provider_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    transient_terms = (
+        "http 500",
+        "http 502",
+        "http 503",
+        "http 504",
+        "sourceful",
+        "internal error",
+        "temporarily unavailable",
+        "timeout",
+        "timed out",
+        "network",
+        "connection",
+    )
+    return any(term in message for term in transient_terms)
+
+
+async def _generate_image_with_provider_fallback(
+    provider: ImageProvider,
+    request: ImageGenerationRequest,
+) -> tuple[ImageResult, dict]:
+    try:
+        return await provider.generate(request), {}
+    except RuntimeError as exc:
+        if (
+            getattr(provider, "provider_name", "") != "openrouter"
+            or not _transient_image_provider_error(exc)
+        ):
+            raise
+        fallback_request = request.model_copy(update={"model": "mock-image"})
+        image_result = await MockImageProvider().generate(fallback_request)
+        return image_result, {
+            "fallback_from_provider": "openrouter",
+            "fallback_from_model": request.model,
+            "fallback_error": str(exc)[:1000],
+        }
 
 
 async def _create_artifact(
@@ -1749,7 +1788,8 @@ async def generate_visual_references(
     for view_type in views:
         prompt = visual_reference_prompt(profile, view_type)
         aspect_ratio = visual_reference_aspect_ratio(profile, view_type)
-        image_result = await provider.generate(
+        image_result, fallback_metadata = await _generate_image_with_provider_fallback(
+            provider,
             ImageGenerationRequest(
                 prompt=prompt,
                 target_id=str(target_id),
@@ -1757,7 +1797,7 @@ async def generate_visual_references(
                 output_dir=output_dir,
                 aspect_ratio=aspect_ratio,
                 model=image_model,
-            )
+            ),
         )
         asset = Asset(
             project_id=project_id,
@@ -1771,6 +1811,7 @@ async def generate_visual_references(
                 "provider": image_result.provider,
                 "model": image_result.model,
                 "aspect_ratio": aspect_ratio,
+                **fallback_metadata,
             },
         )
         session.add(asset)
@@ -1810,7 +1851,7 @@ async def generate_visual_references(
             prompt=prompt,
             variables={"target_kind": target_kind, "target_id": str(target_id), "view": view_type},
             response={"asset_id": str(asset.id), "storage_uri": asset.storage_uri},
-            parameters={},
+            parameters=fallback_metadata,
             estimated_cost=Decimal("0.000000"),
             duration_ms=None,
         )
@@ -1825,7 +1866,11 @@ async def generate_visual_references(
             prompt=prompt,
             provider=image_result.provider,
             model=image_result.model,
-            metadata_json={"sha256": image_result.sha256, "aspect_ratio": aspect_ratio},
+            metadata_json={
+                "sha256": image_result.sha256,
+                "aspect_ratio": aspect_ratio,
+                **fallback_metadata,
+            },
         )
         session.add(reference)
         references.append(reference)
