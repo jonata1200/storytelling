@@ -28,7 +28,7 @@ class VideoRequest(BaseModel):
     source_image_uri: str | None = None
     reference_uris: list[str] = Field(default_factory=list)
     output_dir: Path
-    model: str = "mock-video"
+    model: str = "google/veo-3.1"
     seed: int | None = None
 
 
@@ -38,7 +38,7 @@ class VideoResult(BaseModel):
     file_path: Path | None = None
     storage_uri: str | None = None
     sha256: str | None = None
-    content_type: str = "application/vnd.storytelling.mock-video+json"
+    content_type: str = "video/mp4"
     provider: str
     model: str
     estimated_cost: str = "0.000000"

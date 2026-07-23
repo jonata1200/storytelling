@@ -74,7 +74,7 @@ PRODUCTION_STEPS = [
     ProductionStep(
         "video",
         "Video",
-        "Gere clipes mock por plano, com jobs, assets e custos rastreados.",
+        "Gere clipes reais por plano, com jobs, assets e custos rastreados.",
         "Gerar clipes",
         "movie",
     ),

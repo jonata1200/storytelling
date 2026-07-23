@@ -37,6 +37,8 @@ from app.visual_bible.service import (  # noqa: F401
 )
 from app.visual_bible.service import (
     generate_visual_bible,
+    visual_reference_completion_message,
+    visual_reference_completion_report,
 )
 
 ProjectChatAction = Literal[
@@ -103,6 +105,10 @@ def _is_ai_generation_failure_message(message: str) -> bool:
             "nao foram gerados",
         )
     )
+
+
+def _is_visual_reference_gate_message(message: str) -> bool:
+    return message.startswith("Conclua a Biblioteca Visual")
 
 
 ACTION_PROGRESS_MESSAGES: dict[ProjectChatAction, str] = {
@@ -705,6 +711,14 @@ async def _ensure_storyboard_pipeline(
             failed=_is_ai_generation_failure_message(message),
         )
 
+    visual_report = await visual_reference_completion_report(session, project_id)
+    if not visual_report["complete"]:
+        return ProjectChatResult(
+            visual_reference_completion_message(visual_report),
+            "generate_storyboard",
+            changed,
+        )
+
     frames = await _count(session, StoryboardFrame, project_id)
     if force or frames == 0:
         await _emit_progress(progress, "Vou transformar as cenas em frames de storyboard.")
@@ -748,6 +762,13 @@ async def _ensure_video_pipeline(
         session, project_id, force=force, progress=progress
     )
     changed = storyboard_result.changed
+    if _is_visual_reference_gate_message(storyboard_result.message):
+        return ProjectChatResult(
+            storyboard_result.message,
+            "generate_video",
+            changed,
+            storyboard_result.failed,
+        )
     frames = await _latest_many(session, StoryboardFrame, project_id, 100)
     if not frames:
         return ProjectChatResult(
@@ -777,6 +798,13 @@ async def _ensure_finalization_pipeline(
 ) -> ProjectChatResult:
     storyboard_result = await _ensure_storyboard_pipeline(session, project_id, progress=progress)
     changed = storyboard_result.changed
+    if _is_visual_reference_gate_message(storyboard_result.message):
+        return ProjectChatResult(
+            storyboard_result.message,
+            "generate_finalization",
+            changed,
+            storyboard_result.failed,
+        )
 
     source_audio = await _latest(session, AudioTrack, project_id)
     if source_audio is None:
@@ -787,12 +815,15 @@ async def _ensure_finalization_pipeline(
         )
 
     await _emit_progress(progress, "Vou sintetizar a narracao final.")
-    final_audio = await synthesize_narration(
-        session,
-        project_id,
-        source_audio.id,
-        "pt-br-warm-narrator",
-    )
+    try:
+        final_audio = await synthesize_narration(
+            session,
+            project_id,
+            source_audio.id,
+            "pt-br-warm-narrator",
+        )
+    except ValueError as exc:
+        return ProjectChatResult(str(exc), "generate_finalization", changed, True)
     if final_audio is None:
         return ProjectChatResult(
             "Não consegui gerar a narração final.",

@@ -136,7 +136,7 @@ async def test_image_provider_reports_missing_key_for_real_image_model(
         fake_settings,
     )
 
-    with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY ausente ou invalida"):
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
         await _image_provider_for_project(
             object(),  # type: ignore[arg-type]
             uuid4(),

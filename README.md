@@ -57,24 +57,29 @@ existindo por compatibilidade e chamam o script unificado.
 
 ## OpenRouter
 
-Por padrao, o projeto usa providers mockados para evitar custo. Para usar modelos
-reais via OpenRouter, configure no `.env`:
+A aplicacao usa modelos reais via OpenRouter no fluxo normal. Sem chave valida,
+as etapas de IA retornam erro para a interface, em vez de gerar conteudo mock.
+Configure no `.env`:
 
 ```env
 OPENROUTER_API_KEY=sua_chave_aqui
 OPENROUTER_DEFAULT_MODEL=openai/gpt-4o-mini
+OPENROUTER_IMAGE_MODEL=google/gemini-2.5-flash-image
+OPENROUTER_VIDEO_MODEL=google/veo-3.1
 ```
 
 No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para
-escolher `mock` ou `openrouter` e definir um modelo diferente para ideias, Story
-Bible, roteiro e cenas/planos.
+definir modelos OpenRouter diferentes para ideias, roteiro e cenas/planos.
+Modelos com sufixo `:free` e modelos `mock-*` sao bloqueados porque tendem a
+falhar ou confundir o fluxo de producao.
 
 Preferencias alteradas pela interface sao gravadas em `.runtime/preferences.json`.
 O arquivo `.env` permanece somente para configuracao de inicializacao e nao e
 modificado pela aplicacao em execucao.
 
-O provider real atualmente implementado e o OpenRouter para texto. Imagem, video
-e voz continuam mockados; a API rejeita providers de video ainda nao implementados.
+Os providers reais atualmente implementados usam OpenRouter para texto, imagem e
+video. A narracao final mock foi bloqueada; enquanto nao houver provider real de
+voz configurado/implementado, essa etapa retorna erro claro para a interface.
 
 ## Experiencia de producao
 
@@ -129,7 +134,7 @@ mypy app tests
 ```
 
 Os testes automatizados nao devem chamar APIs pagas. Providers externos entram por
-interfaces e devem ter mocks por padrao.
+interfaces falsas nos testes; o fluxo da aplicacao nao deve escolher mocks.
 
 ## Estado atual
 
@@ -140,12 +145,13 @@ Fases 1 a 8 estao implementadas em base funcional:
 - Alembic async usando `asyncpg`.
 - Projetos, versoes, artefatos, aprovacoes, dependencias, assets e custos.
 - Maquina de estados inicial para o pipeline de projeto.
-- Briefing, ideias, Story Bible, roteiro, cenas e planos com provider mock.
+- Briefing, ideias, Story Bible, roteiro, cenas e planos com OpenRouter.
 - Templates e execucoes de prompt auditaveis.
-- Personagens, locais, objetos e referencias visuais mockadas.
+- Personagens, locais, objetos e referencias visuais reais via OpenRouter Images.
 - Storyboards, narracao provisoria, animatic e timeline preliminar.
-- Jobs de video, provider mock de video, clipes e revisao humana.
-- Narracao final mock, legendas SRT, timeline final e export manifest.
+- Jobs de video via OpenRouter, clipes e revisao humana.
+- Narracao final bloqueada ate provider real de voz, legendas SRT, timeline final
+  e export manifest.
 - Continuity Ledger, quality gate, varredura inicial de seguranca e correlation
   ID por requisicao.
 - Testes de health, auth, maquina de estados, dependencias, custos e mock LLM.
@@ -163,8 +169,9 @@ POST /api/v1/storytelling/projects/{project_id}/script/generate
 POST /api/v1/storytelling/projects/{project_id}/scenes/generate
 ```
 
-Todas as geracoes da Fase 3 usam `MockLLMProvider` por padrao e nao consomem
-APIs pagas.
+As geracoes da Fase 3 usam OpenRouter no fluxo da aplicacao. Sem chave valida,
+com modelo `:free` ou com modelo `mock-*`, a etapa retorna erro em vez de criar
+conteudo falso.
 
 ## Fluxo visual inicial
 
@@ -179,8 +186,8 @@ POST /api/v1/visual-bible/projects/{project_id}/references/generate
 GET  /api/v1/visual-bible/projects/{project_id}/consistency/{target_kind}/{target_id}
 ```
 
-O `MockImageProvider` gera arquivos SVG locais em `storage/mock_images/`.
-Esses arquivos entram como `Asset` e nao sao salvos no PostgreSQL.
+As referencias visuais usam OpenRouter Images. Fallback para imagem mock local
+esta bloqueado; falhas do provedor devem aparecer como erro para o usuario.
 
 ## Fluxo de storyboard inicial
 
@@ -208,8 +215,8 @@ GET  /api/v1/video/projects/{project_id}/jobs/{job_id}
 POST /api/v1/video/projects/{project_id}/clips/{clip_id}/review
 ```
 
-O `MockVideoProvider` gera arquivos `.mockvideo.json` em `storage/mock_videos/`.
-Ele simula clipes e jobs sem chamar APIs pagas.
+Os clipes usam OpenRouter Videos. Provider `mock` e modelo `mock-video` sao
+recusados no fluxo da aplicacao.
 
 ## Fluxo de finalizacao inicial
 
@@ -222,9 +229,9 @@ POST /api/v1/finalization/projects/{project_id}/timeline/final
 POST /api/v1/finalization/projects/{project_id}/exports
 ```
 
-O `MockSpeechProvider` gera WAV silencioso local em `storage/mock_speech/` com
-alinhamento por palavra. As legendas sao geradas em SRT e a exportacao grava um
-manifesto JSON quando `ffmpeg` nao esta disponivel no PATH.
+A geracao de narracao final mock esta bloqueada ate existir provider real de
+voz. As legendas sao geradas em SRT e a exportacao grava um manifesto JSON
+quando `ffmpeg` nao esta disponivel no PATH.
 
 ## Fluxo de qualidade inicial
 

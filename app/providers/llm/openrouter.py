@@ -4,6 +4,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from app.config.model_policy import validate_openrouter_model_name
 from app.config.settings import get_settings, normalize_openrouter_api_key
 from app.providers.llm.types import LLMRequest, LLMResult
 
@@ -17,6 +18,9 @@ class OpenRouterLLMProvider:
         settings = get_settings()
         if not normalize_openrouter_api_key(settings.openrouter_api_key):
             raise RuntimeError("OPENROUTER_API_KEY ausente ou invalida")
+        request = request.model_copy(
+            update={"model": validate_openrouter_model_name(request.model)}
+        )
 
         response = await asyncio.to_thread(self._send_request, request, True)
         content_text = self._extract_message_content(response)

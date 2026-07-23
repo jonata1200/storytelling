@@ -8,6 +8,7 @@ import urllib.request
 from typing import Any
 from uuid import uuid4
 
+from app.config.model_policy import validate_openrouter_model_name
 from app.config.settings import get_settings
 from app.providers.image.types import ImageEditRequest, ImageGenerationRequest, ImageResult
 from app.providers.media_utils import extension_from_media_type, local_uri_to_data_url
@@ -17,6 +18,9 @@ class OpenRouterImageProvider:
     provider_name = "openrouter"
 
     async def generate(self, request: ImageGenerationRequest) -> ImageResult:
+        request = request.model_copy(
+            update={"model": validate_openrouter_model_name(request.model)}
+        )
         response = await asyncio.to_thread(self._generate, request)
         return response
 

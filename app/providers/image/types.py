@@ -12,14 +12,14 @@ class ImageGenerationRequest(BaseModel):
     aspect_ratio: str = "9:16"
     negative_prompt: str | None = None
     references: list[str] = Field(default_factory=list)
-    model: str = "mock-image"
+    model: str = "google/gemini-2.5-flash-image"
 
 
 class ImageEditRequest(BaseModel):
     prompt: str
     source_uri: str
     output_dir: Path
-    model: str = "mock-image"
+    model: str = "google/gemini-2.5-flash-image"
 
 
 class ImageResult(BaseModel):

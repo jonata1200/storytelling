@@ -5,9 +5,10 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.model_policy import validate_openrouter_model_name
+from app.config.settings import get_settings
 from app.generation.models import PromptExecution, PromptTemplate
 from app.generation.prompt_compiler import compile_prompt
-from app.providers.llm.mock import MockLLMProvider
 from app.providers.llm.types import LLMProvider, LLMRequest, LLMResult
 from app.video_generation.durations import (
     VIDEO_CLIP_MAX_SECONDS,
@@ -189,9 +190,8 @@ def should_fallback_to_mock(exc: Exception) -> bool:
 
 
 def allow_runtime_mock_fallback(task: str, requested: bool) -> bool:
-    if not requested:
-        return False
-    return task not in CREATIVE_NARRATIVE_TASKS
+    _ = task, requested
+    return False
 
 
 async def get_or_create_prompt_template(session: AsyncSession, task: str) -> PromptTemplate:
@@ -242,38 +242,26 @@ async def run_structured_generation(
         prompt=prompt,
         variables=variables,
         output_schema=template.output_schema,
-        model=model or "mock-llm",
+        model=validate_openrouter_model_name(model or get_settings().openrouter_default_model),
     )
     fallback_error: str | None = None
     try:
-        provider_call = provider.generate_structured(request)
         if getattr(provider, "provider_name", "") == "mock":
-            result = await provider_call
-        else:
-            result = await asyncio.wait_for(
-                provider_call,
-                timeout=LLM_PROVIDER_TIMEOUT_SECONDS,
+            raise ValueError(
+                "Provider mock bloqueado. Configure um modelo real da OpenRouter."
             )
-    except (RuntimeError, TimeoutError) as exc:
+        provider_call = provider.generate_structured(request)
+        result = await asyncio.wait_for(
+            provider_call,
+            timeout=LLM_PROVIDER_TIMEOUT_SECONDS,
+        )
+    except (RuntimeError, TimeoutError, ValueError) as exc:
         if isinstance(exc, TimeoutError):
             exc = RuntimeError(
                 f"Provider demorou mais de {LLM_PROVIDER_TIMEOUT_SECONDS}s"
             )
-        should_fallback = allow_runtime_mock_fallback(
-            task, fallback_on_runtime_error or should_fallback_to_mock(exc)
-        )
-        if getattr(provider, "provider_name", "") == "mock" or not should_fallback:
-            raise exc
-        fallback_error = str(exc)
-        result = await MockLLMProvider().generate_structured(
-            LLMRequest(
-                task=task,
-                prompt=prompt,
-                variables=variables,
-                output_schema=template.output_schema,
-                model="mock-llm",
-            )
-        )
+        _ = fallback_on_runtime_error, should_fallback_to_mock(exc)
+        raise exc
     duration_ms = int((perf_counter() - started) * 1000)
     execution = PromptExecution(
         project_id=project_id,

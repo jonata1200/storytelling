@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetVersion
+from app.config.model_policy import ensure_openrouter_api_key
 from app.config.settings import get_settings
 from app.core.enums import ArtifactStatus, ArtifactType, AssetKind, DependencyKind, ProjectStatus
 from app.generation.models import PromptExecution
@@ -14,14 +15,17 @@ from app.production.service import get_or_create_production_settings, resolve_im
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
-from app.providers.image.mock import MockImageProvider
 from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.timeline import build_visual_timeline_items, build_word_alignment
 from app.storytelling.models import Scene, Script, Shot
 from app.visual_bible.models import Character, Location, Prop, VisualReference
-from app.visual_bible.service import _generate_image_with_provider_fallback
+from app.visual_bible.service import (
+    _generate_image_with_provider_fallback,
+    visual_reference_completion_message,
+    visual_reference_completion_report,
+)
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
 
@@ -35,13 +39,7 @@ async def _image_provider_for_project(
         production_settings.image_model,
         app_settings.openrouter_image_model,
     )
-    if model == "mock-image":
-        return MockImageProvider(), model, "mock_storyboards"
-    if not app_settings.openrouter_api_key:
-        raise RuntimeError(
-            "OPENROUTER_API_KEY ausente ou invalida. Configure uma chave valida para gerar "
-            f"storyboards reais com o modelo {model}."
-        )
+    ensure_openrouter_api_key(app_settings.openrouter_api_key)
     return OpenRouterImageProvider(), model, "openrouter_storyboards"
 
 
@@ -316,6 +314,10 @@ async def generate_storyboard_frames(
     script = await session.get(Script, script_id)
     if project is None or script is None or script.project_id != project_id:
         return None
+
+    visual_report = await visual_reference_completion_report(session, project_id)
+    if not visual_report["complete"]:
+        raise ValueError(visual_reference_completion_message(visual_report))
 
     shot_rows = await _ordered_shots_for_script(session, project_id, script_id)
     if not shot_rows:

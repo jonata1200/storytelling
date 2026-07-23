@@ -78,11 +78,61 @@ def test_project_story_idea_normalization_accepts_one_valid_idea() -> None:
     assert ideas[0]["title"] == "A ponte de vidro"
 
 
+def _generated_idea_payload(index: int, genre: str, duration: int) -> dict:
+    return {
+        "title": f"A escolha {index}",
+        "genre": genre,
+        "primary_emotion": f"Coragem {index}",
+        "theme": f"tema especifico {index}",
+        "hook": f"Uma decisao impossivel muda a primeira cena {index}.",
+        "premise": f"Uma protagonista diferente enfrenta uma crise concreta {index}.",
+        "protagonist": f"Protagonista {index}, profissao unica {index}",
+        "conflict": f"Conflito principal exclusivo {index}",
+        "obstacles": [f"obstaculo fisico {index}", f"obstaculo emocional {index}"],
+        "stakes": f"Risco irreversivel {index}",
+        "twist": f"Virada narrativa {index}",
+        "climax": f"Climax visual {index}",
+        "payoff": f"Payoff emocional {index}",
+        "resolution": f"Resolucao memoravel {index}",
+        "duration_minutes": duration,
+        "retention_potential": 80,
+        "cliche_risk": 15,
+        "production_complexity": 35,
+    }
+
+
+async def _fake_idea_generation(provider: object, request: LLMRequest) -> LLMResult:
+    count = int(request.variables.get("count") or 10)
+    duration = int(float(request.variables.get("target_duration_minutes") or 5))
+    requested_genre = str(request.variables.get("genre") or "")
+    fixed_genre = "" if "livre" in requested_genre else requested_genre
+    genres = ["Drama", "Aventura", "Suspense", "Fantasia", "Comedia"]
+    return LLMResult(
+        content={
+            "ideas": [
+                _generated_idea_payload(
+                    index,
+                    fixed_genre or genres[(index - 1) % len(genres)],
+                    duration,
+                )
+                for index in range(1, count + 1)
+            ]
+        },
+        model=request.model,
+        provider="openrouter",
+    )
+
+
 @pytest.mark.asyncio
 async def test_generate_freeform_ideas_returns_ten_ai_suggested_ideas(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(idea_lab, "get_settings", lambda: Settings(openrouter_api_key=None))
+    monkeypatch.setattr(
+        idea_lab,
+        "get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+    monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(
         "uma memoria de infancia", count=10, target_duration_minutes=6
     )
@@ -97,7 +147,12 @@ async def test_generate_freeform_ideas_returns_ten_ai_suggested_ideas(
 async def test_generate_freeform_ideas_respects_selected_genre(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(idea_lab, "get_settings", lambda: Settings(openrouter_api_key=None))
+    monkeypatch.setattr(
+        idea_lab,
+        "get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+    monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(count=10, genre="Aventura")
 
     assert len(ideas) == 10
@@ -108,11 +163,26 @@ async def test_generate_freeform_ideas_respects_selected_genre(
 async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(idea_lab, "get_settings", lambda: Settings(openrouter_api_key=None))
+    monkeypatch.setattr(
+        idea_lab,
+        "get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+    monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(count=99, target_duration_minutes=25)
 
     assert len(ideas) == 10
     assert {int(idea.get("duration_minutes", 0)) for idea in ideas} == {25}
+
+
+@pytest.mark.asyncio
+async def test_generate_freeform_ideas_requires_openrouter_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(idea_lab, "get_settings", lambda: Settings(openrouter_api_key=None))
+
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+        await generate_freeform_ideas(count=3)
 
 
 @pytest.mark.asyncio
@@ -128,7 +198,7 @@ async def test_generate_freeform_ideas_reports_openrouter_failure(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test", openrouter_default_model="free-model"),
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", FailingOpenRouterProvider)
 
@@ -150,7 +220,7 @@ async def test_generate_freeform_ideas_reports_openrouter_timeout(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test", openrouter_default_model="free-model"),
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", SlowOpenRouterProvider)
     monkeypatch.setattr(idea_lab, "IDEA_PROVIDER_TIMEOUT_SECONDS", 0.001)
@@ -223,7 +293,7 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test", openrouter_default_model="free-model"),
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", lambda: provider)
 
@@ -278,7 +348,7 @@ async def test_generate_freeform_ideas_keeps_partial_valid_openrouter_response(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test", openrouter_default_model="free-model"),
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", PartialProvider)
 

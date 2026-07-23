@@ -2,6 +2,7 @@ import asyncio
 import json
 import urllib.request
 
+from app.config.model_policy import is_mock_model, is_openrouter_free_model
 from app.config.runtime_preferences import save_runtime_preferences
 from app.config.settings import get_settings
 
@@ -31,4 +32,6 @@ def _fetch_models(api_key: str, kind: str) -> list[dict[str, str]]:
         {"id": str(item["id"]), "name": str(item.get("name") or item["id"])}
         for item in payload.get("data", [])
         if item.get("id")
+        and not is_openrouter_free_model(item.get("id"))
+        and not is_mock_model(item.get("id"))
     ]

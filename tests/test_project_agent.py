@@ -272,6 +272,86 @@ async def test_visual_pipeline_creates_prompts_without_auto_generating_images(
 
 
 @pytest.mark.asyncio
+async def test_storyboard_pipeline_requires_complete_visual_references(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+
+    async def fake_script(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+    ) -> tuple[SimpleNamespace, str, bool]:
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=script_id), "script ok", False
+
+    async def fake_visual_report(
+        session: AsyncSession,
+        requested_project_id: Any,
+    ) -> dict[str, Any]:
+        assert requested_project_id == project_id
+        return {
+            "complete": False,
+            "missing_categories": [],
+            "missing_views": 3,
+        }
+
+    async def fail_storyboard_generation(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("storyboard não deve ser gerado antes das imagens visuais")
+
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
+    monkeypatch.setattr(project_agent, "visual_reference_completion_report", fake_visual_report)
+    monkeypatch.setattr(project_agent, "generate_storyboard_frames", fail_storyboard_generation)
+
+    result = await project_agent._ensure_storyboard_pipeline(
+        cast(AsyncSession, object()),
+        project_id,
+    )
+
+    assert result.action == "generate_storyboard"
+    assert result.changed is False
+    assert "Biblioteca Visual" in result.message
+    assert "referência" in result.message
+
+
+@pytest.mark.asyncio
+async def test_video_pipeline_stops_when_visual_references_block_storyboard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+
+    async def fake_storyboard(
+        session: AsyncSession,
+        requested_project_id: Any,
+        force: bool = False,
+        progress: Any = None,
+    ) -> ProjectChatResult:
+        assert requested_project_id == project_id
+        return ProjectChatResult(
+            "Conclua a Biblioteca Visual antes do storyboard. "
+            "Ainda falta gerar 2 referência(s) visual(is).",
+            "generate_storyboard",
+            False,
+        )
+
+    async def fail_latest_many(*args: Any, **kwargs: Any) -> list[Any]:
+        raise AssertionError("video nao deve consultar frames quando o storyboard esta bloqueado")
+
+    monkeypatch.setattr(project_agent, "_ensure_storyboard_pipeline", fake_storyboard)
+    monkeypatch.setattr(project_agent, "_latest_many", fail_latest_many)
+
+    result = await project_agent._ensure_video_pipeline(
+        cast(AsyncSession, object()),
+        project_id,
+    )
+
+    assert result.action == "generate_video"
+    assert result.changed is False
+    assert "Biblioteca Visual" in result.message
+
+
+@pytest.mark.asyncio
 async def test_project_chat_routes_script_finalization_and_quality(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

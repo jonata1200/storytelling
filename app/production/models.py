@@ -23,8 +23,16 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     image_resolution: Mapped[str] = mapped_column(String(40), default="1080x1920", nullable=False)
     video_resolution: Mapped[str] = mapped_column(String(40), default="1080x1920", nullable=False)
     workflow_mode: Mapped[str] = mapped_column(String(80), default="keyframes_i2v", nullable=False)
-    image_model: Mapped[str] = mapped_column(String(160), default="mock-image", nullable=False)
-    video_model: Mapped[str] = mapped_column(String(160), default="mock-video", nullable=False)
+    image_model: Mapped[str] = mapped_column(
+        String(160),
+        default="google/gemini-2.5-flash-image",
+        nullable=False,
+    )
+    video_model: Mapped[str] = mapped_column(
+        String(160),
+        default="google/veo-3.1",
+        nullable=False,
+    )
     audio_mode: Mapped[str] = mapped_column(
         String(80), default="narration_subtitles", nullable=False
     )

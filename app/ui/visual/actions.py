@@ -61,8 +61,8 @@ def _visual_reference_used_fallback(reference: VisualReference) -> bool:
 
 def _visual_fallback_notice() -> str:
     return (
-        "OpenRouter Images/Sourceful falhou temporariamente. Criei referências mock locais "
-        "para não travar o projeto; tente gerar novamente depois ou troque o modelo de imagem."
+        "Esta referência foi criada antes do bloqueio de mock. Gere novamente com um modelo "
+        "real da OpenRouter para substituir o arquivo local."
     )
 
 

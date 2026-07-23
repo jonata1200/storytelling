@@ -575,6 +575,56 @@ def test_unknown_workspace_section_is_rejected() -> None:
     assert pages._first_available_workspace_section(counts) == "script"
 
 
+def test_storyboard_section_waits_for_all_visual_references() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "scripts": 1,
+        "scenes": 2,
+        "shots": 8,
+        "characters": 2,
+        "locations": 1,
+        "props": 1,
+        "visual_refs": 10,
+        "frames": 0,
+        "animatics": 0,
+        "clips": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    allowed, reason = pages._workspace_section_access("storyboard", counts)
+
+    assert pages._step_ready("visual", counts) is False
+    assert allowed is False
+    assert "Gere todas as imagens" in reason
+
+
+def test_storyboard_section_unlocks_after_visual_references_are_complete() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "scripts": 1,
+        "scenes": 2,
+        "shots": 8,
+        "characters": 2,
+        "locations": 1,
+        "props": 1,
+        "visual_refs": 23,
+        "frames": 0,
+        "animatics": 0,
+        "clips": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    allowed, reason = pages._workspace_section_access("storyboard", counts)
+
+    assert pages._step_ready("visual", counts) is True
+    assert allowed is True
+    assert reason == ""
+
+
 def test_production_steps_do_not_include_story_bible() -> None:
     step_keys = [step.key for step in pages.PRODUCTION_STEPS]
 
@@ -1162,8 +1212,8 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
         pages,
         "get_settings",
         lambda: SimpleNamespace(
-            openrouter_image_model="mock-image",
-            openrouter_video_model="mock-video",
+            openrouter_image_model="google/gemini-2.5-flash-image",
+            openrouter_video_model="google/veo-3.1",
         ),
     )
     idea = {
@@ -1191,14 +1241,13 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
 
 
 @pytest.mark.asyncio
-async def test_generate_script_recovers_when_provider_fails_before_json(
+async def test_generate_script_does_not_save_mock_when_provider_fails_before_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
     idea_id = uuid4()
     briefing_artifact_id = uuid4()
     idea_artifact_id = uuid4()
-    script_artifact_id = uuid4()
     project = SimpleNamespace(id=project_id)
     idea = SimpleNamespace(
         id=idea_id,
@@ -1270,7 +1319,7 @@ async def test_generate_script_recovers_when_provider_fails_before_json(
         raise RuntimeError("OpenRouter retornou conteúdo que não é JSON válido")
 
     async def fake_create_artifact(*args: object, **kwargs: object) -> object:
-        return SimpleNamespace(id=script_artifact_id)
+        raise AssertionError("roteiro mock/local não deve ser salvo como geração real")
 
     async def fake_add_dependency(*args: object, **kwargs: object) -> None:
         pass
@@ -1287,17 +1336,12 @@ async def test_generate_script_recovers_when_provider_fails_before_json(
     monkeypatch.setattr(storytelling_service, "_add_dependency", fake_add_dependency)
     monkeypatch.setattr(storytelling_service, "advance_project_status", lambda *args: None)
 
-    script = await storytelling_service.generate_script(
-        cast(AsyncSession, FakeSession()),
-        project_id,
-        idea_id,
-    )
-
-    assert script is not None
-    assert script.title == "O farol apagado"
-    assert "FADE IN:" in script.content
-    assert "CENA 01" in script.content
-    assert script.word_count > 0
+    with pytest.raises(RuntimeError, match="OpenRouter retornou"):
+        await storytelling_service.generate_script(
+            cast(AsyncSession, FakeSession()),
+            project_id,
+            idea_id,
+        )
 
 
 @pytest.mark.asyncio

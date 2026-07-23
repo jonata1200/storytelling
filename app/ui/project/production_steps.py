@@ -30,7 +30,11 @@ from app.ui.shared.page_config import (
     friendly_ai_error,
     show_ai_error_popup,
 )
-from app.visual_bible.service import generate_visual_bible
+from app.visual_bible.service import (
+    generate_visual_bible,
+    visual_reference_completion_message,
+    visual_reference_completion_report,
+)
 
 
 async def _run_step(
@@ -100,6 +104,9 @@ async def _run_step(
                 script = await _latest(session, Script, project_id)
                 if script is None:
                     raise ValueError("gere o roteiro primeiro")
+                visual_report = await visual_reference_completion_report(session, project_id)
+                if not visual_report["complete"]:
+                    raise ValueError(visual_reference_completion_message(visual_report))
                 await asyncio.wait_for(
                     generate_storyboard_frames(session, project_id, script.id),
                     timeout=UI_GENERATION_TIMEOUT_SECONDS,

@@ -3,9 +3,9 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.model_policy import ensure_openrouter_api_key, validate_openrouter_model_name
 from app.config.settings import get_settings
 from app.generation.models import ProjectModelSetting
-from app.providers.llm.mock import MockLLMProvider
 from app.providers.llm.openrouter import OpenRouterLLMProvider
 from app.providers.llm.types import LLMProvider
 
@@ -42,6 +42,9 @@ async def set_model_setting(
     provider: str,
     model: str,
 ) -> ProjectModelSetting:
+    if provider != "openrouter":
+        raise ValueError("Use OpenRouter com um modelo real. Providers mock estao bloqueados.")
+    model = validate_openrouter_model_name(model)
     result = await session.execute(
         select(ProjectModelSetting).where(
             ProjectModelSetting.project_id == project_id,
@@ -73,8 +76,11 @@ async def ensure_default_model_settings(
 ) -> list[ProjectModelSetting]:
     settings = get_settings()
     created: list[ProjectModelSetting] = []
-    provider = "openrouter" if settings.openrouter_api_key else "mock"
-    model = settings.openrouter_default_model if provider == "openrouter" else "mock-llm"
+    provider = "openrouter"
+    try:
+        model = validate_openrouter_model_name(settings.openrouter_default_model)
+    except ValueError:
+        return created
     for task in NARRATIVE_TASKS:
         setting = await get_model_setting(session, project_id, task)
         if setting is None:
@@ -87,12 +93,11 @@ async def llm_provider_for_task(
 ) -> tuple[LLMProvider, str]:
     setting = await get_model_setting(session, project_id, task)
     settings = get_settings()
+    ensure_openrouter_api_key(settings.openrouter_api_key)
     if setting is not None and setting.provider == "openrouter":
-        if settings.openrouter_api_key:
-            return OpenRouterLLMProvider(), setting.model
-        return MockLLMProvider(), "mock-llm"
+        return OpenRouterLLMProvider(), validate_openrouter_model_name(setting.model)
     if setting is not None and setting.provider == "mock":
-        return MockLLMProvider(), setting.model
-    if settings.openrouter_api_key:
-        return OpenRouterLLMProvider(), settings.openrouter_default_model
-    return MockLLMProvider(), "mock-llm"
+        raise ValueError("Provider mock bloqueado. Configure um modelo real da OpenRouter.")
+    return OpenRouterLLMProvider(), validate_openrouter_model_name(
+        settings.openrouter_default_model
+    )

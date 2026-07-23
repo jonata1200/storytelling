@@ -26,11 +26,19 @@ def test_production_payload_rejects_invalid_domain_values() -> None:
 
 def test_production_payload_normalizes_model_and_intensity() -> None:
     payload = _validated_production_payload(
-        {"image_model": " mock-image ", "motion_intensity": "7"}
+        {"image_model": " google/gemini-2.5-flash-image ", "motion_intensity": "7"}
     )
 
-    assert payload["image_model"] == "mock-image"
+    assert payload["image_model"] == "google/gemini-2.5-flash-image"
     assert payload["motion_intensity"] == 7
+
+
+def test_production_payload_rejects_mock_and_openrouter_free_models() -> None:
+    with pytest.raises(ValueError, match="mock"):
+        _validated_production_payload({"image_model": "mock-image"})
+
+    with pytest.raises(ValueError, match="free"):
+        _validated_production_payload({"video_model": "google/gemini-flash-1.5:free"})
 
 
 def test_resolve_image_model_uses_global_default_when_project_is_mock() -> None:
@@ -47,5 +55,6 @@ def test_resolve_image_model_preserves_project_specific_real_model() -> None:
     )
 
 
-def test_resolve_image_model_falls_back_to_mock_when_no_default_exists() -> None:
-    assert resolve_image_model("mock-image", "") == "mock-image"
+def test_resolve_image_model_requires_real_model_when_no_default_exists() -> None:
+    with pytest.raises(ValueError, match="modelo real"):
+        resolve_image_model("mock-image", "")

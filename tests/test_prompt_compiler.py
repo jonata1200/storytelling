@@ -98,11 +98,11 @@ def test_generation_fallback_ignores_schema_errors() -> None:
 def test_creative_narrative_tasks_do_not_allow_runtime_mock_fallback() -> None:
     assert generation_service.allow_runtime_mock_fallback("generate_story_ideas", True) is False
     assert generation_service.allow_runtime_mock_fallback("generate_script", True) is False
-    assert generation_service.allow_runtime_mock_fallback("director_agent_chat", True) is True
+    assert generation_service.allow_runtime_mock_fallback("director_agent_chat", True) is False
 
 
 @pytest.mark.asyncio
-async def test_director_generation_can_fallback_on_any_openrouter_runtime_error(
+async def test_director_generation_reports_openrouter_runtime_error_without_mock_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FailingProvider:
@@ -129,26 +129,22 @@ async def test_director_generation_can_fallback_on_any_openrouter_runtime_error(
     session = FakeSession()
     monkeypatch.setattr(generation_service, "get_or_create_prompt_template", fake_template)
 
-    result, execution = await run_structured_generation(
-        session,  # type: ignore[arg-type]
-        FailingProvider(),
-        uuid4(),
-        "director_agent_chat",
-        {"prompt": "Ajude no roteiro", "section": "script"},
-        model="unstable-model",
-        fallback_on_runtime_error=True,
-    )
+    with pytest.raises(RuntimeError, match="nao e JSON valido"):
+        await run_structured_generation(
+            session,  # type: ignore[arg-type]
+            FailingProvider(),
+            uuid4(),
+            "director_agent_chat",
+            {"prompt": "Ajude no roteiro", "section": "script"},
+            model="unstable-model",
+            fallback_on_runtime_error=True,
+        )
 
-    assert result.provider == "mock"
-    assert execution.provider == "mock"
-    assert execution.model == "mock-llm"
-    assert execution.parameters["fallback_from"] == "unstable-model"
-    assert "nao e JSON valido" in execution.parameters["fallback_error"]
-    assert session.flushed is True
+    assert session.flushed is False
 
 
 @pytest.mark.asyncio
-async def test_structured_generation_falls_back_to_mock_when_provider_times_out(
+async def test_structured_generation_reports_timeout_without_mock_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class SlowProvider:
@@ -174,20 +170,18 @@ async def test_structured_generation_falls_back_to_mock_when_provider_times_out(
     monkeypatch.setattr(generation_service, "LLM_PROVIDER_TIMEOUT_SECONDS", 0.001)
 
     session = FakeSession()
-    result, execution = await run_structured_generation(
-        session,  # type: ignore[arg-type]
-        SlowProvider(),  # type: ignore[arg-type]
-        uuid4(),
-        "director_agent_chat",
-        {"prompt": "Ajude", "section": "script"},
-        model="slow-model",
-        fallback_on_runtime_error=True,
-    )
+    with pytest.raises(RuntimeError, match="Provider demorou mais"):
+        await run_structured_generation(
+            session,  # type: ignore[arg-type]
+            SlowProvider(),  # type: ignore[arg-type]
+            uuid4(),
+            "director_agent_chat",
+            {"prompt": "Ajude", "section": "script"},
+            model="slow-model",
+            fallback_on_runtime_error=True,
+        )
 
-    assert result.provider == "mock"
-    assert execution.provider == "mock"
-    assert "demorou mais" in execution.parameters["fallback_error"]
-    assert session.flushed is True
+    assert session.flushed is False
 
 
 @pytest.mark.asyncio

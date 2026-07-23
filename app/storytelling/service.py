@@ -21,7 +21,6 @@ from app.storytelling.models import (
 from app.storytelling.normalization import (
     GenerationOutputError,
     _bounded_required_str,
-    _fallback_script_content_from_idea,
     _idea_script_contract,
     _normalize_generated_story_ideas,
     _required_int,
@@ -38,6 +37,9 @@ from app.storytelling.normalization import (
 )
 from app.storytelling.normalization import (
     _fallback_script_content_from_bible as _fallback_script_content_from_bible,
+)
+from app.storytelling.normalization import (
+    _fallback_script_content_from_idea as _fallback_script_content_from_idea,  # noqa: F401
 )
 from app.storytelling.normalization import (
     coerce_duration_minutes as coerce_duration_minutes,
@@ -362,21 +364,16 @@ async def generate_script(
     provider, model = await llm_provider_for_task(session, project_id, "generate_script")
     payload: dict | None = None
     last_error: GenerationOutputError | None = None
-    runtime_error: RuntimeError | None = None
     for attempt in range(2):
-        try:
-            result, _execution = await run_structured_generation(
-                session,
-                provider,
-                project_id,
-                "generate_script",
-                variables,
-                model=model,
-                fallback_on_runtime_error=True,
-            )
-        except RuntimeError as exc:
-            runtime_error = exc
-            break
+        result, _execution = await run_structured_generation(
+            session,
+            provider,
+            project_id,
+            "generate_script",
+            variables,
+            model=model,
+            fallback_on_runtime_error=True,
+        )
         try:
             payload = normalize_script_payload(
                 _required_mapping(result.content, "generate_script"),
@@ -395,36 +392,12 @@ async def generate_script(
                 "production_plan separado."
             )
     if payload is None:
-        recovery_error = runtime_error or last_error
-        if recovery_error is not None:
-            fallback_content = _fallback_script_content_from_idea(
-                idea.payload,
-                idea.title,
-                target_duration_seconds,
-            )
-            payload = {
-                "title": idea.title,
-                "language": briefing.language,
-                "target_duration_seconds": target_duration_seconds,
-                "content": fallback_content,
-                "word_count": len(fallback_content.split()),
-                "generation_recovery": (
-                    "fallback_script_from_idea_after_provider_error"
-                    if runtime_error is not None
-                    else "fallback_script_from_idea_after_invalid_model_output"
-                ),
-                "generation_recovery_error": str(recovery_error),
-            }
-        else:
-            raise GenerationOutputError("generate_script: resposta vazia do modelo")
+        if last_error is not None:
+            raise last_error
+        raise GenerationOutputError("generate_script: resposta vazia do modelo")
     title = _required_str(payload, "title", "generate_script")
     if not str(payload.get("content") or "").strip():
-        payload["content"] = _fallback_script_content_from_idea(
-            idea.payload,
-            title,
-            target_duration_seconds,
-        )
-        payload["word_count"] = len(payload["content"].split())
+        raise GenerationOutputError("generate_script: resposta sem roteiro")
     artifact = await _create_artifact(
         session, project_id, ArtifactType.SCRIPT, title, payload
     )

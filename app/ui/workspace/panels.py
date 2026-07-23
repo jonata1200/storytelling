@@ -3,6 +3,7 @@ from uuid import UUID
 
 from nicegui import ui
 
+from app.config.model_policy import is_mock_model
 from app.config.settings import get_settings
 from app.generation.model_settings import NARRATIVE_TASKS, TASK_LABELS
 from app.generation.models import ProjectModelSetting
@@ -44,18 +45,21 @@ def _render_model_settings(project_id: UUID, settings_list: list[ProjectModelSet
                 "border border-amber-800"
             )
         _muted(
-            "Use mock para trabalhar sem custo ou OpenRouter para chamar modelos reais. "
-            "Informe slugs como openai/gpt-4o-mini, anthropic/claude-3.5-sonnet "
-            "ou google/gemini-flash-1.5."
+            "Use apenas modelos reais da OpenRouter. Modelos :free e mock ficam bloqueados "
+            "para evitar travamentos e respostas falsas."
         )
         for task in NARRATIVE_TASKS:
             setting = settings_by_task.get(task)
-            provider_value = setting.provider if setting else "mock"
-            model_value = setting.model if setting else "mock-llm"
+            provider_value = "openrouter"
+            model_value = (
+                setting.model
+                if setting and not is_mock_model(setting.model)
+                else app_settings.openrouter_default_model
+            )
             with ui.row().classes("w-full items-end gap-2"):
                 ui.label(TASK_LABELS[task]).classes("w-28 text-sm text-slate-300")
                 provider_select = ui.select(
-                    ["mock", "openrouter"],
+                    ["openrouter"],
                     label="Provider",
                     value=provider_value,
                 ).classes("w-36")

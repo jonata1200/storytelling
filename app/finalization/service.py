@@ -15,8 +15,6 @@ from app.finalization.models import Export, SubtitleTrack
 from app.finalization.subtitles import build_srt_from_alignment, safe_area_profile
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
-from app.providers.speech.mock import MockSpeechProvider
-from app.providers.speech.types import SpeechRequest
 from app.storyboards.models import AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.video_generation.models import VideoClip
 from app.workflows.models import ArtifactDependency
@@ -181,62 +179,10 @@ async def synthesize_narration(
     if project is None or source_track is None or source_track.project_id != project_id:
         return None
 
-    settings = get_settings()
-    provider = MockSpeechProvider()
-    result = await provider.synthesize(
-        SpeechRequest(
-            text=source_track.transcript,
-            voice_profile_id=voice_profile_id,
-            output_dir=settings.local_storage_path / "mock_speech" / str(project_id),
-        )
+    _ = voice_profile_id
+    raise ValueError(
+        "Narração mock bloqueada. Configure um provider real de voz antes de gerar narração final."
     )
-    artifact = await _create_artifact(
-        session,
-        project_id,
-        ArtifactType.AUDIO_TRACK,
-        "Narracao final mock",
-        {
-            "voice_profile_id": voice_profile_id,
-            "asset_uri": result.storage_uri,
-            "duration_seconds": result.duration_seconds,
-            "alignment": result.alignment,
-        },
-    )
-    await _add_dependency(session, source_track.artifact_id, artifact.id)
-    asset = Asset(
-        project_id=project_id,
-        artifact_id=artifact.id,
-        kind=AssetKind.AUDIO,
-        name="Narracao final mock",
-        storage_uri=result.storage_uri,
-        content_type=result.content_type,
-        sha256=result.sha256,
-        metadata_json={"provider": result.provider, "model": result.model},
-    )
-    session.add(asset)
-    await session.flush()
-    session.add(
-        AssetVersion(
-            asset_id=asset.id,
-            version_number=1,
-            storage_uri=asset.storage_uri,
-            sha256=asset.sha256,
-            metadata_json=asset.metadata_json,
-        )
-    )
-    track = AudioTrack(
-        project_id=project_id,
-        artifact_id=artifact.id,
-        name="Narracao final mock",
-        track_type="final_narration",
-        duration_seconds=result.duration_seconds,
-        transcript=source_track.transcript,
-        alignment=result.alignment,
-    )
-    session.add(track)
-    await session.commit()
-    await session.refresh(track)
-    return track
 
 
 async def generate_subtitles(

@@ -7,6 +7,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+from app.config.model_policy import validate_openrouter_model_name
 from app.config.settings import get_settings
 from app.core.enums import GenerationJobStatus
 from app.providers.media_utils import local_uri_to_data_url
@@ -35,9 +36,15 @@ class OpenRouterVideoProvider:
         )
 
     async def generate_from_text(self, request: VideoRequest) -> VideoResult:
+        request = request.model_copy(
+            update={"model": validate_openrouter_model_name(request.model)}
+        )
         return await asyncio.to_thread(self._generate, request, False)
 
     async def generate_from_image(self, request: VideoRequest) -> VideoResult:
+        request = request.model_copy(
+            update={"model": validate_openrouter_model_name(request.model)}
+        )
         return await asyncio.to_thread(self._generate, request, True)
 
     async def get_status(self, external_job_id: str) -> GenerationJobStatus:

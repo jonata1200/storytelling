@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.model_policy import is_mock_model, validate_openrouter_model_name
 from app.production.models import ProjectProductionSettings
 from app.projects.repository import ProjectRepository
 
@@ -23,15 +24,11 @@ ASPECT_RATIOS = ["9:16", "16:9", "1:1", "3:4", "4:3"]
 RESOLUTIONS = ["720x1280", "1080x1920", "1920x1080", "3840x2160"]
 AUDIO_MODES = {"narration_subtitles"}
 MOCK_IMAGE_MODEL = "mock-image"
+MOCK_VIDEO_MODEL = "mock-video"
 
 
 def _validate_model_name(value: object, field_name: str) -> str:
-    text = str(value or "").strip()
-    if not text:
-        raise ValueError(f"{field_name} nao pode ficar vazio")
-    if len(text) > 160:
-        raise ValueError(f"{field_name} deve ter no maximo 160 caracteres")
-    return text
+    return validate_openrouter_model_name(value, field_name)
 
 
 def _validated_production_payload(payload: dict) -> dict:
@@ -69,9 +66,21 @@ def _validated_production_payload(payload: dict) -> dict:
 def resolve_image_model(project_image_model: str | None, default_image_model: str | None) -> str:
     project_model = str(project_image_model or "").strip()
     default_model = str(default_image_model or "").strip()
-    if project_model and project_model != MOCK_IMAGE_MODEL:
-        return project_model
-    return default_model or MOCK_IMAGE_MODEL
+    if project_model and not is_mock_model(project_model):
+        return validate_openrouter_model_name(project_model, "image_model")
+    if default_model and not is_mock_model(default_model):
+        return validate_openrouter_model_name(default_model, "OPENROUTER_IMAGE_MODEL")
+    raise ValueError("Configure um modelo real de imagem da OpenRouter antes de gerar imagens.")
+
+
+def resolve_video_model(project_video_model: str | None, default_video_model: str | None) -> str:
+    project_model = str(project_video_model or "").strip()
+    default_model = str(default_video_model or "").strip()
+    if project_model and not is_mock_model(project_model):
+        return validate_openrouter_model_name(project_model, "video_model")
+    if default_model and not is_mock_model(default_model):
+        return validate_openrouter_model_name(default_model, "OPENROUTER_VIDEO_MODEL")
+    raise ValueError("Configure um modelo real de video da OpenRouter antes de gerar clipes.")
 
 
 async def get_or_create_production_settings(

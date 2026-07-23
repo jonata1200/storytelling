@@ -37,9 +37,12 @@ async def post_generate_narration(
     payload: GenerateNarrationRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> AudioTrackRead:
-    track = await synthesize_narration(
-        session, project_id, payload.audio_track_id, payload.voice_profile_id
-    )
+    try:
+        track = await synthesize_narration(
+            session, project_id, payload.audio_track_id, payload.voice_profile_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if track is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

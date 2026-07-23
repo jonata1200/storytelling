@@ -1,4 +1,6 @@
-﻿from decimal import Decimal
+﻿from collections.abc import Mapping
+from decimal import Decimal
+from typing import TypedDict
 from uuid import UUID
 
 from sqlalchemy import select
@@ -6,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approvals.service import record_approval
 from app.assets.models import Asset, AssetVersion
+from app.config.model_policy import ensure_openrouter_api_key
 from app.config.settings import get_settings
 from app.core.enums import (
     ApprovalDecision,
@@ -19,7 +22,6 @@ from app.production.service import get_or_create_production_settings, resolve_im
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
-from app.providers.image.mock import MockImageProvider
 from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider, ImageResult
 from app.storytelling.models import Script, StoryIdea
@@ -64,6 +66,15 @@ from app.visual_bible.schemas import ConsistencyIssue
 from app.workflows.models import ArtifactDependency
 
 
+class VisualReferenceCompletionReport(TypedDict):
+    complete: bool
+    counts: dict[str, int]
+    missing_categories: list[str]
+    expected_references: int
+    existing_references: int
+    missing_views: int
+
+
 async def _image_provider_for_project(
     session: AsyncSession, project_id: UUID
 ) -> tuple[ImageProvider, str, str]:
@@ -73,13 +84,7 @@ async def _image_provider_for_project(
         production_settings.image_model,
         app_settings.openrouter_image_model,
     )
-    if model == "mock-image":
-        return MockImageProvider(), model, "mock_images"
-    if not app_settings.openrouter_api_key:
-        raise RuntimeError(
-            "OPENROUTER_API_KEY ausente ou invalida. Configure uma chave valida para gerar "
-            f"imagens reais com o modelo {model}."
-        )
+    ensure_openrouter_api_key(app_settings.openrouter_api_key)
     return OpenRouterImageProvider(), model, "openrouter_images"
 
 
@@ -587,6 +592,71 @@ async def _existing_visual_reference_views(
         )
     )
     return set(result.scalars())
+
+
+async def visual_reference_completion_report(
+    session: AsyncSession, project_id: UUID
+) -> VisualReferenceCompletionReport:
+    target_specs = (
+        ("character", "characters", "personagens", Character),
+        ("location", "locations", "locais", Location),
+        ("prop", "props", "objetos", Prop),
+    )
+    counts: dict[str, int] = {}
+    missing_categories: list[str] = []
+    expected_references = 0
+    existing_references = 0
+    missing_views = 0
+
+    for target_kind, count_key, label, model in target_specs:
+        result = await session.execute(select(model.id).where(model.project_id == project_id))
+        target_ids = list(result.scalars())
+        counts[count_key] = len(target_ids)
+        if not target_ids:
+            missing_categories.append(label)
+            continue
+
+        expected_views = set(default_views_for(target_kind))
+        expected_references += len(target_ids) * len(expected_views)
+        for target_id in target_ids:
+            existing_views = await _existing_visual_reference_views(
+                session, project_id, target_kind, target_id
+            )
+            valid_existing_views = existing_views & expected_views
+            existing_references += len(valid_existing_views)
+            missing_views += len(expected_views - valid_existing_views)
+
+    complete = not missing_categories and missing_views == 0
+    return {
+        "complete": complete,
+        "counts": counts,
+        "missing_categories": missing_categories,
+        "expected_references": expected_references,
+        "existing_references": existing_references,
+        "missing_views": missing_views,
+    }
+
+
+def visual_reference_completion_message(report: Mapping[str, object]) -> str:
+    raw_missing_categories = report.get("missing_categories", [])
+    missing_categories = (
+        [str(item) for item in raw_missing_categories if str(item).strip()]
+        if isinstance(raw_missing_categories, list)
+        else []
+    )
+    if missing_categories:
+        return (
+            "Conclua a Biblioteca Visual antes do storyboard. Ainda faltam: "
+            f"{', '.join(missing_categories)}."
+        )
+    raw_missing_views = report.get("missing_views", 0)
+    missing_views = raw_missing_views if isinstance(raw_missing_views, int) else 0
+    if missing_views > 0:
+        return (
+            "Conclua a Biblioteca Visual antes do storyboard. "
+            f"Ainda falta gerar {missing_views} referência(s) visual(is)."
+        )
+    return "Biblioteca Visual completa."
 
 
 async def approve_visual_target_and_generate_views(

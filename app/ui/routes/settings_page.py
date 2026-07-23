@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import Request
 from nicegui import ui
 
+from app.config.model_policy import validate_openrouter_model_name
 from app.config.preferences import save_preferences
 from app.config.runtime_preferences import load_runtime_preferences
 from app.config.settings import get_settings, normalize_openrouter_api_key
@@ -215,11 +216,24 @@ def register_settings_page(
 
                             def save_ai() -> None:
                                 typed_api_key = str(api_key.value or "").strip()
-                                values = {
-                                    "OPENROUTER_DEFAULT_MODEL": text_model.value or "",
-                                    "OPENROUTER_IMAGE_MODEL": image_model.value or "",
-                                    "OPENROUTER_VIDEO_MODEL": video_model.value or "",
-                                }
+                                try:
+                                    values = {
+                                        "OPENROUTER_DEFAULT_MODEL": validate_openrouter_model_name(
+                                            text_model.value,
+                                            "Modelo de texto",
+                                        ),
+                                        "OPENROUTER_IMAGE_MODEL": validate_openrouter_model_name(
+                                            image_model.value,
+                                            "Modelo de imagem",
+                                        ),
+                                        "OPENROUTER_VIDEO_MODEL": validate_openrouter_model_name(
+                                            video_model.value,
+                                            "Modelo de vídeo",
+                                        ),
+                                    }
+                                except ValueError as exc:
+                                    ui.notify(str(exc), color="negative")
+                                    return
                                 if typed_api_key:
                                     normalized_key = normalize_openrouter_api_key(typed_api_key)
                                     if normalized_key is None:

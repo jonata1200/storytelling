@@ -3,6 +3,7 @@ from uuid import UUID
 
 from nicegui import ui
 
+from app.config.model_policy import validate_openrouter_model_name
 from app.database.session import AsyncSessionLocal
 from app.generation.model_settings import ensure_default_model_settings, set_model_setting
 from app.production.service import get_or_create_production_settings, update_production_settings
@@ -125,6 +126,7 @@ async def _save_model_setting(
     try:
         if not provider or not model:
             raise ValueError("informe provider e modelo")
+        model = validate_openrouter_model_name(model)
         async with AsyncSessionLocal() as session:
             await set_model_setting(session, project_id, task, provider, model)
         ui.notify("Modelo salvo para esta etapa.", color="positive")

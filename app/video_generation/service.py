@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetVersion
+from app.config.model_policy import ensure_openrouter_api_key
 from app.config.settings import get_settings
 from app.core.enums import (
     ArtifactStatus,
@@ -23,10 +24,9 @@ from app.core.enums import (
 )
 from app.costs.models import CostEntry
 from app.costs.service import calculate_total_cost, estimate_batch_cost
-from app.production.service import get_or_create_production_settings
+from app.production.service import get_or_create_production_settings, resolve_video_model
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
-from app.providers.video.mock import MockVideoProvider
 from app.providers.video.openrouter import OpenRouterVideoProvider
 from app.providers.video.types import VideoProvider, VideoRequest
 from app.storyboards.models import StoryboardFrame
@@ -297,30 +297,22 @@ async def _video_provider_for_project(
     app_settings = get_settings()
     production_settings = await get_or_create_production_settings(session, project_id)
     requested_provider = provider_name or "auto"
-    requested_model = (
-        model or production_settings.video_model or app_settings.openrouter_video_model
+    requested_model = resolve_video_model(
+        model or production_settings.video_model,
+        app_settings.openrouter_video_model,
     )
     if requested_provider == "auto":
-        if app_settings.openrouter_api_key and requested_model != "mock-video":
-            return (
-                OpenRouterVideoProvider(),
-                "openrouter",
-                requested_model,
-                "openrouter_videos",
-                production_settings.aspect_ratio,
-                production_settings.video_resolution,
-            )
+        ensure_openrouter_api_key(app_settings.openrouter_api_key)
         return (
-            MockVideoProvider(),
-            "mock",
-            "mock-video",
-            "mock_videos",
+            OpenRouterVideoProvider(),
+            "openrouter",
+            requested_model,
+            "openrouter_videos",
             production_settings.aspect_ratio,
             production_settings.video_resolution,
         )
     if requested_provider == "openrouter":
-        if not app_settings.openrouter_api_key:
-            raise ValueError("OPENROUTER_API_KEY nao configurada")
+        ensure_openrouter_api_key(app_settings.openrouter_api_key)
         return (
             OpenRouterVideoProvider(),
             "openrouter",
@@ -330,14 +322,7 @@ async def _video_provider_for_project(
             production_settings.video_resolution,
         )
     if requested_provider == "mock":
-        return (
-            MockVideoProvider(),
-            "mock",
-            "mock-video" if requested_model == "auto" else requested_model,
-            "mock_videos",
-            production_settings.aspect_ratio,
-            production_settings.video_resolution,
-        )
+        raise ValueError("Provider mock bloqueado. Use OpenRouter com um modelo real de video.")
     raise ValueError(f"Unsupported video provider: {provider_name}")
 
 
