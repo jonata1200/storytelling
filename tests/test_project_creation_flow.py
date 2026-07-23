@@ -2,12 +2,14 @@ import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.storytelling import service as storytelling_service
+from app.storytelling.models import StoryIdea
 from app.storytelling.service import (
     GenerationOutputError,
     _bounded_required_str,
@@ -1186,6 +1188,116 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
     assert captured["form"]["source_idea_payload"] == idea
     assert "Obstáculos: culpa antiga, silencio familiar" in captured["form"]["one_line_idea"]
     assert "Virada: O segredo protegeu a protagonista." in captured["form"]["one_line_idea"]
+
+
+@pytest.mark.asyncio
+async def test_generate_script_recovers_when_provider_fails_before_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    idea_id = uuid4()
+    briefing_artifact_id = uuid4()
+    idea_artifact_id = uuid4()
+    script_artifact_id = uuid4()
+    project = SimpleNamespace(id=project_id)
+    idea = SimpleNamespace(
+        id=idea_id,
+        project_id=project_id,
+        artifact_id=idea_artifact_id,
+        title="O farol apagado",
+        hook="Uma faroleira acende a luz para um barco que não existe.",
+        premise="Uma jovem mantém um farol ligado contra a vontade da cidade.",
+        protagonist="Lia, uma faroleira teimosa",
+        payload={
+            "title": "O farol apagado",
+            "hook": "Uma faroleira acende a luz para um barco que não existe.",
+            "premise": "Uma jovem mantém um farol ligado contra a vontade da cidade.",
+            "protagonist": "Lia, uma faroleira teimosa",
+            "conflict": "A cidade quer desligar o farol.",
+            "payoff": "A luz salva quem ainda está no mar.",
+        },
+    )
+    briefing = SimpleNamespace(
+        artifact_id=briefing_artifact_id,
+        desired_duration_minutes=5,
+        language="pt-BR",
+        theme="luto e recomeço",
+        genre="Drama",
+        primary_emotion="Esperança",
+        audience="público geral",
+        constraints="produção simples",
+        visual_style="cinemático realista",
+    )
+
+    class FakeProjectRepository:
+        def __init__(self, session: object) -> None:
+            pass
+
+        async def get_project(self, requested_project_id: object) -> object:
+            assert requested_project_id == project_id
+            return project
+
+    class FakeSession:
+        async def get(self, model: object, requested_id: object) -> object:
+            assert model is StoryIdea
+            assert requested_id == idea_id
+            return idea
+
+        def add(self, item: object) -> None:
+            pass
+
+        async def flush(self) -> None:
+            pass
+
+        async def commit(self) -> None:
+            pass
+
+        async def refresh(self, item: object) -> None:
+            pass
+
+    async def fake_latest_briefing(session: object, requested_project_id: object) -> object:
+        assert requested_project_id == project_id
+        return briefing
+
+    async def fake_provider_for_task(
+        session: object, requested_project_id: object, task: str
+    ) -> tuple[object, str]:
+        assert requested_project_id == project_id
+        assert task == "generate_script"
+        return object(), "unstable-model"
+
+    async def fake_run_structured_generation(*args: object, **kwargs: object) -> NoReturn:
+        raise RuntimeError("OpenRouter retornou conteúdo que não é JSON válido")
+
+    async def fake_create_artifact(*args: object, **kwargs: object) -> object:
+        return SimpleNamespace(id=script_artifact_id)
+
+    async def fake_add_dependency(*args: object, **kwargs: object) -> None:
+        pass
+
+    monkeypatch.setattr(storytelling_service, "ProjectRepository", FakeProjectRepository)
+    monkeypatch.setattr(storytelling_service, "get_latest_briefing", fake_latest_briefing)
+    monkeypatch.setattr(storytelling_service, "llm_provider_for_task", fake_provider_for_task)
+    monkeypatch.setattr(
+        storytelling_service,
+        "run_structured_generation",
+        fake_run_structured_generation,
+    )
+    monkeypatch.setattr(storytelling_service, "_create_artifact", fake_create_artifact)
+    monkeypatch.setattr(storytelling_service, "_add_dependency", fake_add_dependency)
+    monkeypatch.setattr(storytelling_service, "advance_project_status", lambda *args: None)
+
+    script = await storytelling_service.generate_script(
+        cast(AsyncSession, FakeSession()),
+        project_id,
+        idea_id,
+    )
+
+    assert script is not None
+    assert script.title == "O farol apagado"
+    assert "FADE IN:" in script.content
+    assert "CENA 01" in script.content
+    assert script.word_count > 0
 
 
 @pytest.mark.asyncio

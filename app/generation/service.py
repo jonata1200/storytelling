@@ -23,7 +23,7 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
     "director_agent_chat": "Director Agent Chat",
 }
 
-LLM_PROVIDER_TIMEOUT_SECONDS = 150
+LLM_PROVIDER_TIMEOUT_SECONDS = 300
 CREATIVE_NARRATIVE_TASKS = {
     "generate_story_ideas",
     "generate_script",

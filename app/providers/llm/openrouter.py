@@ -7,6 +7,8 @@ from typing import Any
 from app.config.settings import get_settings, normalize_openrouter_api_key
 from app.providers.llm.types import LLMRequest, LLMResult
 
+OPENROUTER_LLM_HTTP_TIMEOUT_SECONDS = 300
+
 
 class OpenRouterLLMProvider:
     provider_name = "openrouter"
@@ -64,7 +66,9 @@ class OpenRouterLLMProvider:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(http_request, timeout=120) as response:
+            with urllib.request.urlopen(
+                http_request, timeout=OPENROUTER_LLM_HTTP_TIMEOUT_SECONDS
+            ) as response:
                 parsed = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")

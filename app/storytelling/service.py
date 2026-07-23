@@ -362,16 +362,21 @@ async def generate_script(
     provider, model = await llm_provider_for_task(session, project_id, "generate_script")
     payload: dict | None = None
     last_error: GenerationOutputError | None = None
+    runtime_error: RuntimeError | None = None
     for attempt in range(2):
-        result, _execution = await run_structured_generation(
-            session,
-            provider,
-            project_id,
-            "generate_script",
-            variables,
-            model=model,
-            fallback_on_runtime_error=True,
-        )
+        try:
+            result, _execution = await run_structured_generation(
+                session,
+                provider,
+                project_id,
+                "generate_script",
+                variables,
+                model=model,
+                fallback_on_runtime_error=True,
+            )
+        except RuntimeError as exc:
+            runtime_error = exc
+            break
         try:
             payload = normalize_script_payload(
                 _required_mapping(result.content, "generate_script"),
@@ -390,7 +395,8 @@ async def generate_script(
                 "production_plan separado."
             )
     if payload is None:
-        if last_error is not None:
+        recovery_error = runtime_error or last_error
+        if recovery_error is not None:
             fallback_content = _fallback_script_content_from_idea(
                 idea.payload,
                 idea.title,
@@ -402,8 +408,12 @@ async def generate_script(
                 "target_duration_seconds": target_duration_seconds,
                 "content": fallback_content,
                 "word_count": len(fallback_content.split()),
-                "generation_recovery": "fallback_script_from_idea_after_invalid_model_output",
-                "generation_recovery_error": str(last_error),
+                "generation_recovery": (
+                    "fallback_script_from_idea_after_provider_error"
+                    if runtime_error is not None
+                    else "fallback_script_from_idea_after_invalid_model_output"
+                ),
+                "generation_recovery_error": str(recovery_error),
             }
         else:
             raise GenerationOutputError("generate_script: resposta vazia do modelo")
