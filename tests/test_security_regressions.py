@@ -1,10 +1,15 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+import app.auth.ui_middleware as ui_middleware
+import app.auth.ui_routes as ui_routes
+import app.providers.media_utils as media_utils
+import app.video_generation.service as video_generation_service
 from app.auth.session import SESSION_COOKIE_NAME, create_session_token
 from app.auth.ui_middleware import UIBasicAuthMiddleware
 from app.auth.ui_routes import _secure_cookie_enabled
@@ -33,6 +38,48 @@ def test_ui_middleware_requires_authentication() -> None:
 
     client.cookies.set(SESSION_COOKIE_NAME, create_session_token("jonata"))
     assert client.get("/").json() == {"ok": True}
+
+
+def test_ui_middleware_keeps_registration_private_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ui_middleware,
+        "get_settings",
+        lambda: SimpleNamespace(allow_user_registration=False),
+    )
+    middleware = UIBasicAuthMiddleware(FastAPI())
+
+    assert middleware._is_ui_scope({"type": "http", "path": "/register"}) is True
+    assert middleware._is_ui_scope({"type": "http", "path": "/auth/register"}) is True
+    assert middleware._is_ui_scope({"type": "http", "path": "/login"}) is False
+
+
+@pytest.mark.asyncio
+async def test_registration_routes_are_disabled_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ui_routes,
+        "get_settings",
+        lambda: SimpleNamespace(
+            app_name="Storytelling",
+            app_env="local",
+            allow_user_registration=False,
+        ),
+    )
+
+    def _unexpected_create_user(*args: object, **kwargs: object) -> object:
+        raise AssertionError("create_user should not be called when registration is disabled")
+
+    monkeypatch.setattr(ui_routes, "create_user", _unexpected_create_user)
+
+    page = await ui_routes.register_page()
+    assert page.status_code == 403
+    assert "Cadastro desativado" in bytes(page.body).decode("utf-8")
+
+    response = await ui_routes.register(username="novo", password="senha-segura")
+    assert response.status_code == 403
 
 
 def test_ui_middleware_protects_docs_and_openapi() -> None:
@@ -135,6 +182,34 @@ def test_runtime_json_corruption_falls_back_safely(tmp_path: Path) -> None:
     ideas_path = tmp_path / "ideas.json"
     ideas_path.write_text("{broken", encoding="utf-8")
     assert load_generated_ideas(ideas_path) == []
+
+
+def test_local_storage_helpers_reject_files_outside_storage_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    storage_root = tmp_path / "storage"
+    storage_root.mkdir()
+    inside = storage_root / "avatar.png"
+    inside.write_bytes(b"avatar")
+    outside = tmp_path / "secret.txt"
+    outside.write_text("secret", encoding="utf-8")
+
+    monkeypatch.setattr(
+        media_utils,
+        "get_settings",
+        lambda: SimpleNamespace(local_storage_path=storage_root),
+    )
+    monkeypatch.setattr(
+        video_generation_service,
+        "get_settings",
+        lambda: SimpleNamespace(local_storage_path=storage_root),
+    )
+
+    assert media_utils.local_uri_to_data_url(inside.as_posix()).startswith("data:")
+    assert media_utils.local_uri_to_data_url(outside.as_posix()) == outside.as_posix()
+    assert video_generation_service._local_storage_path(inside.as_posix()) == inside.resolve()
+    assert video_generation_service._local_storage_path(outside.as_posix()) is None
 
 
 def test_generation_payload_validation_rejects_missing_lists() -> None:

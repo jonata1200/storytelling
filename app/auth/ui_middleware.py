@@ -16,20 +16,22 @@ class UIBasicAuthMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    @staticmethod
-    def _is_ui_scope(scope: Scope) -> bool:
-        path = str(scope.get("path", ""))
+    def _public_paths(self) -> set[str]:
         public_paths = {
             "/auth/login",
             "/auth/logout",
-            "/auth/register",
             "/login",
-            "/register",
         }
+        if get_settings().allow_user_registration:
+            public_paths.update({"/auth/register", "/register"})
+        return public_paths
+
+    def _is_ui_scope(self, scope: Scope) -> bool:
+        path = str(scope.get("path", ""))
         return (
             not path.startswith("/api/")
             and not path.startswith("/ui-assets/")
-            and path not in public_paths
+            and path not in self._public_paths()
         )
 
     @staticmethod

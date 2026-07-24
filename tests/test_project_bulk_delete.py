@@ -1,6 +1,7 @@
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, cast
+from uuid import UUID
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,7 +108,7 @@ async def test_hard_delete_project_removes_project_graph_physically() -> None:
 
     deleted = await hard_delete_project(
         cast(AsyncSession, session),
-        "62d6bfdf-d2e3-4b8b-93de-b5f4f764f474",
+        UUID("62d6bfdf-d2e3-4b8b-93de-b5f4f764f474"),
     )
 
     assert deleted is True
@@ -123,7 +124,7 @@ async def test_hard_delete_project_rolls_back_when_project_is_missing() -> None:
 
     deleted = await hard_delete_project(
         cast(AsyncSession, session),
-        "62d6bfdf-d2e3-4b8b-93de-b5f4f764f474",
+        UUID("62d6bfdf-d2e3-4b8b-93de-b5f4f764f474"),
     )
 
     assert deleted is False

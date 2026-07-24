@@ -39,6 +39,8 @@ async def post_generate_storyboards(
         frames = await generate_storyboard_frames(session, project_id, payload.script_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except (RuntimeError, TimeoutError) as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     if frames is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -66,6 +68,8 @@ async def post_generate_animatic(
         bundle = await generate_animatic_bundle(session, project_id, payload.script_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except (RuntimeError, TimeoutError) as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     if bundle is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

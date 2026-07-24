@@ -12,15 +12,19 @@ from app.config.settings import get_settings
 router = APIRouter(include_in_schema=False)
 
 
-def _auth_page(mode: str, message: str = "") -> HTMLResponse:
+def _auth_page(mode: str, message: str = "", status_code: int = 200) -> HTMLResponse:
     is_register = mode == "register"
     title = "Criar conta" if is_register else "Entrar"
     action = "/auth/register" if is_register else "/auth/login"
-    alternative_path = "/login" if is_register else "/register"
-    alternative_text = "Ja tenho conta" if is_register else "Criar uma conta"
+    settings = get_settings()
+    alternative_path = ""
+    alternative_text = ""
+    if settings.allow_user_registration:
+        alternative_path = "/login" if is_register else "/register"
+        alternative_text = "Ja tenho conta" if is_register else "Criar uma conta"
     autocomplete = "new-password" if is_register else "current-password"
     escaped_message = escape(message)
-    app_name = escape(get_settings().app_name)
+    app_name = escape(settings.app_name)
     return HTMLResponse(
         f"""
         <!doctype html>
@@ -60,11 +64,12 @@ def _auth_page(mode: str, message: str = "") -> HTMLResponse:
               <input id="password" name="password" type="password" autocomplete="{autocomplete}" required minlength="8">
               <button type="submit">{title}</button>
             </form>
-            <div class="footer"><a href="{alternative_path}">{alternative_text}</a></div>
+            {f'<div class="footer"><a href="{alternative_path}">{alternative_text}</a></div>' if alternative_path else ''}
           </main>
         </body>
         </html>
-        """
+        """,
+        status_code=status_code,
     )
 
 
@@ -79,6 +84,8 @@ async def login_page() -> HTMLResponse:
 
 @router.get("/register")
 async def register_page() -> HTMLResponse:
+    if not get_settings().allow_user_registration:
+        return _auth_page("login", "Cadastro desativado.", status_code=403)
     return _auth_page("register")
 
 
@@ -102,6 +109,8 @@ async def login(username: str = Form(...), password: str = Form(...)) -> Respons
 async def register(
     username: str = Form(...), password: str = Form(...)
 ) -> Response:
+    if not get_settings().allow_user_registration:
+        return _auth_page("login", "Cadastro desativado.", status_code=403)
     try:
         user = create_user(username, password)
     except ValueError as exc:

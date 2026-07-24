@@ -15,7 +15,7 @@ from app.finalization.models import Export, SubtitleTrack
 from app.finalization.subtitles import build_srt_from_alignment, safe_area_profile
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
-from app.storyboards.models import AudioTrack, StoryboardFrame, Timeline, TimelineItem
+from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.video_generation.models import VideoClip
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
@@ -255,6 +255,10 @@ async def create_final_timeline(
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         return None
+    if animatic_id is not None:
+        animatic = await session.get(Animatic, animatic_id)
+        if animatic is None or animatic.project_id != project_id:
+            return None
 
     frame_result = await session.execute(
         select(StoryboardFrame)

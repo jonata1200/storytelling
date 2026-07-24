@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -57,7 +59,7 @@ def test_sourceful_502_is_treated_as_transient_image_provider_error() -> None:
 
 @pytest.mark.asyncio
 async def test_openrouter_image_transient_error_is_reported_without_mock_fallback(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     class FailingOpenRouterProvider:
         provider_name = "openrouter"
@@ -79,7 +81,7 @@ async def test_openrouter_image_transient_error_is_reported_without_mock_fallbac
             ),
         )
 
-    assert list(tmp_path.iterdir()) == []
+    assert os.listdir(tmp_path) == []
 
 
 @pytest.mark.asyncio
@@ -110,7 +112,7 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         project_id,
     )
 
-    assert provider.provider_name == "openrouter"
+    assert getattr(provider, "provider_name", None) == "openrouter"
     assert model == "krea/krea-2-medium-turbo"
     assert directory == "openrouter_images"
 
@@ -629,7 +631,7 @@ async def test_regenerate_visual_reference_forces_existing_view(
 @pytest.mark.asyncio
 async def test_generate_visual_references_reloads_created_rows_without_refresh(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     project_id = uuid4()
     target_id = uuid4()
@@ -646,7 +648,7 @@ async def test_generate_visual_references_reloads_created_rows_without_refresh(
         def __init__(self, items: list[VisualReference]) -> None:
             self.items = items
 
-        def __iter__(self):
+        def __iter__(self) -> Any:
             return iter(self.items)
 
     class FakeResult:

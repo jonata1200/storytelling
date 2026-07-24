@@ -1,6 +1,4 @@
-﻿import base64
-import mimetypes
-from pathlib import Path
+﻿from pathlib import Path
 from typing import Any
 
 from nicegui import ui
@@ -8,6 +6,7 @@ from nicegui import ui
 from app.config.preferences import save_preferences
 from app.config.settings import get_settings
 from app.projects.models import Project
+from app.providers.media_utils import local_uri_to_data_url
 from app.ui.shared.page_config import BRAND_MARK_URL, WORKSPACE_TABS
 from app.ui.workspace.rules import workspace_section_access
 
@@ -46,17 +45,13 @@ def logout_button() -> None:
 def avatar_data_uri(path_value: str) -> str | None:
     if not path_value:
         return None
-    path = Path(path_value)
-    if not path.is_file():
-        return None
-    mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:{mime};base64,{encoded}"
+    data_uri = local_uri_to_data_url(path_value)
+    return data_uri if data_uri.startswith("data:") else None
 
 
 def save_avatar_file(filename: str, content: bytes) -> Path:
     suffix = Path(filename).suffix.lower()
-    target_dir = Path("storage/profile")
+    target_dir = get_settings().local_storage_path / "profile"
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"avatar{suffix}"
     target.write_bytes(content)
@@ -145,4 +140,5 @@ def workspace_header(project: Project, active: str, counts: dict[str, int]) -> N
             ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
                 "acid-bg workspace-export-button rounded-xl font-semibold shrink-0"
             )
+
 

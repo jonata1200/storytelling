@@ -31,6 +31,7 @@ class Settings(BaseSettings):
 
     storage_backend: str = "local"
     local_storage_path: Path = Path("./storage")
+    allow_user_registration: bool = False
 
     openrouter_api_key: str | None = Field(default=None, repr=False)
     openrouter_base_url: str = "https://openrouter.ai/api/v1"

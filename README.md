@@ -66,6 +66,7 @@ OPENROUTER_API_KEY=sua_chave_aqui
 OPENROUTER_DEFAULT_MODEL=openai/gpt-4o-mini
 OPENROUTER_IMAGE_MODEL=google/gemini-2.5-flash-image
 OPENROUTER_VIDEO_MODEL=google/veo-3.1
+ALLOW_USER_REGISTRATION=false
 ```
 
 No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para

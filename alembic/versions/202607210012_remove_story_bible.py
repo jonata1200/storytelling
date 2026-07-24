@@ -48,17 +48,52 @@ def _foreign_key_name(
     return result.scalar_one_or_none()
 
 
-def upgrade() -> None:
-    bind = op.get_bind()
-    dialect = bind.dialect.name
-    if dialect == "postgresql":
-        op.execute("TRUNCATE TABLE projects RESTART IDENTITY CASCADE")
-    else:
-        op.execute("DELETE FROM projects")
+def _table_exists(table_name: str) -> bool:
+    return sa.inspect(op.get_bind()).has_table(table_name)
 
+
+def _backfill_story_idea_ids() -> None:
+    if not _table_exists("story_bibles") or not _table_exists("scripts"):
+        return
+    bind = op.get_bind()
+    rows = bind.execute(
+        sa.text(
+            """
+            SELECT s.id AS script_id, sb.story_idea_id
+            FROM scripts AS s
+            JOIN story_bibles AS sb ON s.story_bible_id = sb.id
+            WHERE s.story_idea_id IS NULL
+            """
+        )
+    ).all()
+    for row in rows:
+        bind.execute(
+            sa.text(
+                """
+                UPDATE scripts
+                SET story_idea_id = :story_idea_id
+                WHERE id = :script_id
+                """
+            ),
+            {"script_id": row.script_id, "story_idea_id": row.story_idea_id},
+        )
+    remaining = bind.execute(
+        sa.text("SELECT COUNT(*) FROM scripts WHERE story_idea_id IS NULL")
+    ).scalar_one()
+    if int(remaining or 0) > 0:
+        raise RuntimeError(
+            "Nao foi possivel migrar scripts.story_bible_id para story_idea_id sem perda de dados."
+        )
+
+
+def upgrade() -> None:
     with op.batch_alter_table("scripts") as batch_op:
         batch_op.add_column(sa.Column("story_idea_id", sa.Uuid(), nullable=True))
 
+    _backfill_story_idea_ids()
+
+    bind = op.get_bind()
+    dialect = bind.dialect.name
     if dialect == "postgresql":
         fk_name = _foreign_key_name("scripts", "story_bible_id", "story_bibles")
         if fk_name:
@@ -73,8 +108,9 @@ def upgrade() -> None:
         )
         batch_op.alter_column("story_idea_id", nullable=False)
 
-    op.drop_index(op.f("ix_story_bibles_project_id"), table_name="story_bibles")
-    op.drop_table("story_bibles")
+    if _table_exists("story_bibles"):
+        op.drop_index(op.f("ix_story_bibles_project_id"), table_name="story_bibles")
+        op.drop_table("story_bibles")
 
 
 def downgrade() -> None:

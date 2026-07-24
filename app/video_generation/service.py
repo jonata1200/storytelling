@@ -188,16 +188,17 @@ def _video_motion_prompt(
 def _local_storage_path(storage_uri: str | None) -> Path | None:
     if not storage_uri:
         return None
+    storage_root = get_settings().local_storage_path.resolve()
     path = Path(storage_uri)
-    if path.is_absolute() and path.exists():
-        return path
-    settings = get_settings()
-    candidate = settings.local_storage_path / storage_uri
-    if candidate.exists():
-        return candidate
-    if path.exists():
-        return path
-    return None
+    try:
+        candidate = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    try:
+        candidate.relative_to(storage_root)
+    except ValueError:
+        return None
+    return candidate
 
 
 def video_generation_validation_errors(

@@ -57,7 +57,12 @@ async def post_generate_ideas(
 ) -> list[StoryIdeaRead]:
     try:
         ideas = await generate_story_ideas(session, project_id)
-    except GenerationOutputError as exc:
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except (GenerationOutputError, RuntimeError, TimeoutError) as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
@@ -87,7 +92,12 @@ async def post_generate_script(
 ) -> ScriptRead:
     try:
         script = await generate_script(session, project_id, payload.story_idea_id)
-    except GenerationOutputError as exc:
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except (GenerationOutputError, RuntimeError, TimeoutError) as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
@@ -108,7 +118,12 @@ async def post_generate_scenes(
 ) -> list[SceneRead]:
     try:
         scenes = await generate_scenes_and_shots(session, project_id, payload.script_id)
-    except GenerationOutputError as exc:
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except (GenerationOutputError, RuntimeError, TimeoutError) as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
