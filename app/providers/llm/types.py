@@ -8,7 +8,7 @@ class LLMRequest(BaseModel):
     prompt: str
     variables: dict[str, Any] = Field(default_factory=dict)
     output_schema: dict[str, Any] = Field(default_factory=dict)
-    model: str = "openai/gpt-4o-mini"
+    model: str = "deepseek/deepseek-v4-flash"
 
 
 class LLMResult(BaseModel):

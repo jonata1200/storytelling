@@ -40,7 +40,7 @@ def test_openrouter_image_provider_writes_generated_image(
             view_type="front",
             output_dir=tmp_path,
             aspect_ratio="1:1",
-            model="google/gemini-2.5-flash-image",
+            model="sourceful/riverflow-v2.5-pro",
         )
     )
 
@@ -280,14 +280,14 @@ def test_openrouter_video_provider_downloads_completed_video(
             duration_seconds=4,
             source_image_uri="asset://frame",
             output_dir=tmp_path,
-            model="google/veo-3.1",
+            model="bytedance/seedance-2.0-fast",
             size="1080x1920",
         ),
         image_to_video=True,
     )
 
     assert posted["path"] == "/videos"
-    assert posted["body"]["model"] == "google/veo-3.1"
+    assert posted["body"]["model"] == "bytedance/seedance-2.0-fast"
     assert posted["body"]["size"] == "1080x1920"
     assert result.status == GenerationJobStatus.SUCCEEDED
     assert result.file_path is not None

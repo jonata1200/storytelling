@@ -12,14 +12,14 @@ class ImageGenerationRequest(BaseModel):
     aspect_ratio: str = "9:16"
     negative_prompt: str | None = None
     references: list[str] = Field(default_factory=list)
-    model: str = "google/gemini-2.5-flash-image"
+    model: str = "sourceful/riverflow-v2.5-pro"
 
 
 class ImageEditRequest(BaseModel):
     prompt: str
     source_uri: str
     output_dir: Path
-    model: str = "google/gemini-2.5-flash-image"
+    model: str = "sourceful/riverflow-v2.5-pro"
 
 
 class ImageResult(BaseModel):

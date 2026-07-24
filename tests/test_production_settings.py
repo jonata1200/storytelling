@@ -26,10 +26,10 @@ def test_production_payload_rejects_invalid_domain_values() -> None:
 
 def test_production_payload_normalizes_model_and_intensity() -> None:
     payload = _validated_production_payload(
-        {"image_model": " google/gemini-2.5-flash-image ", "motion_intensity": "7"}
+        {"image_model": " sourceful/riverflow-v2.5-pro ", "motion_intensity": "7"}
     )
 
-    assert payload["image_model"] == "google/gemini-2.5-flash-image"
+    assert payload["image_model"] == "sourceful/riverflow-v2.5-pro"
     assert payload["motion_intensity"] == 7
 
 
@@ -50,8 +50,8 @@ def test_resolve_image_model_uses_global_default_when_project_is_mock() -> None:
 
 def test_resolve_image_model_preserves_project_specific_real_model() -> None:
     assert (
-        resolve_image_model("google/gemini-2.5-flash-image", "krea/krea-2-medium-turbo")
-        == "google/gemini-2.5-flash-image"
+        resolve_image_model("sourceful/riverflow-v2.5-pro", "krea/krea-2-medium-turbo")
+        == "sourceful/riverflow-v2.5-pro"
     )
 
 

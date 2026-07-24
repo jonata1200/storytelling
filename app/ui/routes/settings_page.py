@@ -190,7 +190,7 @@ def register_settings_page(
                                 ui.input(
                                     "Modelo de texto",
                                     value=current.openrouter_default_model,
-                                    placeholder="openai/gpt-4o-mini",
+                                    placeholder="deepseek/deepseek-v4-flash",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
@@ -199,7 +199,7 @@ def register_settings_page(
                                 ui.input(
                                     "Modelo de imagem",
                                     value=current.openrouter_image_model,
-                                    placeholder="google/gemini-2.5-flash-image",
+                                    placeholder="sourceful/riverflow-v2.5-pro",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
@@ -208,7 +208,7 @@ def register_settings_page(
                                 ui.input(
                                     "Modelo de vídeo",
                                     value=current.openrouter_video_model,
-                                    placeholder="google/veo-3.1",
+                                    placeholder="bytedance/seedance-2.0-fast",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")

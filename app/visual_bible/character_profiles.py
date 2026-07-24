@@ -266,7 +266,8 @@ def _character_profile(raw: object) -> dict:
             "nao reutilizar roupa de outro personagem",
         ],
         "canonical_prompt": (
-            "Fotorrealista, referencia de elenco, uma unica pessoa. "
+            "Fotorrealista, referencia de elenco, mesmo personagem em multiplas "
+            "perspectivas na mesma imagem de referencia. "
             f"{_character_gender_guardrail(gender)} "
             f"{name}, {_prompt_text(origin)}, {_prompt_text(apparent_age)}, "
             f"{_prompt_text(body_type)}, {_prompt_text(height_cm)}cm. "

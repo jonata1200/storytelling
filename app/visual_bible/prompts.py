@@ -2,12 +2,13 @@
 
 CHARACTER_VIEWS = ["character_reference_sheet"]
 LOCATION_VIEWS = ["establishing", "floor_plan", "camera_points"]
-PROP_VIEWS = ["front", "side", "top", "scale_reference"]
+PROP_VIEWS = ["prop_reference_sheet"]
 VIEW_PROMPT_DETAILS = {
     "character_reference_sheet": (
         "folha unica de referencia em fundo branco: close frontal grande do rosto a esquerda, "
         "corpo inteiro frontal, corpo inteiro em perfil lateral e corpo inteiro de costas; "
-        "mesmo rosto, cabelo, figurino, proporcoes e paleta; composicao horizontal limpa"
+        "mesmo rosto, cabelo, figurino, proporcoes e paleta; composicao horizontal limpa; "
+        "sem texto, sem labels e sem bordas"
     ),
     "front_portrait": (
         "imagem inicial do personagem em pe, corpo inteiro, vista frontal, pose neutra, "
@@ -39,13 +40,22 @@ VIEW_PROMPT_DETAILS = {
         "referencia de escala de corpo inteiro, postura neutra, proporcoes claras"
     ),
     "establishing": (
-        "plano geral de apresentacao do ambiente vazio, layout espacial, luz, "
-        "entradas e objetos principais visiveis"
+        "plano geral cinematografico do ambiente vazio, perspectiva natural de camera, "
+        "layout espacial, luz, entradas e objetos principais visiveis"
     ),
     "floor_plan": (
-        "planta vista de cima, geometria do ambiente, portas, janelas e areas seguras para camera"
+        "planta baixa limpa vista de cima, sem perspectiva, paredes, portas, janelas, moveis "
+        "principais e circulacao legiveis"
     ),
-    "camera_points": "referencia de pontos de camera, 3 enquadramentos verticais dentro do local",
+    "camera_points": (
+        "painel de 3 enquadramentos cinematograficos verticais do mesmo local, mostrando "
+        "angulos filmaveis consistentes"
+    ),
+    "prop_reference_sheet": (
+        "folha unica de referencia do objeto em fundo branco: vista frontal, vista lateral, "
+        "vista superior e detalhe ampliado de textura; mesmo material, cor, estado e escala; "
+        "composicao limpa de fotografia de produto, sem texto, sem labels e sem bordas"
+    ),
     "front": (
         "vista frontal, objeto totalmente em destaque, centralizado, material, "
         "cor e detalhes reconheciveis visiveis"
@@ -85,17 +95,22 @@ def initial_view_for(target_kind: str) -> str:
     return {
         "character": "character_reference_sheet",
         "location": "establishing",
-        "prop": "front",
+        "prop": "prop_reference_sheet",
     }[target_kind]
+
+
+COMMON_NEGATIVE_GUARDRAIL = (
+    "sem texto, marca d'agua, logotipo, UI, borrado ou duplicacoes"
+)
 
 
 def _character_view_guardrail(view_type: str) -> str:
     if view_type == "character_reference_sheet":
         return (
             "uma unica imagem, nao separar em arquivos; fundo branco puro de estudio; "
-            "sem cenario e sem objetos extras; incluir exatamente o mesmo personagem repetido "
-            "nas perspectivas solicitadas; rosto consistente, anatomia consistente, figurino "
-            "identico; nao cortar cabeca, pes ou maos nas vistas de corpo inteiro"
+            "mesmo personagem nas perspectivas solicitadas; rosto, anatomia e figurino "
+            "consistentes; iluminacao uniforme; alinhar altura das poses; nao cortar cabeca, "
+            "pes ou maos"
         )
     if view_type == "front_portrait":
         return (
@@ -109,8 +124,45 @@ def _character_view_guardrail(view_type: str) -> str:
     )
 
 
+def _location_view_guardrail(view_type: str) -> str:
+    if view_type == "floor_plan":
+        return (
+            "visual tecnico limpo, vista ortografica de cima, sem pessoas ou perspectiva "
+            "cinematografica; portas, janelas, moveis e circulacao claros"
+        )
+    if view_type == "camera_points":
+        return (
+            "tres quadros no mesmo painel, mesmo ambiente, sem pessoas, sem personagens; "
+            "variar angulos mantendo arquitetura, portas, janelas e objetos fixos consistentes"
+        )
+    return (
+        "cenario vazio, sem pessoas, sem personagens ou silhuetas; priorizar arquitetura, "
+        "layout, luz, materiais e objetos fixos"
+    )
+
+
+def _prop_view_guardrail(view_type: str) -> str:
+    if view_type == "prop_reference_sheet":
+        return (
+            "uma unica imagem, nao separar em arquivos; objeto isolado em fundo branco puro; "
+            "mesmo objeto em varias vistas, sem pessoas, sem maos ou ambiente; permitir detalhe "
+            "ampliado e escala discreta"
+        )
+    if view_type == "scale_reference":
+        return (
+            "objeto isolado em fundo branco puro; permitir regua, grade simples ou silhueta "
+            "neutra apenas para escala; sem pessoas reais, sem maos, sem cenario"
+        )
+    return (
+        "objeto isolado, fundo branco puro, inteiro e centralizado, sem pessoas, sem maos, "
+        "sem ambiente, sem outros objetos"
+    )
+
+
 def visual_reference_aspect_ratio(profile: dict, view_type: str) -> str:
     if view_type == "character_reference_sheet":
+        return "16:9"
+    if view_type == "prop_reference_sheet":
         return "16:9"
     asset_kind = str(profile.get("asset_kind") or "")
     if asset_kind == "location":
@@ -182,18 +234,13 @@ def visual_reference_prompt(profile: dict, view_type: str) -> str:
     asset_kind = str(profile.get("asset_kind") or "")
     aspect_ratio = visual_reference_aspect_ratio(profile, view_type)
     if asset_kind == "location":
-        guardrail = (
-            "cenario vazio, sem pessoas, sem personagens, sem silhuetas; priorizar arquitetura, "
-            "layout, luz e objetos do local"
-        )
+        guardrail = _location_view_guardrail(view_type)
     elif asset_kind == "prop":
-        guardrail = (
-            "objeto isolado, fundo branco puro, inteiro e centralizado, sem pessoas, sem maos, "
-            "sem ambiente, sem outros objetos"
-        )
+        guardrail = _prop_view_guardrail(view_type)
     else:
         guardrail = _character_view_guardrail(view_type)
     return (
         f"{base_prompt}. Vista: {view_detail}. Regras: {guardrail}. "
-        f"Proporcao: {aspect_ratio}. Referencia de continuidade; detalhes principais legiveis."
+        f"Evitar: {COMMON_NEGATIVE_GUARDRAIL}. Proporcao: {aspect_ratio}. "
+        "Referencia de continuidade; detalhes legiveis."
     )

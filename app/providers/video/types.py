@@ -28,7 +28,7 @@ class VideoRequest(BaseModel):
     source_image_uri: str | None = None
     reference_uris: list[str] = Field(default_factory=list)
     output_dir: Path
-    model: str = "google/veo-3.1"
+    model: str = "bytedance/seedance-2.0-fast"
     seed: int | None = None
 
 

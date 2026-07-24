@@ -442,7 +442,7 @@ def test_visual_batch_requests_include_all_missing_views() -> None:
             ["character_reference_sheet"],
         ),
         ("location", location_id, ["establishing", "floor_plan", "camera_points"]),
-        ("prop", prop_id, ["front", "side", "top", "scale_reference"]),
+        ("prop", prop_id, ["prop_reference_sheet"]),
     ]
 
 
@@ -594,7 +594,7 @@ def test_storyboard_section_waits_for_all_visual_references() -> None:
         "characters": 2,
         "locations": 1,
         "props": 1,
-        "visual_refs": 8,
+        "visual_refs": 5,
         "frames": 0,
         "animatics": 0,
         "clips": 0,
@@ -619,7 +619,7 @@ def test_storyboard_section_unlocks_after_visual_references_are_complete() -> No
         "characters": 2,
         "locations": 1,
         "props": 1,
-        "visual_refs": 9,
+        "visual_refs": 6,
         "frames": 0,
         "animatics": 0,
         "clips": 0,
@@ -1302,8 +1302,8 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
         pages,
         "get_settings",
         lambda: SimpleNamespace(
-            openrouter_image_model="google/gemini-2.5-flash-image",
-            openrouter_video_model="google/veo-3.1",
+            openrouter_image_model="sourceful/riverflow-v2.5-pro",
+            openrouter_video_model="bytedance/seedance-2.0-fast",
         ),
     )
     idea = {

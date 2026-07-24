@@ -143,17 +143,19 @@ async def test_image_provider_reports_missing_key_for_real_image_model(
 def test_initial_visual_reference_is_single_canonical_view() -> None:
     assert initial_view_for("character") == "character_reference_sheet"
     assert initial_view_for("location") == "establishing"
-    assert initial_view_for("prop") == "front"
+    assert initial_view_for("prop") == "prop_reference_sheet"
 
     for target_kind in ["character", "location", "prop"]:
         assert initial_view_for(target_kind) in default_views_for(target_kind)
 
 
 def test_visual_reference_views_reject_invalid_values() -> None:
-    assert validated_visual_reference_views("prop", ["front", "side"]) == ["front", "side"]
+    assert validated_visual_reference_views("prop", ["prop_reference_sheet"]) == [
+        "prop_reference_sheet"
+    ]
 
     with pytest.raises(ValueError, match="View type invalido"):
-        validated_visual_reference_views("prop", ["front", "bad/view"])
+        validated_visual_reference_views("prop", ["front"])
 
 
 def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
@@ -169,8 +171,9 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
     )
     assert "perspectivas solicitadas" in prompt
     assert "Proporcao: 16:9" in prompt
+    assert "sem texto" in prompt
     assert "Referencia de continuidade" in prompt
-    assert len(prompt) < 760
+    assert len(prompt) < 900
 
 
 def test_visual_reference_prompts_are_distinct_by_view_type() -> None:
@@ -212,6 +215,8 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     assert character["narrative_profile"]["name"] == "Clara"
     assert character["gender"] == "personagem feminino"
     assert "Genero visual obrigatorio: feminino" in character["canonical_prompt"]
+    assert "mesmo personagem em multiplas perspectivas" in character["canonical_prompt"]
+    assert "uma unica pessoa" not in character["canonical_prompt"]
     assert character["visual_profile"]["hair"] == "cabelo castanho curto"
     assert "cabelo castanho curto" in character["canonical_prompt"]
     assert "Figurino base exclusivo" in character["canonical_prompt"]
@@ -383,18 +388,35 @@ def test_location_reference_prompt_forbids_people() -> None:
     assert len(prompt) < 720
 
 
-def test_prop_reference_prompt_requires_white_background_and_object_focus() -> None:
+def test_prop_reference_prompt_uses_single_product_sheet() -> None:
     prop = _prop_profile({"name": "Partitura", "material": "papel envelhecido"})
 
-    prompt = visual_reference_prompt(prop, "front")
+    prompt = visual_reference_prompt(prop, "prop_reference_sheet")
 
+    assert "folha unica de referencia do objeto" in prompt
+    assert "vista frontal" in prompt
+    assert "vista lateral" in prompt
+    assert "vista superior" in prompt
+    assert "detalhe ampliado de textura" in prompt
     assert "fundo branco puro" in prompt
-    assert "inteiro e centralizado" in prompt
     assert "sem pessoas" in prompt
     assert "sem maos" in prompt
-    assert "Proporcao: 1:1" in prompt
-    assert "detalhes principais legiveis" in prompt
-    assert len(prompt) < 620
+    assert "sem texto" in prompt
+    assert "Proporcao: 16:9" in prompt
+    assert "detalhes legiveis" in prompt
+    assert len(prompt) < 840
+
+
+def test_location_floor_plan_prompt_uses_technical_top_view() -> None:
+    location = _location_profile({"name": "Sala de estar"})
+
+    prompt = visual_reference_prompt(location, "floor_plan")
+
+    assert "planta baixa limpa vista de cima" in prompt
+    assert "sem perspectiva" in prompt
+    assert "visual tecnico" in prompt
+    assert "sem pessoas" in prompt
+    assert "Proporcao: 16:9" in prompt
 
 
 def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:
@@ -405,6 +427,7 @@ def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:
     assert visual_reference_aspect_ratio(character, "character_reference_sheet") == "16:9"
     assert visual_reference_aspect_ratio(character, "front_portrait") == "16:9"
     assert visual_reference_aspect_ratio(location, "establishing") == "16:9"
+    assert visual_reference_aspect_ratio(prop, "prop_reference_sheet") == "16:9"
     assert visual_reference_aspect_ratio(prop, "front") == "1:1"
 
 
