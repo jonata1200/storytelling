@@ -601,6 +601,88 @@ async def _existing_visual_reference_views(
     return set(result.scalars())
 
 
+async def _visual_generation_reference_uris(
+    session: AsyncSession,
+    project_id: UUID,
+    target_kind: str,
+    target_id: UUID,
+    profile: dict,
+    view_type: str,
+) -> list[str]:
+    if target_kind != "character":
+        return []
+
+    identity_base = str(profile.get("identity_base_name") or "").strip().casefold()
+    if not identity_base:
+        return []
+
+    reference_uris: list[str] = []
+    seen_uris: set[str] = set()
+
+    async def append_reference_uri(reference: VisualReference) -> None:
+        if reference.asset_id is None:
+            return
+        asset = await session.get(Asset, reference.asset_id)
+        storage_uri = str(getattr(asset, "storage_uri", "") or "").strip()
+        if storage_uri and storage_uri not in seen_uris:
+            seen_uris.add(storage_uri)
+            reference_uris.append(storage_uri)
+
+    if view_type == "character_reference_sheet":
+        current_result = await session.execute(
+            select(VisualReference)
+            .where(
+                VisualReference.project_id == project_id,
+                VisualReference.target_kind == target_kind,
+                VisualReference.target_id == target_id,
+                VisualReference.view_type == "front_portrait",
+            )
+            .order_by(VisualReference.created_at.desc())
+            .limit(1)
+        )
+        current_reference = current_result.scalars().first()
+        if current_reference is not None:
+            await append_reference_uri(current_reference)
+
+    characters_result = await session.execute(
+        select(Character).where(
+            Character.project_id == project_id,
+            Character.id != target_id,
+        )
+    )
+    related_character_ids = [
+        character.id
+        for character in characters_result.scalars()
+        if str(
+            (character.canonical_profile or {}).get("identity_base_name") or ""
+        ).strip().casefold()
+        == identity_base
+    ]
+    if related_character_ids:
+        related_refs_result = await session.execute(
+            select(VisualReference)
+            .where(
+                VisualReference.project_id == project_id,
+                VisualReference.target_kind == target_kind,
+                VisualReference.target_id.in_(related_character_ids),
+            )
+            .order_by(VisualReference.created_at.desc())
+        )
+        related_references = sorted(
+            related_refs_result.scalars(),
+            key=lambda reference: (
+                0 if reference.view_type == "front_portrait" else 1,
+                -reference.created_at.timestamp(),
+            ),
+        )
+        for reference in related_references:
+            await append_reference_uri(reference)
+            if len(reference_uris) >= 2:
+                break
+
+    return reference_uris[:2]
+
+
 async def visual_reference_completion_report(
     session: AsyncSession, project_id: UUID
 ) -> VisualReferenceCompletionReport:
@@ -750,6 +832,14 @@ async def generate_visual_references(
     for view_type in views:
         prompt = visual_reference_prompt(profile, view_type)
         aspect_ratio = visual_reference_aspect_ratio(profile, view_type)
+        reference_uris = await _visual_generation_reference_uris(
+            session,
+            project_id,
+            target_kind,
+            target_id,
+            profile,
+            view_type,
+        )
         image_result, fallback_metadata = await _generate_image_with_provider_fallback(
             provider,
             ImageGenerationRequest(
@@ -758,9 +848,14 @@ async def generate_visual_references(
                 view_type=view_type,
                 output_dir=output_dir,
                 aspect_ratio=aspect_ratio,
+                references=reference_uris,
                 model=image_model,
             ),
         )
+        generation_metadata = {
+            "reference_uris": reference_uris,
+            **fallback_metadata,
+        }
         asset = Asset(
             project_id=project_id,
             artifact_id=target_artifact_id,
@@ -773,7 +868,7 @@ async def generate_visual_references(
                 "provider": image_result.provider,
                 "model": image_result.model,
                 "aspect_ratio": aspect_ratio,
-                **fallback_metadata,
+                **generation_metadata,
             },
         )
         session.add(asset)
@@ -813,7 +908,7 @@ async def generate_visual_references(
             prompt=prompt,
             variables={"target_kind": target_kind, "target_id": str(target_id), "view": view_type},
             response={"asset_id": str(asset.id), "storage_uri": asset.storage_uri},
-            parameters=fallback_metadata,
+            parameters=generation_metadata,
             estimated_cost=Decimal("0.000000"),
             duration_ms=None,
         )
@@ -831,7 +926,7 @@ async def generate_visual_references(
             metadata_json={
                 "sha256": image_result.sha256,
                 "aspect_ratio": aspect_ratio,
-                **fallback_metadata,
+                **generation_metadata,
             },
         )
         session.add(reference)

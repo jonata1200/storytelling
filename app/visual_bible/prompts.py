@@ -1,8 +1,8 @@
 ﻿from app.visual_bible.profiles import _clean_prompt_fragment, _prompt_text
 
-CHARACTER_VIEWS = ["character_reference_sheet"]
-LOCATION_VIEWS = ["establishing", "floor_plan", "camera_points"]
-PROP_VIEWS = ["prop_reference_sheet"]
+CHARACTER_VIEWS = ["front_portrait", "character_reference_sheet"]
+LOCATION_VIEWS = ["establishing"]
+PROP_VIEWS = ["front"]
 VIEW_PROMPT_DETAILS = {
     "character_reference_sheet": (
         "folha unica de referencia em fundo branco: close frontal grande do rosto a esquerda, "
@@ -93,9 +93,9 @@ def validated_visual_reference_views(target_kind: str, view_types: list[str] | N
 
 def initial_view_for(target_kind: str) -> str:
     return {
-        "character": "character_reference_sheet",
+        "character": "front_portrait",
         "location": "establishing",
-        "prop": "prop_reference_sheet",
+        "prop": "front",
     }[target_kind]
 
 
@@ -169,7 +169,7 @@ def visual_reference_aspect_ratio(profile: dict, view_type: str) -> str:
         return "16:9"
     if asset_kind == "prop":
         return "1:1"
-    if asset_kind == "character":
+    if asset_kind == "character" and view_type != "front_portrait":
         return "16:9"
     return "9:16"
 
@@ -185,9 +185,13 @@ def _compact_visual_base_prompt(profile: dict) -> str:
     asset_kind = str(profile.get("asset_kind") or "")
     name = str(profile.get("name") or "").strip()
     if asset_kind == "character":
+        identity_base_name = _prompt_text(profile.get("identity_base_name"))
+        identity_variant_note = _prompt_text(profile.get("identity_variant_note"))
         parts = [
             "Fotorrealista, referencia de elenco",
             name,
+            f"identidade base {identity_base_name}" if identity_base_name else "",
+            f"variante {identity_variant_note}" if identity_variant_note else "",
             _clean_prompt_fragment(
                 profile.get("gender"),
                 ("personagem", "genero visual", "gênero visual"),
@@ -201,7 +205,7 @@ def _compact_visual_base_prompt(profile: dict) -> str:
             f"figurino {_clean_prompt_fragment(profile.get('base_outfit'), ('figurino', 'roupa'))}",
             f"paleta {_clean_prompt_fragment(profile.get('palette'), ('paleta',))}",
         ]
-        return _truncate_prompt_text(". ".join(part for part in parts if part), 420)
+        return _truncate_prompt_text(". ".join(part for part in parts if part), 370)
     if asset_kind == "location":
         parts = [
             "Fotorrealista, arquitetura cinematografica",

@@ -1,5 +1,6 @@
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -26,6 +27,7 @@ from app.visual_bible.service import (
     _script_location_profiles,
     _script_prop_profiles,
     _transient_image_provider_error,
+    _visual_generation_reference_uris,
     default_views_for,
     generate_visual_references,
     initial_view_for,
@@ -41,7 +43,7 @@ from app.visual_bible.service import (
 def test_default_character_views_include_required_reference_sheet_items() -> None:
     views = default_views_for("character")
 
-    assert views == ["character_reference_sheet"]
+    assert views == ["front_portrait", "character_reference_sheet"]
 
 
 def test_sourceful_502_is_treated_as_transient_image_provider_error() -> None:
@@ -141,21 +143,19 @@ async def test_image_provider_reports_missing_key_for_real_image_model(
 
 
 def test_initial_visual_reference_is_single_canonical_view() -> None:
-    assert initial_view_for("character") == "character_reference_sheet"
+    assert initial_view_for("character") == "front_portrait"
     assert initial_view_for("location") == "establishing"
-    assert initial_view_for("prop") == "prop_reference_sheet"
+    assert initial_view_for("prop") == "front"
 
     for target_kind in ["character", "location", "prop"]:
         assert initial_view_for(target_kind) in default_views_for(target_kind)
 
 
 def test_visual_reference_views_reject_invalid_values() -> None:
-    assert validated_visual_reference_views("prop", ["prop_reference_sheet"]) == [
-        "prop_reference_sheet"
-    ]
+    assert validated_visual_reference_views("prop", ["front"]) == ["front"]
 
     with pytest.raises(ValueError, match="View type invalido"):
-        validated_visual_reference_views("prop", ["front"])
+        validated_visual_reference_views("prop", ["prop_reference_sheet"])
 
 
 def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
@@ -215,7 +215,7 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     assert character["narrative_profile"]["name"] == "Clara"
     assert character["gender"] == "personagem feminino"
     assert "Genero visual obrigatorio: feminino" in character["canonical_prompt"]
-    assert "mesmo personagem em multiplas perspectivas" in character["canonical_prompt"]
+    assert "identidade consistente do personagem" in character["canonical_prompt"]
     assert "uma unica pessoa" not in character["canonical_prompt"]
     assert character["visual_profile"]["hair"] == "cabelo castanho curto"
     assert "cabelo castanho curto" in character["canonical_prompt"]
@@ -344,7 +344,40 @@ def test_character_defaults_are_distinct_by_name() -> None:
     assert "nao reutilizar roupa" in " ".join(clara["visual_constraints"])
 
 
+def test_temporal_character_versions_share_visual_identity_defaults() -> None:
+    omero = _character_profile({"name": "Omero", "role": "protagonista"})
+    future_omero = _character_profile({"name": "Futuro Omero", "role": "protagonista"})
+
+    assert omero["name"] == "Omero"
+    assert future_omero["name"] == "Futuro Omero"
+    assert omero["permanent_id"] != future_omero["permanent_id"]
+    assert omero["identity_base_name"] == "Omero"
+    assert future_omero["identity_base_name"] == "Omero"
+    assert "versao futura" in future_omero["identity_variant_note"]
+    for key in ("origin", "height_cm", "hair", "eyes", "body_type", "base_outfit", "palette"):
+        assert future_omero[key] == omero[key]
+    assert "Identidade visual base: Omero" in future_omero["canonical_prompt"]
+    assert "Variante temporal" in future_omero["canonical_prompt"]
+
+
 def test_character_initial_reference_uses_single_turnaround_sheet() -> None:
+    character = _character_profile({"name": "Dona Celia"})
+
+    prompt = visual_reference_prompt(character, "front_portrait")
+
+    assert "imagem inicial do personagem em pe" in prompt
+    assert "corpo inteiro" in prompt
+    assert "vista frontal" in prompt
+    assert "pose neutra" in prompt
+    assert "fundo cinza neutro de estudio" in prompt
+    assert "uma unica pessoa" in prompt
+    assert "nao cortar cabeca, pes ou maos" in prompt
+    assert "Proporcao: 9:16" in prompt
+    assert "Referencia de continuidade" in prompt
+    assert len(prompt) < 900
+
+
+def test_character_approved_reference_sheet_uses_multiple_perspectives() -> None:
     character = _character_profile({"name": "Dona Celia"})
 
     prompt = visual_reference_prompt(character, "character_reference_sheet")
@@ -355,7 +388,6 @@ def test_character_initial_reference_uses_single_turnaround_sheet() -> None:
     assert "perfil lateral" in prompt
     assert "corpo inteiro de costas" in prompt
     assert "uma unica imagem" in prompt
-    assert "corpo inteiro" in prompt
     assert "fundo branco puro de estudio" in prompt
     assert "nao cortar cabeca, pes ou maos" in prompt
     assert "Proporcao: 16:9" in prompt
@@ -376,6 +408,76 @@ def test_character_legacy_multi_view_prompt_is_still_supported_for_old_reference
     assert len(prompt) < 850
 
 
+@pytest.mark.asyncio
+async def test_character_generation_uses_front_and_related_identity_references() -> None:
+    project_id = uuid4()
+    target_id = uuid4()
+    related_id = uuid4()
+    current_asset_id = uuid4()
+    related_asset_id = uuid4()
+    now = datetime.now()
+    current_reference = SimpleNamespace(
+        asset_id=current_asset_id,
+        view_type="front_portrait",
+        created_at=now,
+    )
+    related_character = SimpleNamespace(
+        id=related_id,
+        canonical_profile={"identity_base_name": "Omero"},
+    )
+    related_reference = SimpleNamespace(
+        asset_id=related_asset_id,
+        view_type="front_portrait",
+        created_at=now,
+    )
+
+    class FakeScalars:
+        def __init__(self, items: list[object]) -> None:
+            self.items = items
+
+        def first(self) -> object | None:
+            return self.items[0] if self.items else None
+
+        def __iter__(self) -> Any:
+            return iter(self.items)
+
+    class FakeResult:
+        def __init__(self, items: list[object]) -> None:
+            self.items = items
+
+        def scalars(self) -> FakeScalars:
+            return FakeScalars(self.items)
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.execute_calls = 0
+
+        async def execute(self, statement: object) -> FakeResult:
+            self.execute_calls += 1
+            if self.execute_calls == 1:
+                return FakeResult([current_reference])
+            if self.execute_calls == 2:
+                return FakeResult([related_character])
+            return FakeResult([related_reference])
+
+        async def get(self, model: object, asset_id: object) -> object:
+            return SimpleNamespace(storage_uri=f"storage/ref-{asset_id}.png")
+
+    references = await _visual_generation_reference_uris(
+        FakeSession(),  # type: ignore[arg-type]
+        project_id,
+        "character",
+        target_id,
+        {"identity_base_name": "Omero"},
+        "character_reference_sheet",
+    )
+
+    assert references == [
+        f"storage/ref-{current_asset_id}.png",
+        f"storage/ref-{related_asset_id}.png",
+    ]
+
+
 def test_location_reference_prompt_forbids_people() -> None:
     location = _location_profile({"name": "Sala de estar"})
 
@@ -388,23 +490,19 @@ def test_location_reference_prompt_forbids_people() -> None:
     assert len(prompt) < 720
 
 
-def test_prop_reference_prompt_uses_single_product_sheet() -> None:
+def test_prop_reference_prompt_requires_white_background_and_object_focus() -> None:
     prop = _prop_profile({"name": "Partitura", "material": "papel envelhecido"})
 
-    prompt = visual_reference_prompt(prop, "prop_reference_sheet")
+    prompt = visual_reference_prompt(prop, "front")
 
-    assert "folha unica de referencia do objeto" in prompt
     assert "vista frontal" in prompt
-    assert "vista lateral" in prompt
-    assert "vista superior" in prompt
-    assert "detalhe ampliado de textura" in prompt
     assert "fundo branco puro" in prompt
     assert "sem pessoas" in prompt
     assert "sem maos" in prompt
     assert "sem texto" in prompt
-    assert "Proporcao: 16:9" in prompt
+    assert "Proporcao: 1:1" in prompt
     assert "detalhes legiveis" in prompt
-    assert len(prompt) < 840
+    assert len(prompt) < 700
 
 
 def test_location_floor_plan_prompt_uses_technical_top_view() -> None:
@@ -425,9 +523,8 @@ def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:
     prop = _prop_profile({"name": "Partitura"})
 
     assert visual_reference_aspect_ratio(character, "character_reference_sheet") == "16:9"
-    assert visual_reference_aspect_ratio(character, "front_portrait") == "16:9"
+    assert visual_reference_aspect_ratio(character, "front_portrait") == "9:16"
     assert visual_reference_aspect_ratio(location, "establishing") == "16:9"
-    assert visual_reference_aspect_ratio(prop, "prop_reference_sheet") == "16:9"
     assert visual_reference_aspect_ratio(prop, "front") == "1:1"
 
 

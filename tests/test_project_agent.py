@@ -607,7 +607,7 @@ async def test_visual_prompt_approval_matches_target_name_and_generates_initial_
         project_id,
         "character",
         target_id,
-        ["character_reference_sheet"],
+        ["front_portrait"],
     )
 
 

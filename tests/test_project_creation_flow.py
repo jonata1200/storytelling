@@ -441,8 +441,8 @@ def test_visual_batch_requests_include_all_missing_views() -> None:
             character_id,
             ["character_reference_sheet"],
         ),
-        ("location", location_id, ["establishing", "floor_plan", "camera_points"]),
-        ("prop", prop_id, ["prop_reference_sheet"]),
+        ("location", location_id, ["establishing"]),
+        ("prop", prop_id, ["front"]),
     ]
 
 

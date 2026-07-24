@@ -111,6 +111,49 @@ def _character_gender_guardrail(gender: object) -> str:
     return f"Genero visual obrigatorio: {_prompt_text(gender)}."
 
 
+TEMPORAL_VARIANT_NOTES = {
+    "futuro": "versao futura mais velha; preservar tracos faciais familiares",
+    "futura": "versao futura mais velha; preservar tracos faciais familiares",
+    "passado": "versao do passado mais jovem; preservar tracos faciais familiares",
+    "passada": "versao do passado mais jovem; preservar tracos faciais familiares",
+    "jovem": "versao jovem; preservar tracos faciais familiares",
+    "velho": "versao idosa; preservar tracos faciais familiares",
+    "velha": "versao idosa; preservar tracos faciais familiares",
+    "idoso": "versao idosa; preservar tracos faciais familiares",
+    "idosa": "versao idosa; preservar tracos faciais familiares",
+    "crianca": "versao crianca; preservar tracos faciais familiares",
+    "criança": "versao crianca; preservar tracos faciais familiares",
+    "menino": "versao crianca; preservar tracos faciais familiares",
+    "menina": "versao crianca; preservar tracos faciais familiares",
+    "adolescente": "versao adolescente; preservar tracos faciais familiares",
+}
+
+
+def _character_identity_base(name: str) -> tuple[str, str]:
+    text = re.sub(r"\s+", " ", str(name or "")).strip()
+    if not text:
+        return "Personagem", ""
+
+    normalized = _ascii_lower(text)
+    matched_note = ""
+    for token, note in TEMPORAL_VARIANT_NOTES.items():
+        if re.search(rf"\b{re.escape(_ascii_lower(token))}\b", normalized):
+            matched_note = note
+            break
+
+    temporal_terms = "|".join(re.escape(term) for term in TEMPORAL_VARIANT_NOTES)
+    base = re.sub(rf"(?i)^\s*(?:{temporal_terms})\s+", "", text).strip()
+    base = re.sub(rf"(?i)\s+(?:{temporal_terms})\s*$", "", base).strip()
+    base = re.sub(r"(?i)\s+(?:do|da|de)\s+futuro\s*$", "", base).strip()
+    base = re.sub(r"\s+", " ", base).strip(" .:-")
+    if not base:
+        base = text
+        matched_note = ""
+    if base == text:
+        matched_note = ""
+    return base, matched_note
+
+
 def _character_visual_defaults(name: str) -> dict[str, object]:
     outfit_layers = [
         "casaco de linho verde musgo sobre camisa creme amarrotada",
@@ -177,7 +220,8 @@ def _character_visual_defaults(name: str) -> dict[str, object]:
 def _character_profile(raw: object) -> dict:
     raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Personagem")
-    defaults = _character_visual_defaults(name)
+    identity_base_name, identity_variant_note = _character_identity_base(name)
+    defaults = _character_visual_defaults(identity_base_name)
     role = _short_text(_first_value(raw, "role", "funcao", "função"), "personagem", 120)
     gender = _character_gender(
         _first_value(raw, "gender", "genero", "sexo", fallback=""),
@@ -189,7 +233,11 @@ def _character_profile(raw: object) -> dict:
         raw, "height_cm", "altura_cm", "altura", fallback=defaults["height_cm"]
     )
     apparent_age = _first_value(
-        raw, "apparent_age", "idade_aparente", "idade", fallback="adulto de idade visual definida"
+        raw,
+        "apparent_age",
+        "idade_aparente",
+        "idade",
+        fallback=identity_variant_note or "adulto de idade visual definida",
     )
     body_type = _first_value(
         raw, "body_type", "tipo_fisico", "corpo", fallback=defaults["body_type"]
@@ -241,6 +289,8 @@ def _character_profile(raw: object) -> dict:
     return {
         "permanent_id": raw.get("id", f"char_{hashlib.sha1(name.encode()).hexdigest()[:8]}"),
         "name": name,
+        "identity_base_name": identity_base_name,
+        "identity_variant_note": identity_variant_note,
         "role": role,
         "gender": gender,
         "origin": origin,
@@ -264,10 +314,12 @@ def _character_profile(raw: object) -> dict:
             "manter cabelo",
             "manter figurino base exclusivo deste personagem",
             "nao reutilizar roupa de outro personagem",
+            "preservar identidade visual base em versoes temporais do mesmo personagem",
         ],
         "canonical_prompt": (
-            "Fotorrealista, referencia de elenco, mesmo personagem em multiplas "
-            "perspectivas na mesma imagem de referencia. "
+            "Fotorrealista, referencia de elenco, identidade consistente do personagem. "
+            f"Identidade visual base: {identity_base_name}. "
+            f"{f'Variante temporal: {identity_variant_note}. ' if identity_variant_note else ''}"
             f"{_character_gender_guardrail(gender)} "
             f"{name}, {_prompt_text(origin)}, {_prompt_text(apparent_age)}, "
             f"{_prompt_text(body_type)}, {_prompt_text(height_cm)}cm. "
