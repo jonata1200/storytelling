@@ -53,8 +53,8 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
     }
 
     assert '"content":"ROTEIRO CINEMATOGRAFICO COMPLETO AQUI"' in compiled["generate_script"]
-    assert '"production_plan"' in compiled["generate_script"]
-    assert "Seedance 2.0 Fast" in compiled["generate_script"]
+    assert '"production_plan"' not in compiled["generate_script"]
+    assert "Escreva somente o roteiro cinematografico" in compiled["generate_script"]
     assert "FADE IN:" in compiled["generate_script"]
     assert "slugline" in compiled["generate_script"]
     assert "Nao use listas tecnicas" in compiled["generate_script"]

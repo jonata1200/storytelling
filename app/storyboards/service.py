@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.assets.models import Asset, AssetVersion
 from app.config.model_policy import ensure_openrouter_api_key
@@ -93,10 +94,16 @@ async def _add_dependency(session: AsyncSession, upstream: UUID, downstream: UUI
 async def _ordered_shots_for_script(
     session: AsyncSession, project_id: UUID, script_id: UUID
 ) -> list[tuple[Shot, Scene]]:
+    scene_artifact = aliased(Artifact)
+    shot_artifact = aliased(Artifact)
     result = await session.execute(
         select(Shot, Scene)
         .join(Scene, Shot.scene_id == Scene.id)
+        .join(scene_artifact, scene_artifact.id == Scene.artifact_id)
+        .join(shot_artifact, shot_artifact.id == Shot.artifact_id)
         .where(Shot.project_id == project_id, Scene.script_id == script_id)
+        .where(scene_artifact.status != ArtifactStatus.STALE)
+        .where(shot_artifact.status != ArtifactStatus.STALE)
         .order_by(Scene.scene_number, Shot.shot_number)
     )
     return [(row[0], row[1]) for row in result.all()]

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import ArtifactStatus, ArtifactType, DependencyKind, ProjectStatus
 from app.generation.model_settings import llm_provider_for_task
 from app.generation.service import run_structured_generation
-from app.projects.models import Artifact, ArtifactVersion
+from app.projects.models import Artifact, ArtifactVersion, Project
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
 from app.storytelling.models import (
@@ -34,6 +34,7 @@ from app.storytelling.normalization import (
     normalize_scene_plan_payload_from_script,
     normalize_script_payload,
     normalize_story_idea_payload,
+    scene_plan_payload_from_script_content,
 )
 from app.storytelling.normalization import (
     _fallback_script_content_from_bible as _fallback_script_content_from_bible,
@@ -71,7 +72,14 @@ from app.video_generation.durations import (
     video_clip_durations,
 )
 from app.workflows.models import ArtifactDependency
-from app.workflows.state_machine import advance_project_status
+from app.workflows.state_machine import WorkflowStateError, advance_project_status
+
+
+def _advance_project_status_when_reachable(project: Project, target: ProjectStatus) -> None:
+    try:
+        advance_project_status(project, target)
+    except WorkflowStateError:
+        return
 
 
 async def _create_artifact(
@@ -389,7 +397,7 @@ async def generate_script(
             variables["retry_guidance"] = (
                 "A resposta anterior foi recusada porque nao seguiu o formato exigido: "
                 f"{exc}. Reescreva mantendo content como roteiro de filme limpo e "
-                "production_plan separado."
+                "sem plano tecnico ou lista de shots."
             )
     if payload is None:
         if last_error is not None:
@@ -425,7 +433,7 @@ async def generate_script(
             payload=payload,
         )
     )
-    advance_project_status(project, ProjectStatus.SCRIPT_APPROVAL)
+    _advance_project_status_when_reachable(project, ProjectStatus.SCRIPT_APPROVAL)
     await session.commit()
     await session.refresh(script)
     return script
@@ -515,7 +523,7 @@ async def revise_script(
         )
     )
     execution.response = result.content
-    advance_project_status(project, ProjectStatus.SCRIPT_APPROVAL)
+    _advance_project_status_when_reachable(project, ProjectStatus.SCRIPT_APPROVAL)
     await session.commit()
     await session.refresh(script)
     return script
@@ -559,31 +567,38 @@ async def generate_scenes_and_shots(
         except GenerationOutputError:
             embedded_plan = None
     if embedded_plan is None:
-        provider, model = await llm_provider_for_task(
-            session, project_id, "generate_scenes_and_shots"
-        )
-        result, _execution = await run_structured_generation(
-            session,
-            provider,
-            project_id,
-            "generate_scenes_and_shots",
-            {
-                "script": script.content,
-                "target_duration_seconds": script.target_duration_seconds,
-                "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
-                "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
-                "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
-                "expected_clip_count": len(clip_durations),
-                "clip_durations": format_clip_durations(clip_durations),
-            },
-            model=model,
-            fallback_on_runtime_error=True,
-        )
-        content = normalize_scene_plan_payload_from_script(
-            _required_mapping(result.content, "generate_scenes_and_shots"),
-            script.target_duration_seconds,
+        local_plan = scene_plan_payload_from_script_content(
             script.content,
+            script.target_duration_seconds,
         )
+        if local_plan is not None:
+            content = local_plan
+        else:
+            provider, model = await llm_provider_for_task(
+                session, project_id, "generate_scenes_and_shots"
+            )
+            result, _execution = await run_structured_generation(
+                session,
+                provider,
+                project_id,
+                "generate_scenes_and_shots",
+                {
+                    "script": script.content,
+                    "target_duration_seconds": script.target_duration_seconds,
+                    "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
+                    "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
+                    "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
+                    "expected_clip_count": len(clip_durations),
+                    "clip_durations": format_clip_durations(clip_durations),
+                },
+                model=model,
+                fallback_on_runtime_error=True,
+            )
+            content = normalize_scene_plan_payload_from_script(
+                _required_mapping(result.content, "generate_scenes_and_shots"),
+                script.target_duration_seconds,
+                script.content,
+            )
     for scene_index, raw_scene_payload in enumerate(
         _required_list(content, "scenes", "generate_scenes_and_shots"), 1
     ):
@@ -663,8 +678,47 @@ async def generate_scenes_and_shots(
                 )
             )
         scenes.append(scene)
-    advance_project_status(project, ProjectStatus.VISUAL_BIBLE_GENERATION)
+    _advance_project_status_when_reachable(project, ProjectStatus.VISUAL_BIBLE_GENERATION)
     await session.commit()
     for scene in scenes:
         await session.refresh(scene)
     return scenes
+
+
+async def _mark_existing_scene_plan_stale(
+    session: AsyncSession, project_id: UUID, script_id: UUID
+) -> None:
+    scene_result = await session.execute(
+        select(Scene).where(Scene.project_id == project_id, Scene.script_id == script_id)
+    )
+    existing_scenes = list(scene_result.scalars())
+    if not existing_scenes:
+        return
+
+    shot_result = await session.execute(
+        select(Shot)
+        .join(Scene, Shot.scene_id == Scene.id)
+        .where(Shot.project_id == project_id, Scene.script_id == script_id)
+    )
+    existing_shots = list(shot_result.scalars())
+    stale_artifact_ids = {scene.artifact_id for scene in existing_scenes}
+    stale_artifact_ids.update(shot.artifact_id for shot in existing_shots)
+    if not stale_artifact_ids:
+        return
+
+    artifact_result = await session.execute(
+        select(Artifact).where(
+            Artifact.project_id == project_id,
+            Artifact.id.in_(stale_artifact_ids),
+        )
+    )
+    for artifact in artifact_result.scalars():
+        artifact.status = ArtifactStatus.STALE
+    await session.flush()
+
+
+async def regenerate_scenes_and_shots(
+    session: AsyncSession, project_id: UUID, script_id: UUID
+) -> list[Scene] | None:
+    await _mark_existing_scene_plan_stale(session, project_id, script_id)
+    return await generate_scenes_and_shots(session, project_id, script_id)

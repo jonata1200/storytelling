@@ -24,6 +24,7 @@ from app.storytelling.service import (
     normalize_script_payload,
     normalize_story_bible_payload,
     normalize_story_idea_payload,
+    scene_plan_payload_from_script_content,
     screenplay_validation_errors,
     story_bible_validation_errors,
     story_idea_validation_errors,
@@ -959,6 +960,39 @@ FADE OUT.
     assert "CENA 02\nEXT. QUINTAL - NOITE" in payload["content"]
 
 
+def test_script_payload_normalizes_inline_scene_heading_from_model_response() -> None:
+    payload = normalize_script_payload(
+        {
+            "title": "O Relampago de Papel",
+            "content": """
+FADE IN:
+
+CENA 1 - INT. QUARTO DE IAN - NOITE
+
+Chuva forte. IAN desenha um cavalo no caderno.
+
+IAN
+(sussurrando)
+Não acredito...
+
+CENA 2 - EXT. ESCOLA - DIA
+
+Ian tenta brincar com colegas, mas o passaro de fogo assusta as criancas.
+
+FADE OUT.
+""",
+        },
+        default_title="O Relampago de Papel",
+        language="pt-BR",
+        target_duration_seconds=300,
+    )
+
+    assert "CENA 01\nINT. QUARTO DE IAN - NOITE" in payload["content"]
+    assert "CENA 02\nEXT. ESCOLA - DIA" in payload["content"]
+    assert "INT. CENA 1 - DIA" not in payload["content"]
+    assert "FADE IN: CENA 1" not in payload["content"]
+
+
 def test_screenplay_validator_rejects_technical_planning_document() -> None:
     errors = screenplay_validation_errors(
         """
@@ -974,6 +1008,27 @@ Indicacao para video: push-in lento.
     assert "faltou FADE IN" in errors
     assert "faltou slugline INT./EXT." in errors
     assert "conteudo contem rotulos tecnicos" in errors
+
+
+def test_screenplay_validator_rejects_scene_and_slugline_on_same_line() -> None:
+    errors = screenplay_validation_errors(
+        """
+FADE IN:
+
+CENA 01
+INT. SALA - DIA
+
+Clara encontra a carta.
+
+CENA 2 - EXT. QUINTAL - NOITE
+
+Clara encara a janela acesa.
+
+FADE OUT.
+"""
+    )
+
+    assert "cenas e sluglines precisam ficar em linhas separadas" in errors
 
 
 def test_story_idea_db_text_truncates_long_protagonist_for_varchar_column() -> None:
@@ -1117,6 +1172,33 @@ OBJETIVO: Revelar o segredo.
     assert [scene["title"] for scene in payload["scenes"]] == [
         "INT. SALA DE ESTAR - FINAL DE TARDE",
         "EXT. QUINTAL - NOITE",
+    ]
+
+
+def test_scene_plan_payload_can_be_derived_from_structured_script_without_llm() -> None:
+    script = """TITULO: O Relampago de Papel
+
+FADE IN:
+
+CENA 01
+INT. QUARTO DE IAN - NOITE
+
+Ian desenha um cavalo no caderno enquanto a chuva bate na janela.
+
+CENA 02
+EXT. ESCOLA - DIA
+
+Ian tenta brincar com colegas, mas o passaro de fogo assusta as criancas.
+
+FADE OUT.
+"""
+
+    payload = scene_plan_payload_from_script_content(script, 120)
+
+    assert payload is not None
+    assert [scene["title"] for scene in payload["scenes"]] == [
+        "INT. QUARTO DE IAN - NOITE",
+        "EXT. ESCOLA - DIA",
     ]
     assert sum(scene["duration_seconds"] for scene in payload["scenes"]) == 120
     assert all(

@@ -21,7 +21,11 @@ from app.config.settings import get_settings
 from app.core.enums import ProjectStatus
 from app.projects.models import Project
 from app.storytelling.idea_lab import load_generated_ideas
-from app.storytelling.service import GenerationOutputError, _required_list
+from app.storytelling.service import (
+    GenerationOutputError,
+    _advance_project_status_when_reachable,
+    _required_list,
+)
 from app.video_generation.schemas import GenerateVideoClipsRequest
 from app.workflows.state_machine import advance_project_status
 
@@ -249,3 +253,11 @@ def test_project_status_advances_only_through_valid_transitions() -> None:
 
     with pytest.raises(ValueError, match="Cannot advance"):
         advance_project_status(project, ProjectStatus.IDEA_GENERATION)
+
+
+def test_script_regeneration_does_not_move_advanced_project_backwards() -> None:
+    project = Project(title="Test", status=ProjectStatus.VISUAL_BIBLE_GENERATION)
+
+    _advance_project_status_when_reachable(project, ProjectStatus.SCRIPT_APPROVAL)
+
+    assert project.status == ProjectStatus.VISUAL_BIBLE_GENERATION

@@ -1,4 +1,5 @@
-﻿from collections.abc import Awaitable, Callable
+﻿import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 from uuid import UUID
@@ -19,6 +20,7 @@ from app.generation.model_settings import llm_provider_for_task
 from app.generation.service import run_structured_generation
 from app.projects.models import Artifact
 from app.projects.repository import ProjectRepository
+from app.projects.versioning import mark_dependents_stale
 from app.quality.models import ContinuityIssue, QualityCheck
 from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
@@ -28,6 +30,7 @@ from app.storytelling.service import (
     generate_scenes_and_shots,
     generate_script,
     generate_story_ideas,
+    regenerate_scenes_and_shots,
     revise_script,
 )
 from app.video_generation.models import VideoClip
@@ -111,6 +114,42 @@ def _is_visual_reference_gate_message(message: str) -> bool:
     return message.startswith("Conclua a Biblioteca Visual")
 
 
+def _requests_specific_script_scenes(message: str) -> bool:
+    normalized = _normalize_match_text(message)
+    return bool(
+        any(term in normalized for term in ("cena", "cenas", "scene", "scenes"))
+        and re.search(r"\b(?:cena|cenas|scene|scenes)\s+\d+", normalized)
+    )
+
+
+def _requests_full_script_regeneration(message: str) -> bool:
+    normalized = _normalize_match_text(message)
+    if not any(term in normalized for term in ("roteiro", "script")):
+        return False
+    if _requests_specific_script_scenes(message):
+        return False
+    full_terms = (
+        "roteiro completo",
+        "roteiro inteiro",
+        "roteiro todo",
+        "todo o roteiro",
+        "script completo",
+        "script inteiro",
+        "do zero",
+        "novo roteiro",
+        "roteiro novo",
+        "nova versao",
+        "nova versão",
+        "gerar novamente",
+        "gere novamente",
+        "regenerar",
+        "refazer tudo",
+        "refaca tudo",
+        "reescrever tudo",
+    )
+    return any(term in normalized for term in full_terms)
+
+
 ACTION_PROGRESS_MESSAGES: dict[ProjectChatAction, str] = {
     "generate_ideas": "Criando ideias.",
     "generate_script": "Criando roteiro.",
@@ -160,6 +199,22 @@ async def _latest_many(
 async def _count(session: AsyncSession, model: type[Any], project_id: UUID) -> int:
     value = await session.scalar(
         select(func.count()).select_from(model).where(model.project_id == project_id)
+    )
+    return int(value or 0)
+
+
+async def _active_scene_count_for_script(
+    session: AsyncSession, project_id: UUID, script_id: UUID
+) -> int:
+    value = await session.scalar(
+        select(func.count())
+        .select_from(Scene)
+        .join(Artifact, Artifact.id == Scene.artifact_id)
+        .where(
+            Scene.project_id == project_id,
+            Scene.script_id == script_id,
+            Artifact.status != ArtifactStatus.STALE,
+        )
     )
     return int(value or 0)
 
@@ -369,6 +424,8 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
 
     if _requests_visual_prompt_approval(message):
         return "approve_visual_prompt"
+    if _requests_full_script_regeneration(message):
+        return "generate_script"
     if actionable and any(term in normalized for term in quality_terms):
         return "run_quality"
     if actionable and any(term in normalized for term in finalization_terms):
@@ -600,14 +657,15 @@ async def _ensure_script_pipeline(
     session: AsyncSession,
     project_id: UUID,
     progress: ProgressCallback | None = None,
+    force: bool = False,
 ) -> tuple[Script | None, str, bool]:
     briefing = await _latest(session, Briefing, project_id)
     if briefing is None:
         return None, "Este projeto ainda nao tem briefing para orientar o roteiro.", False
 
     script = await _latest(session, Script, project_id)
-    if script is not None:
-        scene_count = await _count(session, Scene, project_id)
+    if script is not None and not force:
+        scene_count = await _active_scene_count_for_script(session, project_id, script.id)
         if scene_count == 0:
             await _emit_progress(progress, "O roteiro ja existe. Vou dividir em cenas e planos.")
             scenes = await generate_scenes_and_shots(session, project_id, script.id)
@@ -624,10 +682,18 @@ async def _ensure_script_pipeline(
             return None, "Não consegui gerar uma ideia base para este projeto.", False
         idea = ideas[0]
 
-    await _emit_progress(
-        progress,
-        "Vou escrever o roteiro cinematografico a partir da ideia aprovada.",
-    )
+    if script is not None and force:
+        await _emit_progress(
+            progress,
+            "Vou gerar novamente o roteiro completo e atualizar as cenas derivadas.",
+        )
+        await mark_dependents_stale(session, {script.artifact_id})
+    else:
+        await _emit_progress(
+            progress,
+            "Vou escrever o roteiro cinematografico a partir da ideia aprovada.",
+        )
+
     script = await generate_script(session, project_id, idea.id)
     if script is None:
         return None, "Não consegui gerar o roteiro para este projeto.", False
@@ -635,6 +701,8 @@ async def _ensure_script_pipeline(
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
         return script, "Roteiro criado, mas as cenas e planos não foram gerados.", True
+    if force:
+        return script, "Roteiro completo gerado novamente e dividido em cenas e planos.", True
     return script, "Roteiro criado e dividido em cenas e planos.", True
 
 
@@ -916,14 +984,14 @@ async def handle_project_chat(
         if ai_intent.action != "chat":
             intent = ai_intent
     action = intent.action
-    force = _requests_regeneration(message)
+    force = _requests_regeneration(message) or _requests_full_script_regeneration(message)
     await _emit_progress(progress, ACTION_PROGRESS_MESSAGES[action])
 
     if action == "generate_ideas":
         return await _ensure_ideas_pipeline(session, project_id, progress=progress)
     if action == "generate_script":
         _script, result_message, changed = await _ensure_script_pipeline(
-            session, project_id, progress
+            session, project_id, progress, force=force
         )
         return ProjectChatResult(
             result_message,
@@ -950,7 +1018,26 @@ async def handle_project_chat(
                 changed,
                 True,
             )
-        return ProjectChatResult("Roteiro revisado e nova versao salva no projeto.", action, True)
+        await _emit_progress(progress, "Vou recriar cenas e planos a partir do roteiro revisado.")
+        scenes = await regenerate_scenes_and_shots(session, project_id, revised.id)
+        if scenes is None:
+            return ProjectChatResult(
+                "Roteiro revisado, mas não consegui recriar cenas e planos.",
+                action,
+                True,
+                True,
+            )
+        if _requests_specific_script_scenes(message):
+            return ProjectChatResult(
+                "Cena(s) revisada(s) e cenas/planos recriados para o roteiro atual.",
+                action,
+                True,
+            )
+        return ProjectChatResult(
+            "Roteiro revisado e cenas/planos recriados para o projeto.",
+            action,
+            True,
+        )
     if action == "generate_assets":
         return await _ensure_visual_pipeline(
             session, project_id, force=force, progress=progress

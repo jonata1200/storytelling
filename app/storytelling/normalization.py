@@ -199,6 +199,10 @@ SCREENPLAY_HEADING_RE = re.compile(
     r"(?i)^\s*(?P<kind>INT|EXT|INT/EXT|EXT/INT)\.\s+"
     r"(?P<location>.+?)(?:\s*-\s*(?P<period>[^-\n]+))?\s*$"
 )
+INLINE_SCENE_HEADING_RE = re.compile(
+    r"(?im)^\s*CENA\s+0*(?P<number>\d+)\s*[-:]\s*"
+    r"(?P<heading>(?:INT|EXT|INT/EXT|EXT/INT)\.\s+.+?)\s*$"
+)
 
 
 def _looks_like_screenplay(content: str) -> bool:
@@ -234,6 +238,15 @@ def _ensure_screenplay_scene_markers(content: str) -> str:
     return "\n".join(repaired).strip()
 
 
+def _normalize_inline_scene_headings(content: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        scene_number = int(match.group("number"))
+        heading = match.group("heading").strip()
+        return f"CENA {scene_number:02d}\n{heading}"
+
+    return INLINE_SCENE_HEADING_RE.sub(replace, str(content or "").strip())
+
+
 def screenplay_validation_errors(content: str) -> list[str]:
     text = str(content or "").strip()
     errors: list[str] = []
@@ -247,6 +260,8 @@ def screenplay_validation_errors(content: str) -> list[str]:
         errors.append("faltou slugline INT./EXT.")
     if SCRIPT_TECHNICAL_LABEL_RE.search(text):
         errors.append("conteudo contem rotulos tecnicos")
+    if re.search(r"(?i)\bCENA\s+\d+\s*[-:]\s*(?:INT|EXT|INT/EXT|EXT/INT)\.", text):
+        errors.append("cenas e sluglines precisam ficar em linhas separadas")
     if len(text.split()) < 12:
         errors.append("conteudo curto demais para roteiro")
     return errors
@@ -421,6 +436,7 @@ def _script_content_from_payload(
         or payload.get("texto")
     )
     if text := _script_block_to_text(direct_content):
+        text = _normalize_inline_scene_headings(text)
         if _looks_like_screenplay(text):
             return _ensure_screenplay_scene_markers(text)
 
@@ -444,6 +460,7 @@ def _script_content_from_payload(
                 target_duration_seconds=target_duration_seconds,
             )
         if value and (text := _script_block_to_text(value)):
+            text = _normalize_inline_scene_headings(text)
             if _looks_like_screenplay(text):
                 return _ensure_screenplay_scene_markers(text)
     if text := _script_block_to_text(direct_content):
@@ -917,6 +934,15 @@ def _scene_plan_from_script_sections(
             }
         )
     return {"scenes": scenes}
+
+
+def scene_plan_payload_from_script_content(
+    script_content: str, target_duration_seconds: int
+) -> dict | None:
+    sections = _script_scene_sections(script_content)
+    if not sections:
+        return None
+    return _scene_plan_from_script_sections(sections, target_duration_seconds)
 
 
 def normalize_scene_plan_payload(payload: dict, target_duration_seconds: int) -> dict:

@@ -31,6 +31,12 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("melhore o gancho do roteiro", "script") == (
         "revise_script"
     )
+    assert classify_project_chat_action("gere novamente o roteiro completo", "script") == (
+        "generate_script"
+    )
+    assert classify_project_chat_action("reescreva somente a cena 3", "script") == (
+        "revise_script"
+    )
     assert classify_project_chat_action("ajuste o ritmo e a camera", "video") == (
         "generate_video"
     )
@@ -79,9 +85,16 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
         assert "melhore" in args[3]
         return SimpleNamespace(id=script_id)
 
+    async def fake_regenerate_scenes(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
+        calls.append("regenerate_scenes")
+        assert args[1] == project_id
+        assert args[2] == script_id
+        return [SimpleNamespace(id=uuid4())]
+
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
     monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
+    monkeypatch.setattr(project_agent, "regenerate_scenes_and_shots", fake_regenerate_scenes)
 
     result = await handle_project_chat(
         cast(AsyncSession, object()),
@@ -92,11 +105,106 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
     )
 
     assert result == ProjectChatResult(
-        "Roteiro revisado e nova versao salva no projeto.",
+        "Roteiro revisado e cenas/planos recriados para o projeto.",
         "revise_script",
         True,
     )
-    assert calls == ["ensure_script", "revise"]
+    assert calls == ["ensure_script", "revise", "regenerate_scenes"]
+
+
+@pytest.mark.asyncio
+async def test_project_chat_can_revise_specific_script_scenes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    calls: list[str] = []
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        assert requested_project_id == project_id
+        return {"project": {"title": "Teste"}}
+
+    async def fake_ensure_script(
+        session: AsyncSession, requested_project_id: Any, progress: Any = None
+    ) -> tuple[SimpleNamespace, str, bool]:
+        calls.append("ensure_script")
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=script_id), "pronto", False
+
+    async def fake_revise_script(*args: Any, **kwargs: Any) -> SimpleNamespace:
+        calls.append("revise")
+        assert args[2] == script_id
+        assert "cena 3" in args[3]
+        return SimpleNamespace(id=script_id)
+
+    async def fake_regenerate_scenes(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
+        calls.append("regenerate_scenes")
+        assert args[2] == script_id
+        return [SimpleNamespace(id=uuid4())]
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
+    monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
+    monkeypatch.setattr(project_agent, "regenerate_scenes_and_shots", fake_regenerate_scenes)
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "script",
+        "reescreva somente a cena 3 com mais tensão",
+        [],
+    )
+
+    assert result == ProjectChatResult(
+        "Cena(s) revisada(s) e cenas/planos recriados para o roteiro atual.",
+        "revise_script",
+        True,
+    )
+    assert calls == ["ensure_script", "revise", "regenerate_scenes"]
+
+
+@pytest.mark.asyncio
+async def test_project_chat_can_force_full_script_regeneration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    captured_force: list[bool] = []
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        assert requested_project_id == project_id
+        return {"counts": {"scripts": 1, "scenes": 4, "shots": 12}}
+
+    async def fake_ensure_script(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+        force: bool = False,
+    ) -> tuple[SimpleNamespace, str, bool]:
+        assert requested_project_id == project_id
+        captured_force.append(force)
+        return (
+            SimpleNamespace(id=uuid4()),
+            "Roteiro completo gerado novamente e dividido em cenas e planos.",
+            True,
+        )
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "script",
+        "gere novamente o roteiro completo",
+        [],
+    )
+
+    assert result == ProjectChatResult(
+        "Roteiro completo gerado novamente e dividido em cenas e planos.",
+        "generate_script",
+        True,
+    )
+    assert captured_force == [True]
 
 
 @pytest.mark.asyncio
@@ -365,9 +473,11 @@ async def test_project_chat_routes_script_finalization_and_quality(
         session: AsyncSession,
         requested_project_id: Any,
         progress: Any = None,
+        force: bool = False,
     ) -> tuple[SimpleNamespace, str, bool]:
         calls.append("script")
         assert requested_project_id == project_id
+        assert force is False
         return SimpleNamespace(id=uuid4()), "script ok", True
 
     async def fake_finalization(
@@ -570,9 +680,11 @@ async def test_project_chat_reports_progress(
         session: AsyncSession,
         requested_project_id: Any,
         progress: Any = None,
+        force: bool = False,
     ) -> tuple[SimpleNamespace, str, bool]:
         if progress is not None:
             await progress("Vou escrever o roteiro.")
+        assert force is False
         return SimpleNamespace(id=uuid4()), "Roteiro criado.", True
 
     async def collect_progress(message: str) -> None:

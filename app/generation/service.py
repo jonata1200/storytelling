@@ -89,26 +89,13 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "'personagens', 'local', 'duracao', 'storyboard', 'video', 'camera' ou "
         "'objetos narrativos' como campos aparentes dentro de content. A informacao "
         "deve aparecer naturalmente em acao, imagem e dialogo. "
-        "A etapa de video usa Seedance 2.0 Fast, portanto os planos finais serao "
-        "clipes independentes de {clip_min_seconds}s a {clip_max_seconds}s, com alvo "
-        "pratico de {clip_target_seconds}s por clipe. Escreva o roteiro para sustentar "
-        "aproximadamente {expected_clip_count} clipes, sem tentar colocar um plano unico "
-        "mais longo que esse limite. "
-        "Tambem retorne production_plan separado do roteiro, com cenas e planos tecnicos "
-        "derivados diretamente do roteiro para uso interno. Esse plano deve seguir "
-        "exatamente {expected_clip_count} planos com duracoes nesta ordem: "
-        "{clip_durations}. Cada plano deve conter acao visual, emocao, composicao "
-        "vertical, movimento de camera e texto de narracao ou dialogo quando houver. "
-        "Nao misture production_plan dentro de content. {retry_guidance}"
+        "Escreva somente o roteiro cinematografico. Nao retorne plano tecnico, "
+        "production_plan, lista de shots, storyboard, camera_movement ou campos de video; "
+        "a decupagem tecnica sera derivada em outra etapa. {retry_guidance}"
         "Responda somente JSON valido, sem markdown e sem texto fora do objeto, neste "
         "formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
-        '"word_count":650,"content":"ROTEIRO CINEMATOGRAFICO COMPLETO AQUI",'
-        '"production_plan":{{"scenes":[{{"scene_number":1,"title":"...",'
-        '"summary":"...","duration_seconds":45,"shots":[{{"shot_number":1,'
-        '"duration_seconds":15,"narration_text":"...","dialogue_text":"",'
-        '"action":"...","emotion":"...","visual_composition":"...",'
-        '"camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}}]}}]}}}}'
+        '"word_count":650,"content":"ROTEIRO CINEMATOGRAFICO COMPLETO AQUI"}}'
     ),
     "generate_scenes_and_shots": (
         "Divida o roteiro em {script} em cenas e planos prontos para geracao de video "
@@ -137,6 +124,10 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "mantendo a duracao alvo de "
         "{target_duration_seconds}s. Pedido do usuario: {instruction}. "
         "Contexto do projeto: {project_context}. Roteiro atual: {current_script}. "
+        "Se o pedido citar cenas especificas por numero, reescreva somente essas cenas "
+        "e preserve as demais cenas com o mesmo conteudo, ordem e numeracao. Se o pedido "
+        "solicitar roteiro completo, nova versao ou reescrita geral, reescreva o roteiro "
+        "inteiro mantendo o contrato narrativo do projeto. "
         "Mantenha formato cinematografico de filme, nao ficha tecnica: FADE IN:, "
         "cenas numeradas, sluglines INT./EXT. em caixa alta sem duracao, "
         "acao filmavel no presente, primeira aparicao de personagem em caixa alta, "
