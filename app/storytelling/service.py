@@ -74,6 +74,8 @@ from app.video_generation.durations import (
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import WorkflowStateError, advance_project_status
 
+SCRIPT_GENERATION_MAX_ATTEMPTS = 3
+
 
 def _advance_project_status_when_reachable(project: Project, target: ProjectStatus) -> None:
     try:
@@ -262,7 +264,7 @@ async def generate_story_ideas(session: AsyncSession, project_id: UUID) -> list[
     provider, model = await llm_provider_for_task(session, project_id, "generate_story_ideas")
     normalized_items: list[dict] | None = None
     last_error: GenerationOutputError | None = None
-    for attempt in range(2):
+    for attempt in range(SCRIPT_GENERATION_MAX_ATTEMPTS):
         result, execution = await run_structured_generation(
             session,
             provider,
@@ -392,12 +394,13 @@ async def generate_script(
             break
         except GenerationOutputError as exc:
             last_error = exc
-            if attempt == 1:
+            if attempt == SCRIPT_GENERATION_MAX_ATTEMPTS - 1:
                 break
             variables["retry_guidance"] = (
                 "A resposta anterior foi recusada porque nao seguiu o formato exigido: "
                 f"{exc}. Reescreva mantendo content como roteiro de filme limpo e "
-                "sem plano tecnico ou lista de shots."
+                "sem plano tecnico, lista de shots, cenas compactadas em paragrafos ou "
+                "sluglines numeradas como '1. INT.'."
             )
     if payload is None:
         if last_error is not None:
@@ -470,7 +473,7 @@ async def revise_script(
     provider, model = await llm_provider_for_task(session, project_id, "revise_script")
     payload: dict | None = None
     execution = None
-    for attempt in range(2):
+    for attempt in range(SCRIPT_GENERATION_MAX_ATTEMPTS):
         result, execution = await run_structured_generation(
             session,
             provider,
@@ -490,11 +493,12 @@ async def revise_script(
             )
             break
         except GenerationOutputError as exc:
-            if attempt == 1:
+            if attempt == SCRIPT_GENERATION_MAX_ATTEMPTS - 1:
                 break
             variables["retry_guidance"] = (
                 "A resposta anterior foi recusada porque nao seguiu o formato exigido: "
-                f"{exc}. Reescreva mantendo apenas roteiro de filme em content."
+                f"{exc}. Reescreva mantendo apenas roteiro de filme em content, com "
+                "FADE IN, CENA, slugline, acao e dialogo em linhas separadas."
             )
     if payload is None or execution is None:
         return None

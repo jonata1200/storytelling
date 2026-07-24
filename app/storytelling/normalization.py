@@ -203,6 +203,14 @@ INLINE_SCENE_HEADING_RE = re.compile(
     r"(?im)^\s*CENA\s+0*(?P<number>\d+)\s*[-:]\s*"
     r"(?P<heading>(?:INT|EXT|INT/EXT|EXT/INT)\.\s+.+?)\s*$"
 )
+INLINE_NUMBERED_SLUGLINE_RE = re.compile(
+    r"(?i)(?<!CENA\s)\b\d{1,2}\.\s*(?:INT|EXT|INT/EXT|EXT/INT)\."
+)
+PLACEHOLDER_SCENE_SLUGLINE_RE = re.compile(
+    r"(?im)^\s*(?:INT|EXT|INT/EXT|EXT/INT)\.\s*CENA\s+\d+\s*-\s*"
+    r"(?:DIA|NOITE|MANHA|MANHÃ|TARDE|MADRUGADA|AMANHECER)\s*$"
+)
+FADE_IN_WITH_INLINE_TEXT_RE = re.compile(r"(?im)^\s*FADE IN\s*:?[^\S\r\n]+\S")
 
 
 def _looks_like_screenplay(content: str) -> bool:
@@ -262,6 +270,12 @@ def screenplay_validation_errors(content: str) -> list[str]:
         errors.append("conteudo contem rotulos tecnicos")
     if re.search(r"(?i)\bCENA\s+\d+\s*[-:]\s*(?:INT|EXT|INT/EXT|EXT/INT)\.", text):
         errors.append("cenas e sluglines precisam ficar em linhas separadas")
+    if FADE_IN_WITH_INLINE_TEXT_RE.search(text):
+        errors.append("FADE IN precisa ficar em linha propria")
+    if INLINE_NUMBERED_SLUGLINE_RE.search(text):
+        errors.append("sluglines numeradas nao podem ficar dentro de paragrafos")
+    if PLACEHOLDER_SCENE_SLUGLINE_RE.search(text):
+        errors.append("slugline generica INT. CENA precisa ser substituida por local real")
     if len(text.split()) < 12:
         errors.append("conteudo curto demais para roteiro")
     return errors
@@ -279,6 +293,8 @@ def validate_screenplay_content(content: str, context: str) -> None:
 def _clean_screenplay_location(value: object, fallback: str) -> str:
     text = re.sub(r"\s+", " ", str(value or fallback)).strip(" .:-")
     text = re.sub(r"(?i)^(?:int|ext|int/ext|ext/int)\.\s*", "", text)
+    if re.fullmatch(r"(?i)cena\s+\d+", text):
+        text = fallback
     text = re.sub(
         r"\s*-\s*(?:dia|noite|manha|manh[aã]|tarde|madrugada|amanhecer).*$",
         "",
@@ -387,14 +403,14 @@ def _screenplay_content_from_scene_items(
             "local",
             "setting",
             "title",
-            fallback=f"Cena {index}",
+            fallback="AMBIENTE PRINCIPAL",
         )
         period = _first_non_empty(scene, "period", "periodo", "time", fallback="DIA")
         kind = str(scene.get("kind") or scene.get("tipo") or "").strip().upper()
         kind = kind if kind in {"INT", "EXT", "INT/EXT", "EXT/INT"} else ""
         parsed_kind, location, parsed_period = _screenplay_heading_parts(
             scene_title,
-            fallback_location=f"CENA {index}",
+            fallback_location="AMBIENTE PRINCIPAL",
             fallback_period=str(period),
         )
         heading_kind = kind or parsed_kind

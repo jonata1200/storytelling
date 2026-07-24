@@ -920,7 +920,8 @@ def test_script_payload_accepts_common_ai_field_names() -> None:
     assert payload["word_count"] > 8
     assert "FADE IN:" in payload["content"]
     assert "CENA 01" in payload["content"]
-    assert "INT. CENA 1 - DIA" in payload["content"]
+    assert "INT. AMBIENTE PRINCIPAL - DIA" in payload["content"]
+    assert "INT. CENA 1 - DIA" not in payload["content"]
     assert "Cena 1: Uma carta chega tarde demais." in payload["content"]
 
 
@@ -1037,6 +1038,45 @@ FADE OUT.
     )
 
     assert "cenas e sluglines precisam ficar em linhas separadas" in errors
+
+
+def test_screenplay_validator_rejects_compacted_inline_numbered_sluglines() -> None:
+    errors = screenplay_validation_errors(
+        """
+CENA 01
+INT. CENA 1 - DIA
+
+FADE IN: 1. INT. MERCADO NOTURNO - NOITE Um labirinto de barracas.
+OMERO vende memorias. 2. INT. BARRACA DE OMERO - MAIS TARDE Omero abre um caderno.
+
+FADE OUT.
+"""
+    )
+
+    assert "FADE IN precisa ficar em linha propria" in errors
+    assert "sluglines numeradas nao podem ficar dentro de paragrafos" in errors
+    assert "slugline generica INT. CENA precisa ser substituida por local real" in errors
+
+
+def test_script_payload_retries_compacted_inline_numbered_sluglines() -> None:
+    with pytest.raises(GenerationOutputError, match="sluglines numeradas"):
+        normalize_script_payload(
+            {
+                "title": "Memorias de Omero",
+                "content": """
+CENA 01
+INT. CENA 1 - DIA
+
+FADE IN: 1. INT. MERCADO NOTURNO - NOITE Um labirinto de barracas.
+OMERO vende memorias. 2. INT. BARRACA DE OMERO - MAIS TARDE Omero abre um caderno.
+
+FADE OUT.
+""",
+            },
+            default_title="Memorias de Omero",
+            language="pt-BR",
+            target_duration_seconds=300,
+        )
 
 
 def test_story_idea_db_text_truncates_long_protagonist_for_varchar_column() -> None:

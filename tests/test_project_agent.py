@@ -208,6 +208,102 @@ async def test_project_chat_can_force_full_script_regeneration(
 
 
 @pytest.mark.asyncio
+async def test_forced_script_pipeline_refreshes_existing_visual_bible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    old_script_artifact_id = uuid4()
+    idea_id = uuid4()
+    new_script_id = uuid4()
+    calls: list[str] = []
+    progress_messages: list[str] = []
+
+    async def fake_latest(
+        session: AsyncSession, model: type[Any], requested_project_id: Any
+    ) -> SimpleNamespace | None:
+        assert requested_project_id == project_id
+        if model is project_agent.Briefing:
+            return SimpleNamespace(id=uuid4())
+        if model is project_agent.Script:
+            return SimpleNamespace(id=uuid4(), artifact_id=old_script_artifact_id)
+        if model is project_agent.StoryIdea:
+            return SimpleNamespace(id=idea_id)
+        return None
+
+    async def fake_mark_dependents_stale(
+        session: AsyncSession, changed_artifact_ids: set[Any]
+    ) -> set[Any]:
+        calls.append("stale")
+        assert changed_artifact_ids == {old_script_artifact_id}
+        return set()
+
+    async def fake_generate_script(
+        session: AsyncSession,
+        requested_project_id: Any,
+        requested_idea_id: Any,
+    ) -> SimpleNamespace:
+        calls.append("script")
+        assert requested_project_id == project_id
+        assert requested_idea_id == idea_id
+        return SimpleNamespace(id=new_script_id)
+
+    async def fake_generate_scenes_and_shots(
+        session: AsyncSession,
+        requested_project_id: Any,
+        requested_script_id: Any,
+    ) -> list[SimpleNamespace]:
+        calls.append("scenes")
+        assert requested_project_id == project_id
+        assert requested_script_id == new_script_id
+        return [SimpleNamespace(id=uuid4())]
+
+    async def fake_count(
+        session: AsyncSession,
+        model: type[Any],
+        requested_project_id: Any,
+    ) -> int:
+        assert requested_project_id == project_id
+        return 1 if model is project_agent.Character else 0
+
+    async def fake_generate_visual_bible(
+        session: AsyncSession,
+        requested_project_id: Any,
+        requested_script_id: Any,
+    ) -> tuple[list[SimpleNamespace], list[SimpleNamespace], list[SimpleNamespace]]:
+        calls.append("visual")
+        assert requested_project_id == project_id
+        assert requested_script_id == new_script_id
+        return ([SimpleNamespace(id=uuid4())], [], [])
+
+    async def collect_progress(message: str) -> None:
+        progress_messages.append(message)
+
+    monkeypatch.setattr(project_agent, "_latest", fake_latest)
+    monkeypatch.setattr(project_agent, "mark_dependents_stale", fake_mark_dependents_stale)
+    monkeypatch.setattr(project_agent, "generate_script", fake_generate_script)
+    monkeypatch.setattr(project_agent, "generate_scenes_and_shots", fake_generate_scenes_and_shots)
+    monkeypatch.setattr(project_agent, "_count", fake_count)
+    monkeypatch.setattr(project_agent, "generate_visual_bible", fake_generate_visual_bible)
+
+    script, message, changed = await project_agent._ensure_script_pipeline(
+        cast(AsyncSession, object()),
+        project_id,
+        progress=collect_progress,
+        force=True,
+    )
+
+    assert script is not None
+    assert script.id == new_script_id
+    assert changed is True
+    assert message == (
+        "Roteiro completo gerado novamente, cenas/planos recriados "
+        "e biblioteca visual atualizada."
+    )
+    assert calls == ["stale", "script", "scenes", "visual"]
+    assert any("Biblioteca visual atualizada" in item for item in progress_messages)
+
+
+@pytest.mark.asyncio
 async def test_project_chat_routes_assets_storyboard_and_video(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

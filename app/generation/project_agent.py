@@ -653,6 +653,42 @@ async def _ensure_ideas_pipeline(
     return ProjectChatResult(f"Criei {len(ideas)} ideia(s) para o projeto.", "generate_ideas", True)
 
 
+async def _project_has_visual_bible(session: AsyncSession, project_id: UUID) -> bool:
+    return any(
+        [
+            await _count(session, Character, project_id),
+            await _count(session, Location, project_id),
+            await _count(session, Prop, project_id),
+        ]
+    )
+
+
+async def _refresh_visual_bible_after_script_regeneration(
+    session: AsyncSession,
+    project_id: UUID,
+    script_id: UUID,
+    progress: ProgressCallback | None = None,
+) -> bool:
+    if not await _project_has_visual_bible(session, project_id):
+        return False
+    await _emit_progress(
+        progress,
+        "Vou atualizar automaticamente personagens, locais e objetos a partir do novo roteiro.",
+    )
+    visual = await generate_visual_bible(session, project_id, script_id)
+    if visual is None:
+        await _emit_progress(
+            progress,
+            "Nao consegui atualizar automaticamente a biblioteca visual.",
+        )
+        return False
+    await _emit_progress(
+        progress,
+        "Biblioteca visual atualizada para o roteiro atual.",
+    )
+    return True
+
+
 async def _ensure_script_pipeline(
     session: AsyncSession,
     project_id: UUID,
@@ -702,6 +738,19 @@ async def _ensure_script_pipeline(
     if scenes is None:
         return script, "Roteiro criado, mas as cenas e planos não foram gerados.", True
     if force:
+        visual_updated = await _refresh_visual_bible_after_script_regeneration(
+            session,
+            project_id,
+            script.id,
+            progress,
+        )
+        if visual_updated:
+            return (
+                script,
+                "Roteiro completo gerado novamente, cenas/planos recriados "
+                "e biblioteca visual atualizada.",
+                True,
+            )
         return script, "Roteiro completo gerado novamente e dividido em cenas e planos.", True
     return script, "Roteiro criado e dividido em cenas e planos.", True
 
