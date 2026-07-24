@@ -22,6 +22,7 @@ from app.visual_bible.service import (
     _prop_profile,
     _repair_missing_character_names,
     _script_character_names,
+    _script_character_profiles,
     _script_location_profiles,
     _script_prop_profiles,
     _transient_image_provider_error,
@@ -508,6 +509,24 @@ def test_script_fallback_extracts_locations_and_props() -> None:
     assert "Carta Amarelada" in [item["name"] for item in props]
 
 
+def test_script_fallback_extracts_musical_props_from_script() -> None:
+    script = """
+    EXT. JARDIM DAS SOMBRAS - NOITE
+    LUNA segura uma flauta de madeira rachada.
+    Ela traz um violino improvisado, feito de galhos e cordas de tripa.
+    Depois constrói um tambor de tronco oco e um chocalho de pedras.
+    O JARDINEIRO mostra um cachimbo de osso, rachado, mudo.
+    """
+
+    props = _script_prop_profiles(script)
+
+    assert "Flauta De Madeira Rachada" in [item["name"] for item in props]
+    assert "Violino Improvisado" in [item["name"] for item in props]
+    assert "Tambor De Tronco Oco" in [item["name"] for item in props]
+    assert "Chocalho De Pedras" in [item["name"] for item in props]
+    assert "Cachimbo De Osso" in [item["name"] for item in props]
+
+
 def test_script_fallback_repairs_missing_character_names() -> None:
     script = """
     INT. COZINHA - MANHA
@@ -525,6 +544,31 @@ def test_script_fallback_repairs_missing_character_names() -> None:
     assert [item["name"] for item in _repair_missing_character_names(items, script)] == [
         "Dona Lourdes",
         "Nete",
+    ]
+
+
+def test_script_fallback_extracts_character_profiles_from_dialogue_and_action() -> None:
+    script = """
+    LUNA (17 anos, cega) segura uma flauta.
+
+    Seu AVÔ (70 anos) segura seu braço.
+
+    O JARDINEIRO DAS SOMBRAS (sem rosto) emerge do jardim.
+
+    JARDINEIRO
+    Silencio.
+
+    UMA MULHER (50 anos)
+    Ela traz mau agouro.
+    """
+
+    profiles = _script_character_profiles(script)
+
+    assert [item["name"] for item in profiles] == [
+        "Luna",
+        "Avô",
+        "Jardineiro Das Sombras",
+        "Uma Mulher",
     ]
 
 

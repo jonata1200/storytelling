@@ -564,6 +564,7 @@ from app.visual_bible.script_profiles import (  # noqa: E402,F401
     _is_placeholder_profile_name,
     _repair_missing_character_names,
     _script_character_names,
+    _script_character_profiles,
     _script_location_profiles,
     _script_prop_profiles,
 )

@@ -15,17 +15,23 @@ SCRIPT_PROP_KEYWORDS = (
     "bilhete",
     "boneca",
     "brinquedo",
+    "caderno",
+    "cachimbo",
     "caixa",
     "caneta",
     "carta",
     "chave",
+    "chocalho",
     "colher",
     "colar",
+    "corda",
     "cumbuca",
     "diario",
+    "desenho",
     "envelope",
     "faca",
     "fita",
+    "flauta",
     "fotografia",
     "livro",
     "mala",
@@ -38,12 +44,22 @@ SCRIPT_PROP_KEYWORDS = (
     "relogio",
     "retrato",
     "tabua",
+    "tambor",
+    "violino",
 )
 
 
 def _clean_script_entity_name(value: str) -> str:
     text = re.sub(r"\([^)]*\)", "", value)
     text = re.split(r"\s+-\s+", text, maxsplit=1)[0]
+    text = re.split(
+        r"\s+(?:e|ou)\s+(?:um|uma|o|a|os|as)\s+",
+        text,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    text = re.sub(r"(?i)\s+(?:e|ou)\s+(?:um|uma|o|a|os|as)\s*$", "", text)
+    text = re.sub(r"(?i)^\s*(?:o|a|os|as)\s+", "", text)
     text = re.sub(r"\b\d+\s*s\b", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s+", " ", text).strip(" .:-")
     return text.title()
@@ -69,7 +85,7 @@ def _script_location_profiles(script_content: str) -> list[dict]:
                 "lighting": "luz coerente com o periodo da slugline e o tom dramatico",
             }
         )
-        if len(profiles) >= 6:
+        if len(profiles) >= 12:
             break
     return profiles
 
@@ -106,7 +122,7 @@ def _script_prop_profiles(script_content: str) -> list[dict]:
                 }
             )
             break
-        if len(profiles) >= 6:
+        if len(profiles) >= 12:
             break
     return profiles
 
@@ -122,9 +138,33 @@ SCRIPT_CHARACTER_EXCLUSIONS = {
 }
 
 
+def _append_script_character_name(names: list[str], seen: set[str], raw_name: str) -> None:
+    name = _clean_script_entity_name(raw_name)
+    if not name or len(name) > 48:
+        return
+    normalized = name.lower()
+    if normalized.upper() in SCRIPT_CHARACTER_EXCLUSIONS:
+        return
+    for existing in list(seen):
+        if normalized == existing:
+            return
+        if normalized in existing:
+            return
+        if existing in normalized:
+            names[:] = [item for item in names if item.lower() != existing]
+            seen.remove(existing)
+    seen.add(normalized)
+    names.append(name)
+
+
 def _script_character_names(script_content: str) -> list[str]:
     names: list[str] = []
     seen: set[str] = set()
+    for match in re.finditer(
+        r"\b(?P<name>[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{1,48})\s*\(",
+        script_content,
+    ):
+        _append_script_character_name(names, seen, match.group("name"))
     for raw_line in script_content.splitlines():
         line = re.sub(r"\([^)]*\)", "", raw_line).strip(" .:-")
         if not line or len(line) > 48:
@@ -133,12 +173,18 @@ def _script_character_names(script_content: str) -> list[str]:
             continue
         if line in SCRIPT_CHARACTER_EXCLUSIONS or line.startswith(("INT", "EXT")):
             continue
-        key = line.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        names.append(line.title())
+        _append_script_character_name(names, seen, line)
     return names
+
+
+def _script_character_profiles(script_content: str) -> list[dict]:
+    return [
+        {
+            "name": name,
+            "role": "personagem extraido do roteiro",
+        }
+        for name in _script_character_names(script_content)
+    ]
 
 
 def _is_placeholder_profile_name(value: object) -> bool:

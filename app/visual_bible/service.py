@@ -46,6 +46,7 @@ from app.visual_bible.profiles import (
     _raise_visual_profile_errors,
     _repair_missing_character_names,
     _script_character_names,
+    _script_character_profiles,
     _script_location_profiles,
     _script_prop_profiles,
     _story_idea_protagonist_name,
@@ -406,6 +407,12 @@ async def generate_visual_bible(
     character_items = _repair_missing_character_names(
         character_items, script_content, protagonist_hint
     )
+    if script_content:
+        character_items = _merge_profile_items(
+            "character",
+            character_items,
+            _script_character_profiles(script_content),
+        )
     character_profiles = [_character_profile(raw) for raw in character_items]
     _raise_visual_profile_errors("character", character_profiles)
     existing_character_result = await session.execute(
