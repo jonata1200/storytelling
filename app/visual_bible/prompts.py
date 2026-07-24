@@ -1,18 +1,14 @@
 ﻿from app.visual_bible.profiles import _clean_prompt_fragment, _prompt_text
 
-CHARACTER_VIEWS = [
-    "front_portrait",
-    "left_profile",
-    "right_profile",
-    "back_view",
-    "full_body",
-    "expression_sheet",
-    "pose_sheet",
-    "scale_reference",
-]
+CHARACTER_VIEWS = ["character_reference_sheet"]
 LOCATION_VIEWS = ["establishing", "floor_plan", "camera_points"]
 PROP_VIEWS = ["front", "side", "top", "scale_reference"]
 VIEW_PROMPT_DETAILS = {
+    "character_reference_sheet": (
+        "folha unica de referencia em fundo branco: close frontal grande do rosto a esquerda, "
+        "corpo inteiro frontal, corpo inteiro em perfil lateral e corpo inteiro de costas; "
+        "mesmo rosto, cabelo, figurino, proporcoes e paleta; composicao horizontal limpa"
+    ),
     "front_portrait": (
         "imagem inicial do personagem em pe, corpo inteiro, vista frontal, pose neutra, "
         "bracos relaxados, corpo dos pes ao topo da cabeca totalmente visivel"
@@ -87,13 +83,20 @@ def validated_visual_reference_views(target_kind: str, view_types: list[str] | N
 
 def initial_view_for(target_kind: str) -> str:
     return {
-        "character": "front_portrait",
+        "character": "character_reference_sheet",
         "location": "establishing",
         "prop": "front",
     }[target_kind]
 
 
 def _character_view_guardrail(view_type: str) -> str:
+    if view_type == "character_reference_sheet":
+        return (
+            "uma unica imagem, nao separar em arquivos; fundo branco puro de estudio; "
+            "sem cenario e sem objetos extras; incluir exatamente o mesmo personagem repetido "
+            "nas perspectivas solicitadas; rosto consistente, anatomia consistente, figurino "
+            "identico; nao cortar cabeca, pes ou maos nas vistas de corpo inteiro"
+        )
     if view_type == "front_portrait":
         return (
             "personagem em pe, corpo inteiro, vista frontal, pose neutra, olhando para a camera, "
@@ -107,12 +110,14 @@ def _character_view_guardrail(view_type: str) -> str:
 
 
 def visual_reference_aspect_ratio(profile: dict, view_type: str) -> str:
+    if view_type == "character_reference_sheet":
+        return "16:9"
     asset_kind = str(profile.get("asset_kind") or "")
     if asset_kind == "location":
         return "16:9"
     if asset_kind == "prop":
         return "1:1"
-    if asset_kind == "character" and view_type != "front_portrait":
+    if asset_kind == "character":
         return "16:9"
     return "9:16"
 

@@ -358,21 +358,21 @@ def test_visual_references_are_sorted_by_expected_view_order() -> None:
         view_type="back_view",
         created_at=now,
     )
-    front = SimpleNamespace(
+    reference_sheet = SimpleNamespace(
         project_id=project_id,
         target_kind="character",
         target_id=target_id,
-        view_type="front_portrait",
+        view_type="character_reference_sheet",
         created_at=now + timedelta(seconds=1),
     )
 
     references = pages._visual_references_for(
-        {"visual_refs": [back, front]},
+        {"visual_refs": [back, reference_sheet]},
         "character",
         target_id,
     )
 
-    assert references == [front, back]
+    assert references == [reference_sheet, back]
 
 
 def test_visual_references_prefer_newest_image_for_same_view() -> None:
@@ -439,15 +439,7 @@ def test_visual_batch_requests_include_all_missing_views() -> None:
         (
             "character",
             character_id,
-            [
-                "left_profile",
-                "right_profile",
-                "back_view",
-                "full_body",
-                "expression_sheet",
-                "pose_sheet",
-                "scale_reference",
-            ],
+            ["character_reference_sheet"],
         ),
         ("location", location_id, ["establishing", "floor_plan", "camera_points"]),
         ("prop", prop_id, ["front", "side", "top", "scale_reference"]),
@@ -602,7 +594,7 @@ def test_storyboard_section_waits_for_all_visual_references() -> None:
         "characters": 2,
         "locations": 1,
         "props": 1,
-        "visual_refs": 10,
+        "visual_refs": 8,
         "frames": 0,
         "animatics": 0,
         "clips": 0,
@@ -627,7 +619,7 @@ def test_storyboard_section_unlocks_after_visual_references_are_complete() -> No
         "characters": 2,
         "locations": 1,
         "props": 1,
-        "visual_refs": 23,
+        "visual_refs": 9,
         "frames": 0,
         "animatics": 0,
         "clips": 0,

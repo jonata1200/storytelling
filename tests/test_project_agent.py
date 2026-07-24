@@ -603,7 +603,12 @@ async def test_visual_prompt_approval_matches_target_name_and_generates_initial_
         "approve_visual_prompt",
         True,
     )
-    assert captured["args"][1:] == (project_id, "character", target_id, ["front_portrait"])
+    assert captured["args"][1:] == (
+        project_id,
+        "character",
+        target_id,
+        ["character_reference_sheet"],
+    )
 
 
 @pytest.mark.asyncio

@@ -41,14 +41,7 @@ from app.visual_bible.service import (
 def test_default_character_views_include_required_reference_sheet_items() -> None:
     views = default_views_for("character")
 
-    assert "front_portrait" in views
-    assert "left_profile" in views
-    assert "right_profile" in views
-    assert "back_view" in views
-    assert "full_body" in views
-    assert "expression_sheet" in views
-    assert "pose_sheet" in views
-    assert "scale_reference" in views
+    assert views == ["character_reference_sheet"]
 
 
 def test_sourceful_502_is_treated_as_transient_image_provider_error() -> None:
@@ -77,7 +70,7 @@ async def test_openrouter_image_transient_error_is_reported_without_mock_fallbac
             ImageGenerationRequest(
                 prompt="Personagem em pe, vista frontal",
                 target_id="character-1",
-                view_type="front_portrait",
+                view_type="character_reference_sheet",
                 output_dir=tmp_path,
                 model="sourceful/sourceful-v2.5",
             ),
@@ -148,7 +141,7 @@ async def test_image_provider_reports_missing_key_for_real_image_model(
 
 
 def test_initial_visual_reference_is_single_canonical_view() -> None:
-    assert initial_view_for("character") == "front_portrait"
+    assert initial_view_for("character") == "character_reference_sheet"
     assert initial_view_for("location") == "establishing"
     assert initial_view_for("prop") == "front"
 
@@ -169,15 +162,15 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
         "canonical_prompt": "Helena, 35, expressive detective, rainy noir lighting",
     }
 
-    prompt = visual_reference_prompt(profile, "front_portrait")
+    prompt = visual_reference_prompt(profile, "character_reference_sheet")
 
     assert prompt.startswith(
-        "Helena, 35, expressive detective, rainy noir lighting. Vista: imagem inicial"
+        "Helena, 35, expressive detective, rainy noir lighting. Vista: folha unica"
     )
-    assert "fundo cinza neutro de estudio" in prompt
-    assert "Proporcao: 9:16" in prompt
+    assert "perspectivas solicitadas" in prompt
+    assert "Proporcao: 16:9" in prompt
     assert "Referencia de continuidade" in prompt
-    assert len(prompt) < 520
+    assert len(prompt) < 760
 
 
 def test_visual_reference_prompts_are_distinct_by_view_type() -> None:
@@ -346,21 +339,26 @@ def test_character_defaults_are_distinct_by_name() -> None:
     assert "nao reutilizar roupa" in " ".join(clara["visual_constraints"])
 
 
-def test_character_initial_reference_uses_full_body_gray_background() -> None:
+def test_character_initial_reference_uses_single_turnaround_sheet() -> None:
     character = _character_profile({"name": "Dona Celia"})
 
-    prompt = visual_reference_prompt(character, "front_portrait")
+    prompt = visual_reference_prompt(character, "character_reference_sheet")
 
-    assert "personagem em pe" in prompt
+    assert "folha unica de referencia" in prompt
+    assert "close frontal grande do rosto" in prompt
+    assert "corpo inteiro frontal" in prompt
+    assert "perfil lateral" in prompt
+    assert "corpo inteiro de costas" in prompt
+    assert "uma unica imagem" in prompt
     assert "corpo inteiro" in prompt
-    assert "fundo cinza neutro de estudio" in prompt
+    assert "fundo branco puro de estudio" in prompt
     assert "nao cortar cabeca, pes ou maos" in prompt
-    assert "Proporcao: 9:16" in prompt
+    assert "Proporcao: 16:9" in prompt
     assert "Referencia de continuidade" in prompt
-    assert len(prompt) < 900
+    assert len(prompt) < 1100
 
 
-def test_character_multi_view_references_use_white_background_and_angles() -> None:
+def test_character_legacy_multi_view_prompt_is_still_supported_for_old_references() -> None:
     character = _character_profile({"name": "Dona Celia"})
 
     prompt = visual_reference_prompt(character, "left_profile")
@@ -404,8 +402,8 @@ def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:
     location = _location_profile({"name": "Sala de estar"})
     prop = _prop_profile({"name": "Partitura"})
 
-    assert visual_reference_aspect_ratio(character, "front_portrait") == "9:16"
-    assert visual_reference_aspect_ratio(character, "left_profile") == "16:9"
+    assert visual_reference_aspect_ratio(character, "character_reference_sheet") == "16:9"
+    assert visual_reference_aspect_ratio(character, "front_portrait") == "16:9"
     assert visual_reference_aspect_ratio(location, "establishing") == "16:9"
     assert visual_reference_aspect_ratio(prop, "front") == "1:1"
 
@@ -683,7 +681,7 @@ async def test_regenerate_visual_reference_forces_existing_view(
         project_id,
         "character",
         target_id,
-        "front_portrait",
+        "character_reference_sheet",
     )
 
     assert result is reference
@@ -691,7 +689,7 @@ async def test_regenerate_visual_reference_forces_existing_view(
         project_id,
         "character",
         target_id,
-        ["front_portrait"],
+        ["character_reference_sheet"],
     )
     assert captured["kwargs"] == {"force": True}
 
@@ -797,7 +795,7 @@ async def test_generate_visual_references_reloads_created_rows_without_refresh(
         project_id,
         "character",
         target_id,
-        ["front_portrait"],
+        ["character_reference_sheet"],
         force=True,
     )
 
@@ -805,4 +803,4 @@ async def test_generate_visual_references_reloads_created_rows_without_refresh(
     assert session.refreshed is False
     assert references is not None
     assert len(references) == 1
-    assert references[0].view_type == "front_portrait"
+    assert references[0].view_type == "character_reference_sheet"
