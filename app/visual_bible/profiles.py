@@ -235,6 +235,27 @@ def _prompt_text(value: object) -> str:
     return str(value or "").strip()
 
 
+def _clean_prompt_fragment(value: object, prefixes: tuple[str, ...]) -> str:
+    text = _prompt_text(value).strip()
+    if not text:
+        return ""
+    for prefix in prefixes:
+        clean_prefix = re.escape(prefix.strip())
+        if not clean_prefix:
+            continue
+        stripped = re.sub(
+            rf"^{clean_prefix}\b[\s:,\-]*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        ).strip()
+        if stripped != text:
+            return stripped
+        if re.fullmatch(clean_prefix, text, flags=re.IGNORECASE):
+            return ""
+    return text
+
+
 PLACEHOLDER_PROFILE_NAMES = {"", "item", "personagem", "protagonista"}
 
 

@@ -3,6 +3,7 @@ import re
 
 from app.visual_bible.profiles import (
     _ascii_lower,
+    _clean_prompt_fragment,
     _first_value,
     _profile_mapping,
     _prompt_text,
@@ -267,14 +268,16 @@ def _character_profile(raw: object) -> dict:
         "canonical_prompt": (
             "Fotorrealista, referencia de elenco, uma unica pessoa. "
             f"{_character_gender_guardrail(gender)} "
-            f"{_prompt_text(gender).capitalize()} {_prompt_text(origin)}, "
-            f"{_prompt_text(apparent_age)}, "
+            f"{name}, {_prompt_text(origin)}, {_prompt_text(apparent_age)}, "
             f"{_prompt_text(body_type)}, {_prompt_text(height_cm)}cm. "
-            f"Rosto {_prompt_text(face_shape)}, pele {_prompt_text(skin_tone)}, "
-            f"olhos {_prompt_text(eyes)}, cabelo {_prompt_text(hair)}. "
+            f"Rosto {_clean_prompt_fragment(face_shape, ('rosto', 'face'))}, "
+            f"pele {_clean_prompt_fragment(skin_tone, ('pele', 'tom de pele'))}, "
+            f"olhos {_clean_prompt_fragment(eyes, ('olhos',))}, "
+            f"cabelo {_clean_prompt_fragment(hair, ('cabelo',))}. "
             f"Papel: {_prompt_text(role)}. "
-            f"Figurino base exclusivo: {_prompt_text(base_outfit)}. "
-            f"Paleta: {_prompt_text(palette)}. "
+            "Figurino base exclusivo: "
+            f"{_clean_prompt_fragment(base_outfit, ('figurino', 'roupa'))}. "
+            f"Paleta: {_clean_prompt_fragment(palette, ('paleta',))}. "
             "Manter mesmo rosto, cabelo, corpo, figurino e paleta."
         ),
     }

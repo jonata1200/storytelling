@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -233,6 +234,29 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     assert len(character["canonical_prompt"]) < 700
     assert len(location["canonical_prompt"]) < 560
     assert len(prop["canonical_prompt"]) < 480
+
+
+def test_character_canonical_prompt_avoids_redundant_noun_repetition() -> None:
+    character = _character_profile(
+        {
+            "name": "Helena",
+            "role": "detetive",
+            "face_shape": "rosto com estrutura clara e memoravel",
+            "skin_tone": "tom de pele natural sob luz cinematica",
+            "hair": "cabelo castanho curto, bem alinhado",
+            "base_outfit": "figurino blazer cinza gasto",
+            "palette": ["paleta terracota", "caramelo", "azul desbotado"],
+        }
+    )
+
+    prompt = character["canonical_prompt"].lower()
+
+    assert re.search(r"\brosto\s+rosto\b", prompt) is None
+    assert re.search(r"\bcabelo\s+cabelo\b", prompt) is None
+    assert re.search(r"\bpele\s+pele\b", prompt) is None
+    assert re.search(r"\bfigurino\s+figurino\b", prompt) is None
+    assert re.search(r"\bpaleta\s+paleta\b", prompt) is None
+    assert "cabelo castanho curto" in prompt
 
 
 def test_visual_profile_validation_rejects_generic_profiles() -> None:

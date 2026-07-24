@@ -1,7 +1,8 @@
 ﻿from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
+from nicegui import app as nicegui_app
 from nicegui import ui
 
 from app.assets.models import Asset
@@ -34,6 +35,27 @@ from app.visual_bible.service import (
     initial_view_for,
     visual_reference_prompt,
 )
+
+VISUAL_LIBRARY_TAB_DEFAULT = "characters"
+VISUAL_LIBRARY_TAB_KEYS = {"characters", "locations", "props"}
+
+
+def _visual_library_tab_storage_key(project_id: UUID) -> str:
+    return f"visual_library_active_tab:{project_id}"
+
+
+def _read_visual_library_active_tab(project_id: UUID) -> str:
+    raw_value = str(
+        nicegui_app.storage.user.get(
+            _visual_library_tab_storage_key(project_id), VISUAL_LIBRARY_TAB_DEFAULT
+        )
+    ).strip()
+    return raw_value if raw_value in VISUAL_LIBRARY_TAB_KEYS else VISUAL_LIBRARY_TAB_DEFAULT
+
+
+def _store_visual_library_active_tab(project_id: UUID, tab_name: str) -> None:
+    value = tab_name if tab_name in VISUAL_LIBRARY_TAB_KEYS else VISUAL_LIBRARY_TAB_DEFAULT
+    nicegui_app.storage.user[_visual_library_tab_storage_key(project_id)] = value
 
 
 def _entity_card(
@@ -309,15 +331,17 @@ def render_assets_area(
                 icon="check_circle",
                 on_click=lambda: batch_prompt_dialog.open(),
             ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-    with (
-        ui.tabs()
-        .classes("text-[#8d938e]")
-        .props("no-caps active-color=primary indicator-color=primary") as tabs
-    ):
-        people = ui.tab("Personagens")
-        places = ui.tab("Locais")
-        props = ui.tab("Objetos")
-    with ui.tab_panels(tabs, value=people).classes("w-full bg-transparent p-0"):
+    active_tab = _read_visual_library_active_tab(project_id)
+    with ui.tabs(value=cast(Any, active_tab)).classes("text-[#8d938e]") as tabs:
+        people = ui.tab("characters", "Personagens")
+        places = ui.tab("locations", "Locais")
+        props = ui.tab("props", "Objetos")
+    tabs.on_value_change(
+        lambda event: _store_visual_library_active_tab(
+            project_id, str(event.value or VISUAL_LIBRARY_TAB_DEFAULT)
+        )
+    )
+    with ui.tab_panels(tabs, value=cast(Any, active_tab)).classes("w-full bg-transparent p-0"):
         for tab, items, icon, target_kind in [
             (people, summary["characters"], "person", "character"),
             (places, summary["locations"], "location_on", "location"),
@@ -359,7 +383,4 @@ def render_assets_area(
                             ui.label(
                                 "O Diretor IA pode criar esta coleção a partir do roteiro."
                             ).classes("text-sm text-[#888e89]")
-
-
-
 

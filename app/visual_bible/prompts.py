@@ -1,4 +1,4 @@
-﻿from app.visual_bible.profiles import _prompt_text
+﻿from app.visual_bible.profiles import _clean_prompt_fragment, _prompt_text
 
 CHARACTER_VIEWS = [
     "front_portrait",
@@ -131,15 +131,18 @@ def _compact_visual_base_prompt(profile: dict) -> str:
         parts = [
             "Fotorrealista, referencia de elenco",
             name,
-            _prompt_text(profile.get("gender")),
+            _clean_prompt_fragment(
+                profile.get("gender"),
+                ("personagem", "genero visual", "gênero visual"),
+            ),
             _prompt_text(profile.get("apparent_age")),
             _prompt_text(profile.get("body_type")),
-            f"rosto {_prompt_text(profile.get('face_shape'))}",
-            f"pele {_prompt_text(profile.get('skin_tone'))}",
-            f"olhos {_prompt_text(profile.get('eyes'))}",
-            f"cabelo {_prompt_text(profile.get('hair'))}",
-            f"figurino {_prompt_text(profile.get('base_outfit'))}",
-            f"paleta {_prompt_text(profile.get('palette'))}",
+            f"rosto {_clean_prompt_fragment(profile.get('face_shape'), ('rosto', 'face'))}",
+            f"pele {_clean_prompt_fragment(profile.get('skin_tone'), ('pele', 'tom de pele'))}",
+            f"olhos {_clean_prompt_fragment(profile.get('eyes'), ('olhos',))}",
+            f"cabelo {_clean_prompt_fragment(profile.get('hair'), ('cabelo',))}",
+            f"figurino {_clean_prompt_fragment(profile.get('base_outfit'), ('figurino', 'roupa'))}",
+            f"paleta {_clean_prompt_fragment(profile.get('palette'), ('paleta',))}",
         ]
         return _truncate_prompt_text(". ".join(part for part in parts if part), 420)
     if asset_kind == "location":
@@ -149,7 +152,7 @@ def _compact_visual_base_prompt(profile: dict) -> str:
             f"funcao {_prompt_text(profile.get('description'))}",
             f"layout {_prompt_text(profile.get('layout'))}",
             f"materiais {_prompt_text(profile.get('materials'))}",
-            f"paleta {_prompt_text(profile.get('palette'))}",
+            f"paleta {_clean_prompt_fragment(profile.get('palette'), ('paleta',))}",
             f"luz {_prompt_text(profile.get('lighting'))}",
         ]
         return _truncate_prompt_text(". ".join(part for part in parts if part), 360)
@@ -189,5 +192,3 @@ def visual_reference_prompt(profile: dict, view_type: str) -> str:
         f"{base_prompt}. Vista: {view_detail}. Regras: {guardrail}. "
         f"Proporcao: {aspect_ratio}. Referencia de continuidade; detalhes principais legiveis."
     )
-
-

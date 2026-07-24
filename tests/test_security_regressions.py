@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -9,6 +10,7 @@ from pydantic import ValidationError
 import app.auth.ui_middleware as ui_middleware
 import app.auth.ui_routes as ui_routes
 import app.providers.media_utils as media_utils
+import app.ui.workspace.assets_area as assets_area
 import app.video_generation.service as video_generation_service
 from app.auth.session import SESSION_COOKIE_NAME, create_session_token
 from app.auth.ui_middleware import UIBasicAuthMiddleware
@@ -210,6 +212,24 @@ def test_local_storage_helpers_reject_files_outside_storage_root(
     assert media_utils.local_uri_to_data_url(outside.as_posix()) == outside.as_posix()
     assert video_generation_service._local_storage_path(inside.as_posix()) == inside.resolve()
     assert video_generation_service._local_storage_path(outside.as_posix()) is None
+
+
+def test_visual_library_tab_is_persisted_per_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage: dict[str, str] = {}
+    monkeypatch.setattr(
+        assets_area,
+        "nicegui_app",
+        SimpleNamespace(storage=SimpleNamespace(user=storage)),
+    )
+    project_id = uuid4()
+
+    assert assets_area._read_visual_library_active_tab(project_id) == "characters"
+    assets_area._store_visual_library_active_tab(project_id, "locations")
+    assert assets_area._read_visual_library_active_tab(project_id) == "locations"
+    assets_area._store_visual_library_active_tab(project_id, "unexpected")
+    assert assets_area._read_visual_library_active_tab(project_id) == "characters"
 
 
 def test_generation_payload_validation_rejects_missing_lists() -> None:
