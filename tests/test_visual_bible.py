@@ -627,6 +627,76 @@ def test_script_fallback_extracts_locations_and_props() -> None:
     assert "Carta Amarelada" in [item["name"] for item in props]
 
 
+def test_script_fallback_cleans_hierarchical_and_repeated_locations() -> None:
+    script = """
+    INT. HOSPITAL - QUARTO - DIA
+    Ian acorda.
+
+    EXT. TELHADO DA CASA - NOITE
+    A chuva cai.
+
+    EXT. TELHADO - CONTINUACAO
+    Ian encara o ceu.
+
+    EXT. JARDIM DO HOSPITAL - DIA
+    O sol aparece.
+    """
+
+    locations = _script_location_profiles(script)
+
+    assert [item["name"] for item in locations] == [
+        "Quarto Do Hospital",
+        "Telhado Da Casa",
+        "Jardim Do Hospital",
+    ]
+
+
+def test_script_fallback_does_not_turn_screenplay_markers_into_characters() -> None:
+    script = """
+    INT. QUARTO DE IAN - DIA
+    IAN (9 anos) desenha.
+
+    OS PAIS DE IAN (40 anos) entram no quarto.
+
+    PAI
+    Isso precisa parar.
+
+    MAE
+    Ele esta cansado.
+
+    EXT. PATIO DA ESCOLA - DIA
+    Um MENINO se aproxima.
+
+    MENINO
+    O que voce desenha?
+
+    PASSARO
+    Desenhe mais.
+
+    AVÔ DE IAN (70 anos) surge na lembranca.
+
+    VOLTA AO PRESENTE.
+    """
+
+    assert _script_character_names(script) == ["Ian", "Pai", "Mae", "Passaro", "Avô De Ian"]
+
+
+def test_script_fallback_trims_action_phrases_from_props() -> None:
+    script = """
+    O desenho e tosco, mas cheio de vida.
+    Ian pega uma corda e ve a chave no chao.
+    """
+
+    props = _script_prop_profiles(script)
+    names = [item["name"] for item in props]
+
+    assert "Desenho" in names
+    assert "Corda" in names
+    assert "Chave" in names
+    assert "Desenho E Tosco" not in names
+    assert "Corda E Ve" not in names
+
+
 def test_script_fallback_extracts_musical_props_from_script() -> None:
     script = """
     EXT. JARDIM DAS SOMBRAS - NOITE
