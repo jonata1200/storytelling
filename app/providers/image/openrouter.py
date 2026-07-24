@@ -99,26 +99,43 @@ class OpenRouterImageProvider:
 
     def _post_image_generation(self, body: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         submitted_body = dict(body)
-        try:
-            return self._post_json("/images", submitted_body), submitted_body
-        except RuntimeError as exc:
-            if not self._should_retry_with_jpeg(exc, submitted_body):
-                if not self._should_retry_without_n(exc, submitted_body):
-                    raise
-                submitted_body = dict(submitted_body)
-                submitted_body.pop("n", None)
+        attempted_bodies: set[str] = set()
+        while True:
+            attempt_key = json.dumps(submitted_body, sort_keys=True, default=str)
+            attempted_bodies.add(attempt_key)
+            try:
                 return self._post_json("/images", submitted_body), submitted_body
+            except RuntimeError as exc:
+                retry_body = self._retry_body_for_image_error(exc, submitted_body)
+                if retry_body is None:
+                    raise
+                retry_key = json.dumps(retry_body, sort_keys=True, default=str)
+                if retry_key in attempted_bodies:
+                    raise
+                submitted_body = retry_body
 
-        submitted_body = dict(submitted_body)
-        submitted_body["output_format"] = "jpeg"
-        try:
-            return self._post_json("/images", submitted_body), submitted_body
-        except RuntimeError as exc:
-            if not self._should_retry_without_n(exc, submitted_body):
-                raise
-            submitted_body = dict(submitted_body)
-            submitted_body.pop("n", None)
-            return self._post_json("/images", submitted_body), submitted_body
+    def _retry_body_for_image_error(
+        self, exc: RuntimeError, body: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        if self._should_retry_with_jpeg(exc, body):
+            retry_body = dict(body)
+            retry_body["output_format"] = "jpeg"
+            return retry_body
+
+        unsupported_parameters = self._unsupported_parameters_from_error(exc, body)
+        if unsupported_parameters:
+            retry_body = dict(body)
+            for parameter in unsupported_parameters:
+                retry_body.pop(parameter, None)
+            if retry_body != body:
+                return retry_body
+
+        if self._should_retry_without_n(exc, body):
+            retry_body = dict(body)
+            retry_body.pop("n", None)
+            return retry_body
+
+        return None
 
     @staticmethod
     def _should_retry_with_jpeg(exc: RuntimeError, body: dict[str, Any]) -> bool:
@@ -139,6 +156,32 @@ class OpenRouterImageProvider:
             or " n:" in message
             or "parameter: n" in message
         )
+
+    @classmethod
+    def _unsupported_parameters_from_error(
+        cls, exc: RuntimeError, body: dict[str, Any]
+    ) -> list[str]:
+        message = str(exc).lower()
+        if not any(term in message for term in ("unsupported", "not supported", "unknown")):
+            return []
+        retryable_parameters = ("output_format", "aspect_ratio", "n")
+        return [
+            parameter
+            for parameter in retryable_parameters
+            if parameter in body and cls._error_mentions_parameter(message, parameter)
+        ]
+
+    @staticmethod
+    def _error_mentions_parameter(message: str, parameter: str) -> bool:
+        variants = {
+            parameter,
+            parameter.replace("_", " "),
+            f'"{parameter}"',
+            f"'{parameter}'",
+            f"`{parameter}`",
+            f"parameter: {parameter}",
+        }
+        return any(variant in message for variant in variants)
 
     def _post_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         settings = get_settings()

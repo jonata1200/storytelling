@@ -51,6 +51,12 @@ async def _approve_visual_target_from_ui(
             )
         ui.navigate.reload()
     except Exception as exc:
+        logger.exception(
+            "Não foi possível aprovar e gerar imagens do ativo visual %s/%s no projeto %s",
+            target_kind,
+            target_id,
+            project_id,
+        )
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
@@ -129,6 +135,12 @@ async def _regenerate_visual_reference_from_ui(
             _notify_visual_action("Imagem gerada novamente.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
+        logger.exception(
+            "Não foi possível regenerar imagem do ativo visual %s/%s no projeto %s",
+            target_kind,
+            target_id,
+            project_id,
+        )
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
@@ -189,21 +201,59 @@ async def _approve_all_visual_targets_from_ui(
             return
         created_count = 0
         used_fallback = False
-        async with AsyncSessionLocal() as session:
-            for target_kind, target_id, view_types in current_requests:
-                references = await approve_visual_target_and_generate_views(
-                    session,
-                    project_id,
+        failures: list[str] = []
+        for target_kind, target_id, view_types in current_requests:
+            try:
+                async with AsyncSessionLocal() as session:
+                    references = await approve_visual_target_and_generate_views(
+                        session,
+                        project_id,
+                        target_kind,
+                        target_id,
+                        view_types,
+                    )
+            except Exception as exc:
+                logger.exception(
+                    "Não foi possível gerar imagens em lote para %s/%s no projeto %s",
                     target_kind,
                     target_id,
-                    view_types,
+                    project_id,
                 )
-                if references is None:
-                    raise ValueError("um ativo visual não foi encontrado")
-                created_count += len(references)
-                used_fallback = used_fallback or any(
-                    _visual_reference_used_fallback(reference) for reference in references
+                failures.append(f"{target_kind}/{target_id}: {exc}")
+                continue
+
+            if references is None:
+                failures.append(f"{target_kind}/{target_id}: ativo visual não encontrado")
+                continue
+            created_count += len(references)
+            used_fallback = used_fallback or any(
+                _visual_reference_used_fallback(reference) for reference in references
+            )
+        if failures:
+            details = "\n".join(failures[:8])
+            if len(failures) > 8:
+                details += f"\n... e mais {len(failures) - 8} falha(s)."
+            if created_count:
+                _notify_visual_action(
+                    (
+                        f"{created_count} imagem(ns) criada(s), mas {len(failures)} ativo(s) "
+                        "falharam. Veja os detalhes técnicos."
+                    ),
+                    color="warning",
+                    timeout=9000,
                 )
+                show_ai_error_popup(
+                    "Algumas imagens da Biblioteca Visual não puderam ser criadas.",
+                    title="Geração parcial",
+                    details=details,
+                )
+                ui.navigate.reload()
+                return
+            show_ai_error_popup(
+                "Nenhuma imagem da Biblioteca Visual pôde ser criada.",
+                details=details,
+            )
+            return
         if created_count:
             if used_fallback:
                 _notify_visual_action(_visual_fallback_notice(), color="warning", timeout=9000)
@@ -218,6 +268,7 @@ async def _approve_all_visual_targets_from_ui(
             )
         ui.navigate.reload()
     except Exception as exc:
+        logger.exception("Não foi possível aprovar imagens em lote no projeto %s", project_id)
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 

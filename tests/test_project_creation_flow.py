@@ -316,6 +316,22 @@ def test_asset_url_maps_local_storage_file_to_public_storage_route(
     )
 
 
+def test_asset_url_maps_storage_prefixed_relative_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    storage_root = tmp_path / "storage"
+    monkeypatch.setattr(
+        pages,
+        "get_settings",
+        lambda: SimpleNamespace(local_storage_path=storage_root),
+    )
+
+    assert _asset_url("storage/openrouter_images/project-1/front view.png") == (
+        "/storage/openrouter_images/project-1/front%20view.png"
+    )
+
+
 def test_asset_url_rejects_files_outside_configured_storage(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

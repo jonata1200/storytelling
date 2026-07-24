@@ -42,11 +42,22 @@ def asset_url(storage_uri: str, storage_root: Path | None = None) -> str:
         return ""
     storage_root = (storage_root or get_settings().local_storage_path).resolve()
     candidate = Path(storage_uri)
-    if not candidate.is_absolute():
-        candidate = candidate.resolve()
-    try:
-        relative = candidate.relative_to(storage_root)
-    except ValueError:
+    candidates: list[Path]
+    if candidate.is_absolute():
+        candidates = [candidate.resolve()]
+    else:
+        candidates = []
+        if candidate.parts and candidate.parts[0] == storage_root.name:
+            candidates.append((storage_root.parent / candidate).resolve())
+        candidates.extend([(storage_root / candidate).resolve(), candidate.resolve()])
+    relative = None
+    for path in candidates:
+        try:
+            relative = path.relative_to(storage_root)
+            break
+        except ValueError:
+            continue
+    if relative is None:
         return ""
     return "/storage/" + "/".join(quote(part) for part in relative.parts)
 

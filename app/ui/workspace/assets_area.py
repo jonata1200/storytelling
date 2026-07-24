@@ -33,6 +33,7 @@ from app.visual_bible.models import VisualReference
 from app.visual_bible.service import (
     default_views_for,
     initial_view_for,
+    visual_reference_aspect_ratio,
     visual_reference_prompt,
 )
 
@@ -58,6 +59,20 @@ def _store_visual_library_active_tab(project_id: UUID, tab_name: str) -> None:
     nicegui_app.storage.user[_visual_library_tab_storage_key(project_id)] = value
 
 
+def _visual_reference_aspect_class(profile: dict, reference: VisualReference) -> str:
+    metadata = reference.metadata_json if isinstance(reference.metadata_json, dict) else {}
+    aspect_ratio = str(
+        metadata.get("aspect_ratio")
+        or visual_reference_aspect_ratio(profile, reference.view_type)
+        or ""
+    ).strip()
+    if aspect_ratio == "1:1":
+        return "aspect-square"
+    if aspect_ratio in {"16:9", "4:3"}:
+        return "aspect-video"
+    return "aspect-[9/16]"
+
+
 def _entity_card(
     project_id: UUID,
     target_kind: str,
@@ -70,6 +85,7 @@ def _entity_card(
     title: str,
     subtitle: str,
     detail: str,
+    loading_dialog_factory: Callable[[str, str], Any],
 ) -> None:
     if not existing_views:
         requested_views = [initial_view_for(target_kind)]
@@ -95,6 +111,15 @@ def _entity_card(
         if image_url
     ]
     hero_reference = reference_assets[0] if reference_assets else None
+    hero_aspect_class = (
+        _visual_reference_aspect_class(profile, hero_reference[0])
+        if hero_reference
+        else "aspect-[9/16]"
+    )
+    loading_dialog = loading_dialog_factory(
+        "Gerando imagem",
+        f"A IA está criando a referência visual de {title}.",
+    )
 
     with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as gallery_dialog, ui.card().classes(
@@ -109,7 +134,9 @@ def _entity_card(
                                 "border border-[#343934] rounded-xl overflow-hidden"
                             ):
                                 ui.image(image_url).classes(
-                                    "w-full aspect-[9/16] object-contain bg-black"
+                                    "w-full "
+                                    f"{_visual_reference_aspect_class(profile, reference)} "
+                                    "object-contain bg-black"
                                 ).props("fit=contain")
                                 with ui.column().classes("p-3 gap-1"):
                                     ui.label(reference.view_type).classes(
@@ -123,12 +150,16 @@ def _entity_card(
                                         view_type: str = reference.view_type,
                                     ) -> None:
                                         gallery_dialog.close()
-                                        await _regenerate_visual_reference_from_ui(
-                                            project_id,
-                                            target_kind,
-                                            target_id,
-                                            view_type,
-                                        )
+                                        loading_dialog.open()
+                                        try:
+                                            await _regenerate_visual_reference_from_ui(
+                                                project_id,
+                                                target_kind,
+                                                target_id,
+                                                view_type,
+                                            )
+                                        finally:
+                                            loading_dialog.close()
 
                                     ui.button(
                                         "Gerar novamente",
@@ -142,11 +173,14 @@ def _entity_card(
             with ui.row().classes("w-full justify-end mt-3"):
                 ui.button("Fechar", on_click=gallery_dialog.close).props("flat no-caps")
         with ui.element("div").classes(
-            "visual-placeholder h-44 p-0 flex items-stretch cursor-pointer"
+            "visual-placeholder p-0 flex items-stretch cursor-pointer "
+            f"{hero_aspect_class}"
         ).on("click", gallery_dialog.open):
             if hero_reference is not None:
                 _reference, _asset, hero_url = hero_reference
-                ui.image(hero_url).classes("w-full h-full object-cover").props("fit=cover")
+                ui.image(hero_url).classes("w-full h-full object-contain bg-black").props(
+                    "fit=contain"
+                )
             else:
                 with ui.element("div").classes("w-full h-full p-5 flex items-end"):
                     ui.icon(icon).classes("text-6xl text-[#eefa83]")
@@ -180,12 +214,16 @@ def _entity_card(
                     views: list[str] = requested_views,
                 ) -> None:
                     prompt_dialog.close()
-                    await _approve_visual_target_from_ui(
-                        project_id,
-                        target_kind,
-                        target_id,
-                        views,
-                    )
+                    loading_dialog.open()
+                    try:
+                        await _approve_visual_target_from_ui(
+                            project_id,
+                            target_kind,
+                            target_id,
+                            views,
+                        )
+                    finally:
+                        loading_dialog.close()
 
                 with ui.row().classes("w-full justify-end gap-2 mt-3"):
                     ui.button("Cancelar", on_click=prompt_dialog.close).props("flat no-caps")
@@ -243,12 +281,16 @@ def _entity_card(
                     async def regenerate_hero_reference(
                         view_type: str = hero_view_type,
                     ) -> None:
-                        await _regenerate_visual_reference_from_ui(
-                            project_id,
-                            target_kind,
-                            target_id,
-                            view_type,
-                        )
+                        loading_dialog.open()
+                        try:
+                            await _regenerate_visual_reference_from_ui(
+                                project_id,
+                                target_kind,
+                                target_id,
+                                view_type,
+                            )
+                        finally:
+                            loading_dialog.close()
 
                     ui.button(
                         "Gerar novamente",
@@ -375,6 +417,7 @@ def render_assets_area(
                             item.name,
                             subtitle,
                             detail,
+                            loading_dialog_factory,
                         )
                     if not items:
                         with ui.element("div").classes("entity-card rounded-2xl p-8"):

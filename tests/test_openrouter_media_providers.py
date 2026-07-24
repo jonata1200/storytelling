@@ -129,6 +129,84 @@ def test_openrouter_image_provider_retries_without_n_when_rejected_with_single_q
     assert result.file_path.read_bytes() == b"fake-png"
 
 
+def test_openrouter_image_provider_retries_without_unsupported_aspect_ratio(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    provider = OpenRouterImageProvider()
+    pixel = base64.b64encode(b"fake-png").decode("ascii")
+    posted_bodies: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+
+    def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
+        assert path == "/images"
+        posted_bodies.append(dict(body))
+        if len(posted_bodies) == 1:
+            raise RuntimeError("OpenRouter Images HTTP 400: unsupported parameter: aspect_ratio")
+        return {"data": [{"b64_json": pixel, "media_type": "image/png"}]}
+
+    monkeypatch.setattr(provider, "_post_json", fake_post)
+
+    result = provider._generate(
+        ImageGenerationRequest(
+            prompt="dramatic character portrait",
+            target_id="char",
+            view_type="front",
+            output_dir=tmp_path,
+            aspect_ratio="9:16",
+            model="sourceful/riverflow-v2.5-pro",
+        )
+    )
+
+    assert "aspect_ratio" in posted_bodies[0]
+    assert "aspect_ratio" not in posted_bodies[1]
+    assert posted_bodies[1]["output_format"] == "png"
+    assert result.file_path.read_bytes() == b"fake-png"
+
+
+def test_openrouter_image_provider_retries_multiple_unsupported_parameters(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    provider = OpenRouterImageProvider()
+    pixel = base64.b64encode(b"fake-png").decode("ascii")
+    posted_bodies: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+
+    def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
+        assert path == "/images"
+        posted_bodies.append(dict(body))
+        if len(posted_bodies) == 1:
+            raise RuntimeError(
+                "OpenRouter Images HTTP 400: unsupported parameters: output_format, aspect_ratio"
+            )
+        return {"data": [{"b64_json": pixel, "media_type": "image/png"}]}
+
+    monkeypatch.setattr(provider, "_post_json", fake_post)
+
+    result = provider._generate(
+        ImageGenerationRequest(
+            prompt="dramatic character portrait",
+            target_id="char",
+            view_type="front",
+            output_dir=tmp_path,
+            aspect_ratio="16:9",
+            model="sourceful/riverflow-v2.5-pro",
+        )
+    )
+
+    assert {"output_format", "aspect_ratio"}.issubset(posted_bodies[0])
+    assert "output_format" not in posted_bodies[1]
+    assert "aspect_ratio" not in posted_bodies[1]
+    assert result.file_path.read_bytes() == b"fake-png"
+
+
 def test_openrouter_image_provider_wraps_network_errors(
     monkeypatch: Any,
 ) -> None:
