@@ -73,6 +73,20 @@ def _visual_reference_aspect_class(profile: dict, reference: VisualReference) ->
     return "aspect-[9/16]"
 
 
+def _visual_reference_preview_width_class(profile: dict, reference: VisualReference) -> str:
+    metadata = reference.metadata_json if isinstance(reference.metadata_json, dict) else {}
+    aspect_ratio = str(
+        metadata.get("aspect_ratio")
+        or visual_reference_aspect_ratio(profile, reference.view_type)
+        or ""
+    ).strip()
+    if aspect_ratio == "1:1":
+        return "w-[min(720px,94vw)]"
+    if aspect_ratio in {"16:9", "4:3"}:
+        return "w-[min(1180px,94vw)]"
+    return "w-[min(520px,94vw)]"
+
+
 def _entity_card(
     project_id: UUID,
     target_kind: str,
@@ -116,12 +130,33 @@ def _entity_card(
         if hero_reference
         else "aspect-[9/16]"
     )
+    hero_preview_width_class = (
+        _visual_reference_preview_width_class(profile, hero_reference[0])
+        if hero_reference
+        else "w-[min(520px,94vw)]"
+    )
     loading_dialog = loading_dialog_factory(
         "Gerando imagem",
         f"A IA está criando a referência visual de {title}.",
     )
 
     with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
+        with ui.dialog() as image_preview_dialog:
+            if hero_reference is not None:
+                _reference, _asset, preview_url = hero_reference
+                with ui.element("div").classes(
+                    f"relative {hero_preview_width_class} max-h-[92vh]"
+                ):
+                    ui.image(preview_url).classes(
+                        "w-full max-h-[92vh] "
+                        f"{hero_aspect_class} bg-black rounded-xl overflow-hidden"
+                    ).props("fit=contain")
+                    ui.button(
+                        icon="close",
+                        on_click=image_preview_dialog.close,
+                    ).props("round dense unelevated").classes(
+                        "absolute top-3 right-3 bg-black/70 text-white"
+                    )
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as gallery_dialog, ui.card().classes(
             "entity-card rounded-2xl p-6 w-[min(980px,94vw)] max-h-[90vh]"
         ):
@@ -172,10 +207,13 @@ def _entity_card(
                 )
             with ui.row().classes("w-full justify-end mt-3"):
                 ui.button("Fechar", on_click=gallery_dialog.close).props("flat no-caps")
-        with ui.element("div").classes(
+        preview_target = ui.element("div").classes(
             "visual-placeholder p-0 flex items-stretch cursor-pointer "
             f"{hero_aspect_class}"
-        ).on("click", gallery_dialog.open):
+        )
+        if hero_reference is not None:
+            preview_target.on("click", image_preview_dialog.open)
+        with preview_target:
             if hero_reference is not None:
                 _reference, _asset, hero_url = hero_reference
                 ui.image(hero_url).classes("w-full h-full object-contain bg-black").props(
@@ -306,14 +344,10 @@ def render_assets_area(
     section_title: Callable[[str, str, str | None, Any | None], None],
     loading_dialog_factory: Callable[[str, str], Any],
 ) -> None:
+    del section_title
     asset_map = {asset.id: asset for asset in summary.get("assets", [])}
-    section_title(
-        "Biblioteca visual",
-        "Personagens, locais e objetos canônicos do seu universo.",
-        None,
-        None,
-    )
     batch_requests = _visual_batch_requests(summary)
+    batch_prompt_dialog: Any | None = None
     if batch_requests:
         target_lookup: dict[tuple[str, UUID], str] = {}
         target_profiles: dict[tuple[str, UUID], dict[str, Any]] = {}
@@ -366,15 +400,21 @@ def render_assets_area(
                     icon="check_circle",
                     on_click=confirm_batch_prompts,
                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-        with ui.row().classes("w-full justify-end mb-3"):
+    with ui.row().classes("w-full items-start justify-between gap-3 mb-1"):
+        with ui.column().classes("gap-0"):
+            ui.label("Biblioteca visual").classes("brand-type text-2xl font-bold leading-tight")
+            ui.label("Personagens, locais e objetos canônicos do seu universo.").classes(
+                "text-sm text-[#8e948f]"
+            )
+        if batch_prompt_dialog is not None:
             pending_count = sum(len(view_types) for _kind, _id, view_types in batch_requests)
             ui.button(
                 f"Aprovar prompts pendentes ({pending_count})",
                 icon="check_circle",
-                on_click=lambda: batch_prompt_dialog.open(),
-            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                on_click=batch_prompt_dialog.open,
+            ).props("unelevated no-caps").classes("acid-bg rounded-xl shrink-0")
     active_tab = _read_visual_library_active_tab(project_id)
-    with ui.tabs(value=cast(Any, active_tab)).classes("text-[#8d938e]") as tabs:
+    with ui.tabs(value=cast(Any, active_tab)).classes("text-[#8d938e] mt-1") as tabs:
         people = ui.tab("characters", "Personagens")
         places = ui.tab("locations", "Locais")
         props = ui.tab("props", "Objetos")
@@ -383,13 +423,15 @@ def render_assets_area(
             project_id, str(event.value or VISUAL_LIBRARY_TAB_DEFAULT)
         )
     )
-    with ui.tab_panels(tabs, value=cast(Any, active_tab)).classes("w-full bg-transparent p-0"):
+    with ui.tab_panels(tabs, value=cast(Any, active_tab)).classes(
+        "w-full bg-transparent p-0 mt-1"
+    ):
         for tab, items, icon, target_kind in [
             (people, summary["characters"], "person", "character"),
             (places, summary["locations"], "location_on", "location"),
             (props, summary["props"], "category", "prop"),
         ]:
-            with ui.tab_panel(tab).classes("px-0"):
+            with ui.tab_panel(tab).classes("px-0 py-1"):
                 with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
                     for item in items:
                         subtitle = (
