@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     openrouter_site_url: str = "http://127.0.0.1:8000"
     openrouter_app_title: str = "Storytelling"
     openrouter_default_model: str = "deepseek/deepseek-v4-flash"
-    openrouter_image_model: str = "sourceful/riverflow-v2.5-pro"
+    openrouter_image_model: str = "sourceful/riverflow-v2-fast"
     openrouter_video_model: str = "bytedance/seedance-2.0-fast"
     user_display_name: str = "Jonata"
     user_email: str = ""

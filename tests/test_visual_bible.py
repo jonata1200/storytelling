@@ -1047,6 +1047,9 @@ async def test_generate_visual_references_reloads_created_rows_without_refresh(
     async def fake_provider(*args: object, **kwargs: object) -> tuple[object, str, str]:
         return object(), "mock-image", "mock_images"
 
+    async def fake_production_settings(*args: object, **kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(image_resolution="1080x1920")
+
     async def fake_image(
         provider: object, request: ImageGenerationRequest
     ) -> tuple[ImageResult, dict]:
@@ -1069,6 +1072,11 @@ async def test_generate_visual_references_reloads_created_rows_without_refresh(
     monkeypatch.setattr(visual_bible_service, "ProjectRepository", FakeRepository)
     monkeypatch.setattr(visual_bible_service, "_get_visual_target", fake_target)
     monkeypatch.setattr(visual_bible_service, "_image_provider_for_project", fake_provider)
+    monkeypatch.setattr(
+        visual_bible_service,
+        "get_or_create_production_settings",
+        fake_production_settings,
+    )
     monkeypatch.setattr(
         visual_bible_service,
         "_generate_image_with_provider_fallback",

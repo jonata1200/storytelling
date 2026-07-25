@@ -6,9 +6,21 @@ from nicegui import ui
 
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS
 from app.ui.visual.actions import _approve_video_prompts_from_ui
+from app.ui.visual.helpers import asset_url
 from app.ui.workspace.panels import _render_timeline_strip
 
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
+
+
+def _storyboard_frame_image_url(summary: dict[str, Any], frame: Any) -> str:
+    frame_asset_id = getattr(frame, "asset_id", None)
+    if frame_asset_id is None:
+        return ""
+    asset_map = {asset.id: asset for asset in summary.get("assets", [])}
+    asset = asset_map.get(frame_asset_id)
+    if asset is None:
+        return ""
+    return asset_url(asset.storage_uri)
 
 
 def render_storyboard_area(
@@ -34,11 +46,17 @@ def render_storyboard_area(
                 ui.label(str(value)).classes("text-lg font-bold")
     with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
         for frame in sorted(summary["frames"], key=lambda f: f.frame_number):
+            image_url = _storyboard_frame_image_url(summary, frame)
             with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
                 with ui.element("div").classes(
-                    "visual-placeholder aspect-video p-4 flex items-center justify-center"
+                    "visual-placeholder aspect-video p-0 flex items-center justify-center bg-black"
                 ):
-                    ui.icon("photo_camera").classes("text-5xl text-[#bdc77b]")
+                    if image_url:
+                        ui.image(image_url).classes(
+                            "w-full h-full object-contain bg-black"
+                        ).props("fit=contain")
+                    else:
+                        ui.icon("photo_camera").classes("text-5xl text-[#bdc77b]")
                 with ui.column().classes("p-4 gap-1"):
                     ui.label(f"PLANO {frame.frame_number:02d} · {frame.duration_seconds}s").classes(
                         "text-xs acid font-semibold"

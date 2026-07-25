@@ -64,7 +64,7 @@ Configure no `.env`:
 ```env
 OPENROUTER_API_KEY=sua_chave_aqui
 OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash
-OPENROUTER_IMAGE_MODEL=sourceful/riverflow-v2.5-pro
+OPENROUTER_IMAGE_MODEL=sourceful/riverflow-v2-fast
 OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0-fast
 ALLOW_USER_REGISTRATION=false
 ```

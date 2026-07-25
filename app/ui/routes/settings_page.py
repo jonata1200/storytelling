@@ -199,7 +199,7 @@ def register_settings_page(
                                 ui.input(
                                     "Modelo de imagem",
                                     value=current.openrouter_image_model,
-                                    placeholder="sourceful/riverflow-v2.5-pro",
+                                    placeholder="sourceful/riverflow-v2-fast",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")

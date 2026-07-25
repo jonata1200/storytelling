@@ -1,5 +1,6 @@
 ﻿from collections.abc import Mapping
 from decimal import Decimal
+from time import perf_counter
 from typing import TypedDict
 from uuid import UUID
 
@@ -815,7 +816,9 @@ async def generate_visual_references(
     if target is None:
         return None
     profile, target_artifact_id = target
+    production_settings = await get_or_create_production_settings(session, project_id)
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
+    image_resolution = production_settings.image_resolution
     requested_views = validated_visual_reference_views(target_kind, view_types)
     if force:
         views = requested_views
@@ -840,6 +843,7 @@ async def generate_visual_references(
             profile,
             view_type,
         )
+        generation_started_at = perf_counter()
         image_result, fallback_metadata = await _generate_image_with_provider_fallback(
             provider,
             ImageGenerationRequest(
@@ -848,12 +852,16 @@ async def generate_visual_references(
                 view_type=view_type,
                 output_dir=output_dir,
                 aspect_ratio=aspect_ratio,
+                resolution=image_resolution,
                 references=reference_uris,
                 model=image_model,
             ),
         )
+        duration_ms = max(1, int((perf_counter() - generation_started_at) * 1000))
         generation_metadata = {
             "reference_uris": reference_uris,
+            "resolution": image_resolution,
+            "duration_ms": duration_ms,
             **fallback_metadata,
         }
         asset = Asset(
@@ -909,8 +917,8 @@ async def generate_visual_references(
             variables={"target_kind": target_kind, "target_id": str(target_id), "view": view_type},
             response={"asset_id": str(asset.id), "storage_uri": asset.storage_uri},
             parameters=generation_metadata,
-            estimated_cost=Decimal("0.000000"),
-            duration_ms=None,
+            estimated_cost=Decimal(image_result.estimated_cost),
+            duration_ms=duration_ms,
         )
         session.add(execution)
         reference = VisualReference(

@@ -1,4 +1,5 @@
-﻿import logging
+import asyncio
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -199,19 +200,23 @@ async def _approve_all_visual_targets_from_ui(
             )
             ui.navigate.reload()
             return
-        created_count = 0
-        used_fallback = False
-        failures: list[str] = []
-        for target_kind, target_id, view_types in current_requests:
+        semaphore = asyncio.Semaphore(2)
+
+        async def generate_request(
+            target_kind: str,
+            target_id: UUID,
+            view_types: list[str],
+        ) -> tuple[int, bool, str | None]:
             try:
-                async with AsyncSessionLocal() as session:
-                    references = await approve_visual_target_and_generate_views(
-                        session,
-                        project_id,
-                        target_kind,
-                        target_id,
-                        view_types,
-                    )
+                async with semaphore:
+                    async with AsyncSessionLocal() as session:
+                        references = await approve_visual_target_and_generate_views(
+                            session,
+                            project_id,
+                            target_kind,
+                            target_id,
+                            view_types,
+                        )
             except Exception as exc:
                 logger.exception(
                     "Não foi possível gerar imagens em lote para %s/%s no projeto %s",
@@ -219,16 +224,24 @@ async def _approve_all_visual_targets_from_ui(
                     target_id,
                     project_id,
                 )
-                failures.append(f"{target_kind}/{target_id}: {exc}")
-                continue
+                return 0, False, f"{target_kind}/{target_id}: {exc}"
 
             if references is None:
-                failures.append(f"{target_kind}/{target_id}: ativo visual não encontrado")
-                continue
-            created_count += len(references)
-            used_fallback = used_fallback or any(
+                return 0, False, f"{target_kind}/{target_id}: ativo visual não encontrado"
+            used_fallback = any(
                 _visual_reference_used_fallback(reference) for reference in references
             )
+            return len(references), used_fallback, None
+
+        results = await asyncio.gather(
+            *(
+                generate_request(target_kind, target_id, view_types)
+                for target_kind, target_id, view_types in current_requests
+            )
+        )
+        created_count = sum(created for created, _fallback, _failure in results)
+        used_fallback = any(used for _created, used, _failure in results)
+        failures = [failure for _created, _used, failure in results if failure]
         if failures:
             details = "\n".join(failures[:8])
             if len(failures) > 8:
@@ -297,6 +310,7 @@ async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+
 
 
 

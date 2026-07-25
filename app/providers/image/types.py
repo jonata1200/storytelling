@@ -10,16 +10,17 @@ class ImageGenerationRequest(BaseModel):
     view_type: str
     output_dir: Path
     aspect_ratio: str = "9:16"
+    resolution: str | None = None
     negative_prompt: str | None = None
     references: list[str] = Field(default_factory=list)
-    model: str = "sourceful/riverflow-v2.5-pro"
+    model: str = "sourceful/riverflow-v2-fast"
 
 
 class ImageEditRequest(BaseModel):
     prompt: str
     source_uri: str
     output_dir: Path
-    model: str = "sourceful/riverflow-v2.5-pro"
+    model: str = "sourceful/riverflow-v2-fast"
 
 
 class ImageResult(BaseModel):

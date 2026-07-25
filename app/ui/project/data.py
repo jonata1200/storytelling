@@ -116,17 +116,22 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             )
             timeline_items = list(item_result.scalars())
         visual_refs = await latest_many(session, VisualReference, project_id, 100)
-        visual_asset_ids = {reference.asset_id for reference in visual_refs}
-        if visual_asset_ids:
+        frames = await latest_many(session, StoryboardFrame, project_id, 100)
+        visual_asset_ids = {
+            reference.asset_id for reference in visual_refs if reference.asset_id is not None
+        }
+        frame_asset_ids = {frame.asset_id for frame in frames if frame.asset_id is not None}
+        asset_ids = visual_asset_ids | frame_asset_ids
+        if asset_ids:
             asset_result = await session.execute(
                 select(Asset).where(
                     Asset.project_id == project_id,
-                    Asset.id.in_(visual_asset_ids),
+                    Asset.id.in_(asset_ids),
                 )
             )
-            visual_assets = list(asset_result.scalars())
+            assets = list(asset_result.scalars())
         else:
-            visual_assets = []
+            assets = []
         return {
             "project": project,
             "production_settings": production_settings,
@@ -170,8 +175,8 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             "locations": await latest_many(session, Location, project_id, 100),
             "props": await latest_many(session, Prop, project_id, 100),
             "visual_refs": visual_refs,
-            "assets": visual_assets,
-            "frames": await latest_many(session, StoryboardFrame, project_id, 100),
+            "assets": assets,
+            "frames": frames,
             "clips": await latest_many(session, VideoClip, project_id, 100),
             "timeline": latest_timeline,
             "timeline_items": timeline_items,

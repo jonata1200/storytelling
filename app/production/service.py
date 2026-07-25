@@ -25,6 +25,7 @@ RESOLUTIONS = ["720x1280", "1080x1920", "1920x1080", "3840x2160"]
 AUDIO_MODES = {"narration_subtitles"}
 MOCK_IMAGE_MODEL = "mock-image"
 MOCK_VIDEO_MODEL = "mock-video"
+LEGACY_DEFAULT_IMAGE_MODELS = {"sourceful/riverflow-v2.5-pro"}
 
 
 def _validate_model_name(value: object, field_name: str) -> str:
@@ -66,7 +67,11 @@ def _validated_production_payload(payload: dict) -> dict:
 def resolve_image_model(project_image_model: str | None, default_image_model: str | None) -> str:
     project_model = str(project_image_model or "").strip()
     default_model = str(default_image_model or "").strip()
-    if project_model and not is_mock_model(project_model):
+    if (
+        project_model
+        and not is_mock_model(project_model)
+        and project_model not in LEGACY_DEFAULT_IMAGE_MODELS
+    ):
         return validate_openrouter_model_name(project_model, "image_model")
     if default_model and not is_mock_model(default_model):
         return validate_openrouter_model_name(default_model, "OPENROUTER_IMAGE_MODEL")

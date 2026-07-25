@@ -50,6 +50,8 @@ class OpenRouterImageProvider:
             "aspect_ratio": request.aspect_ratio,
             "output_format": "png",
         }
+        if request.resolution:
+            body["size"] = request.resolution
         if request.references:
             body["input_references"] = [
                 {
@@ -164,7 +166,7 @@ class OpenRouterImageProvider:
         message = str(exc).lower()
         if not any(term in message for term in ("unsupported", "not supported", "unknown")):
             return []
-        retryable_parameters = ("output_format", "aspect_ratio", "n")
+        retryable_parameters = ("output_format", "aspect_ratio", "n", "size")
         return [
             parameter
             for parameter in retryable_parameters

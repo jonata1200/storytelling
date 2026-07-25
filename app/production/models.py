@@ -25,7 +25,7 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     workflow_mode: Mapped[str] = mapped_column(String(80), default="keyframes_i2v", nullable=False)
     image_model: Mapped[str] = mapped_column(
         String(160),
-        default="sourceful/riverflow-v2.5-pro",
+        default="sourceful/riverflow-v2-fast",
         nullable=False,
     )
     video_model: Mapped[str] = mapped_column(

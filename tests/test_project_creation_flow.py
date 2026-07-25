@@ -31,6 +31,7 @@ from app.storytelling.service import (
 )
 from app.ui import pages
 from app.ui.pages import DEFAULT_STORY_DURATION_MINUTES, _asset_url, _compact_project_title
+from app.ui.workspace import storyboard_video_area
 from app.ui.workspace.assets_area import _character_reference_sheet_asset
 
 
@@ -420,6 +421,26 @@ def test_character_reference_sheet_asset_is_available_only_for_characters() -> N
     assert _character_reference_sheet_asset("character", reference_assets) == reference_sheet
     assert _character_reference_sheet_asset("location", reference_assets) is None
     assert _character_reference_sheet_asset("prop", reference_assets) is None
+
+
+def test_storyboard_frame_image_url_uses_frame_asset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asset_id = uuid4()
+    frame = SimpleNamespace(asset_id=asset_id)
+    asset = SimpleNamespace(id=asset_id, storage_uri="storage/storyboards/frame.png")
+    monkeypatch.setattr(
+        storyboard_video_area,
+        "asset_url",
+        lambda storage_uri: f"/resolved/{storage_uri}",
+    )
+
+    image_url = storyboard_video_area._storyboard_frame_image_url(
+        {"assets": [asset]},
+        frame,
+    )
+
+    assert image_url == "/resolved/storage/storyboards/frame.png"
 
 
 def test_visual_library_cards_ready_when_any_card_type_exists() -> None:
@@ -1361,7 +1382,7 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
         pages,
         "get_settings",
         lambda: SimpleNamespace(
-            openrouter_image_model="sourceful/riverflow-v2.5-pro",
+            openrouter_image_model="sourceful/riverflow-v2-fast",
             openrouter_video_model="bytedance/seedance-2.0-fast",
         ),
     )

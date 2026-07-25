@@ -1,6 +1,7 @@
 import hashlib
 import json
 from decimal import Decimal
+from time import perf_counter
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -331,6 +332,8 @@ async def generate_storyboard_frames(
         return []
 
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
+    production_settings = await get_or_create_production_settings(session, project_id)
+    image_resolution = production_settings.image_resolution
     output_dir = get_settings().local_storage_path / image_dir_name / str(project_id)
     visual_context = await _storyboard_visual_context(session, project_id)
     existing_frames = await list_storyboard_frames(session, project_id, script_id)
@@ -347,6 +350,7 @@ async def generate_storyboard_frames(
         )
         needs_image = existing_frame is None or existing_prompt_hash != _prompt_hash(prompt)
         if needs_image:
+            generation_started_at = perf_counter()
             image, fallback_metadata = await _generate_image_with_provider_fallback(
                 provider,
                 ImageGenerationRequest(
@@ -354,9 +358,16 @@ async def generate_storyboard_frames(
                     target_id=str(shot.id),
                     view_type=f"storyboard_{frame_number:03d}",
                     output_dir=output_dir,
+                    resolution=image_resolution,
                     model=image_model,
                 )
             )
+            duration_ms = max(1, int((perf_counter() - generation_started_at) * 1000))
+            generation_metadata = {
+                "resolution": image_resolution,
+                "duration_ms": duration_ms,
+                **fallback_metadata,
+            }
             asset_artifact_id = (
                 existing_frame.artifact_id if existing_frame is not None else shot.artifact_id
             )
@@ -371,7 +382,7 @@ async def generate_storyboard_frames(
                 metadata_json={
                     "provider": image.provider,
                     "model": image.model,
-                    **fallback_metadata,
+                    **generation_metadata,
                 },
             )
             session.add(asset)
@@ -391,6 +402,8 @@ async def generate_storyboard_frames(
             image = None
             asset = None
             asset_id = existing_frame.asset_id
+            duration_ms = None
+            generation_metadata = {"reused": True}
 
         payload = _storyboard_frame_payload(scene, shot, asset_id, prompt)
         if existing_frame is not None:
@@ -427,9 +440,13 @@ async def generate_storyboard_frames(
                             "asset_id": str(asset_id),
                             "storage_uri": asset.storage_uri if asset is not None else "",
                         },
-                        parameters={"reused": False, **fallback_metadata},
-                        estimated_cost=Decimal("0.000000"),
-                        duration_ms=None,
+                        parameters={"reused": False, **generation_metadata},
+                        estimated_cost=(
+                            Decimal(image.estimated_cost)
+                            if image is not None
+                            else Decimal("0.000000")
+                        ),
+                        duration_ms=duration_ms,
                     )
                 )
             elif metadata_changed:
@@ -473,9 +490,13 @@ async def generate_storyboard_frames(
                         "asset_id": str(asset_id),
                         "storage_uri": asset.storage_uri if asset is not None else "",
                     },
-                    parameters={"reused": False, **fallback_metadata},
-                    estimated_cost=Decimal("0.000000"),
-                    duration_ms=None,
+                    parameters={"reused": False, **generation_metadata},
+                    estimated_cost=(
+                        Decimal(image.estimated_cost)
+                        if image is not None
+                        else Decimal("0.000000")
+                    ),
+                    duration_ms=duration_ms,
                 )
             )
             frame = StoryboardFrame(

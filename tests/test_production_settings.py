@@ -50,8 +50,15 @@ def test_resolve_image_model_uses_global_default_when_project_is_mock() -> None:
 
 def test_resolve_image_model_preserves_project_specific_real_model() -> None:
     assert (
-        resolve_image_model("sourceful/riverflow-v2.5-pro", "krea/krea-2-medium-turbo")
-        == "sourceful/riverflow-v2.5-pro"
+        resolve_image_model("krea/krea-2-medium-turbo", "sourceful/riverflow-v2-fast")
+        == "krea/krea-2-medium-turbo"
+    )
+
+
+def test_resolve_image_model_uses_global_default_for_legacy_project_default() -> None:
+    assert (
+        resolve_image_model("sourceful/riverflow-v2.5-pro", "sourceful/riverflow-v2-fast")
+        == "sourceful/riverflow-v2-fast"
     )
 
 
