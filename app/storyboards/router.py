@@ -36,6 +36,7 @@ async def post_generate_storyboards(
             project_id,
             payload.script_id,
             scene_number=payload.scene_number,
+            force=payload.force,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

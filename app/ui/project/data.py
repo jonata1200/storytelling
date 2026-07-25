@@ -18,6 +18,7 @@ from app.projects.repository import ProjectRepository
 from app.projects.service import list_projects
 from app.quality.models import ContinuityIssue, QualityCheck
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
+from app.storyboards.service import list_storyboard_prompt_previews
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
 from app.video_generation.models import GenerationJob, VideoClip
 from app.visual_bible.models import Character, Location, Prop, VisualReference
@@ -128,6 +129,11 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             frames = list(frame_result.scalars())
         else:
             frames = []
+        storyboard_prompt_previews = (
+            await list_storyboard_prompt_previews(session, project_id, script.id)
+            if script is not None
+            else []
+        )
         visual_asset_ids = {
             reference.asset_id for reference in visual_refs if reference.asset_id is not None
         }
@@ -188,6 +194,7 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             "visual_refs": visual_refs,
             "assets": assets,
             "frames": frames,
+            "storyboard_prompt_previews": storyboard_prompt_previews,
             "clips": await latest_many(session, VideoClip, project_id, 100),
             "timeline": latest_timeline,
             "timeline_items": timeline_items,

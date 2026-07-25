@@ -95,6 +95,39 @@ def test_openrouter_image_provider_retries_with_jpeg_when_png_is_rejected(
     assert result.file_path.read_bytes() == b"fake-jpeg"
 
 
+def test_openrouter_image_provider_writes_webp_with_displayable_extension(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    provider = OpenRouterImageProvider()
+    pixel = base64.b64encode(b"fake-webp").decode("ascii")
+
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+    monkeypatch.setattr(
+        provider,
+        "_post_json",
+        lambda _path, _body: {
+            "data": [{"b64_json": pixel, "media_type": "image/webp"}],
+        },
+    )
+
+    result = provider._generate(
+        ImageGenerationRequest(
+            prompt="vertical storyboard",
+            target_id="shot",
+            view_type="storyboard_001",
+            output_dir=tmp_path,
+            model="sourceful/riverflow-v2-fast",
+        )
+    )
+
+    assert result.content_type == "image/webp"
+    assert result.file_path.suffix == ".webp"
+    assert result.file_path.read_bytes() == b"fake-webp"
+
+
 def test_openrouter_image_provider_retries_without_n_when_rejected_with_single_quotes(
     monkeypatch: Any, tmp_path: Path
 ) -> None:

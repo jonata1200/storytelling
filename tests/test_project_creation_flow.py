@@ -428,7 +428,11 @@ def test_storyboard_frame_image_url_uses_frame_asset(
 ) -> None:
     asset_id = uuid4()
     frame = SimpleNamespace(asset_id=asset_id)
-    asset = SimpleNamespace(id=asset_id, storage_uri="storage/storyboards/frame.png")
+    asset = SimpleNamespace(
+        id=asset_id,
+        storage_uri="storage/storyboards/frame.bin",
+        content_type="image/webp",
+    )
     monkeypatch.setattr(
         storyboard_video_area,
         "asset_url",
@@ -441,7 +445,7 @@ def test_storyboard_frame_image_url_uses_frame_asset(
         frame,
     )
 
-    assert image_url == "/resolved/storage/storyboards/frame.png"
+    assert image_url == f"/api/v1/assets/{asset_id}/content"
 
 
 def test_storyboard_frame_image_url_ignores_missing_local_file(

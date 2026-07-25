@@ -25,7 +25,18 @@ def local_uri_to_data_url(uri: str) -> str:
 
 
 def extension_from_media_type(media_type: str) -> str:
-    if media_type == "image/svg+xml":
+    normalized = str(media_type or "").split(";", 1)[0].strip().lower()
+    explicit_extensions = {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/svg+xml": ".svg",
+        "image/webp": ".webp",
+        "image/gif": ".gif",
+    }
+    if normalized in explicit_extensions:
+        return explicit_extensions[normalized]
+    if normalized == "image/svg+xml":
         return ".svg"
-    extension = mimetypes.guess_extension(media_type)
+    extension = mimetypes.guess_extension(normalized)
     return extension or ".bin"

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class GenerateStoryboardsRequest(BaseModel):
     script_id: UUID
     scene_number: int | None = Field(default=None, ge=1)
+    force: bool = False
 
 
 class StoryboardFrameRead(BaseModel):

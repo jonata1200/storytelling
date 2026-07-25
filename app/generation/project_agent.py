@@ -28,6 +28,7 @@ from app.storyboards.service import (
     generate_animatic_bundle,
     generate_storyboard_frames,
     storyboard_frames_need_generation,
+    storyboard_prompts_need_approval,
 )
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
 from app.storytelling.service import (
@@ -860,6 +861,22 @@ async def _ensure_storyboard_pipeline(
         or force
         or await storyboard_frames_need_generation(session, project_id, script.id)
     ):
+        if await storyboard_prompts_need_approval(
+            session,
+            project_id,
+            script.id,
+            scene_number=scene_number,
+        ):
+            scene_copy = (
+                f" da cena {scene_number}" if scene_number is not None else ""
+            )
+            return ProjectChatResult(
+                "Os prompts de storyboard"
+                f"{scene_copy} precisam ser aprovados antes da geração das imagens. "
+                "Abra a aba Storyboard, revise os cards de prompt e clique em aprovar.",
+                "generate_storyboard",
+                changed,
+            )
         if scene_number is None:
             await _emit_progress(progress, "Vou transformar as cenas em frames de storyboard.")
         else:
@@ -872,6 +889,7 @@ async def _ensure_storyboard_pipeline(
             project_id,
             script.id,
             scene_number=scene_number,
+            force=force,
         )
         if generated_frames is None:
             return ProjectChatResult(

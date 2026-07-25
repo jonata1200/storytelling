@@ -10,7 +10,9 @@ from app.storyboards.models import StoryboardFrame
 from app.storyboards.service import (
     _animatic_fingerprint,
     _local_storage_file_exists,
+    _store_storyboard_prompt_approval,
     _storyboard_prompt,
+    _storyboard_prompt_is_approved,
     generate_storyboard_frames,
     storyboard_coverage_errors,
 )
@@ -121,6 +123,15 @@ def test_storyboard_coverage_errors_detect_missing_and_duration_mismatch() -> No
 
     assert "1 plano(s) sem frame de storyboard" in errors
     assert "duracao dos frames (4s) difere dos planos (12s)" in errors
+
+
+def test_storyboard_prompt_approval_requires_matching_hash() -> None:
+    script_id = uuid4()
+    shot_id = uuid4()
+    metadata = _store_storyboard_prompt_approval({}, script_id, shot_id, "hash-a")
+
+    assert _storyboard_prompt_is_approved(metadata, script_id, shot_id, "hash-a")
+    assert not _storyboard_prompt_is_approved(metadata, script_id, shot_id, "hash-b")
 
 
 def test_local_storage_file_exists_checks_storage_root(

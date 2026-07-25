@@ -675,7 +675,12 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
     )
 
 def _render_storyboard_area(project_id: UUID, summary: dict[str, Any]) -> None:
-    render_storyboard_area(project_id, summary, section_title=_section_title)
+    render_storyboard_area(
+        project_id,
+        summary,
+        section_title=_section_title,
+        loading_dialog_factory=_generation_loading_dialog,
+    )
 
 
 def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:

@@ -579,6 +579,123 @@ async def test_storyboard_pipeline_requires_complete_visual_references(
 
 
 @pytest.mark.asyncio
+async def test_storyboard_pipeline_requires_prompt_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+
+    async def fake_script(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+    ) -> tuple[SimpleNamespace, str, bool]:
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=script_id), "script ok", False
+
+    async def fake_visual_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"complete": True, "missing_categories": [], "missing_views": 0}
+
+    async def fake_frames_need_generation(*args: Any, **kwargs: Any) -> bool:
+        return True
+
+    async def fake_prompts_need_approval(*args: Any, **kwargs: Any) -> bool:
+        return True
+
+    async def fail_storyboard_generation(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("storyboard não deve ser gerado antes da aprovação")
+
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
+    monkeypatch.setattr(project_agent, "visual_reference_completion_report", fake_visual_report)
+    monkeypatch.setattr(
+        project_agent,
+        "storyboard_frames_need_generation",
+        fake_frames_need_generation,
+    )
+    monkeypatch.setattr(
+        project_agent,
+        "storyboard_prompts_need_approval",
+        fake_prompts_need_approval,
+    )
+    monkeypatch.setattr(project_agent, "generate_storyboard_frames", fail_storyboard_generation)
+
+    result = await project_agent._ensure_storyboard_pipeline(
+        cast(AsyncSession, object()),
+        project_id,
+    )
+
+    assert result.action == "generate_storyboard"
+    assert result.changed is False
+    assert "prompts de storyboard" in result.message
+    assert "aprovados" in result.message
+
+
+@pytest.mark.asyncio
+async def test_storyboard_pipeline_force_regenerates_frames(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    requested_force_values: list[bool] = []
+
+    async def fake_script(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+    ) -> tuple[SimpleNamespace, str, bool]:
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=script_id), "script ok", False
+
+    async def fake_visual_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"complete": True, "missing_categories": [], "missing_views": 0}
+
+    async def fake_prompts_need_approval(*args: Any, **kwargs: Any) -> bool:
+        return False
+
+    async def fake_generate_storyboard_frames(
+        session: AsyncSession,
+        requested_project_id: Any,
+        requested_script_id: Any,
+        scene_number: int | None = None,
+        force: bool = False,
+    ) -> list[SimpleNamespace]:
+        assert requested_project_id == project_id
+        assert requested_script_id == script_id
+        requested_force_values.append(force)
+        return [SimpleNamespace(id=uuid4())]
+
+    async def fake_count(*args: Any, **kwargs: Any) -> int:
+        return 1
+
+    async def fake_animatic_bundle(*args: Any, **kwargs: Any) -> object:
+        return object()
+
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
+    monkeypatch.setattr(project_agent, "visual_reference_completion_report", fake_visual_report)
+    monkeypatch.setattr(
+        project_agent,
+        "storyboard_prompts_need_approval",
+        fake_prompts_need_approval,
+    )
+    monkeypatch.setattr(
+        project_agent,
+        "generate_storyboard_frames",
+        fake_generate_storyboard_frames,
+    )
+    monkeypatch.setattr(project_agent, "generate_animatic_bundle", fake_animatic_bundle)
+    monkeypatch.setattr(project_agent, "_count", fake_count)
+
+    result = await project_agent._ensure_storyboard_pipeline(
+        cast(AsyncSession, object()),
+        project_id,
+        force=True,
+    )
+
+    assert result.action == "generate_storyboard"
+    assert requested_force_values == [True]
+
+
+@pytest.mark.asyncio
 async def test_video_pipeline_stops_when_visual_references_block_storyboard(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
