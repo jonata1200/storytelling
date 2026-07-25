@@ -25,6 +25,9 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("gere o storyboard completo", "script") == (
         "generate_storyboard"
     )
+    assert classify_project_chat_action("gere o storyboard da cena 1", "storyboard") == (
+        "generate_storyboard"
+    )
     assert classify_project_chat_action("gerar os clipes de video", "storyboard") == (
         "generate_video"
     )
@@ -59,6 +62,12 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("aprove o prompt da Clara para gerar imagem", "assets") == (
         "approve_visual_prompt"
     )
+
+
+def test_project_chat_extracts_storyboard_scene_number() -> None:
+    assert project_agent._requested_storyboard_scene_number("gere storyboard da cena 1") == 1
+    assert project_agent._requested_storyboard_scene_number("crie frames da cena 02") == 2
+    assert project_agent._requested_storyboard_scene_number("gere storyboard completo") is None
 
 
 @pytest.mark.asyncio
@@ -365,6 +374,56 @@ async def test_project_chat_routes_assets_storyboard_and_video(
     assert storyboard.action == "generate_storyboard"
     assert video.action == "generate_video"
     assert calls == ["assets", "storyboard", "video"]
+
+
+@pytest.mark.asyncio
+async def test_project_chat_routes_storyboard_scene_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    requested_scene_numbers: list[int | None] = []
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        assert requested_project_id == project_id
+        return {
+            "found": True,
+            "counts": {
+                "scripts": 1,
+                "scenes": 3,
+                "shots": 9,
+                "characters": 2,
+                "locations": 2,
+                "props": 2,
+                "frames": 0,
+                "clips": 0,
+            },
+        }
+
+    async def fake_storyboard(
+        session: AsyncSession,
+        requested_project_id: Any,
+        force: bool = False,
+        progress: Any = None,
+        scene_number: int | None = None,
+    ) -> ProjectChatResult:
+        assert requested_project_id == project_id
+        assert force is False
+        requested_scene_numbers.append(scene_number)
+        return ProjectChatResult("storyboard parcial ok", "generate_storyboard", True)
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_ensure_storyboard_pipeline", fake_storyboard)
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "storyboard",
+        "gere o storyboard da cena 1",
+        [],
+    )
+
+    assert result.action == "generate_storyboard"
+    assert requested_scene_numbers == [1]
 
 
 @pytest.mark.asyncio

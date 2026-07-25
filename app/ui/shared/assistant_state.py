@@ -67,6 +67,12 @@ def save_assistant_messages(project_id: UUID, messages: list[dict[str, str]]) ->
     nicegui_app.storage.user["project_assistant_messages"] = store
 
 
+def clear_assistant_messages(project_id: UUID) -> None:
+    store = assistant_chat_store()
+    store.pop(str(project_id), None)
+    nicegui_app.storage.user["project_assistant_messages"] = store
+
+
 def append_assistant_message_to_chat(project_id: UUID, content: str) -> None:
     message = content.strip()
     if not message:

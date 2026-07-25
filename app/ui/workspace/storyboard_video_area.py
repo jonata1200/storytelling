@@ -72,7 +72,8 @@ def render_storyboard_area(
             image_url = _storyboard_frame_image_url(summary, frame)
             with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
                 with ui.element("div").classes(
-                    "visual-placeholder aspect-video p-0 flex items-center justify-center bg-black"
+                    "visual-placeholder aspect-[9/16] max-h-[72vh] p-0 "
+                    "flex items-center justify-center bg-black"
                 ):
                     if image_url:
                         ui.image(image_url).classes(

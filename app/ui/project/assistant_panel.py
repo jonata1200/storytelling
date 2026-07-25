@@ -8,6 +8,7 @@ from nicegui import ui
 
 from app.database.session import AsyncSessionLocal
 from app.generation.project_agent import classify_project_chat_action, handle_project_chat
+from app.ui.shared.assistant_state import clear_assistant_messages as _clear_assistant_messages
 from app.ui.shared.assistant_state import load_assistant_messages as _load_assistant_messages
 from app.ui.shared.assistant_state import safe_client_navigation as _safe_client_navigation
 from app.ui.shared.assistant_state import safe_refresh as _safe_refresh
@@ -80,6 +81,12 @@ def render_assistant_panel(
     notify_ai_action_failure_once(project_id, summary)
     messages = _load_assistant_messages(project_id, active, assistant_suggestions)
 
+    def clear_conversation() -> None:
+        _clear_assistant_messages(project_id)
+        messages[:] = _load_assistant_messages(project_id, active, assistant_suggestions)
+        _safe_refresh(conversation)
+        ui.notify("Histórico da conversa limpo.", color="info")
+
     with ui.element("aside").classes(
         "right-assistant flex flex-col min-h-0 mt-0 gap-4 sticky top-0 self-start"
     ):
@@ -89,7 +96,12 @@ def render_assistant_panel(
             with ui.element("div").classes("flex items-center gap-2"):
                 ui.icon("auto_awesome").classes("acid")
                 ui.label("Diretor IA").classes("font-semibold")
-            ui.badge("online").classes("bg-[#26301f] text-white")
+            with ui.row().classes("items-center gap-2"):
+                ui.badge("online").classes("bg-[#26301f] text-white")
+                with ui.button(icon="delete_sweep", on_click=clear_conversation).props(
+                    "flat round dense"
+                ).classes("text-[#7c8a7c]"):
+                    ui.tooltip("Limpar histórico da conversa")
 
         @ui.refreshable
         def conversation() -> None:

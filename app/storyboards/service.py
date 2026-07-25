@@ -348,7 +348,10 @@ async def _storyboard_frame_asset_available(
 
 
 async def generate_storyboard_frames(
-    session: AsyncSession, project_id: UUID, script_id: UUID
+    session: AsyncSession,
+    project_id: UUID,
+    script_id: UUID,
+    scene_number: int | None = None,
 ) -> list[StoryboardFrame] | None:
     project = await ProjectRepository(session).get_project(project_id)
     script = await session.get(Script, script_id)
@@ -359,11 +362,24 @@ async def generate_storyboard_frames(
     if not visual_report["complete"]:
         raise ValueError(visual_reference_completion_message(visual_report))
 
-    shot_rows = await _ordered_shots_for_script(session, project_id, script_id)
-    if not shot_rows:
+    all_shot_rows = await _ordered_shots_for_script(session, project_id, script_id)
+    if not all_shot_rows:
         raise ValueError(
             "Nenhum plano encontrado para este roteiro. Gere as cenas e planos antes do storyboard."
         )
+    shot_rows = all_shot_rows
+    if scene_number is not None:
+        shot_rows = [
+            (shot, scene)
+            for shot, scene in all_shot_rows
+            if scene.scene_number == scene_number
+        ]
+        if not shot_rows:
+            raise ValueError(f"Nenhum plano encontrado para a cena {scene_number}.")
+    frame_number_by_shot = {
+        shot.id: frame_number
+        for frame_number, (shot, _scene) in enumerate(all_shot_rows, start=1)
+    }
 
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
     production_settings = await get_or_create_production_settings(session, project_id)
@@ -374,7 +390,8 @@ async def generate_storyboard_frames(
     existing_by_shot = {frame.shot_id: frame for frame in existing_frames}
     frames: list[StoryboardFrame] = []
 
-    for frame_number, (shot, scene) in enumerate(shot_rows, start=1):
+    for shot, scene in shot_rows:
+        frame_number = frame_number_by_shot[shot.id]
         prompt = _storyboard_prompt(shot, scene, visual_context)
         existing_frame = existing_by_shot.get(shot.id)
         existing_prompt_hash = (
@@ -558,7 +575,15 @@ async def generate_storyboard_frames(
     errors = storyboard_coverage_errors(shot_rows, frames)
     if errors:
         raise ValueError("Storyboard incompleto: " + "; ".join(errors))
-    advance_project_status(project, ProjectStatus.STORYBOARD_APPROVAL)
+    if scene_number is None:
+        advance_project_status(project, ProjectStatus.STORYBOARD_APPROVAL)
+    else:
+        full_frames = await list_storyboard_frames(session, project_id, script_id)
+        full_frame_by_shot = {frame.shot_id: frame for frame in full_frames}
+        for frame in frames:
+            full_frame_by_shot[frame.shot_id] = frame
+        if not storyboard_coverage_errors(all_shot_rows, list(full_frame_by_shot.values())):
+            advance_project_status(project, ProjectStatus.STORYBOARD_APPROVAL)
     await session.commit()
     for frame in frames:
         await session.refresh(frame)

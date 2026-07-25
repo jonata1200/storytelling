@@ -126,6 +126,20 @@ def _requests_specific_script_scenes(message: str) -> bool:
     )
 
 
+def _requested_storyboard_scene_number(message: str) -> int | None:
+    normalized = _normalize_match_text(message)
+    match = re.search(
+        r"\b(?:cena|scene)\s*(?:numero|n|no)?\s*0*([1-9]\d*)\b",
+        normalized,
+    )
+    if match is None:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
 def _requests_full_script_regeneration(message: str) -> bool:
     normalized = _normalize_match_text(message)
     if not any(term in normalized for term in ("roteiro", "script")):
@@ -822,6 +836,7 @@ async def _ensure_storyboard_pipeline(
     project_id: UUID,
     force: bool = False,
     progress: ProgressCallback | None = None,
+    scene_number: int | None = None,
 ) -> ProjectChatResult:
     script, message, changed = await _ensure_script_pipeline(session, project_id, progress)
     if script is None:
@@ -840,9 +855,24 @@ async def _ensure_storyboard_pipeline(
             changed,
         )
 
-    if force or await storyboard_frames_need_generation(session, project_id, script.id):
-        await _emit_progress(progress, "Vou transformar as cenas em frames de storyboard.")
-        generated_frames = await generate_storyboard_frames(session, project_id, script.id)
+    if (
+        scene_number is not None
+        or force
+        or await storyboard_frames_need_generation(session, project_id, script.id)
+    ):
+        if scene_number is None:
+            await _emit_progress(progress, "Vou transformar as cenas em frames de storyboard.")
+        else:
+            await _emit_progress(
+                progress,
+                f"Vou transformar a cena {scene_number} em frames de storyboard.",
+            )
+        generated_frames = await generate_storyboard_frames(
+            session,
+            project_id,
+            script.id,
+            scene_number=scene_number,
+        )
         if generated_frames is None:
             return ProjectChatResult(
                 "Não consegui gerar o storyboard.",
@@ -851,6 +881,16 @@ async def _ensure_storyboard_pipeline(
                 True,
             )
         changed = True
+
+    if scene_number is not None and await storyboard_frames_need_generation(
+        session, project_id, script.id
+    ):
+        return ProjectChatResult(
+            f"Storyboard da cena {scene_number} criado/atualizado. "
+            "As demais cenas ainda precisam de storyboard antes de montar o animatic completo.",
+            "generate_storyboard",
+            changed,
+        )
 
     animatics = await _count(session, Animatic, project_id)
     if force or animatics == 0:
@@ -865,8 +905,14 @@ async def _ensure_storyboard_pipeline(
             )
         changed = True
 
+    message = "Storyboard e animatic criados para o roteiro atual."
+    if scene_number is not None:
+        message = (
+            f"Storyboard da cena {scene_number} criado/atualizado. "
+            "O storyboard completo já está coberto e o animatic foi validado."
+        )
     return ProjectChatResult(
-        "Storyboard e animatic criados para o roteiro atual.",
+        message,
         "generate_storyboard",
         changed,
     )
@@ -1102,6 +1148,15 @@ async def handle_project_chat(
             progress=progress,
         )
     if action == "generate_storyboard":
+        scene_number = _requested_storyboard_scene_number(message)
+        if scene_number is not None:
+            return await _ensure_storyboard_pipeline(
+                session,
+                project_id,
+                force=force,
+                progress=progress,
+                scene_number=scene_number,
+            )
         return await _ensure_storyboard_pipeline(
             session, project_id, force=force, progress=progress
         )
