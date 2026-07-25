@@ -31,6 +31,7 @@ from app.storytelling.service import (
 )
 from app.ui import pages
 from app.ui.pages import DEFAULT_STORY_DURATION_MINUTES, _asset_url, _compact_project_title
+from app.ui.workspace.assets_area import _character_reference_sheet_asset
 
 
 def test_settings_tab_key_keeps_data_tab_after_destructive_actions() -> None:
@@ -401,6 +402,24 @@ def test_visual_references_prefer_newest_image_for_same_view() -> None:
     )
 
     assert references == [newer, older]
+
+
+def test_character_reference_sheet_asset_is_available_only_for_characters() -> None:
+    front_reference = (
+        SimpleNamespace(view_type="front_portrait"),
+        object(),
+        "/storage/front.png",
+    )
+    reference_sheet = (
+        SimpleNamespace(view_type="character_reference_sheet"),
+        object(),
+        "/storage/sheet.png",
+    )
+    reference_assets: list[Any] = [front_reference, reference_sheet]
+
+    assert _character_reference_sheet_asset("character", reference_assets) == reference_sheet
+    assert _character_reference_sheet_asset("location", reference_assets) is None
+    assert _character_reference_sheet_asset("prop", reference_assets) is None
 
 
 def test_visual_library_cards_ready_when_any_card_type_exists() -> None:

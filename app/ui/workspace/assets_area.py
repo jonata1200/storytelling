@@ -39,6 +39,7 @@ from app.visual_bible.service import (
 
 VISUAL_LIBRARY_TAB_DEFAULT = "characters"
 VISUAL_LIBRARY_TAB_KEYS = {"characters", "locations", "props"}
+ReferenceAsset = tuple[VisualReference, Asset, str]
 
 
 def _visual_library_tab_storage_key(project_id: UUID) -> str:
@@ -87,6 +88,47 @@ def _visual_reference_preview_width_class(profile: dict, reference: VisualRefere
     return "w-[min(520px,94vw)]"
 
 
+def _character_reference_sheet_asset(
+    target_kind: str,
+    reference_assets: list[ReferenceAsset],
+) -> ReferenceAsset | None:
+    if target_kind != "character":
+        return None
+    return next(
+        (
+            reference_asset
+            for reference_asset in reference_assets
+            if reference_asset[0].view_type == "character_reference_sheet"
+        ),
+        None,
+    )
+
+
+def _render_reference_preview_dialog(
+    profile: dict,
+    reference_asset: ReferenceAsset | None,
+) -> Any:
+    with ui.dialog() as image_preview_dialog:
+        if reference_asset is not None:
+            reference, _asset, preview_url = reference_asset
+            aspect_class = _visual_reference_aspect_class(profile, reference)
+            preview_width_class = _visual_reference_preview_width_class(profile, reference)
+            with ui.element("div").classes(
+                f"relative {preview_width_class} max-h-[92vh]"
+            ):
+                ui.image(preview_url).classes(
+                    "w-full max-h-[92vh] "
+                    f"{aspect_class} bg-black rounded-xl overflow-hidden"
+                ).props("fit=contain")
+                ui.button(
+                    icon="close",
+                    on_click=image_preview_dialog.close,
+                ).props("round dense unelevated").classes(
+                    "absolute top-3 right-3 bg-black/70 text-white"
+                )
+    return image_preview_dialog
+
+
 def _entity_card(
     project_id: UUID,
     target_kind: str,
@@ -114,7 +156,7 @@ def _entity_card(
         for view_type in requested_views
     ]
     current_prompt = str(profile.get("canonical_prompt") or title).strip()
-    reference_assets = [
+    reference_assets: list[ReferenceAsset] = [
         (reference, asset, asset_url(asset.storage_uri))
         for reference in references
         if (asset := _visual_reference_asset(asset_map, reference)) is not None
@@ -125,15 +167,17 @@ def _entity_card(
         if image_url
     ]
     hero_reference = reference_assets[0] if reference_assets else None
+    character_reference_sheet = _character_reference_sheet_asset(
+        target_kind, reference_assets
+    )
+    show_character_reference_sheet = (
+        character_reference_sheet is not None
+        and character_reference_sheet != hero_reference
+    )
     hero_aspect_class = (
         _visual_reference_aspect_class(profile, hero_reference[0])
         if hero_reference
         else "aspect-[9/16]"
-    )
-    hero_preview_width_class = (
-        _visual_reference_preview_width_class(profile, hero_reference[0])
-        if hero_reference
-        else "w-[min(520px,94vw)]"
     )
     loading_dialog = loading_dialog_factory(
         "Gerando imagem",
@@ -141,22 +185,10 @@ def _entity_card(
     )
 
     with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
-        with ui.dialog() as image_preview_dialog:
-            if hero_reference is not None:
-                _reference, _asset, preview_url = hero_reference
-                with ui.element("div").classes(
-                    f"relative {hero_preview_width_class} max-h-[92vh]"
-                ):
-                    ui.image(preview_url).classes(
-                        "w-full max-h-[92vh] "
-                        f"{hero_aspect_class} bg-black rounded-xl overflow-hidden"
-                    ).props("fit=contain")
-                    ui.button(
-                        icon="close",
-                        on_click=image_preview_dialog.close,
-                    ).props("round dense unelevated").classes(
-                        "absolute top-3 right-3 bg-black/70 text-white"
-                    )
+        image_preview_dialog = _render_reference_preview_dialog(profile, hero_reference)
+        reference_sheet_preview_dialog = _render_reference_preview_dialog(
+            profile, character_reference_sheet if show_character_reference_sheet else None
+        )
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as gallery_dialog, ui.card().classes(
             "entity-card rounded-2xl p-6 w-[min(980px,94vw)] max-h-[90vh]"
         ):
@@ -222,6 +254,20 @@ def _entity_card(
             else:
                 with ui.element("div").classes("w-full h-full p-5 flex items-end"):
                     ui.icon(icon).classes("text-6xl text-[#eefa83]")
+        if show_character_reference_sheet and character_reference_sheet is not None:
+            _reference, _asset, reference_sheet_url = character_reference_sheet
+            reference_sheet_target = ui.element("div").classes(
+                "relative h-28 border-t border-[#292d29] bg-black cursor-pointer"
+            )
+            reference_sheet_target.on("click", reference_sheet_preview_dialog.open)
+            with reference_sheet_target:
+                ui.image(reference_sheet_url).classes(
+                    "w-full h-full object-contain bg-black"
+                ).props("fit=contain")
+                ui.label("Múltiplas vistas").classes(
+                    "absolute left-3 bottom-3 rounded-full bg-black/70 px-3 py-1 "
+                    "text-[11px] font-semibold uppercase text-white"
+                )
         with ui.column().classes("p-4 gap-2"):
             ui.label(title).classes("brand-type text-xl font-bold")
             ui.label(subtitle).classes("text-xs acid uppercase tracking-wide")
