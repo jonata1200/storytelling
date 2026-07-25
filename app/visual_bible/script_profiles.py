@@ -1,10 +1,14 @@
 ﻿import re
 import unicodedata
+from dataclasses import dataclass
 
 PLACEHOLDER_PROFILE_NAMES = {"", "item", "personagem", "protagonista"}
 
 SCENE_LOCATION_RE = re.compile(
     r"(?im)^\s*(?:INT|EXT|INT/EXT|INTERIOR|EXTERIOR)\.?\s+(?P<location>.+?)\s*$"
+)
+SCENE_MARKER_RE = re.compile(
+    r"(?im)^\s*CENA\s+0*(?P<number>\d+)(?:\s*[-:]\s*(?P<title>.+?))?\s*$"
 )
 SCRIPT_PROP_KEYWORDS = (
     "anel",
@@ -21,15 +25,29 @@ SCRIPT_PROP_KEYWORDS = (
     "colher",
     "colar",
     "corda",
+    "cristal",
+    "cristais",
     "cumbuca",
     "diario",
     "desenho",
     "envelope",
+    "espelho",
+    "espelhos",
+    "esfera",
+    "esferas",
     "faca",
     "fita",
     "flauta",
     "fotografia",
+    "frasco",
+    "frascos",
+    "girassol",
+    "lapide",
+    "lapides",
+    "lápide",
+    "lápides",
     "livro",
+    "livros",
     "mala",
     "mochila",
     "panela",
@@ -38,11 +56,23 @@ SCRIPT_PROP_KEYWORDS = (
     "prato",
     "receita",
     "relogio",
+    "relógio",
     "retrato",
     "tabua",
     "tambor",
     "violino",
 )
+
+
+@dataclass(frozen=True)
+class ScriptScene:
+    scene_number: int
+    heading: str
+    location: str
+    period: str
+    block: str
+    action_lines: tuple[str, ...]
+    dialogue_cues: tuple[str, ...]
 
 
 def _prompt_text(value: object) -> str:
@@ -117,6 +147,16 @@ SCENE_LOCATION_CONTEXT_MARKERS = {
     "manha",
     "manhã",
     "tarde",
+    "madrugada",
+    "amanhecer",
+    "meia-noite",
+    "meio-dia",
+    "fim de tarde",
+    "mais tarde",
+    "noite seguinte",
+    "dia seguinte",
+    "manha seguinte",
+    "manhã seguinte",
     "continuacao",
     "continuação",
     "flashback",
@@ -144,6 +184,85 @@ def _clean_script_location_name(value: str) -> str:
     return _clean_script_entity_name(location_parts[0] if location_parts else value)
 
 
+def _script_heading_period(value: str) -> str:
+    parts = [
+        re.sub(r"\([^)]*\)", "", part).strip(" .:-")
+        for part in re.split(r"\s+-\s+", value)
+    ]
+    for part in reversed(parts):
+        if _ascii_lower(part) in SCENE_LOCATION_CONTEXT_MARKERS:
+            return part.upper()
+    return ""
+
+
+def _looks_like_dialogue_cue(line: str) -> bool:
+    text = re.sub(r"\([^)]*\)", "", line).strip(" .:-")
+    if not text or len(text) > 48:
+        return False
+    if not re.fullmatch(r"[A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{2,}", text):
+        return False
+    return not (_looks_like_non_character_name(text) or text.startswith(("INT", "EXT")))
+
+
+def _parse_script_scenes(script_content: str) -> list[ScriptScene]:
+    text = str(script_content or "").strip()
+    if not text:
+        return []
+    matches = list(SCENE_MARKER_RE.finditer(text))
+    if not matches:
+        matches = []
+    scenes: list[ScriptScene] = []
+    scene_blocks: list[tuple[int, str]] = []
+    if matches:
+        for index, match in enumerate(matches):
+            start = match.end()
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+            scene_blocks.append((int(match.group("number")), text[start:end].strip()))
+    else:
+        heading_matches = list(SCENE_LOCATION_RE.finditer(text))
+        if heading_matches:
+            for index, heading_match in enumerate(heading_matches):
+                start = heading_match.start()
+                end = (
+                    heading_matches[index + 1].start()
+                    if index + 1 < len(heading_matches)
+                    else len(text)
+                )
+                scene_blocks.append((index + 1, text[start:end].strip()))
+        else:
+            scene_blocks.append((1, text))
+    for scene_number, block in scene_blocks:
+        parsed_heading_match = SCENE_LOCATION_RE.search(block)
+        heading = parsed_heading_match.group(0).strip() if parsed_heading_match else ""
+        raw_location = parsed_heading_match.group("location") if parsed_heading_match else ""
+        location = _clean_script_location_name(raw_location) if raw_location else ""
+        period = _script_heading_period(raw_location) if raw_location else ""
+        action_lines: list[str] = []
+        dialogue_cues: list[str] = []
+        for raw_line in block.splitlines():
+            line = raw_line.strip()
+            if not line or line == heading or SCENE_LOCATION_RE.match(line):
+                continue
+            if _looks_like_dialogue_cue(line):
+                dialogue_cues.append(_clean_script_entity_name(line))
+                continue
+            if line.startswith("(") and line.endswith(")"):
+                continue
+            action_lines.append(line)
+        scenes.append(
+            ScriptScene(
+                scene_number=scene_number,
+                heading=heading,
+                location=location,
+                period=period,
+                block=block,
+                action_lines=tuple(action_lines),
+                dialogue_cues=tuple(dialogue_cues),
+            )
+        )
+    return scenes
+
+
 GENERIC_LOCATION_ROOTS = {
     "casa",
     "cidade",
@@ -169,19 +288,55 @@ def _same_location_family(candidate: str, existing: str) -> bool:
     return bool(candidate_words & existing_words & GENERIC_LOCATION_ROOTS)
 
 
-def _script_location_profile(name: str) -> dict:
+def _candidate_importance(count: int, first_scene_number: int) -> str:
+    if first_scene_number <= 2 or count >= 3:
+        return "principal"
+    if count == 2:
+        return "recorrente"
+    return "pontual"
+
+
+def _append_metadata(item: dict, scene_number: int | None, evidence_text: str) -> None:
+    if scene_number is not None:
+        scene_numbers = item.setdefault("scene_numbers", [])
+        if scene_number not in scene_numbers:
+            scene_numbers.append(scene_number)
+        item["importance"] = _candidate_importance(len(scene_numbers), min(scene_numbers))
+    if evidence_text:
+        evidences = item.setdefault("evidence_text", [])
+        if evidence_text not in evidences:
+            evidences.append(evidence_text)
+
+
+def _script_location_profile(
+    name: str, scene_number: int | None = None, evidence_text: str = ""
+) -> dict:
+    scene_numbers = [scene_number] if scene_number is not None else []
     return {
         "name": name,
         "description": f"Ambiente extraido do roteiro: {name}",
         "layout": "geografia definida pelas acoes e entradas descritas no roteiro",
         "materials": "materiais, moveis e objetos visiveis no texto da cena",
         "lighting": "luz coerente com o periodo da slugline e o tom dramatico",
+        "scene_numbers": scene_numbers,
+        "evidence_text": [evidence_text] if evidence_text else [],
+        "importance": _candidate_importance(1, scene_number or 999),
     }
 
 
-def _append_script_location_profile(profiles: list[dict], seen: set[str], name: str) -> None:
+def _append_script_location_profile(
+    profiles: list[dict],
+    seen: set[str],
+    name: str,
+    scene_number: int | None = None,
+    evidence_text: str = "",
+) -> None:
     key = _entity_key(name)
     if not key or key in seen:
+        for item in profiles:
+            if _entity_key(item.get("name")) == key:
+                _append_metadata(item, scene_number, evidence_text)
+                break
         return
     for index, item in enumerate(profiles):
         existing_name = str(item.get("name") or "")
@@ -191,22 +346,44 @@ def _append_script_location_profile(profiles: list[dict], seen: set[str], name: 
         if existing_key in key and len(key) > len(existing_key):
             seen.discard(existing_key)
             seen.add(key)
-            profiles[index] = _script_location_profile(name)
+            profile = _script_location_profile(name, scene_number, evidence_text)
+            for old_scene_number in item.get("scene_numbers", []):
+                _append_metadata(profile, old_scene_number, "")
+            for old_evidence in item.get("evidence_text", []):
+                _append_metadata(profile, None, str(old_evidence))
+            profiles[index] = profile
             return
         if key in existing_key:
+            _append_metadata(item, scene_number, evidence_text)
             return
     seen.add(key)
-    profiles.append(_script_location_profile(name))
+    profiles.append(_script_location_profile(name, scene_number, evidence_text))
 
 
 def _script_location_profiles(script_content: str) -> list[dict]:
     profiles: list[dict] = []
     seen: set[str] = set()
+    scenes = _parse_script_scenes(script_content)
+    if scenes:
+        for scene in scenes:
+            name = scene.location
+            if not name:
+                continue
+            _append_script_location_profile(
+                profiles,
+                seen,
+                name,
+                scene.scene_number,
+                scene.heading,
+            )
+            if len(profiles) >= 12:
+                break
+        return profiles
     for match in SCENE_LOCATION_RE.finditer(script_content):
         name = _clean_script_location_name(match.group("location"))
         if not name:
             continue
-        _append_script_location_profile(profiles, seen, name)
+        _append_script_location_profile(profiles, seen, name, None, match.group(0).strip())
         if len(profiles) >= 12:
             break
     return profiles
@@ -215,30 +392,81 @@ def _script_location_profiles(script_content: str) -> list[dict]:
 def _clean_script_prop_name(value: str) -> str:
     text = _clean_script_entity_name(value)
     text = re.split(
-        r"(?i)\s+(?:e|ou|eh|é|esta|está|fica|parece|ve|vê|olha|pega|segura|sai|entra)\b",
+        r"(?i)\s+(?:e|ou|que|eh|é|esta|está|fica|parece|ve|vê|olha|pega|segura|sai|entra)\b",
         text,
         maxsplit=1,
     )[0]
     text = re.split(
-        r"(?i)\s+(?:no|na|nos|nas)\s+(?:chao|chão|mesa|parede|bolso|mao|mão|maos|mãos|ar)\b",
+        r"(?i)\s+(?:no|na|nos|nas)\s+"
+        r"(?:chao|chão|mesa|parede|bolso|mao|mão|maos|mãos|ar|torre)\b",
+        text,
+        maxsplit=1,
+    )[0]
+    text = re.split(
+        r"(?i)\s+(?:ao|aos|à|às|a)\s+(?:seu|sua|seus|suas|dele|dela|deles|delas)\b",
         text,
         maxsplit=1,
     )[0]
     return re.sub(r"\s+", " ", text).strip(" .:-")
 
 
+def _prop_family_key(name: str) -> str:
+    words = str(name or "").split()
+    key = _entity_key(words[0] if words else name)
+    for suffix in ("oes", "aes", "ais", "eis", "is", "es", "s"):
+        if len(key) > len(suffix) + 3 and key.endswith(suffix):
+            return key[: -len(suffix)]
+    return key
+
+
+def _script_prop_profile(
+    name: str, scene_number: int | None = None, evidence_text: str = ""
+) -> dict:
+    return {
+        "name": name,
+        "narrative_importance": f"Objeto narrativo extraido do roteiro: {name}",
+        "material": "material visivel conforme descrito no roteiro",
+        "state": "estado coerente com a cena em que aparece",
+        "scene_numbers": [scene_number] if scene_number is not None else [],
+        "evidence_text": [evidence_text] if evidence_text else [],
+        "importance": _candidate_importance(1, scene_number or 999),
+    }
+
+
+def _prop_search_blocks(script_content: str) -> list[tuple[int | None, str]]:
+    scenes = _parse_script_scenes(script_content)
+    if not scenes:
+        return [(None, script_content)]
+    return [(scene.scene_number, scene.block) for scene in scenes]
+
+
+def _prop_evidence_text(block: str, start: int, end: int) -> str:
+    sentence_start = max(block.rfind(".", 0, start), block.rfind("\n", 0, start))
+    sentence_end_candidates = [
+        index for index in (block.find(".", end), block.find("\n", end)) if index != -1
+    ]
+    sentence_end = min(sentence_end_candidates) if sentence_end_candidates else len(block)
+    evidence = block[sentence_start + 1 : sentence_end].strip()
+    return re.sub(r"\s+", " ", evidence)[:240]
+
+
 def _script_prop_profiles(script_content: str) -> list[dict]:
     profiles: list[dict] = []
     seen: set[str] = set()
+    seen_families: set[str] = set()
+    search_blocks = _prop_search_blocks(script_content)
     for keyword in SCRIPT_PROP_KEYWORDS:
         pattern = re.compile(
             rf"\b(?:um|uma|o|a|os|as|do|da|dos|das)?\s*"
-            rf"((?:\w+\s+){{0,2}}{re.escape(keyword)}"
+            rf"((?:\w+\s+){{0,2}}\b{re.escape(keyword)}\b"
             r"(?:\s+(?!de\b|do\b|da\b|dos\b|das\b|com\b)\w+){0,2}"
             r"(?:\s+(?:de|do|da|dos|das|com)\s+\w+(?:\s+\w+){0,3})?)",
             re.IGNORECASE,
         )
-        for match in pattern.finditer(script_content):
+        for scene_number, block in search_blocks:
+            match = pattern.search(block)
+            if match is None:
+                continue
             raw_name = match.group(1)
             keyword_match = re.search(rf"\b{re.escape(keyword)}\b", raw_name, re.IGNORECASE)
             if keyword_match is not None:
@@ -249,14 +477,17 @@ def _script_prop_profiles(script_content: str) -> list[dict]:
             key = _entity_key(name)
             if key in seen:
                 continue
+            family_key = _prop_family_key(name)
+            if family_key in seen_families:
+                continue
             seen.add(key)
+            seen_families.add(family_key)
             profiles.append(
-                {
-                    "name": name,
-                    "narrative_importance": f"Objeto narrativo extraido do roteiro: {name}",
-                    "material": "material visivel conforme descrito no roteiro",
-                    "state": "estado coerente com a cena em que aparece",
-                }
+                _script_prop_profile(
+                    name,
+                    scene_number,
+                    _prop_evidence_text(block, match.start(1), match.end(1)),
+                )
             )
             break
         if len(profiles) >= 12:
@@ -293,6 +524,23 @@ SCRIPT_CHARACTER_EXCLUSIONS = {
     "CRIANÇA",
 }
 
+TEMPORAL_CHARACTER_MARKERS = {
+    "crianca",
+    "criança",
+    "jovem",
+    "adolescente",
+    "adulto",
+    "adulta",
+    "velho",
+    "velha",
+    "idoso",
+    "idosa",
+    "futuro",
+    "futura",
+    "passado",
+    "passada",
+}
+
 
 def _character_exclusion_key(value: object) -> str:
     return re.sub(r"\s+", " ", _ascii_lower(value)).strip().upper()
@@ -316,6 +564,10 @@ def _same_character_name(candidate: str, existing: str) -> bool:
     existing_norm = _ascii_lower(existing)
     if candidate_norm == existing_norm:
         return True
+    candidate_temporal = bool(set(candidate_norm.split()) & TEMPORAL_CHARACTER_MARKERS)
+    existing_temporal = bool(set(existing_norm.split()) & TEMPORAL_CHARACTER_MARKERS)
+    if candidate_temporal != existing_temporal:
+        return False
     candidate_tokens = candidate_norm.split()
     existing_tokens = existing_norm.split()
     if not candidate_tokens or not existing_tokens:
@@ -346,7 +598,13 @@ def _append_script_character_name(names: list[str], seen: set[str], raw_name: st
 def _script_character_names(script_content: str) -> list[str]:
     names: list[str] = []
     seen: set[str] = set()
-    for raw_line in script_content.splitlines():
+    scenes = _parse_script_scenes(script_content)
+    lines = (
+        [line for scene in scenes for line in scene.block.splitlines()]
+        if scenes
+        else script_content.splitlines()
+    )
+    for raw_line in lines:
         for match in re.finditer(
             r"\b(?P<name>[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{1,48})\s*\(",
             raw_line,
@@ -363,14 +621,65 @@ def _script_character_names(script_content: str) -> list[str]:
     return names
 
 
+def _script_character_candidate_profiles(script_content: str) -> list[dict]:
+    profiles: list[dict] = []
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def append(raw_name: str, scene_number: int | None, evidence_text: str) -> None:
+        before = list(names)
+        _append_script_character_name(names, seen, raw_name)
+        if names == before:
+            for item in profiles:
+                item_name = _ascii_lower(item.get("name"))
+                raw_clean_name = _ascii_lower(_clean_script_entity_name(raw_name))
+                if item_name == raw_clean_name:
+                    _append_metadata(item, scene_number, evidence_text)
+                    break
+            return
+        current_names = {_ascii_lower(name) for name in names}
+        profiles[:] = [
+            item for item in profiles if _ascii_lower(item.get("name")) in current_names
+        ]
+        new_name = names[-1]
+        profiles.append(
+            {
+                "name": new_name,
+                "role": "personagem extraido do roteiro",
+                "scene_numbers": [scene_number] if scene_number is not None else [],
+                "evidence_text": [evidence_text] if evidence_text else [],
+                "importance": _candidate_importance(1, scene_number or 999),
+            }
+        )
+
+    scenes = _parse_script_scenes(script_content)
+    if scenes:
+        for scene in scenes:
+            for raw_line in scene.block.splitlines():
+                line = raw_line.strip()
+                for match in re.finditer(
+                    r"\b(?P<name>[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{1,48})\s*\(",
+                    line,
+                ):
+                    append(match.group("name"), scene.scene_number, line)
+                if _looks_like_dialogue_cue(line):
+                    append(line, scene.scene_number, line)
+        return profiles
+
+    for raw_line in script_content.splitlines():
+        line = raw_line.strip()
+        for match in re.finditer(
+            r"\b(?P<name>[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{1,48})\s*\(",
+            line,
+        ):
+            append(match.group("name"), None, line)
+        if _looks_like_dialogue_cue(line):
+            append(line, None, line)
+    return profiles
+
+
 def _script_character_profiles(script_content: str) -> list[dict]:
-    return [
-        {
-            "name": name,
-            "role": "personagem extraido do roteiro",
-        }
-        for name in _script_character_names(script_content)
-    ]
+    return _script_character_candidate_profiles(script_content)
 
 
 def _is_placeholder_profile_name(value: object) -> bool:

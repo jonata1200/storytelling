@@ -632,11 +632,17 @@ def test_script_fallback_cleans_hierarchical_and_repeated_locations() -> None:
     INT. HOSPITAL - QUARTO - DIA
     Ian acorda.
 
+    INT. BARRACA VAZIA - MEIA-NOITE
+    O mercado vira.
+
     EXT. TELHADO DA CASA - NOITE
     A chuva cai.
 
     EXT. TELHADO - CONTINUACAO
     Ian encara o ceu.
+
+    EXT. CEMITERIO - AMANHECER
+    O sol aparece.
 
     EXT. JARDIM DO HOSPITAL - DIA
     O sol aparece.
@@ -646,9 +652,14 @@ def test_script_fallback_cleans_hierarchical_and_repeated_locations() -> None:
 
     assert [item["name"] for item in locations] == [
         "Quarto Do Hospital",
+        "Barraca Vazia",
         "Telhado Da Casa",
+        "Cemiterio",
         "Jardim Do Hospital",
     ]
+    barraca = next(item for item in locations if item["name"] == "Barraca Vazia")
+    assert barraca["scene_numbers"] == [2]
+    assert barraca["evidence_text"] == ["INT. BARRACA VAZIA - MEIA-NOITE"]
 
 
 def test_script_fallback_does_not_turn_screenplay_markers_into_characters() -> None:
@@ -695,6 +706,93 @@ def test_script_fallback_trims_action_phrases_from_props() -> None:
     assert "Chave" in names
     assert "Desenho E Tosco" not in names
     assert "Corda E Ve" not in names
+
+
+def test_script_fallback_extracts_accented_props_without_substring_false_positives() -> None:
+    script = """
+    Omero acorda no quarto e olha para as esferas de vidro.
+    Ele pega uma esfera azul-clara, depois guarda um pequeno frasco vazio.
+    O velho aponta para um relogio na torre.
+    Os espelhos que mostram cenas do passado cercam a barraca.
+    """
+
+    props = _script_prop_profiles(script)
+    names = [item["name"] for item in props]
+
+    assert "Corda" not in names
+    assert "Esfera Azul" in names
+    assert "Frasco Vazio" in names
+    assert "Relogio" in names
+    assert "Espelhos" in names
+    assert not any(name.startswith("Esferas") for name in names)
+    esfera = next(item for item in props if item["name"] == "Esfera Azul")
+    assert esfera["scene_numbers"] == [1]
+    assert "esfera azul-clara" in esfera["evidence_text"][0]
+
+
+def test_script_fallback_keeps_temporal_character_variants_with_evidence() -> None:
+    script = """
+    CENA 01
+    INT. MERCADO - NOITE
+    OMERO (34) vende memorias.
+
+    OMERO
+    Eu lembro.
+
+    CENA 02
+    INT. QUARTO DE INFANCIA - DIA
+    OMERO CRIANCA (8) segura uma esfera.
+
+    OMERO CRIANCA
+    Mae, nao quero esquecer.
+    """
+
+    profiles = _script_character_profiles(script)
+    names = [item["name"] for item in profiles]
+
+    assert "Omero" in names
+    assert "Omero Crianca" in names
+    omero = next(item for item in profiles if item["name"] == "Omero")
+    child = next(item for item in profiles if item["name"] == "Omero Crianca")
+    assert omero["scene_numbers"] == [1]
+    assert child["scene_numbers"] == [2]
+
+
+def test_visual_profiles_preserve_script_evidence_metadata() -> None:
+    location = _location_profile(
+        {
+            "name": "Barraca Vazia",
+            "scene_numbers": [6, 7],
+            "evidence_text": ["INT. BARRACA VAZIA - MEIA-NOITE"],
+            "importance": "recorrente",
+        }
+    )
+    prop = _prop_profile(
+        {
+            "name": "Esfera Azul",
+            "scene_numbers": [1],
+            "evidence_text": ["Omero pega uma esfera azul-clara."],
+            "importance": "principal",
+        }
+    )
+    character = _character_profile(
+        {
+            "name": "Omero Criança",
+            "scene_numbers": [9],
+            "evidence_text": ["OMERO CRIANÇA (8) está no colo da mãe."],
+            "importance": "pontual",
+        }
+    )
+
+    assert location["scene_numbers"] == [6, 7]
+    assert location["evidence_text"] == ["INT. BARRACA VAZIA - MEIA-NOITE"]
+    assert location["importance"] == "recorrente"
+    assert prop["scene_numbers"] == [1]
+    assert prop["evidence_text"] == ["Omero pega uma esfera azul-clara."]
+    assert prop["importance"] == "principal"
+    assert character["scene_numbers"] == [9]
+    assert character["evidence_text"] == ["OMERO CRIANÇA (8) está no colo da mãe."]
+    assert character["importance"] == "pontual"
 
 
 def test_script_fallback_extracts_musical_props_from_script() -> None:
