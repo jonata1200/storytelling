@@ -1,15 +1,36 @@
-﻿from collections.abc import Callable
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from nicegui import ui
 
+from app.config.settings import get_settings
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS
 from app.ui.visual.actions import _approve_video_prompts_from_ui
 from app.ui.visual.helpers import asset_url
 from app.ui.workspace.panels import _render_timeline_strip
 
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
+
+
+def _local_asset_file_exists(storage_uri: str) -> bool:
+    if not storage_uri:
+        return False
+    if storage_uri.startswith(("http://", "https://", "data:")):
+        return True
+    storage_root = get_settings().local_storage_path.resolve()
+    candidate = Path(storage_uri)
+    candidates = [candidate] if candidate.is_absolute() else [storage_root / candidate, candidate]
+    for path in candidates:
+        try:
+            resolved = path.resolve(strict=False)
+            resolved.relative_to(storage_root)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if resolved.is_file():
+            return True
+    return False
 
 
 def _storyboard_frame_image_url(summary: dict[str, Any], frame: Any) -> str:
@@ -19,6 +40,8 @@ def _storyboard_frame_image_url(summary: dict[str, Any], frame: Any) -> str:
     asset_map = {asset.id: asset for asset in summary.get("assets", [])}
     asset = asset_map.get(frame_asset_id)
     if asset is None:
+        return ""
+    if not _local_asset_file_exists(str(asset.storage_uri or "")):
         return ""
     return asset_url(asset.storage_uri)
 

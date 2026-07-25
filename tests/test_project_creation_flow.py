@@ -434,6 +434,7 @@ def test_storyboard_frame_image_url_uses_frame_asset(
         "asset_url",
         lambda storage_uri: f"/resolved/{storage_uri}",
     )
+    monkeypatch.setattr(storyboard_video_area, "_local_asset_file_exists", lambda _uri: True)
 
     image_url = storyboard_video_area._storyboard_frame_image_url(
         {"assets": [asset]},
@@ -441,6 +442,22 @@ def test_storyboard_frame_image_url_uses_frame_asset(
     )
 
     assert image_url == "/resolved/storage/storyboards/frame.png"
+
+
+def test_storyboard_frame_image_url_ignores_missing_local_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asset_id = uuid4()
+    frame = SimpleNamespace(asset_id=asset_id)
+    asset = SimpleNamespace(id=asset_id, storage_uri="storage/storyboards/missing.png")
+    monkeypatch.setattr(storyboard_video_area, "_local_asset_file_exists", lambda _uri: False)
+
+    image_url = storyboard_video_area._storyboard_frame_image_url(
+        {"assets": [asset]},
+        frame,
+    )
+
+    assert image_url == ""
 
 
 def test_visual_library_cards_ready_when_any_card_type_exists() -> None:

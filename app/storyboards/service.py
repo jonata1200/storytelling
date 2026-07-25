@@ -1,6 +1,7 @@
 import hashlib
 import json
 from decimal import Decimal
+from pathlib import Path
 from time import perf_counter
 from uuid import UUID, uuid4
 
@@ -315,6 +316,37 @@ def storyboard_coverage_errors(
     return errors
 
 
+def _local_storage_file_exists(storage_uri: str) -> bool:
+    if not storage_uri:
+        return False
+    if storage_uri.startswith(("http://", "https://", "data:")):
+        return True
+    storage_root = get_settings().local_storage_path.resolve()
+    candidate = Path(storage_uri)
+    candidates = [candidate] if candidate.is_absolute() else [storage_root / candidate, candidate]
+    for path in candidates:
+        try:
+            resolved = path.resolve(strict=False)
+            resolved.relative_to(storage_root)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if resolved.is_file():
+            return True
+    return False
+
+
+async def _storyboard_frame_asset_available(
+    session: AsyncSession,
+    frame: StoryboardFrame | None,
+) -> bool:
+    if frame is None or frame.asset_id is None:
+        return False
+    asset = await session.get(Asset, frame.asset_id)
+    if asset is None:
+        return False
+    return _local_storage_file_exists(str(asset.storage_uri or ""))
+
+
 async def generate_storyboard_frames(
     session: AsyncSession, project_id: UUID, script_id: UUID
 ) -> list[StoryboardFrame] | None:
@@ -329,7 +361,9 @@ async def generate_storyboard_frames(
 
     shot_rows = await _ordered_shots_for_script(session, project_id, script_id)
     if not shot_rows:
-        return []
+        raise ValueError(
+            "Nenhum plano encontrado para este roteiro. Gere as cenas e planos antes do storyboard."
+        )
 
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
     production_settings = await get_or_create_production_settings(session, project_id)
@@ -348,7 +382,14 @@ async def generate_storyboard_frames(
             if existing_frame is not None
             else None
         )
-        needs_image = existing_frame is None or existing_prompt_hash != _prompt_hash(prompt)
+        existing_asset_available = await _storyboard_frame_asset_available(
+            session, existing_frame
+        )
+        needs_image = (
+            existing_frame is None
+            or existing_prompt_hash != _prompt_hash(prompt)
+            or not existing_asset_available
+        )
         if needs_image:
             generation_started_at = perf_counter()
             image, fallback_metadata = await _generate_image_with_provider_fallback(
@@ -545,6 +586,32 @@ async def list_storyboard_frames(
         )
     result = await session.execute(statement)
     return list(result.scalars())
+
+
+async def storyboard_frames_need_generation(
+    session: AsyncSession,
+    project_id: UUID,
+    script_id: UUID,
+) -> bool:
+    shot_rows = await _ordered_shots_for_script(session, project_id, script_id)
+    if not shot_rows:
+        return True
+    existing_frames = await list_storyboard_frames(session, project_id, script_id)
+    if len(existing_frames) != len(shot_rows):
+        return True
+    existing_by_shot = {frame.shot_id: frame for frame in existing_frames}
+    visual_context = await _storyboard_visual_context(session, project_id)
+    for shot, scene in shot_rows:
+        frame = existing_by_shot.get(shot.id)
+        if frame is None:
+            return True
+        prompt = _storyboard_prompt(shot, scene, visual_context)
+        existing_prompt_hash = (frame.metadata_json or {}).get("prompt_hash")
+        if existing_prompt_hash != _prompt_hash(prompt):
+            return True
+        if not await _storyboard_frame_asset_available(session, frame):
+            return True
+    return False
 
 
 async def _create_provisional_narration(

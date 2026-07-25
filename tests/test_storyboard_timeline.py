@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
@@ -8,6 +9,7 @@ from app.storyboards import service as storyboard_service
 from app.storyboards.models import StoryboardFrame
 from app.storyboards.service import (
     _animatic_fingerprint,
+    _local_storage_file_exists,
     _storyboard_prompt,
     generate_storyboard_frames,
     storyboard_coverage_errors,
@@ -121,6 +123,25 @@ def test_storyboard_coverage_errors_detect_missing_and_duration_mismatch() -> No
     assert "duracao dos frames (4s) difere dos planos (12s)" in errors
 
 
+def test_local_storage_file_exists_checks_storage_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    storage_root = tmp_path / "storage"
+    storyboard_dir = storage_root / "openrouter_storyboards"
+    storyboard_dir.mkdir(parents=True)
+    frame_file = storyboard_dir / "frame.png"
+    frame_file.write_bytes(b"image")
+    monkeypatch.setattr(
+        storyboard_service,
+        "get_settings",
+        lambda: type("Settings", (), {"local_storage_path": storage_root})(),
+    )
+
+    assert _local_storage_file_exists("openrouter_storyboards/frame.png")
+    assert not _local_storage_file_exists("openrouter_storyboards/missing.png")
+
+
 @pytest.mark.asyncio
 async def test_generate_storyboard_frames_requires_complete_visual_references(
     monkeypatch: pytest.MonkeyPatch,
@@ -165,6 +186,45 @@ async def test_generate_storyboard_frames_requires_complete_visual_references(
     monkeypatch.setattr(storyboard_service, "_ordered_shots_for_script", fail_ordered_shots)
 
     with pytest.raises(ValueError, match="Biblioteca Visual"):
+        await generate_storyboard_frames(cast(AsyncSession, FakeSession()), project_id, script.id)
+
+
+@pytest.mark.asyncio
+async def test_generate_storyboard_frames_requires_shots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script = Script(id=uuid4(), project_id=project_id)
+
+    class FakeProjectRepository:
+        def __init__(self, session: object) -> None:
+            self.session = session
+
+        async def get_project(self, requested_project_id: object) -> object:
+            assert requested_project_id == project_id
+            return object()
+
+    class FakeSession:
+        async def get(self, model: object, requested_id: object) -> object | None:
+            assert model is Script
+            assert requested_id == script.id
+            return script
+
+    async def fake_visual_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"complete": True, "missing_categories": [], "missing_views": 0}
+
+    async def fake_ordered_shots(*args: Any, **kwargs: Any) -> list[tuple[Shot, Scene]]:
+        return []
+
+    monkeypatch.setattr(storyboard_service, "ProjectRepository", FakeProjectRepository)
+    monkeypatch.setattr(
+        storyboard_service,
+        "visual_reference_completion_report",
+        fake_visual_report,
+    )
+    monkeypatch.setattr(storyboard_service, "_ordered_shots_for_script", fake_ordered_shots)
+
+    with pytest.raises(ValueError, match="Nenhum plano"):
         await generate_storyboard_frames(cast(AsyncSession, FakeSession()), project_id, script.id)
 
 

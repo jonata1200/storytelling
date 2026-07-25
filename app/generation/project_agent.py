@@ -24,7 +24,11 @@ from app.projects.versioning import mark_dependents_stale
 from app.quality.models import ContinuityIssue, QualityCheck
 from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
-from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
+from app.storyboards.service import (
+    generate_animatic_bundle,
+    generate_storyboard_frames,
+    storyboard_frames_need_generation,
+)
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
 from app.storytelling.service import (
     generate_scenes_and_shots,
@@ -836,8 +840,7 @@ async def _ensure_storyboard_pipeline(
             changed,
         )
 
-    frames = await _count(session, StoryboardFrame, project_id)
-    if force or frames == 0:
+    if force or await storyboard_frames_need_generation(session, project_id, script.id):
         await _emit_progress(progress, "Vou transformar as cenas em frames de storyboard.")
         generated_frames = await generate_storyboard_frames(session, project_id, script.id)
         if generated_frames is None:

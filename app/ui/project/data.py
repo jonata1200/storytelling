@@ -115,8 +115,19 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
                 .limit(12)
             )
             timeline_items = list(item_result.scalars())
+        script = await latest(session, Script, project_id)
         visual_refs = await latest_many(session, VisualReference, project_id, 100)
-        frames = await latest_many(session, StoryboardFrame, project_id, 100)
+        if script is not None:
+            frame_result = await session.execute(
+                select(StoryboardFrame)
+                .join(Shot, StoryboardFrame.shot_id == Shot.id)
+                .join(Scene, Shot.scene_id == Scene.id)
+                .where(StoryboardFrame.project_id == project_id, Scene.script_id == script.id)
+                .order_by(StoryboardFrame.frame_number)
+            )
+            frames = list(frame_result.scalars())
+        else:
+            frames = []
         visual_asset_ids = {
             reference.asset_id for reference in visual_refs if reference.asset_id is not None
         }
@@ -168,7 +179,7 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             "quality": latest_quality,
             "export": latest_export,
             "model_settings": list(model_result.scalars()),
-            "script": await latest(session, Script, project_id),
+            "script": script,
             "scenes": await latest_many(session, Scene, project_id, 12),
             "shots": await latest_many(session, Shot, project_id, 20),
             "characters": await latest_many(session, Character, project_id, 100),
