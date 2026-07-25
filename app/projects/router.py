@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approvals.service import record_approval
-from app.auth.dependencies import require_basic_auth
 from app.database.session import get_session
 from app.projects.repository import ProjectRepository
 from app.projects.schemas import (
@@ -32,11 +31,7 @@ from app.projects.service import (
     transition_project_status,
 )
 
-router = APIRouter(
-    prefix="/projects",
-    tags=["projects"],
-    dependencies=[Depends(require_basic_auth)],
-)
+router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 @router.post("", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)

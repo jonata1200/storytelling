@@ -7,17 +7,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-import app.auth.ui_middleware as ui_middleware
-import app.auth.ui_routes as ui_routes
 import app.providers.media_utils as media_utils
 import app.ui.workspace.assets_area as assets_area
 import app.video_generation.service as video_generation_service
-from app.auth.session import SESSION_COOKIE_NAME, create_session_token
-from app.auth.ui_middleware import UIBasicAuthMiddleware
-from app.auth.ui_routes import _secure_cookie_enabled
 from app.auth.user_store import create_user, verify_user
 from app.config.runtime_preferences import load_runtime_preferences, save_runtime_preferences
-from app.config.settings import get_settings
 from app.core.enums import ProjectStatus
 from app.projects.models import Project
 from app.storytelling.idea_lab import load_generated_ideas
@@ -30,67 +24,8 @@ from app.video_generation.schemas import GenerateVideoClipsRequest
 from app.workflows.state_machine import advance_project_status
 
 
-def test_ui_middleware_requires_authentication() -> None:
+def test_app_routes_do_not_require_authentication() -> None:
     app = FastAPI()
-    app.add_middleware(UIBasicAuthMiddleware)
-
-    @app.get("/")
-    async def home() -> dict[str, bool]:
-        return {"ok": True}
-
-    client = TestClient(app)
-    assert client.get("/", follow_redirects=False).status_code == 303
-    assert client.get("/", auth=("admin", "admin")).json() == {"ok": True}
-
-    client.cookies.set(SESSION_COOKIE_NAME, create_session_token("jonata"))
-    assert client.get("/").json() == {"ok": True}
-
-
-def test_ui_middleware_keeps_registration_private_when_disabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        ui_middleware,
-        "get_settings",
-        lambda: SimpleNamespace(allow_user_registration=False),
-    )
-    middleware = UIBasicAuthMiddleware(FastAPI())
-
-    assert middleware._is_ui_scope({"type": "http", "path": "/register"}) is True
-    assert middleware._is_ui_scope({"type": "http", "path": "/auth/register"}) is True
-    assert middleware._is_ui_scope({"type": "http", "path": "/login"}) is False
-
-
-@pytest.mark.asyncio
-async def test_registration_routes_are_disabled_by_default(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        ui_routes,
-        "get_settings",
-        lambda: SimpleNamespace(
-            app_name="Storytelling",
-            app_env="local",
-            allow_user_registration=False,
-        ),
-    )
-
-    def _unexpected_create_user(*args: object, **kwargs: object) -> object:
-        raise AssertionError("create_user should not be called when registration is disabled")
-
-    monkeypatch.setattr(ui_routes, "create_user", _unexpected_create_user)
-
-    page = await ui_routes.register_page()
-    assert page.status_code == 403
-    assert "Cadastro desativado" in bytes(page.body).decode("utf-8")
-
-    response = await ui_routes.register(username="novo", password="senha-segura")
-    assert response.status_code == 403
-
-
-def test_ui_middleware_protects_docs_and_openapi() -> None:
-    app = FastAPI()
-    app.add_middleware(UIBasicAuthMiddleware)
 
     @app.get("/docs")
     async def docs() -> dict[str, bool]:
@@ -101,15 +36,12 @@ def test_ui_middleware_protects_docs_and_openapi() -> None:
         return {"ok": True}
 
     client = TestClient(app)
-    assert client.get("/docs", follow_redirects=False).status_code == 303
-    assert client.get("/openapi.json", follow_redirects=False).status_code == 303
-    assert client.get("/docs", auth=("admin", "admin")).status_code == 200
-    assert client.get("/openapi.json", auth=("admin", "admin")).status_code == 200
+    assert client.get("/docs", follow_redirects=False).status_code == 200
+    assert client.get("/openapi.json", follow_redirects=False).status_code == 200
 
 
-def test_ui_middleware_does_not_mask_endpoint_exceptions() -> None:
+def test_app_without_auth_does_not_mask_endpoint_exceptions() -> None:
     app = FastAPI()
-    app.add_middleware(UIBasicAuthMiddleware)
 
     @app.get("/")
     async def home() -> dict[str, bool]:
@@ -117,23 +49,7 @@ def test_ui_middleware_does_not_mask_endpoint_exceptions() -> None:
 
     client = TestClient(app)
     with pytest.raises(RuntimeError, match="boom"):
-        client.get("/", auth=("admin", "admin"))
-
-
-def test_ui_session_cookie_is_secure_outside_local(monkeypatch: pytest.MonkeyPatch) -> None:
-    get_settings.cache_clear()
-    assert not _secure_cookie_enabled()
-
-    monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.setenv("APP_DEBUG", "false")
-    monkeypatch.setenv("APP_SECRET_KEY", "production-secret")
-    monkeypatch.setenv("API_BASIC_USERNAME", "prod-admin")
-    monkeypatch.setenv("API_BASIC_PASSWORD", "prod-password")
-    get_settings.cache_clear()
-    try:
-        assert _secure_cookie_enabled()
-    finally:
-        get_settings.cache_clear()
+        client.get("/")
 
 
 def test_local_user_store_creates_and_verifies_user(tmp_path: Path) -> None:
@@ -145,22 +61,6 @@ def test_local_user_store_creates_and_verifies_user(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="ja existe"):
         create_user("jonata", "outra-senha", users_path)
-
-
-def test_ui_session_cookie_accepts_browser_cookie_header() -> None:
-    app = FastAPI()
-    app.add_middleware(UIBasicAuthMiddleware)
-
-    @app.get("/")
-    async def home() -> dict[str, bool]:
-        return {"ok": True}
-
-    token = create_session_token("jonata jesus")
-    client = TestClient(app)
-    response = client.get("/", headers={"Cookie": f"{SESSION_COOKIE_NAME}={token}"})
-
-    assert response.status_code == 200
-    assert response.json() == {"ok": True}
 
 
 def test_runtime_preferences_are_allowlisted_and_reject_control_characters(

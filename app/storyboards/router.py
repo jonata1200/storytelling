@@ -4,7 +4,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_basic_auth
 from app.database.session import get_session
 from app.storyboards.schemas import (
     AnimaticBundleRead,
@@ -22,11 +21,7 @@ from app.storyboards.service import (
     list_storyboard_frames,
 )
 
-router = APIRouter(
-    prefix="/storyboards/projects",
-    tags=["storyboards"],
-    dependencies=[Depends(require_basic_auth)],
-)
+router = APIRouter(prefix="/storyboards/projects", tags=["storyboards"])
 
 
 @router.post("/{project_id}/generate", response_model=list[StoryboardFrameRead])

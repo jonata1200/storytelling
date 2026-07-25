@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_basic_auth
 from app.database.session import get_session
 from app.storytelling.models import Shot
 from app.storytelling.schemas import (
@@ -27,11 +26,7 @@ from app.storytelling.service import (
     list_story_ideas,
 )
 
-router = APIRouter(
-    prefix="/storytelling/projects",
-    tags=["storytelling"],
-    dependencies=[Depends(require_basic_auth)],
-)
+router = APIRouter(prefix="/storytelling/projects", tags=["storytelling"])
 
 
 @router.post(

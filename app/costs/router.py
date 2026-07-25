@@ -3,7 +3,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_basic_auth
 from app.costs.schemas import (
     CostEntryCreate,
     CostEntryRead,
@@ -13,11 +12,7 @@ from app.costs.schemas import (
 from app.costs.service import create_cost_entry, estimate_batch_cost
 from app.database.session import get_session
 
-router = APIRouter(
-    prefix="/costs",
-    tags=["costs"],
-    dependencies=[Depends(require_basic_auth)],
-)
+router = APIRouter(prefix="/costs", tags=["costs"])
 
 
 @router.post("/estimate", response_model=CostEstimateRead)

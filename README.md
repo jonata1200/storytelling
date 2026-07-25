@@ -155,7 +155,7 @@ Fases 1 a 8 estao implementadas em base funcional:
   e export manifest.
 - Continuity Ledger, quality gate, varredura inicial de seguranca e correlation
   ID por requisicao.
-- Testes de health, auth, maquina de estados, dependencias, custos e mock LLM.
+- Testes de health, maquina de estados, dependencias, custos e mock LLM.
 
 ## Fluxo narrativo inicial
 

@@ -4,7 +4,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_basic_auth
 from app.database.session import get_session
 from app.quality.schemas import (
     AcceptContinuityIssueRequest,
@@ -24,11 +23,7 @@ from app.quality.service import (
     run_quality_check,
 )
 
-router = APIRouter(
-    prefix="/quality/projects",
-    tags=["quality"],
-    dependencies=[Depends(require_basic_auth)],
-)
+router = APIRouter(prefix="/quality/projects", tags=["quality"])
 
 
 @router.post("/{project_id}/continuity/build", response_model=ContinuityBuildRead)
@@ -96,11 +91,7 @@ async def get_observability_summary(
     return ObservabilitySummaryRead(**summary)
 
 
-security_router = APIRouter(
-    prefix="/quality",
-    tags=["quality"],
-    dependencies=[Depends(require_basic_auth)],
-)
+security_router = APIRouter(prefix="/quality", tags=["quality"])
 
 
 @security_router.post("/security/scan", response_model=SecurityScanRead)

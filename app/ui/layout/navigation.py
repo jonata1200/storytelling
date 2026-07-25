@@ -33,15 +33,6 @@ def theme_toggle() -> None:
     button.on("click", toggle_theme).tooltip("Alternar entre tema claro e escuro")
 
 
-def logout_button() -> None:
-    ui.button(icon="logout").props("flat round").classes("text-[#aeb3ae]").on(
-        "click",
-        lambda: ui.run_javascript(
-            "fetch('/auth/logout', {method: 'POST'}).then(() => window.location.href = '/login')"
-        ),
-    ).tooltip("Sair")
-
-
 def avatar_data_uri(path_value: str) -> str | None:
     if not path_value:
         return None
@@ -100,7 +91,6 @@ def home_sidebar(active: str = "") -> None:
         ui.space()
         with ui.element("div").classes("mb-2"):
             user_avatar(size="48px")
-        logout_button()
 
 
 def workspace_header(project: Project, active: str, counts: dict[str, int]) -> None:

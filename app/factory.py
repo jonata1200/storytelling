@@ -5,8 +5,6 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
-from app.auth.ui_middleware import UIBasicAuthMiddleware
-from app.auth.ui_routes import router as ui_auth_router
 from app.config.settings import get_settings
 from app.observability.middleware import CorrelationIdMiddleware
 from app.workflows.state_machine import WorkflowStateError
@@ -16,9 +14,6 @@ def create_app(include_ui: bool = True) -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, debug=settings.app_debug)
     app.add_middleware(CorrelationIdMiddleware)
-    if include_ui:
-        app.add_middleware(UIBasicAuthMiddleware)
-        app.include_router(ui_auth_router)
     app.include_router(api_router)
 
     @app.exception_handler(WorkflowStateError)

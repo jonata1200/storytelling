@@ -5,14 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.schemas import AssetCreate, AssetRead
 from app.assets.service import create_asset
-from app.auth.dependencies import require_basic_auth
 from app.database.session import get_session
 
-router = APIRouter(
-    prefix="/assets",
-    tags=["assets"],
-    dependencies=[Depends(require_basic_auth)],
-)
+router = APIRouter(prefix="/assets", tags=["assets"])
 
 
 @router.post("", response_model=AssetRead, status_code=status.HTTP_201_CREATED)

@@ -21,9 +21,6 @@ class Settings(BaseSettings):
     app_debug: bool = True
     app_secret_key: str = Field(default="change-me-in-development", repr=False)
 
-    api_basic_username: str = "admin"
-    api_basic_password: str = Field(default="admin", repr=False)
-
     database_url: str = "postgresql+asyncpg://storytelling:storytelling@localhost:5432/storytelling"
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/1"
@@ -51,8 +48,6 @@ class Settings(BaseSettings):
     def reject_insecure_non_local_defaults(self) -> "Settings":
         self.openrouter_api_key = normalize_openrouter_api_key(self.openrouter_api_key)
         if self.app_env.lower() not in {"local", "development", "test"}:
-            if self.api_basic_username == "admin" and self.api_basic_password == "admin":
-                raise ValueError("Default API credentials are forbidden outside local environments")
             if self.app_secret_key == "change-me-in-development":
                 raise ValueError("APP_SECRET_KEY must be changed outside local environments")
             if self.app_debug:

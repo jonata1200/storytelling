@@ -4,7 +4,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_basic_auth
 from app.database.session import get_session
 from app.video_generation.schemas import (
     ClipReviewCreate,
@@ -24,11 +23,7 @@ from app.video_generation.service import (
     review_clip,
 )
 
-router = APIRouter(
-    prefix="/video/projects",
-    tags=["video"],
-    dependencies=[Depends(require_basic_auth)],
-)
+router = APIRouter(prefix="/video/projects", tags=["video"])
 
 
 @router.post("/{project_id}/cost-estimate", response_model=VideoCostEstimateRead)

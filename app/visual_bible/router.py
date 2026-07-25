@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_basic_auth
 from app.database.session import get_session
 from app.projects.repository import ProjectRepository
 from app.visual_bible.models import Character, Location, Prop
@@ -25,11 +24,7 @@ from app.visual_bible.service import (
     generate_visual_references,
 )
 
-router = APIRouter(
-    prefix="/visual-bible/projects",
-    tags=["visual-bible"],
-    dependencies=[Depends(require_basic_auth)],
-)
+router = APIRouter(prefix="/visual-bible/projects", tags=["visual-bible"])
 
 
 @router.post("/{project_id}/generate", response_model=VisualBibleRead)

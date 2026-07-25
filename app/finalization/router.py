@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_basic_auth
 from app.database.session import get_session
 from app.finalization.schemas import (
     ExportRead,
@@ -24,11 +23,7 @@ from app.finalization.service import (
 from app.storyboards.models import TimelineItem
 from app.storyboards.schemas import AudioTrackRead, TimelineItemRead, TimelineRead
 
-router = APIRouter(
-    prefix="/finalization/projects",
-    tags=["finalization"],
-    dependencies=[Depends(require_basic_auth)],
-)
+router = APIRouter(prefix="/finalization/projects", tags=["finalization"])
 
 
 @router.post("/{project_id}/narration/generate", response_model=AudioTrackRead)
