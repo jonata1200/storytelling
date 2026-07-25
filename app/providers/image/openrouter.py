@@ -13,6 +13,8 @@ from app.config.settings import get_settings
 from app.providers.image.types import ImageEditRequest, ImageGenerationRequest, ImageResult
 from app.providers.media_utils import extension_from_media_type, local_uri_to_data_url
 
+SOURCEFUL_RESOLUTIONS = {"512", "1K", "2K", "4K"}
+
 
 class OpenRouterImageProvider:
     provider_name = "openrouter"
@@ -51,7 +53,7 @@ class OpenRouterImageProvider:
             "output_format": "png",
         }
         if request.resolution:
-            body["size"] = request.resolution
+            body["resolution"] = self._normalized_resolution(request.resolution)
         if request.references:
             body["input_references"] = [
                 {
@@ -164,9 +166,12 @@ class OpenRouterImageProvider:
         cls, exc: RuntimeError, body: dict[str, Any]
     ) -> list[str]:
         message = str(exc).lower()
-        if not any(term in message for term in ("unsupported", "not supported", "unknown")):
+        if not any(
+            term in message
+            for term in ("unsupported", "not supported", "unknown", "invalid option")
+        ):
             return []
-        retryable_parameters = ("output_format", "aspect_ratio", "n", "size")
+        retryable_parameters = ("output_format", "aspect_ratio", "n", "resolution")
         return [
             parameter
             for parameter in retryable_parameters
@@ -184,6 +189,29 @@ class OpenRouterImageProvider:
             f"parameter: {parameter}",
         }
         return any(variant in message for variant in variants)
+
+    @staticmethod
+    def _normalized_resolution(value: str) -> str:
+        resolution = str(value or "").strip()
+        if resolution in SOURCEFUL_RESOLUTIONS:
+            return resolution
+        if "x" not in resolution.lower():
+            return resolution
+        try:
+            width, height = (
+                int(part.strip())
+                for part in resolution.lower().split("x", 1)
+            )
+        except ValueError:
+            return resolution
+        longest_side = max(width, height)
+        if longest_side <= 768:
+            return "512"
+        if longest_side <= 1280:
+            return "1K"
+        if longest_side <= 2048:
+            return "2K"
+        return "4K"
 
     def _post_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         settings = get_settings()

@@ -47,7 +47,7 @@ def test_openrouter_image_provider_writes_generated_image(
 
     assert posted["path"] == "/images"
     assert posted["body"]["aspect_ratio"] == "1:1"
-    assert posted["body"]["size"] == "1080x1920"
+    assert posted["body"]["resolution"] == "2K"
     assert result.provider == "openrouter"
     assert result.content_type == "image/png"
     assert result.file_path.exists()
@@ -209,7 +209,7 @@ def test_openrouter_image_provider_retries_multiple_unsupported_parameters(
     assert result.file_path.read_bytes() == b"fake-png"
 
 
-def test_openrouter_image_provider_retries_without_unsupported_size(
+def test_openrouter_image_provider_retries_without_unsupported_resolution(
     monkeypatch: Any, tmp_path: Path
 ) -> None:
     provider = OpenRouterImageProvider()
@@ -225,7 +225,7 @@ def test_openrouter_image_provider_retries_without_unsupported_size(
         assert path == "/images"
         posted_bodies.append(dict(body))
         if len(posted_bodies) == 1:
-            raise RuntimeError("OpenRouter Images HTTP 400: unsupported parameter: size")
+            raise RuntimeError("OpenRouter Images HTTP 400: unsupported parameter: resolution")
         return {"data": [{"b64_json": pixel, "media_type": "image/png"}]}
 
     monkeypatch.setattr(provider, "_post_json", fake_post)
@@ -241,8 +241,48 @@ def test_openrouter_image_provider_retries_without_unsupported_size(
         )
     )
 
-    assert "size" in posted_bodies[0]
-    assert "size" not in posted_bodies[1]
+    assert "resolution" in posted_bodies[0]
+    assert "resolution" not in posted_bodies[1]
+    assert result.file_path.read_bytes() == b"fake-png"
+
+
+def test_openrouter_image_provider_retries_without_invalid_resolution(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    provider = OpenRouterImageProvider()
+    pixel = base64.b64encode(b"fake-png").decode("ascii")
+    posted_bodies: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+    )
+
+    def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
+        assert path == "/images"
+        posted_bodies.append(dict(body))
+        if len(posted_bodies) == 1:
+            raise RuntimeError(
+                'OpenRouter Images HTTP 400: {"error":{"message":"Invalid option: '
+                'expected one of \\"512\\"|\\"1K\\"|\\"2K\\"|\\"4K\\"","path":["resolution"]}}'
+            )
+        return {"data": [{"b64_json": pixel, "media_type": "image/png"}]}
+
+    monkeypatch.setattr(provider, "_post_json", fake_post)
+
+    result = provider._generate(
+        ImageGenerationRequest(
+            prompt="dramatic character portrait",
+            target_id="char",
+            view_type="front",
+            output_dir=tmp_path,
+            resolution="unusual",
+            model="sourceful/riverflow-v2-fast",
+        )
+    )
+
+    assert posted_bodies[0]["resolution"] == "unusual"
+    assert "resolution" not in posted_bodies[1]
     assert result.file_path.read_bytes() == b"fake-png"
 
 
