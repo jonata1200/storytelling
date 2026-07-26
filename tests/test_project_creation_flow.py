@@ -13,6 +13,7 @@ from app.storytelling.service import (
 )
 from app.ui import page_runtime, pages
 from app.ui.pages import _asset_url, _compact_project_title
+from app.ui.project import actions as project_actions
 from app.ui.workspace import storyboard_video_area
 from app.ui.workspace.assets_area import _character_reference_sheet_asset
 
@@ -56,6 +57,47 @@ def test_register_ui_pages_resolves_page_facade_dependencies(
     pages.register_ui_pages()
 
     assert registered == ["home", "settings", "workspace"]
+
+
+@pytest.mark.asyncio
+async def test_delete_lab_idea_does_not_remove_local_when_database_delete_is_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    deleted_local: list[str] = []
+    notifications: list[tuple[str, str | None]] = []
+
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+    async def fake_blocked_delete_status(session: Any, idea_id: str) -> str:
+        return "blocked"
+
+    monkeypatch.setattr(project_actions, "AsyncSessionLocal", lambda: FakeSession())
+    monkeypatch.setattr(
+        project_actions,
+        "delete_saved_idea",
+        lambda idea_id: deleted_local.append(idea_id),
+    )
+    monkeypatch.setattr(
+        project_actions,
+        "hard_delete_story_idea_by_payload_id_status",
+        fake_blocked_delete_status,
+    )
+    monkeypatch.setattr(
+        project_actions.ui,
+        "notify",
+        lambda message, **kwargs: notifications.append((message, kwargs.get("color"))),
+    )
+
+    deleted = await project_actions._delete_lab_idea_from_ui("idea-linked", "saved")
+
+    assert deleted is False
+    assert deleted_local == []
+    assert notifications[-1][1] == "warning"
 
 
 def test_chat_prompt_title_is_compact() -> None:

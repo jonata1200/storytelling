@@ -10,6 +10,7 @@ from app.projects.service import (
     delete_all_projects,
     hard_delete_all_story_ideas,
     hard_delete_project,
+    hard_delete_story_idea_by_payload_id_status,
     purge_application_data,
 )
 
@@ -142,4 +143,76 @@ async def test_hard_delete_all_story_ideas_removes_db_ideas_and_non_briefing_art
     assert any("TRUNCATE TABLE" in sql and "story_ideas" in sql for sql in session.executed)
     assert any("artifact_type <> 'BRIEFING'" in sql for sql in session.executed)
     assert all("TRUNCATE TABLE projects" not in sql for sql in session.executed)
+    assert session.committed is True
+
+
+class _FakeStoryIdeaDeleteSession:
+    def __init__(self, *, story_idea: Any | None, script_count: int = 0) -> None:
+        self.story_idea = story_idea
+        self.script_count = script_count
+        self.scalar_calls = 0
+        self.executed: list[str] = []
+        self.committed = False
+
+    async def scalar(self, statement: Any) -> Any:
+        self.scalar_calls += 1
+        if self.scalar_calls == 1:
+            return self.story_idea
+        return self.script_count
+
+    async def execute(self, statement: Any, params: Any | None = None) -> None:
+        self.executed.append(str(statement))
+
+    async def commit(self) -> None:
+        self.committed = True
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_story_idea_by_payload_id_reports_not_found() -> None:
+    session = _FakeStoryIdeaDeleteSession(story_idea=None)
+
+    status = await hard_delete_story_idea_by_payload_id_status(
+        cast(AsyncSession, session),
+        "idea-missing",
+    )
+
+    assert status == "not_found"
+    assert session.executed == []
+    assert session.committed is False
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_story_idea_by_payload_id_reports_blocked_when_script_exists() -> None:
+    story_idea = SimpleNamespace(
+        id=UUID("62d6bfdf-d2e3-4b8b-93de-b5f4f764f474"),
+        artifact_id=UUID("72d6bfdf-d2e3-4b8b-93de-b5f4f764f474"),
+    )
+    session = _FakeStoryIdeaDeleteSession(story_idea=story_idea, script_count=1)
+
+    status = await hard_delete_story_idea_by_payload_id_status(
+        cast(AsyncSession, session),
+        "idea-linked",
+    )
+
+    assert status == "blocked"
+    assert session.executed == []
+    assert session.committed is False
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_story_idea_by_payload_id_reports_deleted() -> None:
+    story_idea = SimpleNamespace(
+        id=UUID("62d6bfdf-d2e3-4b8b-93de-b5f4f764f474"),
+        artifact_id=UUID("72d6bfdf-d2e3-4b8b-93de-b5f4f764f474"),
+    )
+    session = _FakeStoryIdeaDeleteSession(story_idea=story_idea)
+
+    status = await hard_delete_story_idea_by_payload_id_status(
+        cast(AsyncSession, session),
+        "idea-free",
+    )
+
+    assert status == "deleted"
+    assert any("DELETE FROM story_ideas" in sql for sql in session.executed)
+    assert any("DELETE FROM artifacts" in sql for sql in session.executed)
     assert session.committed is True

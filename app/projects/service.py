@@ -344,16 +344,23 @@ async def hard_delete_all_story_ideas(session: AsyncSession) -> dict[str, int]:
 
 
 async def hard_delete_story_idea_by_payload_id(session: AsyncSession, idea_id: str) -> bool:
+    return await hard_delete_story_idea_by_payload_id_status(session, idea_id) == "deleted"
+
+
+async def hard_delete_story_idea_by_payload_id_status(
+    session: AsyncSession,
+    idea_id: str,
+) -> str:
     story_idea = await session.scalar(
         select(StoryIdea).where(StoryIdea.payload["id"].as_string() == idea_id).limit(1)
     )
     if story_idea is None:
-        return False
+        return "not_found"
     script_count = await session.scalar(
         select(func.count()).select_from(Script).where(Script.story_idea_id == story_idea.id)
     )
     if script_count:
-        return False
+        return "blocked"
     await session.execute(
         text(
             """
@@ -397,7 +404,7 @@ async def hard_delete_story_idea_by_payload_id(session: AsyncSession, idea_id: s
         {"artifact_id": story_idea.artifact_id},
     )
     await session.commit()
-    return True
+    return "deleted"
 
 
 async def create_artifact(

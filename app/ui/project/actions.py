@@ -13,7 +13,7 @@ from app.projects.service import (
     create_project,
     hard_delete_all_story_ideas,
     hard_delete_project,
-    hard_delete_story_idea_by_payload_id,
+    hard_delete_story_idea_by_payload_id_status,
     purge_application_data,
     rename_project,
 )
@@ -108,12 +108,18 @@ async def _purge_all_projects_from_ui() -> None:
 
 async def _delete_lab_idea_from_ui(idea_id: str, source: str) -> bool:
     try:
+        async with AsyncSessionLocal() as session:
+            delete_status = await hard_delete_story_idea_by_payload_id_status(session, idea_id)
+        if delete_status == "blocked":
+            ui.notify(
+                "Esta ideia já está vinculada a um roteiro/projeto e não foi apagada do banco.",
+                color="warning",
+            )
+            return False
         if source == "saved":
             delete_saved_idea(idea_id)
         else:
             delete_generated_idea(idea_id)
-        async with AsyncSessionLocal() as session:
-            await hard_delete_story_idea_by_payload_id(session, idea_id)
         return True
     except Exception as exc:
         ui.notify(f"Não foi possível apagar definitivamente a ideia: {exc}", color="negative")
