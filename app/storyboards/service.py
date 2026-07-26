@@ -1,7 +1,5 @@
-import hashlib
 import json
 from decimal import Decimal
-from pathlib import Path
 from time import perf_counter
 from uuid import UUID, uuid4
 
@@ -20,11 +18,28 @@ from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
 from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider
+from app.storyboards.assets import (
+    _delete_local_storage_file,
+    _storyboard_frame_asset_available,
+)
+from app.storyboards.assets import (
+    _local_storage_file_exists as _local_storage_file_exists,
+)
+from app.storyboards.assets import (
+    _local_storage_file_path as _local_storage_file_path,
+)
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
+from app.storyboards.prompts import (
+    _prompt_hash,
+    _store_storyboard_prompt_approval,
+    _storyboard_frame_payload,
+    _storyboard_prompt,
+    _storyboard_prompt_is_approved,
+    _storyboard_visual_context,
+)
 from app.storyboards.timeline import build_visual_timeline_items, build_word_alignment
 from app.storytelling.models import Scene, Script, Shot
 from app.video_generation.models import ClipReview, GenerationJob, VideoClip
-from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (
     _generate_image_with_provider_fallback,
     visual_reference_completion_message,
@@ -112,218 +127,6 @@ async def _ordered_shots_for_script(
     return [(row[0], row[1]) for row in result.all()]
 
 
-def _prompt_hash(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _compact_prompt_value(value: object, max_length: int = 140) -> str:
-    if isinstance(value, list):
-        text = ", ".join(_compact_prompt_value(item, max_length) for item in value)
-    elif isinstance(value, dict):
-        text = "; ".join(
-            f"{key}: {_compact_prompt_value(item, max_length)}"
-            for key, item in value.items()
-            if item not in (None, "", [], {})
-        )
-    else:
-        text = str(value or "").strip()
-    text = " ".join(text.split())
-    if len(text) <= max_length:
-        return text
-    return f"{text[: max_length - 3].rstrip()}..."
-
-
-def _visual_context_items(items: list[Character] | list[Location] | list[Prop]) -> list[dict]:
-    compacted: list[dict] = []
-    for item in items[:8]:
-        profile = item.canonical_profile or {}
-        compacted.append(
-            {
-                "id": str(item.id),
-                "name": item.name,
-                "role": getattr(item, "role", ""),
-                "description": getattr(item, "description", ""),
-                "narrative_importance": getattr(item, "narrative_importance", ""),
-                "profile": {
-                    key: _compact_prompt_value(profile.get(key))
-                    for key in (
-                        "hair",
-                        "base_outfit",
-                        "palette",
-                        "lighting",
-                        "layout",
-                        "material",
-                        "color",
-                    )
-                    if profile.get(key) not in (None, "", [], {})
-                },
-            }
-        )
-    return compacted
-
-
-async def _storyboard_visual_context(session: AsyncSession, project_id: UUID) -> dict:
-    character_rows = await session.execute(
-        select(Character).where(Character.project_id == project_id).order_by(Character.created_at)
-    )
-    location_rows = await session.execute(
-        select(Location).where(Location.project_id == project_id).order_by(Location.created_at)
-    )
-    prop_rows = await session.execute(
-        select(Prop).where(Prop.project_id == project_id).order_by(Prop.created_at)
-    )
-    reference_rows = await session.execute(
-        select(VisualReference).where(VisualReference.project_id == project_id)
-    )
-    reference_views: dict[str, list[str]] = {}
-    for reference in reference_rows.scalars():
-        key = f"{reference.target_kind}:{reference.target_id}"
-        reference_views.setdefault(key, []).append(reference.view_type)
-
-    context = {
-        "characters": _visual_context_items(list(character_rows.scalars())),
-        "locations": _visual_context_items(list(location_rows.scalars())),
-        "props": _visual_context_items(list(prop_rows.scalars())),
-        "reference_views": reference_views,
-    }
-    return context
-
-
-def _storyboard_visual_context_text(visual_context: dict | None) -> str:
-    if not visual_context:
-        return ""
-    sections: list[str] = []
-    for label, key in (
-        ("Personagens", "characters"),
-        ("Locais", "locations"),
-        ("Objetos", "props"),
-    ):
-        items = visual_context.get(key)
-        if not isinstance(items, list) or not items:
-            continue
-        descriptions = []
-        for item in items[:6]:
-            if not isinstance(item, dict):
-                continue
-            raw_profile = item.get("profile")
-            profile: dict = raw_profile if isinstance(raw_profile, dict) else {}
-            details = ", ".join(
-                str(value)
-                for value in profile.values()
-                if str(value or "").strip()
-            )
-            name = str(item.get("name") or "").strip()
-            role = str(
-                item.get("role")
-                or item.get("description")
-                or item.get("narrative_importance")
-                or ""
-            ).strip()
-            descriptions.append(
-                f"- {'; '.join(part for part in (name, role, details) if part)}"
-            )
-        if descriptions:
-            sections.append(f"{label}:\n" + "\n".join(descriptions))
-    if not sections:
-        return ""
-    return (
-        "\n\nBiblioteca visual canonica - autoridade de continuidade:\n"
-        + "\n\n".join(sections)
-    )
-
-
-def _storyboard_prompt(shot: Shot, scene: Scene, visual_context: dict | None = None) -> str:
-    visual_context_text = _storyboard_visual_context_text(visual_context)
-    return (
-        "Storyboard frame cinematografico para video vertical 9:16.\n"
-        f"Cena {scene.scene_number}, plano {shot.shot_number}.\n\n"
-        f"Acao principal do plano: {shot.action}.\n"
-        f"Emocao dominante: {shot.emotion}.\n"
-        f"Composicao planejada: {shot.visual_composition}.\n"
-        f"Movimento de camera previsto: {shot.camera_movement}.\n\n"
-        "Crie um unico quadro de storyboard que funcione como primeiro frame util "
-        "para image-to-video. O quadro deve mostrar o instante inicial mais claro "
-        "e filmavel da acao, com sujeito principal legivel, silhueta reconhecivel, "
-        "ambiente coerente, profundidade espacial e direcao de movimento compreensivel.\n\n"
-        "Regras visuais obrigatorias:\n"
-        "- formato vertical 9:16\n"
-        "- composicao cinematografica, clara e sem poluicao visual\n"
-        "- continuidade rigorosa de rosto, idade, figurino, objetos, paleta, luz e ambiente\n"
-        "- nenhum texto, legenda, marca d'agua, baloes, UI ou anotacao dentro da imagem\n"
-        "- nao criar montagem, colagem, split screen ou multiplas cenas no mesmo quadro\n"
-        "- nao adicionar personagens, objetos ou locais que nao estejam no plano\n"
-        "- nao mudar o genero visual definido pelos ativos canonicos\n"
-        "- deixar espaco visual suficiente para movimento curto de camera ou personagem"
-        f"{visual_context_text}"
-    )
-
-
-def _storyboard_frame_payload(
-    scene: Scene,
-    shot: Shot,
-    asset_id: UUID,
-    prompt: str,
-) -> dict:
-    return {
-        "scene_number": scene.scene_number,
-        "shot_number": shot.shot_number,
-        "shot_id": str(shot.id),
-        "asset_id": str(asset_id),
-        "duration_seconds": shot.duration_seconds,
-        "prompt": prompt,
-        "prompt_hash": _prompt_hash(prompt),
-        "frame_fingerprint": _prompt_hash(
-            json.dumps(
-                {
-                    "shot_id": str(shot.id),
-                    "duration_seconds": shot.duration_seconds,
-                    "narration_text": shot.narration_text,
-                    "dialogue_text": shot.dialogue_text,
-                    "prompt": prompt,
-                },
-                sort_keys=True,
-                ensure_ascii=True,
-            )
-        ),
-    }
-
-
-def _storyboard_prompt_approval_map(metadata: dict, script_id: UUID) -> dict[str, str]:
-    raw_store = metadata.get("storyboard_prompt_approvals")
-    store = raw_store if isinstance(raw_store, dict) else {}
-    raw_script_store = store.get(str(script_id))
-    script_store = raw_script_store if isinstance(raw_script_store, dict) else {}
-    return {str(key): str(value) for key, value in script_store.items()}
-
-
-def _storyboard_prompt_is_approved(
-    metadata: dict,
-    script_id: UUID,
-    shot_id: UUID,
-    prompt_hash: str,
-) -> bool:
-    approvals = _storyboard_prompt_approval_map(metadata, script_id)
-    return approvals.get(str(shot_id)) == prompt_hash
-
-
-def _store_storyboard_prompt_approval(
-    metadata: dict,
-    script_id: UUID,
-    shot_id: UUID,
-    prompt_hash: str,
-) -> dict:
-    updated = dict(metadata or {})
-    raw_store = updated.get("storyboard_prompt_approvals")
-    store = dict(raw_store) if isinstance(raw_store, dict) else {}
-    script_key = str(script_id)
-    raw_script_store = store.get(script_key)
-    script_store = dict(raw_script_store) if isinstance(raw_script_store, dict) else {}
-    script_store[str(shot_id)] = prompt_hash
-    store[script_key] = script_store
-    updated["storyboard_prompt_approvals"] = store
-    return updated
-
-
 async def _selected_storyboard_shots(
     session: AsyncSession,
     project_id: UUID,
@@ -338,15 +141,12 @@ async def _selected_storyboard_shots(
     shot_rows = all_shot_rows
     if scene_number is not None:
         shot_rows = [
-            (shot, scene)
-            for shot, scene in all_shot_rows
-            if scene.scene_number == scene_number
+            (shot, scene) for shot, scene in all_shot_rows if scene.scene_number == scene_number
         ]
         if not shot_rows:
             raise ValueError(f"Nenhum plano encontrado para a cena {scene_number}.")
     frame_number_by_shot = {
-        shot.id: frame_number
-        for frame_number, (shot, _scene) in enumerate(all_shot_rows, start=1)
+        shot.id: frame_number for frame_number, (shot, _scene) in enumerate(all_shot_rows, start=1)
     }
     return all_shot_rows, shot_rows, frame_number_by_shot
 
@@ -476,8 +276,7 @@ async def _ensure_storyboard_prompts_approved(
         if len(pending) > 5:
             sample += f"; e mais {len(pending) - 5}"
         raise ValueError(
-            "Aprove os prompts de storyboard antes de gerar imagens. "
-            f"Pendentes: {sample}."
+            f"Aprove os prompts de storyboard antes de gerar imagens. Pendentes: {sample}."
         )
     return prompt_by_shot
 
@@ -509,72 +308,6 @@ def storyboard_coverage_errors(
         if len(str(frame.prompt or "").split()) < 10:
             errors.append(f"frame {frame.frame_number} com prompt generico")
     return errors
-
-
-def _local_storage_file_exists(storage_uri: str) -> bool:
-    if not storage_uri:
-        return False
-    if storage_uri.startswith(("http://", "https://", "data:")):
-        return True
-    storage_root = get_settings().local_storage_path.resolve()
-    candidate = Path(storage_uri)
-    candidates = [candidate] if candidate.is_absolute() else [storage_root / candidate, candidate]
-    for path in candidates:
-        try:
-            resolved = path.resolve(strict=False)
-            resolved.relative_to(storage_root)
-        except (OSError, RuntimeError, ValueError):
-            continue
-        if resolved.is_file():
-            return True
-    return False
-
-
-def _local_storage_file_path(storage_uri: str) -> Path | None:
-    if not storage_uri or storage_uri.startswith(("http://", "https://", "data:")):
-        return None
-    storage_root = get_settings().local_storage_path.resolve()
-    candidate = Path(storage_uri)
-    if candidate.is_absolute():
-        candidates = [candidate.resolve(strict=False)]
-    else:
-        candidates = []
-        if candidate.parts and candidate.parts[0] == storage_root.name:
-            candidates.append((storage_root.parent / candidate).resolve(strict=False))
-        candidates.extend(
-            [(storage_root / candidate).resolve(strict=False), candidate.resolve(strict=False)]
-        )
-    for path in candidates:
-        try:
-            path.relative_to(storage_root)
-        except (OSError, RuntimeError, ValueError):
-            continue
-        if path.is_file():
-            return path
-    return None
-
-
-def _delete_local_storage_file(storage_uri: str) -> bool:
-    path = _local_storage_file_path(storage_uri)
-    if path is None:
-        return False
-    try:
-        path.unlink()
-    except OSError:
-        return False
-    return True
-
-
-async def _storyboard_frame_asset_available(
-    session: AsyncSession,
-    frame: StoryboardFrame | None,
-) -> bool:
-    if frame is None or frame.asset_id is None:
-        return False
-    asset = await session.get(Asset, frame.asset_id)
-    if asset is None:
-        return False
-    return _local_storage_file_exists(str(asset.storage_uri or ""))
 
 
 async def generate_storyboard_frames(
@@ -625,9 +358,7 @@ async def generate_storyboard_frames(
             if existing_frame is not None
             else None
         )
-        existing_asset_available = await _storyboard_frame_asset_available(
-            session, existing_frame
-        )
+        existing_asset_available = await _storyboard_frame_asset_available(session, existing_frame)
         needs_image = (
             force
             or existing_frame is None
@@ -645,7 +376,7 @@ async def generate_storyboard_frames(
                     output_dir=output_dir,
                     resolution=image_resolution,
                     model=image_model,
-                )
+                ),
             )
             duration_ms = max(1, int((perf_counter() - generation_started_at) * 1000))
             generation_metadata = {
@@ -777,9 +508,7 @@ async def generate_storyboard_frames(
                     },
                     parameters={"reused": False, **generation_metadata},
                     estimated_cost=(
-                        Decimal(image.estimated_cost)
-                        if image is not None
-                        else Decimal("0.000000")
+                        Decimal(image.estimated_cost) if image is not None else Decimal("0.000000")
                     ),
                     duration_ms=duration_ms,
                 )

@@ -1,4 +1,4 @@
-﻿from collections.abc import Mapping
+from collections.abc import Mapping
 from decimal import Decimal
 from time import perf_counter
 from typing import TypedDict
@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approvals.service import record_approval
 from app.assets.models import Asset, AssetVersion
-from app.config.model_policy import ensure_openrouter_api_key
 from app.config.settings import get_settings
 from app.core.enums import (
     ApprovalDecision,
@@ -19,13 +18,19 @@ from app.core.enums import (
     DependencyKind,
 )
 from app.generation.models import PromptExecution
-from app.production.service import get_or_create_production_settings, resolve_image_model
+from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
-from app.providers.image.openrouter import OpenRouterImageProvider
-from app.providers.image.types import ImageGenerationRequest, ImageProvider, ImageResult
+from app.providers.image.types import ImageGenerationRequest
 from app.storytelling.models import Script, StoryIdea
+from app.visual_bible.image_generation import (
+    _generate_image_with_provider_fallback,
+    _image_provider_for_project,
+)
+from app.visual_bible.image_generation import (
+    _transient_image_provider_error as _transient_image_provider_error,
+)
 from app.visual_bible.models import (
     Character,
     CharacterVersion,
@@ -75,55 +80,6 @@ class VisualReferenceCompletionReport(TypedDict):
     expected_references: int
     existing_references: int
     missing_views: int
-
-
-async def _image_provider_for_project(
-    session: AsyncSession, project_id: UUID
-) -> tuple[ImageProvider, str, str]:
-    app_settings = get_settings()
-    production_settings = await get_or_create_production_settings(session, project_id)
-    model = resolve_image_model(
-        production_settings.image_model,
-        app_settings.openrouter_image_model,
-    )
-    ensure_openrouter_api_key(app_settings.openrouter_api_key)
-    return OpenRouterImageProvider(), model, "openrouter_images"
-
-
-def _transient_image_provider_error(exc: Exception) -> bool:
-    message = str(exc).lower()
-    transient_terms = (
-        "http 500",
-        "http 502",
-        "http 503",
-        "http 504",
-        "sourceful",
-        "internal error",
-        "temporarily unavailable",
-        "timeout",
-        "timed out",
-        "network",
-        "connection",
-    )
-    return any(term in message for term in transient_terms)
-
-
-async def _generate_image_with_provider_fallback(
-    provider: ImageProvider,
-    request: ImageGenerationRequest,
-) -> tuple[ImageResult, dict]:
-    try:
-        return await provider.generate(request), {}
-    except RuntimeError as exc:
-        if (
-            getattr(provider, "provider_name", "") != "openrouter"
-            or not _transient_image_provider_error(exc)
-        ):
-            raise
-        raise RuntimeError(
-            "OpenRouter Images falhou ao gerar a imagem real. Nenhuma imagem mock foi criada "
-            f"automaticamente. Detalhes: {exc}"
-        ) from exc
 
 
 async def _create_artifact(
@@ -654,9 +610,9 @@ async def _visual_generation_reference_uris(
     related_character_ids = [
         character.id
         for character in characters_result.scalars()
-        if str(
-            (character.canonical_profile or {}).get("identity_base_name") or ""
-        ).strip().casefold()
+        if str((character.canonical_profile or {}).get("identity_base_name") or "")
+        .strip()
+        .casefold()
         == identity_base
     ]
     if related_character_ids:

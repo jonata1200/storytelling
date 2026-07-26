@@ -1,10 +1,9 @@
-﻿import re
+import re
 from typing import cast
 
 from app.storytelling.models import Briefing
-from app.storytelling.normalization import (
-    GenerationOutputError,
-    _required_str,
+from app.storytelling.normalization_common import GenerationOutputError, _required_str
+from app.storytelling.script_normalization import (
     _story_bible_script_contract,
     _story_bible_visual_contract,
 )
@@ -30,9 +29,7 @@ def _story_bible_text(value: object, fallback: str = "") -> str:
     if value in (None, "", [], {}):
         return fallback
     if isinstance(value, list):
-        text = ", ".join(
-            item_text for item in value if (item_text := _story_bible_text(item))
-        )
+        text = ", ".join(item_text for item in value if (item_text := _story_bible_text(item)))
         return text or fallback
     if isinstance(value, dict):
         parts = [
@@ -126,16 +123,12 @@ def _normalize_story_bible_characters(payload: dict, idea_payload: dict | None) 
     )
     items = _story_bible_profile_items(raw_items)
     if not items:
-        protagonist = _story_bible_text(
-            (idea_payload or {}).get("protagonist"), "Protagonista"
-        )
+        protagonist = _story_bible_text((idea_payload or {}).get("protagonist"), "Protagonista")
         items = [{"name": protagonist, "role": "protagonista"}]
     normalized: list[dict] = []
     for index, item in enumerate(items, start=1):
         default_name = (
-            _story_bible_text((idea_payload or {}).get("protagonist"), "")
-            if index == 1
-            else ""
+            _story_bible_text((idea_payload or {}).get("protagonist"), "") if index == 1 else ""
         ) or f"Personagem {index}"
         name = _story_bible_text(
             item.get("name") or item.get("nome") or item.get("title") or item.get("titulo"),
@@ -326,9 +319,7 @@ def story_bible_quality_report(payload: dict) -> dict:
     characters = cast(list, raw_characters) if isinstance(raw_characters, list) else []
     locations = cast(list, raw_locations) if isinstance(raw_locations, list) else []
     props = cast(list, raw_props) if isinstance(raw_props, list) else []
-    story_engine = (
-        cast(dict, raw_story_engine) if isinstance(raw_story_engine, dict) else {}
-    )
+    story_engine = cast(dict, raw_story_engine) if isinstance(raw_story_engine, dict) else {}
     continuity_rules = (
         cast(list, raw_continuity_rules) if isinstance(raw_continuity_rules, list) else []
     )
@@ -417,9 +408,7 @@ def story_bible_validation_errors(payload: dict) -> list[str]:
 def validate_story_bible_payload(payload: dict, context: str) -> None:
     errors = story_bible_validation_errors(payload)
     if errors:
-        raise GenerationOutputError(
-            f"{context}: Story Bible incompleta ({'; '.join(errors)})"
-        )
+        raise GenerationOutputError(f"{context}: Story Bible incompleta ({'; '.join(errors)})")
 
 
 def normalize_story_bible_payload(
@@ -505,7 +494,3 @@ def normalize_story_bible_payload(
     normalized["visual_contract"] = _story_bible_visual_contract(normalized)
     normalized["quality_report"] = story_bible_quality_report(normalized)
     return normalized
-
-
-
-

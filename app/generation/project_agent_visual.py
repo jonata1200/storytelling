@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.generation.project_agent import (
+from app.generation.project_agent_types import (
     REVISION_TERMS,
     ProgressCallback,
     ProjectChatResult,
@@ -35,9 +35,7 @@ def _requests_regeneration(message: str) -> bool:
 
 def _normalize_match_text(value: str) -> str:
     without_accents = "".join(
-        char
-        for char in unicodedata.normalize("NFKD", value)
-        if not unicodedata.combining(char)
+        char for char in unicodedata.normalize("NFKD", value) if not unicodedata.combining(char)
     )
     return re.sub(r"[^a-z0-9]+", " ", without_accents.lower()).strip()
 
@@ -181,8 +179,7 @@ async def _approve_visual_prompt_from_chat(
     if not selected_targets:
         options = ", ".join(target.name for target in targets[:8])
         return ProjectChatResult(
-            "Preciso saber qual ativo visual voce quer aprovar. "
-            f"Disponiveis agora: {options}.",
+            f"Preciso saber qual ativo visual voce quer aprovar. Disponiveis agora: {options}.",
             "approve_visual_prompt",
             False,
         )
@@ -235,6 +232,3 @@ async def _approve_visual_prompt_from_chat(
         "approve_visual_prompt",
         True,
     )
-
-
-

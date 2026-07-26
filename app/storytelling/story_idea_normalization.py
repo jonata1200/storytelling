@@ -1,6 +1,6 @@
-﻿import re
+import re
 
-from app.storytelling.normalization import (
+from app.storytelling.normalization_common import (
     GenerationOutputError,
     _coerce_score,
     _required_list,
@@ -22,9 +22,8 @@ STORY_IDEA_REQUIRED_TEXT_FIELDS = (
     "resolution",
 )
 
-def normalize_story_idea_payload(
-    payload: dict, default_duration_minutes: float = 5.0
-) -> dict:
+
+def normalize_story_idea_payload(payload: dict, default_duration_minutes: float = 5.0) -> dict:
     normalized = dict(payload)
     title = _required_str(normalized, "title", "story_idea")
     normalized.setdefault("genre", "Drama")
@@ -49,13 +48,9 @@ def normalize_story_idea_payload(
     normalized["duration_minutes"] = coerce_duration_minutes(
         normalized.get("duration_minutes"), default_duration_minutes
     )
-    normalized["retention_potential"] = _coerce_score(
-        normalized.get("retention_potential"), 75
-    )
+    normalized["retention_potential"] = _coerce_score(normalized.get("retention_potential"), 75)
     normalized["cliche_risk"] = _coerce_score(normalized.get("cliche_risk"), 25)
-    normalized["production_complexity"] = _coerce_score(
-        normalized.get("production_complexity"), 35
-    )
+    normalized["production_complexity"] = _coerce_score(normalized.get("production_complexity"), 35)
     normalized["title"] = title
     return normalized
 
@@ -81,8 +76,7 @@ def story_idea_validation_errors(payload: dict) -> list[str]:
 
     obstacles = payload.get("obstacles")
     if obstacles is not None and (
-        not isinstance(obstacles, list)
-        or not any(str(item).strip() for item in obstacles)
+        not isinstance(obstacles, list) or not any(str(item).strip() for item in obstacles)
     ):
         errors.append("obstacles deve ser uma lista nao vazia quando informado")
 
@@ -160,9 +154,7 @@ def story_idea_diversity_errors(items: list[dict]) -> list[str]:
             key = (field, key_text)
             previous = seen.get(key)
             if previous is not None:
-                errors.append(
-                    f"ideias {previous} e {index} repetem {label}: {item.get(field)}"
-                )
+                errors.append(f"ideias {previous} e {index} repetem {label}: {item.get(field)}")
             else:
                 seen[key] = index
 
@@ -191,10 +183,7 @@ def _story_idea_retry_guidance(errors: list[str]) -> str:
     )
 
 
-
-def _normalize_generated_story_ideas(
-    content: dict, default_duration_minutes: float
-) -> list[dict]:
+def _normalize_generated_story_ideas(content: dict, default_duration_minutes: float) -> list[dict]:
     items: list[dict] = []
     errors: list[str] = []
     raw_ideas = _required_list(content, "ideas", "generate_story_ideas")
@@ -220,5 +209,3 @@ def _normalize_generated_story_ideas(
     if errors:
         raise GenerationOutputError("; ".join(errors))
     return items
-
-

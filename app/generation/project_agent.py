@@ -1,14 +1,8 @@
-﻿import re
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from typing import Any, Literal, cast
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import ArtifactStatus
-from app.finalization.models import Export, SubtitleTrack
 from app.finalization.service import (
     create_final_timeline,
     export_timeline,
@@ -17,11 +11,35 @@ from app.finalization.service import (
 )
 from app.generation.director_agent import ask_director_agent
 from app.generation.model_settings import llm_provider_for_task
+from app.generation.project_agent_context import (
+    _active_scene_count_for_script,
+    _count,
+    _latest,
+    build_project_context,
+)
+from app.generation.project_agent_context import (
+    _compact_payload as _compact_payload,
+)
+from app.generation.project_agent_context import (
+    _latest_many as _latest_many,
+)
+from app.generation.project_agent_intent import (
+    _is_ai_generation_failure_message,
+    _is_visual_reference_gate_message,
+    _requested_storyboard_scene_number,
+    _requests_full_script_regeneration,
+    _requests_specific_script_scenes,
+)
+from app.generation.project_agent_types import (
+    ACTION_PROGRESS_MESSAGES,
+    ProgressCallback,
+    ProjectChatAction,
+    ProjectChatIntent,
+    ProjectChatResult,
+    _emit_progress,
+)
 from app.generation.service import run_structured_generation
-from app.projects.models import Artifact
-from app.projects.repository import ProjectRepository
 from app.projects.versioning import mark_dependents_stale
-from app.quality.models import ContinuityIssue, QualityCheck
 from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
 from app.storyboards.service import (
@@ -30,7 +48,7 @@ from app.storyboards.service import (
     storyboard_frames_need_generation,
     storyboard_prompts_need_approval,
 )
-from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
+from app.storytelling.models import Briefing, Script, StoryIdea
 from app.storytelling.service import (
     generate_scenes_and_shots,
     generate_script,
@@ -48,288 +66,6 @@ from app.visual_bible.service import (
     visual_reference_completion_message,
     visual_reference_completion_report,
 )
-
-ProjectChatAction = Literal[
-    "chat",
-    "generate_ideas",
-    "generate_script",
-    "revise_script",
-    "generate_assets",
-    "approve_visual_prompt",
-    "generate_storyboard",
-    "generate_video",
-    "generate_finalization",
-    "run_quality",
-]
-
-REVISION_TERMS = (
-    "ajuste",
-    "ajustar",
-    "altere",
-    "alterar",
-    "melhore",
-    "melhorar",
-    "mude",
-    "mudar",
-    "modifique",
-    "modificar",
-    "refaça",
-    "refazer",
-    "reescreva",
-    "reescrever",
-    "revise",
-    "revisar",
-)
-
-
-@dataclass(frozen=True)
-class ProjectChatResult:
-    message: str
-    action: ProjectChatAction
-    changed: bool = False
-    failed: bool = False
-
-
-@dataclass(frozen=True)
-class ProjectChatIntent:
-    action: ProjectChatAction
-    confidence: float
-    reason: str = ""
-
-
-ProgressCallback = Callable[[str], Awaitable[None]]
-
-
-def _is_ai_generation_failure_message(message: str) -> bool:
-    normalized = message.casefold()
-    return any(
-        marker in normalized
-        for marker in (
-            "não consegui",
-            "nao consegui",
-            "não foi gerado",
-            "nao foi gerado",
-            "não foram gerados",
-            "nao foram gerados",
-        )
-    )
-
-
-def _is_visual_reference_gate_message(message: str) -> bool:
-    return message.startswith("Conclua a Biblioteca Visual")
-
-
-def _requests_specific_script_scenes(message: str) -> bool:
-    normalized = _normalize_match_text(message)
-    return bool(
-        any(term in normalized for term in ("cena", "cenas", "scene", "scenes"))
-        and re.search(r"\b(?:cena|cenas|scene|scenes)\s+\d+", normalized)
-    )
-
-
-def _requested_storyboard_scene_number(message: str) -> int | None:
-    normalized = _normalize_match_text(message)
-    match = re.search(
-        r"\b(?:cena|scene)\s*(?:numero|n|no)?\s*0*([1-9]\d*)\b",
-        normalized,
-    )
-    if match is None:
-        return None
-    try:
-        return int(match.group(1))
-    except ValueError:
-        return None
-
-
-def _requests_full_script_regeneration(message: str) -> bool:
-    normalized = _normalize_match_text(message)
-    if not any(term in normalized for term in ("roteiro", "script")):
-        return False
-    if _requests_specific_script_scenes(message):
-        return False
-    full_terms = (
-        "roteiro completo",
-        "roteiro inteiro",
-        "roteiro todo",
-        "todo o roteiro",
-        "script completo",
-        "script inteiro",
-        "do zero",
-        "novo roteiro",
-        "roteiro novo",
-        "nova versao",
-        "nova versão",
-        "gerar novamente",
-        "gere novamente",
-        "regenerar",
-        "refazer tudo",
-        "refaca tudo",
-        "reescrever tudo",
-    )
-    return any(term in normalized for term in full_terms)
-
-
-ACTION_PROGRESS_MESSAGES: dict[ProjectChatAction, str] = {
-    "generate_ideas": "Criando ideias.",
-    "generate_script": "Criando roteiro.",
-    "revise_script": "Revisando roteiro.",
-    "generate_assets": "Criando ativos visuais.",
-    "approve_visual_prompt": "Aprovando prompt visual.",
-    "generate_storyboard": "Criando storyboard.",
-    "generate_video": "Preparando video.",
-    "generate_finalization": "Finalizando projeto.",
-    "run_quality": "Rodando controle de qualidade.",
-    "chat": "Analisando projeto.",
-}
-
-
-async def _emit_progress(progress: ProgressCallback | None, message: str) -> None:
-    if progress is not None:
-        await progress(message)
-
-
-async def _latest(
-    session: AsyncSession, model: type[Any], project_id: UUID
-) -> Any | None:
-    result = await session.execute(
-        select(model)
-        .where(model.project_id == project_id)
-        .order_by(model.created_at.desc())
-        .limit(1)
-    )
-    return result.scalars().first()
-
-
-async def _latest_many(
-    session: AsyncSession,
-    model: type[Any],
-    project_id: UUID,
-    limit: int = 5,
-) -> list[Any]:
-    result = await session.execute(
-        select(model)
-        .where(model.project_id == project_id)
-        .order_by(model.created_at.desc())
-        .limit(limit)
-    )
-    return list(result.scalars())
-
-
-async def _count(session: AsyncSession, model: type[Any], project_id: UUID) -> int:
-    value = await session.scalar(
-        select(func.count()).select_from(model).where(model.project_id == project_id)
-    )
-    return int(value or 0)
-
-
-async def _active_scene_count_for_script(
-    session: AsyncSession, project_id: UUID, script_id: UUID
-) -> int:
-    value = await session.scalar(
-        select(func.count())
-        .select_from(Scene)
-        .join(Artifact, Artifact.id == Scene.artifact_id)
-        .where(
-            Scene.project_id == project_id,
-            Scene.script_id == script_id,
-            Artifact.status != ArtifactStatus.STALE,
-        )
-    )
-    return int(value or 0)
-
-
-def _compact_payload(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {key: _compact_payload(item) for key, item in list(value.items())[:24]}
-    if isinstance(value, list):
-        return [_compact_payload(item) for item in value[:8]]
-    return value
-
-
-async def build_project_context(session: AsyncSession, project_id: UUID) -> dict[str, Any]:
-    project = await ProjectRepository(session).get_project(project_id)
-    if project is None:
-        return {"project_id": str(project_id), "found": False}
-
-    briefing = await _latest(session, Briefing, project_id)
-    idea = await _latest(session, StoryIdea, project_id)
-    script = await _latest(session, Script, project_id)
-    stale_count = await session.scalar(
-        select(func.count())
-        .select_from(Artifact)
-        .where(Artifact.project_id == project_id, Artifact.status == ArtifactStatus.STALE)
-    )
-    return {
-        "found": True,
-        "project": {
-            "id": str(project.id),
-            "title": project.title,
-            "description": project.description,
-            "status": project.status,
-        },
-        "briefing": (
-            {
-                "theme": briefing.theme,
-                "audience": briefing.audience,
-                "genre": briefing.genre,
-                "primary_emotion": briefing.primary_emotion,
-                "duration_minutes": float(briefing.desired_duration_minutes),
-                "objective": briefing.content_objective,
-                "constraints": briefing.constraints,
-            }
-            if briefing is not None
-            else None
-        ),
-        "idea": _compact_payload(idea.payload) if idea is not None else None,
-        "script": (
-            {
-                "title": script.title,
-                "target_duration_seconds": script.target_duration_seconds,
-                "word_count": script.word_count,
-                "content_preview": script.content[:1200],
-            }
-            if script is not None
-            else None
-        ),
-        "counts": {
-            "ideas": await _count(session, StoryIdea, project_id),
-            "scripts": await _count(session, Script, project_id),
-            "scenes": await _count(session, Scene, project_id),
-            "shots": await _count(session, Shot, project_id),
-            "characters": await _count(session, Character, project_id),
-            "locations": await _count(session, Location, project_id),
-            "props": await _count(session, Prop, project_id),
-            "visual_refs": await _count(session, VisualReference, project_id),
-            "frames": await _count(session, StoryboardFrame, project_id),
-            "animatics": await _count(session, Animatic, project_id),
-            "clips": await _count(session, VideoClip, project_id),
-            "timelines": await _count(session, Timeline, project_id),
-            "audio_tracks": await _count(session, AudioTrack, project_id),
-            "subtitles": await _count(session, SubtitleTrack, project_id),
-            "exports": await _count(session, Export, project_id),
-            "quality_checks": await _count(session, QualityCheck, project_id),
-            "qa_issues": await _count(session, ContinuityIssue, project_id),
-            "stale_artifacts": int(stale_count or 0),
-        },
-        "recent": {
-            "scenes": [
-                {"number": scene.scene_number, "title": scene.title, "summary": scene.summary}
-                for scene in await _latest_many(session, Scene, project_id, 6)
-            ],
-            "characters": [
-                {"name": character.name, "role": character.role}
-                for character in await _latest_many(session, Character, project_id, 6)
-            ],
-            "frames": [
-                {
-                    "number": frame.frame_number,
-                    "duration_seconds": frame.duration_seconds,
-                    "prompt": frame.prompt,
-                }
-                for frame in await _latest_many(session, StoryboardFrame, project_id, 6)
-            ],
-        },
-    }
 
 
 def classify_project_chat_action(message: str, active: str) -> ProjectChatAction:
@@ -591,7 +327,7 @@ async def _infer_project_chat_intent_with_ai(
         "approve_visual_prompt, generate_storyboard, generate_video, generate_finalization, "
         "run_quality. Use o estado real do projeto para decidir se o usuario quer executar "
         "uma etapa ou apenas conversar. Se a confianca for menor que 0.70, use chat. "
-        "Formato: {\"action\":\"generate_assets\",\"confidence\":0.92,\"reason\":\"...\"}. "
+        'Formato: {"action":"generate_assets","confidence":0.92,"reason":"..."}. '
         f"Etapa ativa: {active}. Estado do projeto: {project_context}. "
         f"Mensagem do usuario: {message}"
     )
@@ -625,6 +361,7 @@ async def _infer_project_chat_intent_with_ai(
     if confidence < 0.7:
         action = "chat"
     return ProjectChatIntent(action, confidence, reason)
+
 
 from app.generation.project_agent_visual import (  # noqa: E402,F401
     VisualChatTarget,
@@ -793,10 +530,7 @@ async def _ensure_visual_pipeline(
     existing_locations = await _count(session, Location, project_id)
     existing_props = await _count(session, Prop, project_id)
     needs_visual = (
-        force
-        or existing_characters == 0
-        or existing_locations == 0
-        or existing_props == 0
+        force or existing_characters == 0 or existing_locations == 0 or existing_props == 0
     )
     changed = changed or needs_visual
     if needs_visual:
@@ -867,9 +601,7 @@ async def _ensure_storyboard_pipeline(
             script.id,
             scene_number=scene_number,
         ):
-            scene_copy = (
-                f" da cena {scene_number}" if scene_number is not None else ""
-            )
+            scene_copy = f" da cena {scene_number}" if scene_number is not None else ""
             return ProjectChatResult(
                 "Os prompts de storyboard"
                 f"{scene_copy} precisam ser aprovados antes da geração das imagens. "
@@ -1155,9 +887,7 @@ async def handle_project_chat(
             True,
         )
     if action == "generate_assets":
-        return await _ensure_visual_pipeline(
-            session, project_id, force=force, progress=progress
-        )
+        return await _ensure_visual_pipeline(session, project_id, force=force, progress=progress)
     if action == "approve_visual_prompt":
         return await _approve_visual_prompt_from_chat(
             session,
@@ -1194,4 +924,3 @@ async def handle_project_chat(
         history,
     )
     return ProjectChatResult(response, "chat", False)
-
