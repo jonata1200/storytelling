@@ -223,6 +223,55 @@ def render_storyboard_area(
                         loading_dialog=generation_dialog,
                     ),
                 ).props("flat no-caps").classes("text-[#d8dbd8]")
+    visible_prompt_previews = (
+        pending_prompt_previews
+        or missing_frame_previews
+        if not summary["frames"]
+        else pending_prompt_previews
+    )
+    if visible_prompt_previews:
+        with ui.column().classes("w-full gap-3 mb-2"):
+            with ui.row().classes("w-full items-center justify-between gap-3"):
+                with ui.column().classes("gap-0"):
+                    ui.label("Prompts pendentes").classes("brand-type text-xl font-bold")
+                    ui.label(
+                        "Revise os prompts abaixo antes de liberar a geração das imagens."
+                    ).classes("text-sm text-[#8e948f]")
+                if script_id is not None and pending_prompt_previews:
+                    ui.button(
+                        f"Aprovar todos ({len(pending_prompt_previews)})",
+                        icon="check_circle",
+                        on_click=lambda: _approve_storyboard_prompts_from_ui(
+                            project_id,
+                            script_id,
+                        ),
+                    ).props("unelevated no-caps").classes("acid-bg rounded-xl shrink-0")
+            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
+                for preview in visible_prompt_previews:
+                    approved = bool(preview.get("approved"))
+                    with ui.element("div").classes("entity-card rounded-2xl p-4"):
+                        with ui.row().classes("w-full items-start justify-between gap-3"):
+                            with ui.column().classes("gap-0 min-w-0"):
+                                ui.label(
+                                    "Cena "
+                                    f"{int(preview.get('scene_number') or 0):02d} · "
+                                    f"Plano {int(preview.get('shot_number') or 0):02d}"
+                                ).classes("text-sm font-semibold")
+                                ui.label(
+                                    f"{int(preview.get('duration_seconds') or 0)}s"
+                                ).classes("text-xs acid")
+                            ui.badge("aprovado" if approved else "pendente").classes(
+                                "bg-[#26301f] text-white" if approved else "bg-[#5aa3f0]"
+                            )
+                        ui.label(str(preview.get("prompt") or "")).classes(
+                            "text-xs text-[#aeb4af] whitespace-pre-wrap mt-3 line-clamp-6"
+                        )
+                        if prompt_dialog is not None:
+                            ui.button(
+                                "Ver prompt completo",
+                                icon="visibility",
+                                on_click=prompt_dialog.open,
+                            ).props("flat dense no-caps").classes("text-[#d8dbd8] mt-2")
     with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
         for frame in sorted(summary["frames"], key=lambda f: f.frame_number):
             image_url = _storyboard_frame_image_url(summary, frame)
