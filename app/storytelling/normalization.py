@@ -21,6 +21,13 @@ from app.storytelling.scene_plan_normalization import (
     normalize_scene_plan_payload_from_script,
     scene_plan_payload_from_script_content,
 )
+from app.storytelling.script_contracts import (
+    _compact_named_items,
+    _idea_script_contract,
+    _story_bible_script_contract,
+    _story_bible_visual_contract,
+    expected_script_scene_count,
+)
 from app.storytelling.script_normalization import (
     FADE_IN_WITH_INLINE_TEXT_RE,
     INLINE_NUMBERED_SLUGLINE_RE,
@@ -31,12 +38,10 @@ from app.storytelling.script_normalization import (
     SCRIPT_TECHNICAL_LABEL_RE,
     _action_text_from_mapping,
     _clean_screenplay_location,
-    _compact_named_items,
     _dialogue_blocks,
     _ensure_screenplay_scene_markers,
     _fallback_script_content_from_bible,
     _fallback_script_content_from_idea,
-    _idea_script_contract,
     _looks_like_screenplay,
     _normalize_embedded_production_plan,
     _normalize_inline_scene_headings,
@@ -45,9 +50,6 @@ from app.storytelling.script_normalization import (
     _screenplay_heading_parts,
     _script_block_to_text,
     _script_content_from_payload,
-    _story_bible_script_contract,
-    _story_bible_visual_contract,
-    expected_script_scene_count,
     normalize_script_payload,
     screenplay_validation_errors,
     validate_screenplay_content,

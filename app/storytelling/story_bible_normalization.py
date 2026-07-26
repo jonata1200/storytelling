@@ -3,7 +3,7 @@ from typing import cast
 
 from app.storytelling.models import Briefing
 from app.storytelling.normalization_common import GenerationOutputError, _required_str
-from app.storytelling.script_normalization import (
+from app.storytelling.script_contracts import (
     _story_bible_script_contract,
     _story_bible_visual_contract,
 )
