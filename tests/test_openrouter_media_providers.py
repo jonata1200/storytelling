@@ -13,9 +13,7 @@ from app.providers.video.openrouter import OpenRouterVideoProvider
 from app.providers.video.types import VideoRequest
 
 
-def test_openrouter_image_provider_writes_generated_image(
-    monkeypatch: Any, tmp_path: Path
-) -> None:
+def test_openrouter_image_provider_writes_generated_image(monkeypatch: Any, tmp_path: Path) -> None:
     provider = OpenRouterImageProvider()
     pixel = base64.b64encode(b"fake-png").decode("ascii")
     posted: dict[str, Any] = {}
@@ -24,6 +22,7 @@ def test_openrouter_image_provider_writes_generated_image(
         "app.providers.image.openrouter.get_settings",
         lambda: Settings(openrouter_api_key="sk-or-v1-test"),
     )
+
     def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
         posted.update({"path": path, "body": body})
         return {
@@ -326,7 +325,7 @@ def test_openrouter_image_provider_converts_local_reference_url_to_data_url(
     storage_root = tmp_path / "storage"
     reference_dir = storage_root / "openrouter_images"
     reference_dir.mkdir(parents=True)
-    reference = reference_dir / "character.png"
+    reference = reference_dir / "character.webp"
     reference.write_bytes(b"fake-reference")
     pixel = base64.b64encode(b"fake-png").decode("ascii")
     posted: dict[str, Any] = {}
@@ -355,13 +354,13 @@ def test_openrouter_image_provider_converts_local_reference_url_to_data_url(
             target_id="char",
             view_type="sheet",
             output_dir=tmp_path,
-            references=["http://127.0.0.1:8000/storage/openrouter_images/character.png"],
+            references=["http://127.0.0.1:8000/storage/openrouter_images/character.webp"],
             model="sourceful/riverflow-v2-fast",
         )
     )
 
     reference_url = posted["body"]["input_references"][0]["image_url"]["url"]
-    assert reference_url.startswith("data:image/png;base64,")
+    assert reference_url.startswith("data:image/webp;base64,")
 
 
 def test_openrouter_image_provider_wraps_network_errors(
@@ -382,9 +381,7 @@ def test_openrouter_image_provider_wraps_network_errors(
         provider._post_json("/images", {"model": "model", "prompt": "prompt"})
 
 
-def test_openrouter_image_provider_rejects_invalid_base64(
-    monkeypatch: Any, tmp_path: Path
-) -> None:
+def test_openrouter_image_provider_rejects_invalid_base64(monkeypatch: Any, tmp_path: Path) -> None:
     provider = OpenRouterImageProvider()
     monkeypatch.setattr(
         "app.providers.image.openrouter.get_settings",

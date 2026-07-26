@@ -98,6 +98,8 @@ def test_local_storage_helpers_reject_files_outside_storage_root(
     storage_root.mkdir()
     inside = storage_root / "avatar.png"
     inside.write_bytes(b"avatar")
+    webp_inside = storage_root / "portrait.webp"
+    webp_inside.write_bytes(b"webp")
     outside = tmp_path / "secret.txt"
     outside.write_text("secret", encoding="utf-8")
 
@@ -113,6 +115,9 @@ def test_local_storage_helpers_reject_files_outside_storage_root(
     )
 
     assert media_utils.local_uri_to_data_url(inside.as_posix()).startswith("data:")
+    assert media_utils.local_uri_to_data_url(webp_inside.as_posix()).startswith(
+        "data:image/webp;base64,"
+    )
     assert media_utils.local_uri_to_data_url(
         f"http://127.0.0.1:8000/storage/{inside.name}"
     ).startswith("data:image/png;base64,")

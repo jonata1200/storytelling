@@ -54,6 +54,22 @@ def _candidate_paths(uri: str, storage_root: Path) -> list[Path]:
     return candidates
 
 
+def _media_type_for_path(path: Path) -> str:
+    explicit_media_types = {
+        ".gif": "image/gif",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".svg": "image/svg+xml",
+        ".webp": "image/webp",
+    }
+    return (
+        explicit_media_types.get(path.suffix.lower())
+        or mimetypes.guess_type(path.name)[0]
+        or "application/octet-stream"
+    )
+
+
 def local_uri_to_data_url(uri: str) -> str:
     if uri.startswith("data:"):
         return uri
@@ -72,7 +88,7 @@ def local_uri_to_data_url(uri: str) -> str:
         break
     if resolved is None:
         return uri
-    media_type = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
+    media_type = _media_type_for_path(resolved)
     encoded = base64.b64encode(resolved.read_bytes()).decode("ascii")
     return f"data:{media_type};base64,{encoded}"
 
