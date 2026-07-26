@@ -319,6 +319,51 @@ def test_openrouter_image_provider_retries_without_invalid_resolution(
     assert result.file_path.read_bytes() == b"fake-png"
 
 
+def test_openrouter_image_provider_converts_local_reference_url_to_data_url(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    provider = OpenRouterImageProvider()
+    storage_root = tmp_path / "storage"
+    reference_dir = storage_root / "openrouter_images"
+    reference_dir.mkdir(parents=True)
+    reference = reference_dir / "character.png"
+    reference.write_bytes(b"fake-reference")
+    pixel = base64.b64encode(b"fake-png").decode("ascii")
+    posted: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(
+            openrouter_api_key="sk-or-v1-test",
+            local_storage_path=storage_root,
+        ),
+    )
+    monkeypatch.setattr(
+        "app.providers.media_utils.get_settings",
+        lambda: Settings(local_storage_path=storage_root),
+    )
+
+    def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
+        posted.update({"path": path, "body": body})
+        return {"data": [{"b64_json": pixel, "media_type": "image/png"}]}
+
+    monkeypatch.setattr(provider, "_post_json", fake_post)
+
+    provider._generate(
+        ImageGenerationRequest(
+            prompt="reference sheet",
+            target_id="char",
+            view_type="sheet",
+            output_dir=tmp_path,
+            references=["http://127.0.0.1:8000/storage/openrouter_images/character.png"],
+            model="sourceful/riverflow-v2-fast",
+        )
+    )
+
+    reference_url = posted["body"]["input_references"][0]["image_url"]["url"]
+    assert reference_url.startswith("data:image/png;base64,")
+
+
 def test_openrouter_image_provider_wraps_network_errors(
     monkeypatch: Any,
 ) -> None:

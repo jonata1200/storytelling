@@ -113,7 +113,17 @@ def test_local_storage_helpers_reject_files_outside_storage_root(
     )
 
     assert media_utils.local_uri_to_data_url(inside.as_posix()).startswith("data:")
+    assert media_utils.local_uri_to_data_url(
+        f"http://127.0.0.1:8000/storage/{inside.name}"
+    ).startswith("data:image/png;base64,")
+    assert media_utils.local_uri_to_data_url(f"/storage/{inside.name}").startswith(
+        "data:image/png;base64,"
+    )
     assert media_utils.local_uri_to_data_url(outside.as_posix()) == outside.as_posix()
+    assert (
+        media_utils.local_uri_to_data_url("http://example.com/storage/avatar.png")
+        == "http://example.com/storage/avatar.png"
+    )
     assert video_generation_service._local_storage_path(inside.as_posix()) == inside.resolve()
     assert video_generation_service._local_storage_path(outside.as_posix()) is None
 
