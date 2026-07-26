@@ -13,6 +13,7 @@ from app.storyboards.service import (
     generate_animatic_bundle,
     generate_storyboard_frames,
     storyboard_frames_need_generation,
+    storyboard_prompts_need_approval,
     update_storyboard_prompt,
 )
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, friendly_ai_error, show_ai_error_popup
@@ -24,10 +25,47 @@ SectionTitle = Callable[[str, str, str | None, Any | None], None]
 LoadingDialogFactory = Callable[[str, str], Any]
 
 
-async def _approve_storyboard_prompts_from_ui(project_id: UUID, script_id: UUID) -> None:
+async def _generate_storyboards_when_prompts_are_ready(
+    session: Any,
+    project_id: UUID,
+    script_id: UUID,
+) -> int | None:
+    if await storyboard_prompts_need_approval(session, project_id, script_id):
+        return None
+    frames = await generate_storyboard_frames(session, project_id, script_id)
+    if frames is None:
+        return None
+    if not await storyboard_frames_need_generation(session, project_id, script_id):
+        await generate_animatic_bundle(session, project_id, script_id)
+    return len(frames)
+
+
+async def _approve_storyboard_prompts_from_ui(
+    project_id: UUID,
+    script_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+) -> None:
+    if loading_dialog is not None:
+        loading_dialog.open()
     try:
         async with AsyncSessionLocal() as session:
             approved_count = await approve_storyboard_prompts(session, project_id, script_id)
+            generated_count = await _generate_storyboards_when_prompts_are_ready(
+                session,
+                project_id,
+                script_id,
+            )
+        if generated_count is not None:
+            ui.notify(
+                (
+                    f"{approved_count} prompt(s) aprovado(s). "
+                    f"{generated_count} storyboard(s) gerado(s)."
+                ),
+                color="positive",
+            )
+            ui.navigate.reload()
+            return
         ui.notify(
             (
                 f"{approved_count} prompt(s) de storyboard aprovado(s)."
@@ -39,16 +77,35 @@ async def _approve_storyboard_prompts_from_ui(project_id: UUID, script_id: UUID)
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            loading_dialog.close()
 
 
 async def _approve_storyboard_prompt_from_ui(
     project_id: UUID,
     script_id: UUID,
     shot_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
 ) -> None:
+    if loading_dialog is not None:
+        loading_dialog.open()
     try:
         async with AsyncSessionLocal() as session:
             approved = await approve_storyboard_prompt(session, project_id, script_id, shot_id)
+            generated_count = (
+                await _generate_storyboards_when_prompts_are_ready(session, project_id, script_id)
+                if approved
+                else None
+            )
+        if generated_count is not None:
+            ui.notify(
+                f"Ultimo prompt aprovado. {generated_count} storyboard(s) gerado(s).",
+                color="positive",
+            )
+            ui.navigate.reload()
+            return
         ui.notify(
             (
                 "Prompt de storyboard aprovado."
@@ -60,6 +117,9 @@ async def _approve_storyboard_prompt_from_ui(
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            loading_dialog.close()
 
 
 async def _save_storyboard_prompt_from_ui(
@@ -183,9 +243,7 @@ def render_storyboard_area(
         preview for preview in prompt_previews if not bool(preview.get("generated"))
     ]
     approved_missing_prompt_previews = [
-        preview
-        for preview in missing_frame_previews
-        if bool(preview.get("approved"))
+        preview for preview in missing_frame_previews if bool(preview.get("approved"))
     ]
     generation_dialog = (
         loading_dialog_factory(
@@ -197,8 +255,9 @@ def render_storyboard_area(
     )
     prompt_dialog: Any | None = None
     if script_id is not None and prompt_previews:
-        with ui.dialog().props(BLOCKING_DIALOG_PROPS) as prompt_dialog, ui.card().classes(
-            "entity-card rounded-2xl p-6 w-[min(920px,94vw)] max-h-[86vh]"
+        with (
+            ui.dialog().props(BLOCKING_DIALOG_PROPS) as prompt_dialog,
+            ui.card().classes("entity-card rounded-2xl p-6 w-[min(920px,94vw)] max-h-[86vh]"),
         ):
             ui.label("Aprovar prompts de storyboard").classes("brand-type text-2xl font-bold")
             ui.label(
@@ -208,9 +267,7 @@ def render_storyboard_area(
                 with ui.column().classes("w-full gap-3"):
                     for preview in prompt_previews:
                         approved = bool(preview.get("approved"))
-                        with ui.element("div").classes(
-                            "border border-[#343934] rounded-xl p-4"
-                        ):
+                        with ui.element("div").classes("border border-[#343934] rounded-xl p-4"):
                             with ui.row().classes("w-full items-center justify-between gap-3"):
                                 ui.label(
                                     "Cena "
@@ -227,13 +284,17 @@ def render_storyboard_area(
 
             async def confirm_storyboard_prompts() -> None:
                 prompt_dialog.close()
-                await _approve_storyboard_prompts_from_ui(project_id, script_id)
+                await _approve_storyboard_prompts_from_ui(
+                    project_id,
+                    script_id,
+                    loading_dialog=generation_dialog,
+                )
 
             with ui.row().classes("w-full justify-end gap-2 mt-3"):
                 ui.button("Fechar", on_click=prompt_dialog.close).props("flat no-caps")
                 if pending_prompt_previews:
                     ui.button(
-                        "Aprovar prompts",
+                        "Aprovar prompts e gerar",
                         icon="check_circle",
                         on_click=confirm_storyboard_prompts,
                     ).props("unelevated no-caps").classes("acid-bg rounded-xl")
@@ -317,9 +378,7 @@ def render_storyboard_area(
                                     value=str(preview.get("prompt") or ""),
                                 )
                                 .props("outlined")
-                                .classes(
-                                    "storyboard-prompt-textarea w-full flex-1 min-h-0"
-                                )
+                                .classes("storyboard-prompt-textarea w-full flex-1 min-h-0")
                             )
 
                         async def save_single_prompt(
@@ -350,9 +409,11 @@ def render_storyboard_area(
                                 icon="save",
                                 on_click=save_single_prompt,
                             ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-                    with ui.element("div").classes(
-                        "entity-card rounded-2xl p-4 cursor-pointer"
-                    ).on("click", prompt_detail_dialog.open):
+                    with (
+                        ui.element("div")
+                        .classes("entity-card rounded-2xl p-4 cursor-pointer")
+                        .on("click", prompt_detail_dialog.open)
+                    ):
                         with ui.row().classes("w-full items-start justify-between gap-3"):
                             with ui.column().classes("gap-0 min-w-0"):
                                 ui.label(
@@ -360,9 +421,9 @@ def render_storyboard_area(
                                     f"{int(preview.get('scene_number') or 0):02d} · "
                                     f"Plano {int(preview.get('shot_number') or 0):02d}"
                                 ).classes("text-sm font-semibold")
-                                ui.label(
-                                    f"{int(preview.get('duration_seconds') or 0)}s"
-                                ).classes("text-xs acid")
+                                ui.label(f"{int(preview.get('duration_seconds') or 0)}s").classes(
+                                    "text-xs acid"
+                                )
                             ui.badge("aprovado" if approved else "pendente").classes(
                                 "bg-[#26301f] text-white" if approved else "bg-[#5aa3f0]"
                             )
@@ -371,11 +432,13 @@ def render_storyboard_area(
                         )
                         with ui.row().classes("w-full items-center justify-between gap-2 mt-2"):
                             if script_id is not None and not approved:
-                                approve_button = ui.button(
-                                    "Aprovar prompt",
-                                    icon="check_circle",
-                                ).props("unelevated dense no-caps").classes(
-                                    "acid-bg rounded-xl"
+                                approve_button = (
+                                    ui.button(
+                                        "Aprovar prompt",
+                                        icon="check_circle",
+                                    )
+                                    .props("unelevated dense no-caps")
+                                    .classes("acid-bg rounded-xl")
                                 )
                                 approve_button.on(
                                     "click.stop",
@@ -383,6 +446,7 @@ def render_storyboard_area(
                                         project_id,
                                         script_id,
                                         shot_id,
+                                        loading_dialog=generation_dialog,
                                     ),
                                 )
                             elif (
@@ -390,11 +454,13 @@ def render_storyboard_area(
                                 and approved
                                 and not bool(preview.get("generated"))
                             ):
-                                generate_button = ui.button(
-                                    "Gerar quadro",
-                                    icon="auto_awesome",
-                                ).props("unelevated dense no-caps").classes(
-                                    "acid-bg rounded-xl"
+                                generate_button = (
+                                    ui.button(
+                                        "Gerar quadro",
+                                        icon="auto_awesome",
+                                    )
+                                    .props("unelevated dense no-caps")
+                                    .classes("acid-bg rounded-xl")
                                 )
                                 generate_button.on(
                                     "click.stop",
@@ -448,13 +514,14 @@ def render_video_area(
     pending_frames = [frame for frame in sorted_frames if frame.id not in clip_frame_ids]
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
-        with ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_dialog, ui.card().classes(
-            "entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"
+        with (
+            ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_dialog,
+            ui.card().classes("entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"),
         ):
             ui.label("Aprovar prompts de vídeo").classes("brand-type text-2xl font-bold")
-            ui.label(
-                "Confira os prompts antes de gerar os clipes a partir do storyboard."
-            ).classes("text-sm text-[#8d938e]")
+            ui.label("Confira os prompts antes de gerar os clipes a partir do storyboard.").classes(
+                "text-sm text-[#8d938e]"
+            )
             with ui.scroll_area().classes("w-full max-h-[52vh] pr-2"):
                 with ui.column().classes("w-full gap-3"):
                     for frame in pending_frames:
@@ -506,12 +573,8 @@ def render_video_area(
                 "O Diretor IA pode criar os clipes quando o storyboard estiver pronto."
             ).classes("text-[#858b86]")
         elif not summary["clips"]:
-            ui.label(
-                "Aprove os prompts pendentes acima para criar os primeiros clipes."
-            ).classes("text-[#858b86]")
+            ui.label("Aprove os prompts pendentes acima para criar os primeiros clipes.").classes(
+                "text-[#858b86]"
+            )
     ui.label("Timeline").classes("brand-type text-2xl font-bold mt-6")
     _render_timeline_strip(summary["timeline"], summary["timeline_items"])
-
-
-
-

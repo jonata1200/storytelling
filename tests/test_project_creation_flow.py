@@ -520,6 +520,164 @@ def test_storyboard_frame_image_url_ignores_missing_local_file(
     assert image_url == ""
 
 
+@pytest.mark.asyncio
+async def test_approve_all_storyboard_prompts_generates_frames_when_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    session = object()
+    calls: list[str] = []
+    notifications: list[str] = []
+    reloads: list[bool] = []
+
+    class FakeSessionContext:
+        async def __aenter__(self) -> object:
+            return session
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    class FakeLoadingDialog:
+        opened = False
+        closed = False
+
+        def open(self) -> None:
+            self.opened = True
+
+        def close(self) -> None:
+            self.closed = True
+
+    async def fake_approve_prompts(*args: object, **kwargs: object) -> int:
+        calls.append("approve_prompts")
+        return 2
+
+    async def fake_prompts_need_approval(*args: object, **kwargs: object) -> bool:
+        calls.append("prompts_need_approval")
+        return False
+
+    async def fake_generate_frames(*args: object, **kwargs: object) -> list[object]:
+        calls.append("generate_frames")
+        return [object(), object()]
+
+    async def fake_frames_need_generation(*args: object, **kwargs: object) -> bool:
+        calls.append("frames_need_generation")
+        return False
+
+    async def fake_generate_animatic(*args: object, **kwargs: object) -> object:
+        calls.append("generate_animatic")
+        return object()
+
+    monkeypatch.setattr(storyboard_video_area, "AsyncSessionLocal", lambda: FakeSessionContext())
+    monkeypatch.setattr(storyboard_video_area, "approve_storyboard_prompts", fake_approve_prompts)
+    monkeypatch.setattr(
+        storyboard_video_area,
+        "storyboard_prompts_need_approval",
+        fake_prompts_need_approval,
+    )
+    monkeypatch.setattr(storyboard_video_area, "generate_storyboard_frames", fake_generate_frames)
+    monkeypatch.setattr(
+        storyboard_video_area,
+        "storyboard_frames_need_generation",
+        fake_frames_need_generation,
+    )
+    monkeypatch.setattr(storyboard_video_area, "generate_animatic_bundle", fake_generate_animatic)
+    monkeypatch.setattr(
+        storyboard_video_area.ui,
+        "notify",
+        lambda message, **_kwargs: notifications.append(message),
+    )
+    monkeypatch.setattr(storyboard_video_area.ui.navigate, "reload", lambda: reloads.append(True))
+
+    loading_dialog = FakeLoadingDialog()
+
+    await storyboard_video_area._approve_storyboard_prompts_from_ui(
+        project_id,
+        script_id,
+        loading_dialog=loading_dialog,
+    )
+
+    assert calls == [
+        "approve_prompts",
+        "prompts_need_approval",
+        "generate_frames",
+        "frames_need_generation",
+        "generate_animatic",
+    ]
+    assert notifications == ["2 prompt(s) aprovado(s). 2 storyboard(s) gerado(s)."]
+    assert reloads == [True]
+    assert loading_dialog.opened is True
+    assert loading_dialog.closed is True
+
+
+@pytest.mark.asyncio
+async def test_approve_last_storyboard_prompt_generates_frames(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    shot_id = uuid4()
+    calls: list[str] = []
+    notifications: list[str] = []
+
+    class FakeSessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    async def fake_approve_prompt(*args: object, **kwargs: object) -> bool:
+        calls.append("approve_prompt")
+        return True
+
+    async def fake_prompts_need_approval(*args: object, **kwargs: object) -> bool:
+        calls.append("prompts_need_approval")
+        return False
+
+    async def fake_generate_frames(*args: object, **kwargs: object) -> list[object]:
+        calls.append("generate_frames")
+        return [object()]
+
+    async def fake_frames_need_generation(*args: object, **kwargs: object) -> bool:
+        calls.append("frames_need_generation")
+        return True
+
+    monkeypatch.setattr(storyboard_video_area, "AsyncSessionLocal", lambda: FakeSessionContext())
+    monkeypatch.setattr(storyboard_video_area, "approve_storyboard_prompt", fake_approve_prompt)
+    monkeypatch.setattr(
+        storyboard_video_area,
+        "storyboard_prompts_need_approval",
+        fake_prompts_need_approval,
+    )
+    monkeypatch.setattr(storyboard_video_area, "generate_storyboard_frames", fake_generate_frames)
+    monkeypatch.setattr(
+        storyboard_video_area,
+        "storyboard_frames_need_generation",
+        fake_frames_need_generation,
+    )
+    monkeypatch.setattr(
+        storyboard_video_area.ui,
+        "notify",
+        lambda message, **_kwargs: notifications.append(message),
+    )
+    monkeypatch.setattr(storyboard_video_area.ui.navigate, "reload", lambda: None)
+
+    await storyboard_video_area._approve_storyboard_prompt_from_ui(
+        project_id,
+        script_id,
+        shot_id,
+    )
+
+    assert calls == [
+        "approve_prompt",
+        "prompts_need_approval",
+        "generate_frames",
+        "frames_need_generation",
+    ]
+    assert notifications == ["Ultimo prompt aprovado. 1 storyboard(s) gerado(s)."]
+
+
 def test_visual_library_cards_ready_when_any_card_type_exists() -> None:
     assert pages._visual_library_cards_ready(
         {"characters": [object()], "locations": [object()], "props": [object()]}

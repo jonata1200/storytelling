@@ -1,5 +1,4 @@
 from decimal import Decimal
-from time import perf_counter
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -13,7 +12,6 @@ from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
-from app.providers.image.types import ImageGenerationRequest
 from app.storyboards.animatic import (
     _animatic_fingerprint as _animatic_fingerprint,
 )
@@ -29,6 +27,11 @@ from app.storyboards.assets import (
 )
 from app.storyboards.assets import (
     _local_storage_file_path as _local_storage_file_path,
+)
+from app.storyboards.frame_generation import (
+    StoryboardFrameGenerationPlan,
+    generate_storyboard_plan_images,
+    storyboard_image_concurrency,
 )
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.prompt_approvals import (
@@ -73,7 +76,6 @@ from app.storyboards.workflow import (
 from app.storytelling.models import Scene, Script, Shot
 from app.video_generation.models import ClipReview, GenerationJob, VideoClip
 from app.visual_bible.service import (
-    _generate_image_with_provider_fallback,
     visual_reference_completion_message,
     visual_reference_completion_report,
 )
@@ -143,11 +145,11 @@ async def generate_storyboard_frames(
             visual_context,
         )
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
-    output_dir = get_settings().local_storage_path / image_dir_name / str(project_id)
+    app_settings = get_settings()
+    output_dir = app_settings.local_storage_path / image_dir_name / str(project_id)
     existing_frames = await list_storyboard_frames(session, project_id, script_id)
     existing_by_shot = {frame.shot_id: frame for frame in existing_frames}
-    frames: list[StoryboardFrame] = []
-
+    frame_plans: list[StoryboardFrameGenerationPlan] = []
     for shot, scene in shot_rows:
         frame_number = frame_number_by_shot[shot.id]
         prompt = prompt_by_shot[shot.id]
@@ -164,31 +166,53 @@ async def generate_storyboard_frames(
             or existing_prompt_hash != _prompt_hash(prompt)
             or not existing_asset_available
         )
-        if needs_image:
-            generation_started_at = perf_counter()
-            image, fallback_metadata = await _generate_image_with_provider_fallback(
-                provider,
-                ImageGenerationRequest(
-                    prompt=prompt,
-                    target_id=str(shot.id),
-                    view_type=f"storyboard_{frame_number:03d}",
-                    output_dir=output_dir,
-                    resolution=image_resolution,
-                    model=image_model,
-                ),
+        asset_artifact_id = (
+            existing_frame.artifact_id if existing_frame is not None else shot.artifact_id
+        )
+        frame_plans.append(
+            StoryboardFrameGenerationPlan(
+                shot=shot,
+                scene=scene,
+                frame_number=frame_number,
+                prompt=prompt,
+                existing_frame=existing_frame,
+                needs_image=needs_image,
+                asset_artifact_id=asset_artifact_id,
             )
-            duration_ms = max(1, int((perf_counter() - generation_started_at) * 1000))
+        )
+
+    await generate_storyboard_plan_images(
+        provider,
+        frame_plans,
+        output_dir=output_dir,
+        image_resolution=image_resolution,
+        image_model=image_model,
+        concurrency=storyboard_image_concurrency(
+            getattr(app_settings, "storyboard_image_concurrency", None)
+        ),
+    )
+
+    frames: list[StoryboardFrame] = []
+    for plan in frame_plans:
+        shot = plan.shot
+        scene = plan.scene
+        frame_number = plan.frame_number
+        prompt = plan.prompt
+        existing_frame = plan.existing_frame
+        needs_image = plan.needs_image
+        if needs_image:
+            image = plan.image
+            if image is None:
+                raise RuntimeError("A geracao do storyboard nao retornou imagem.")
+            duration_ms = plan.duration_ms or 1
             generation_metadata = {
                 "resolution": image_resolution,
                 "duration_ms": duration_ms,
-                **fallback_metadata,
+                **(plan.fallback_metadata or {}),
             }
-            asset_artifact_id = (
-                existing_frame.artifact_id if existing_frame is not None else shot.artifact_id
-            )
             asset = Asset(
                 project_id=project_id,
-                artifact_id=asset_artifact_id,
+                artifact_id=plan.asset_artifact_id,
                 kind=AssetKind.IMAGE,
                 name=f"Storyboard frame {frame_number:03d}",
                 storage_uri=image.storage_uri,
@@ -346,8 +370,6 @@ async def generate_storyboard_frames(
     return frames
 
 
-
-
 async def storyboard_frames_need_generation(
     session: AsyncSession,
     project_id: UUID,
@@ -502,13 +524,3 @@ async def delete_storyboard_outputs(session: AsyncSession, project_id: UUID) -> 
         "artifacts": len(artifact_ids),
         "files": deleted_files,
     }
-
-
-
-
-
-
-
-
-
-

@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -5,8 +6,14 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.providers.image.types import ImageGenerationRequest, ImageResult
 from app.storyboards import prompt_approvals
 from app.storyboards import service as storyboard_service
+from app.storyboards.frame_generation import (
+    StoryboardFrameGenerationPlan,
+    generate_storyboard_plan_images,
+    storyboard_image_concurrency,
+)
 from app.storyboards.models import StoryboardFrame
 from app.storyboards.prompts import (
     _store_storyboard_prompt_approval,
@@ -158,6 +165,74 @@ def test_storyboard_prompt_override_invalidates_previous_approval() -> None:
         "Prompt editado para este plano."
     )
     assert not _storyboard_prompt_is_approved(metadata, script_id, shot_id, "hash-a")
+
+
+def test_storyboard_image_concurrency_is_bounded() -> None:
+    assert storyboard_image_concurrency(None) == 3
+    assert storyboard_image_concurrency("invalid") == 3
+    assert storyboard_image_concurrency(0) == 3
+    assert storyboard_image_concurrency(1) == 1
+    assert storyboard_image_concurrency(20) == 6
+
+
+@pytest.mark.asyncio
+async def test_generate_storyboard_plan_images_respects_concurrency_limit(
+    tmp_path: Path,
+) -> None:
+    active_generations = 0
+    max_active_generations = 0
+    lock = asyncio.Lock()
+
+    class FakeProvider:
+        async def generate(self, request: ImageGenerationRequest) -> ImageResult:
+            nonlocal active_generations, max_active_generations
+            async with lock:
+                active_generations += 1
+                max_active_generations = max(max_active_generations, active_generations)
+            await asyncio.sleep(0.01)
+            async with lock:
+                active_generations -= 1
+            file_path = tmp_path / f"{request.target_id}.png"
+            file_path.write_bytes(b"image")
+            return ImageResult(
+                file_path=file_path,
+                storage_uri=file_path.as_posix(),
+                sha256=request.target_id,
+                content_type="image/png",
+                provider="fake",
+                model=request.model,
+                prompt=request.prompt,
+            )
+
+        async def edit(self, request: object) -> ImageResult:
+            raise NotImplementedError
+
+    scene = Scene(id=uuid4(), scene_number=1)
+    plans = [
+        StoryboardFrameGenerationPlan(
+            shot=Shot(id=uuid4(), shot_number=index + 1, artifact_id=uuid4()),
+            scene=scene,
+            frame_number=index + 1,
+            prompt=f"Prompt {index + 1}",
+            existing_frame=None,
+            needs_image=True,
+            asset_artifact_id=uuid4(),
+        )
+        for index in range(4)
+    ]
+
+    await generate_storyboard_plan_images(
+        FakeProvider(),
+        plans,
+        output_dir=tmp_path,
+        image_resolution="1K",
+        image_model="fake-model",
+        concurrency=2,
+    )
+
+    assert max_active_generations == 2
+    assert all(plan.image is not None for plan in plans)
+    assert all(plan.duration_ms for plan in plans)
 
 
 @pytest.mark.asyncio
