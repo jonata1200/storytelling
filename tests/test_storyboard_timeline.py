@@ -13,10 +13,12 @@ from app.storyboards.service import (
     _store_storyboard_prompt_approval,
     _storyboard_prompt,
     _storyboard_prompt_is_approved,
+    approve_storyboard_prompt,
     generate_storyboard_frames,
     storyboard_coverage_errors,
 )
 from app.storyboards.timeline import build_visual_timeline_items, build_word_alignment
+from app.storyboards.workflow import _selected_storyboard_shots
 from app.storytelling.models import Scene, Script, Shot
 
 
@@ -132,6 +134,79 @@ def test_storyboard_prompt_approval_requires_matching_hash() -> None:
 
     assert _storyboard_prompt_is_approved(metadata, script_id, shot_id, "hash-a")
     assert not _storyboard_prompt_is_approved(metadata, script_id, shot_id, "hash-b")
+
+
+@pytest.mark.asyncio
+async def test_approve_storyboard_prompt_stores_single_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    shot_id = uuid4()
+
+    class FakeSettings:
+        metadata_json: dict[str, Any] = {}
+
+    class FakeSession:
+        committed = False
+
+        async def commit(self) -> None:
+            self.committed = True
+
+    async def fake_previews(*args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        assert kwargs["shot_id"] == shot_id
+        return [
+            {
+                "shot_id": shot_id,
+                "prompt_hash": "hash-a",
+                "approved": False,
+            }
+        ]
+
+    async def fake_settings(*args: Any, **kwargs: Any) -> FakeSettings:
+        return settings
+
+    settings = FakeSettings()
+    session = FakeSession()
+    monkeypatch.setattr(storyboard_service, "list_storyboard_prompt_previews", fake_previews)
+    monkeypatch.setattr(storyboard_service, "get_or_create_production_settings", fake_settings)
+
+    approved = await approve_storyboard_prompt(
+        cast(AsyncSession, session),
+        project_id,
+        script_id,
+        shot_id,
+    )
+
+    assert approved is True
+    assert session.committed is True
+    assert _storyboard_prompt_is_approved(settings.metadata_json, script_id, shot_id, "hash-a")
+
+
+@pytest.mark.asyncio
+async def test_selected_storyboard_shots_can_filter_single_shot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    first_shot = Shot(id=uuid4(), shot_number=1)
+    second_shot = Shot(id=uuid4(), shot_number=2)
+    scene = Scene(id=uuid4(), scene_number=1)
+
+    async def fake_ordered_shots(*args: Any, **kwargs: Any) -> list[tuple[Shot, Scene]]:
+        return [(first_shot, scene), (second_shot, scene)]
+
+    monkeypatch.setattr(storyboard_service, "_ordered_shots_for_script", fake_ordered_shots)
+
+    _all_rows, selected_rows, frame_number_by_shot = await _selected_storyboard_shots(
+        cast(AsyncSession, object()),
+        project_id,
+        script_id,
+        shot_id=second_shot.id,
+    )
+
+    assert selected_rows == [(second_shot, scene)]
+    assert frame_number_by_shot[second_shot.id] == 2
 
 
 def test_local_storage_file_exists_checks_storage_root(

@@ -8,9 +8,12 @@ from nicegui import ui
 from app.config.settings import get_settings
 from app.database.session import AsyncSessionLocal
 from app.storyboards.service import (
+    approve_storyboard_prompt,
     approve_storyboard_prompts,
     generate_animatic_bundle,
     generate_storyboard_frames,
+    storyboard_frames_need_generation,
+    update_storyboard_prompt,
 )
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, friendly_ai_error, show_ai_error_popup
 from app.ui.visual.actions import _approve_video_prompts_from_ui
@@ -38,10 +41,61 @@ async def _approve_storyboard_prompts_from_ui(project_id: UUID, script_id: UUID)
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
+async def _approve_storyboard_prompt_from_ui(
+    project_id: UUID,
+    script_id: UUID,
+    shot_id: UUID,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            approved = await approve_storyboard_prompt(session, project_id, script_id, shot_id)
+        ui.notify(
+            (
+                "Prompt de storyboard aprovado."
+                if approved
+                else "Este prompt de storyboard ja estava aprovado."
+            ),
+            color="positive",
+        )
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+
+
+async def _save_storyboard_prompt_from_ui(
+    project_id: UUID,
+    script_id: UUID,
+    shot_id: UUID,
+    prompt: str,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            updated = await update_storyboard_prompt(
+                session,
+                project_id,
+                script_id,
+                shot_id,
+                prompt,
+            )
+        ui.notify(
+            (
+                "Prompt de storyboard atualizado."
+                if updated
+                else "Nao encontrei o prompt de storyboard selecionado."
+            ),
+            color="positive" if updated else "warning",
+        )
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+
+
 async def _generate_storyboards_from_ui(
     project_id: UUID,
     script_id: UUID,
     *,
+    shot_id: UUID | None = None,
+    approved_only: bool = False,
     force: bool = False,
     loading_dialog: Any | None = None,
 ) -> None:
@@ -53,12 +107,15 @@ async def _generate_storyboards_from_ui(
                 session,
                 project_id,
                 script_id,
+                shot_id=shot_id,
                 force=force,
+                approved_only=approved_only,
             )
             if not frames:
                 ui.notify("Não foi possível gerar storyboards.", color="negative")
                 return
-            await generate_animatic_bundle(session, project_id, script_id)
+            if not await storyboard_frames_need_generation(session, project_id, script_id):
+                await generate_animatic_bundle(session, project_id, script_id)
         ui.notify("Storyboards gerados.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
@@ -125,6 +182,11 @@ def render_storyboard_area(
     missing_frame_previews = [
         preview for preview in prompt_previews if not bool(preview.get("generated"))
     ]
+    approved_missing_prompt_previews = [
+        preview
+        for preview in missing_frame_previews
+        if bool(preview.get("approved"))
+    ]
     generation_dialog = (
         loading_dialog_factory(
             "Gerando storyboards",
@@ -132,12 +194,6 @@ def render_storyboard_area(
         )
         if loading_dialog_factory is not None
         else None
-    )
-    section_title(
-        "Storyboard",
-        "Planeje enquadramentos e ritmo antes de gerar os clipes.",
-        None,
-        None,
     )
     prompt_dialog: Any | None = None
     if script_id is not None and prompt_previews:
@@ -181,27 +237,32 @@ def render_storyboard_area(
                         icon="check_circle",
                         on_click=confirm_storyboard_prompts,
                     ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-    with ui.row().classes("w-full gap-3 mb-3"):
-        for label, value in [
-            ("Quadros", summary["counts"]["frames"]),
-            ("Planos", summary["counts"]["shots"]),
-            ("Duração", f"{sum(f.duration_seconds for f in summary['frames'])}s"),
-        ]:
-            with ui.element("div").classes("glass rounded-xl px-4 py-2"):
-                ui.label(label).classes("text-[10px] uppercase text-[#777d78]")
-                ui.label(str(value)).classes("text-lg font-bold")
-    if script_id is not None and prompt_previews:
+    if prompt_dialog is not None:
+        storyboard_action_label = (
+            f"Aprovar prompts pendentes ({len(pending_prompt_previews)})"
+            if pending_prompt_previews
+            else "Ver prompts aprovados"
+        )
+        with ui.row().classes("w-full items-end justify-between gap-4 mb-2"):
+            with ui.column().classes("gap-1"):
+                ui.label("Storyboard").classes("brand-type text-3xl font-bold")
+                ui.label("Planeje enquadramentos e ritmo antes de gerar os clipes.").classes(
+                    "text-sm text-[#8e948f]"
+                )
+            ui.button(
+                storyboard_action_label,
+                icon="fact_check",
+                on_click=prompt_dialog.open,
+            ).props("unelevated no-caps").classes("acid-bg rounded-xl shrink-0")
+    else:
+        section_title(
+            "Storyboard",
+            "Planeje enquadramentos e ritmo antes de gerar os clipes.",
+            None,
+            None,
+        )
+    if script_id is not None and prompt_previews and not pending_prompt_previews:
         with ui.row().classes("w-full items-center justify-end gap-2 mb-2"):
-            if prompt_dialog is not None:
-                ui.button(
-                    (
-                        f"Aprovar prompts pendentes ({len(pending_prompt_previews)})"
-                        if pending_prompt_previews
-                        else "Ver prompts aprovados"
-                    ),
-                    icon="fact_check",
-                    on_click=prompt_dialog.open,
-                ).props("unelevated no-caps").classes("acid-bg rounded-xl")
             if not pending_prompt_previews and missing_frame_previews:
                 ui.button(
                     f"Gerar storyboards aprovados ({len(missing_frame_previews)})",
@@ -223,29 +284,9 @@ def render_storyboard_area(
                         loading_dialog=generation_dialog,
                     ),
                 ).props("flat no-caps").classes("text-[#d8dbd8]")
-    visible_prompt_previews = (
-        pending_prompt_previews
-        or missing_frame_previews
-        if not summary["frames"]
-        else pending_prompt_previews
-    )
+    visible_prompt_previews = pending_prompt_previews + approved_missing_prompt_previews
     if visible_prompt_previews:
         with ui.column().classes("w-full gap-3 mb-2"):
-            with ui.row().classes("w-full items-center justify-between gap-3"):
-                with ui.column().classes("gap-0"):
-                    ui.label("Prompts pendentes").classes("brand-type text-xl font-bold")
-                    ui.label(
-                        "Revise os prompts abaixo antes de liberar a geração das imagens."
-                    ).classes("text-sm text-[#8e948f]")
-                if script_id is not None and pending_prompt_previews:
-                    ui.button(
-                        f"Aprovar todos ({len(pending_prompt_previews)})",
-                        icon="check_circle",
-                        on_click=lambda: _approve_storyboard_prompts_from_ui(
-                            project_id,
-                            script_id,
-                        ),
-                    ).props("unelevated no-caps").classes("acid-bg rounded-xl shrink-0")
             with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
                 for preview in visible_prompt_previews:
                     approved = bool(preview.get("approved"))
@@ -266,12 +307,47 @@ def render_storyboard_area(
                         ui.label(str(preview.get("prompt") or "")).classes(
                             "text-xs text-[#aeb4af] whitespace-pre-wrap mt-3 line-clamp-6"
                         )
-                        if prompt_dialog is not None:
-                            ui.button(
-                                "Ver prompt completo",
-                                icon="visibility",
-                                on_click=prompt_dialog.open,
-                            ).props("flat dense no-caps").classes("text-[#d8dbd8] mt-2")
+                        with ui.row().classes("w-full items-center justify-between gap-2 mt-2"):
+                            if script_id is not None and not approved:
+                                ui.button(
+                                    "Aprovar prompt",
+                                    icon="check_circle",
+                                    on_click=lambda shot_id=preview[
+                                        "shot_id"
+                                    ]: _approve_storyboard_prompt_from_ui(
+                                        project_id,
+                                        script_id,
+                                        shot_id,
+                                    ),
+                                ).props("unelevated dense no-caps").classes(
+                                    "acid-bg rounded-xl"
+                                )
+                            elif (
+                                script_id is not None
+                                and approved
+                                and not bool(preview.get("generated"))
+                            ):
+                                ui.button(
+                                    "Gerar quadro",
+                                    icon="auto_awesome",
+                                    on_click=lambda shot_id=preview[
+                                        "shot_id"
+                                    ]: _generate_storyboards_from_ui(
+                                        project_id,
+                                        script_id,
+                                        shot_id=shot_id,
+                                        approved_only=True,
+                                        loading_dialog=generation_dialog,
+                                    ),
+                                ).props("unelevated dense no-caps").classes(
+                                    "acid-bg rounded-xl"
+                                )
+                            if prompt_dialog is not None:
+                                ui.button(
+                                    "Ver prompt completo",
+                                    icon="visibility",
+                                    on_click=prompt_dialog.open,
+                                ).props("flat dense no-caps").classes("text-[#d8dbd8]")
     with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
         for frame in sorted(summary["frames"], key=lambda f: f.frame_number):
             image_url = _storyboard_frame_image_url(summary, frame)

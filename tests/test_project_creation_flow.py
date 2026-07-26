@@ -11,7 +11,7 @@ from app.storytelling.service import (
     _bounded_required_str,
     _shot_narration_text,
 )
-from app.ui import pages
+from app.ui import page_runtime, pages
 from app.ui.pages import _asset_url, _compact_project_title
 from app.ui.workspace import storyboard_video_area
 from app.ui.workspace.assets_area import _character_reference_sheet_asset
@@ -22,6 +22,40 @@ def test_settings_tab_key_keeps_data_tab_after_destructive_actions() -> None:
     assert pages._settings_tab_key("Dados") == "data"
     assert pages._settings_tab_key("ia") == "ai"
     assert pages._settings_tab_key(None) == "profile"
+
+
+def test_register_ui_pages_resolves_page_facade_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registered: list[str] = []
+
+    def fake_register_home_pages(**kwargs: Any) -> None:
+        registered.append("home")
+        assert callable(kwargs["body_style"])
+        assert callable(kwargs["project_cards"])
+        assert callable(kwargs["home_sidebar"])
+
+    def fake_register_settings_page(**kwargs: Any) -> None:
+        registered.append("settings")
+        assert callable(kwargs["save_avatar_file"])
+        assert callable(kwargs["theme_toggle"])
+
+    def fake_register_project_workspace_pages(**kwargs: Any) -> None:
+        registered.append("workspace")
+        assert callable(kwargs["project_summary"])
+        assert callable(kwargs["workspace_header"])
+
+    monkeypatch.setattr(page_runtime, "register_home_pages", fake_register_home_pages)
+    monkeypatch.setattr(page_runtime, "register_settings_page", fake_register_settings_page)
+    monkeypatch.setattr(
+        page_runtime,
+        "register_project_workspace_pages",
+        fake_register_project_workspace_pages,
+    )
+
+    pages.register_ui_pages()
+
+    assert registered == ["home", "settings", "workspace"]
 
 
 def test_chat_prompt_title_is_compact() -> None:

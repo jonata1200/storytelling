@@ -104,6 +104,7 @@ async def _selected_storyboard_shots(
     project_id: UUID,
     script_id: UUID,
     scene_number: int | None = None,
+    shot_id: UUID | None = None,
 ) -> tuple[list[tuple[Shot, Scene]], list[tuple[Shot, Scene]], dict[UUID, int]]:
     ordered_shots = _service_attr("_ordered_shots_for_script", _ordered_shots_for_script)
     all_shot_rows = await ordered_shots(session, project_id, script_id)
@@ -118,6 +119,10 @@ async def _selected_storyboard_shots(
         ]
         if not shot_rows:
             raise ValueError(f"Nenhum plano encontrado para a cena {scene_number}.")
+    if shot_id is not None:
+        shot_rows = [(shot, scene) for shot, scene in shot_rows if shot.id == shot_id]
+        if not shot_rows:
+            raise ValueError("Nenhum plano encontrado para o prompt selecionado.")
     frame_number_by_shot = {
         shot.id: frame_number for frame_number, (shot, _scene) in enumerate(all_shot_rows, start=1)
     }

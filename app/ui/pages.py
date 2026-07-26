@@ -44,6 +44,27 @@ from app.ui.layout.components import (
 from app.ui.layout.components import (
     card_classes as _card_classes,
 )
+from app.ui.layout.navigation import (
+    home_sidebar as _home_sidebar,  # noqa: F401
+)
+from app.ui.layout.navigation import (
+    save_avatar_file as _save_avatar_file,  # noqa: F401
+)
+from app.ui.layout.navigation import (
+    studio_logo as _studio_logo,  # noqa: F401
+)
+from app.ui.layout.navigation import (
+    theme_toggle as _theme_toggle,  # noqa: F401
+)
+from app.ui.layout.navigation import (
+    user_avatar as _user_avatar,  # noqa: F401
+)
+from app.ui.layout.navigation import (
+    workspace_header as _workspace_header,  # noqa: F401
+)
+from app.ui.layout.theme import (
+    apply_body_style as _body_style,  # noqa: F401
+)
 from app.ui.page_runtime import (
     _ai_action_is_stale as _ai_action_is_stale,  # noqa: F401
 )
@@ -116,6 +137,12 @@ from app.ui.project.actions import (
 from app.ui.project.cards import render_project_card
 from app.ui.project.data import (
     latest as _latest,
+)
+from app.ui.project.data import (
+    project_cards as _project_cards,  # noqa: F401
+)
+from app.ui.project.data import (
+    project_summary as _project_summary,  # noqa: F401
 )
 from app.ui.project.data import (
     scalar_count as _scalar_count,

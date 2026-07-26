@@ -186,6 +186,37 @@ def _storyboard_prompt_approval_map(metadata: dict, script_id: UUID) -> dict[str
     return {str(key): str(value) for key, value in script_store.items()}
 
 
+def _storyboard_prompt_override_map(metadata: dict, script_id: UUID) -> dict[str, str]:
+    raw_store = metadata.get("storyboard_prompt_overrides")
+    store = raw_store if isinstance(raw_store, dict) else {}
+    raw_script_store = store.get(str(script_id))
+    script_store = raw_script_store if isinstance(raw_script_store, dict) else {}
+    return {
+        str(key): str(value)
+        for key, value in script_store.items()
+        if str(value or "").strip()
+    }
+
+
+def _storyboard_prompt_override(
+    metadata: dict,
+    script_id: UUID,
+    shot_id: UUID,
+) -> str | None:
+    overrides = _storyboard_prompt_override_map(metadata, script_id)
+    prompt = overrides.get(str(shot_id))
+    return prompt if prompt else None
+
+
+def _storyboard_effective_prompt(
+    metadata: dict,
+    script_id: UUID,
+    shot_id: UUID,
+    default_prompt: str,
+) -> str:
+    return _storyboard_prompt_override(metadata, script_id, shot_id) or default_prompt
+
+
 def _storyboard_prompt_is_approved(
     metadata: dict,
     script_id: UUID,
@@ -194,6 +225,26 @@ def _storyboard_prompt_is_approved(
 ) -> bool:
     approvals = _storyboard_prompt_approval_map(metadata, script_id)
     return approvals.get(str(shot_id)) == prompt_hash
+
+
+def _remove_storyboard_prompt_approval(
+    metadata: dict,
+    script_id: UUID,
+    shot_id: UUID,
+) -> dict:
+    updated = dict(metadata or {})
+    raw_store = updated.get("storyboard_prompt_approvals")
+    store = dict(raw_store) if isinstance(raw_store, dict) else {}
+    script_key = str(script_id)
+    raw_script_store = store.get(script_key)
+    script_store = dict(raw_script_store) if isinstance(raw_script_store, dict) else {}
+    script_store.pop(str(shot_id), None)
+    if script_store:
+        store[script_key] = script_store
+    else:
+        store.pop(script_key, None)
+    updated["storyboard_prompt_approvals"] = store
+    return updated
 
 
 def _store_storyboard_prompt_approval(
@@ -211,4 +262,22 @@ def _store_storyboard_prompt_approval(
     script_store[str(shot_id)] = prompt_hash
     store[script_key] = script_store
     updated["storyboard_prompt_approvals"] = store
+    return updated
+
+
+def _store_storyboard_prompt_override(
+    metadata: dict,
+    script_id: UUID,
+    shot_id: UUID,
+    prompt: str,
+) -> dict:
+    updated = _remove_storyboard_prompt_approval(metadata, script_id, shot_id)
+    raw_store = updated.get("storyboard_prompt_overrides")
+    store = dict(raw_store) if isinstance(raw_store, dict) else {}
+    script_key = str(script_id)
+    raw_script_store = store.get(script_key)
+    script_store = dict(raw_script_store) if isinstance(raw_script_store, dict) else {}
+    script_store[str(shot_id)] = prompt.strip()
+    store[script_key] = script_store
+    updated["storyboard_prompt_overrides"] = store
     return updated

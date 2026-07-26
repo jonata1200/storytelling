@@ -34,6 +34,8 @@ from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeli
 from app.storyboards.prompts import (
     _prompt_hash,
     _store_storyboard_prompt_approval,
+    _store_storyboard_prompt_override,
+    _storyboard_effective_prompt,
     _storyboard_frame_payload,
     _storyboard_prompt,
     _storyboard_prompt_is_approved,
@@ -68,6 +70,7 @@ async def list_storyboard_prompt_previews(
     project_id: UUID,
     script_id: UUID,
     scene_number: int | None = None,
+    shot_id: UUID | None = None,
 ) -> list[dict]:
     project = await ProjectRepository(session).get_project(project_id)
     script = await session.get(Script, script_id)
@@ -79,6 +82,7 @@ async def list_storyboard_prompt_previews(
             project_id,
             script_id,
             scene_number=scene_number,
+            shot_id=shot_id,
         )
     except ValueError:
         return []
@@ -89,7 +93,13 @@ async def list_storyboard_prompt_previews(
     existing_by_shot = {frame.shot_id: frame for frame in existing_frames}
     previews: list[dict] = []
     for shot, scene in shot_rows:
-        prompt = _storyboard_prompt(shot, scene, visual_context)
+        default_prompt = _storyboard_prompt(shot, scene, visual_context)
+        prompt = _storyboard_effective_prompt(
+            metadata,
+            script_id,
+            shot.id,
+            default_prompt,
+        )
         prompt_hash = _prompt_hash(prompt)
         previews.append(
             {
@@ -100,7 +110,9 @@ async def list_storyboard_prompt_previews(
                 "frame_number": frame_number_by_shot[shot.id],
                 "duration_seconds": shot.duration_seconds,
                 "prompt": prompt,
+                "default_prompt": default_prompt,
                 "prompt_hash": prompt_hash,
+                "custom_prompt": prompt != default_prompt,
                 "approved": _storyboard_prompt_is_approved(
                     metadata,
                     script_id,
@@ -145,6 +157,65 @@ async def approve_storyboard_prompts(
     return approved_count
 
 
+async def approve_storyboard_prompt(
+    session: AsyncSession,
+    project_id: UUID,
+    script_id: UUID,
+    shot_id: UUID,
+) -> bool:
+    previews = await list_storyboard_prompt_previews(
+        session,
+        project_id,
+        script_id,
+        shot_id=shot_id,
+    )
+    if not previews:
+        return False
+    preview = previews[0]
+    if preview["approved"]:
+        return False
+    production_settings = await get_or_create_production_settings(session, project_id)
+    metadata = production_settings.metadata_json or {}
+    production_settings.metadata_json = _store_storyboard_prompt_approval(
+        metadata,
+        script_id,
+        preview["shot_id"],
+        preview["prompt_hash"],
+    )
+    await session.commit()
+    return True
+
+
+async def update_storyboard_prompt(
+    session: AsyncSession,
+    project_id: UUID,
+    script_id: UUID,
+    shot_id: UUID,
+    prompt: str,
+) -> bool:
+    cleaned_prompt = prompt.strip()
+    if not cleaned_prompt:
+        raise ValueError("Informe um prompt de storyboard antes de salvar.")
+    previews = await list_storyboard_prompt_previews(
+        session,
+        project_id,
+        script_id,
+        shot_id=shot_id,
+    )
+    if not previews:
+        return False
+    production_settings = await get_or_create_production_settings(session, project_id)
+    metadata = production_settings.metadata_json or {}
+    production_settings.metadata_json = _store_storyboard_prompt_override(
+        metadata,
+        script_id,
+        shot_id,
+        cleaned_prompt,
+    )
+    await session.commit()
+    return True
+
+
 async def storyboard_prompts_need_approval(
     session: AsyncSession,
     project_id: UUID,
@@ -174,7 +245,13 @@ async def _ensure_storyboard_prompts_approved(
     prompt_by_shot: dict[UUID, str] = {}
     pending: list[str] = []
     for shot, scene in shot_rows:
-        prompt = _storyboard_prompt(shot, scene, visual_context)
+        default_prompt = _storyboard_prompt(shot, scene, visual_context)
+        prompt = _storyboard_effective_prompt(
+            metadata,
+            script_id,
+            shot.id,
+            default_prompt,
+        )
         prompt_by_shot[shot.id] = prompt
         if not _storyboard_prompt_is_approved(
             metadata,
@@ -200,7 +277,9 @@ async def generate_storyboard_frames(
     project_id: UUID,
     script_id: UUID,
     scene_number: int | None = None,
+    shot_id: UUID | None = None,
     force: bool = False,
+    approved_only: bool = False,
 ) -> list[StoryboardFrame] | None:
     project = await ProjectRepository(session).get_project(project_id)
     script = await session.get(Script, script_id)
@@ -216,20 +295,46 @@ async def generate_storyboard_frames(
         project_id,
         script_id,
         scene_number=scene_number,
+        shot_id=shot_id,
     )
 
-    provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
     production_settings = await get_or_create_production_settings(session, project_id)
     image_resolution = production_settings.image_resolution
-    output_dir = get_settings().local_storage_path / image_dir_name / str(project_id)
     visual_context = await _storyboard_visual_context(session, project_id)
-    prompt_by_shot = await _ensure_storyboard_prompts_approved(
-        session,
-        project_id,
-        script_id,
-        shot_rows,
-        visual_context,
-    )
+    if approved_only:
+        metadata = production_settings.metadata_json or {}
+        approved_shot_rows: list[tuple[Shot, Scene]] = []
+        prompt_by_shot: dict[UUID, str] = {}
+        for shot, scene in shot_rows:
+            default_prompt = _storyboard_prompt(shot, scene, visual_context)
+            prompt = _storyboard_effective_prompt(
+                metadata,
+                script_id,
+                shot.id,
+                default_prompt,
+            )
+            if not _storyboard_prompt_is_approved(
+                metadata,
+                script_id,
+                shot.id,
+                _prompt_hash(prompt),
+            ):
+                continue
+            approved_shot_rows.append((shot, scene))
+            prompt_by_shot[shot.id] = prompt
+        shot_rows = approved_shot_rows
+        if not shot_rows:
+            return []
+    else:
+        prompt_by_shot = await _ensure_storyboard_prompts_approved(
+            session,
+            project_id,
+            script_id,
+            shot_rows,
+            visual_context,
+        )
+    provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
+    output_dir = get_settings().local_storage_path / image_dir_name / str(project_id)
     existing_frames = await list_storyboard_frames(session, project_id, script_id)
     existing_by_shot = {frame.shot_id: frame for frame in existing_frames}
     frames: list[StoryboardFrame] = []
@@ -416,7 +521,8 @@ async def generate_storyboard_frames(
     errors = storyboard_coverage_errors(shot_rows, frames)
     if errors:
         raise ValueError("Storyboard incompleto: " + "; ".join(errors))
-    if scene_number is None:
+    full_scope_generation = scene_number is None and shot_id is None and not approved_only
+    if full_scope_generation:
         advance_project_status(project, ProjectStatus.STORYBOARD_APPROVAL)
     else:
         full_frames = await list_storyboard_frames(session, project_id, script_id)
@@ -446,11 +552,19 @@ async def storyboard_frames_need_generation(
         return True
     existing_by_shot = {frame.shot_id: frame for frame in existing_frames}
     visual_context = await _storyboard_visual_context(session, project_id)
+    production_settings = await get_or_create_production_settings(session, project_id)
+    metadata = production_settings.metadata_json or {}
     for shot, scene in shot_rows:
         frame = existing_by_shot.get(shot.id)
         if frame is None:
             return True
-        prompt = _storyboard_prompt(shot, scene, visual_context)
+        default_prompt = _storyboard_prompt(shot, scene, visual_context)
+        prompt = _storyboard_effective_prompt(
+            metadata,
+            script_id,
+            shot.id,
+            default_prompt,
+        )
         existing_prompt_hash = (frame.metadata_json or {}).get("prompt_hash")
         if existing_prompt_hash != _prompt_hash(prompt):
             return True
