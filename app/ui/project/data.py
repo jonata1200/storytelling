@@ -16,6 +16,7 @@ from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, Project
 from app.projects.repository import ProjectRepository
 from app.projects.service import list_projects
+from app.projects.versioning import INACTIVE_DERIVED_STATUSES
 from app.quality.models import ContinuityIssue, QualityCheck
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.service import list_storyboard_prompt_previews
@@ -54,6 +55,40 @@ async def latest_many(
         .limit(limit)
     )
     return list(result.scalars())
+
+
+async def active_many(
+    session: AsyncSession,
+    model: type[Any],
+    project_id: UUID,
+    limit: int = 6,
+) -> list[Any]:
+    statement = (
+        select(model)
+        .join(Artifact, model.artifact_id == Artifact.id)
+        .where(
+            model.project_id == project_id,
+            Artifact.status.notin_(INACTIVE_DERIVED_STATUSES),
+        )
+        .order_by(model.created_at.desc())
+        .limit(limit)
+    )
+    result = await session.execute(statement)
+    return list(result.scalars())
+
+
+async def active_count(session: AsyncSession, model: type[Any], project_id: UUID) -> int:
+    statement = (
+        select(func.count())
+        .select_from(model)
+        .join(Artifact, model.artifact_id == Artifact.id)
+        .where(
+            model.project_id == project_id,
+            Artifact.status.notin_(INACTIVE_DERIVED_STATUSES),
+        )
+    )
+    value = await session.scalar(statement)
+    return int(value or 0)
 
 
 async def project_cards() -> list[Project]:
@@ -117,13 +152,18 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             )
             timeline_items = list(item_result.scalars())
         script = await latest(session, Script, project_id)
-        visual_refs = await latest_many(session, VisualReference, project_id, 100)
+        visual_refs = await active_many(session, VisualReference, project_id, 100)
         if script is not None:
             frame_result = await session.execute(
                 select(StoryboardFrame)
                 .join(Shot, StoryboardFrame.shot_id == Shot.id)
                 .join(Scene, Shot.scene_id == Scene.id)
-                .where(StoryboardFrame.project_id == project_id, Scene.script_id == script.id)
+                .join(Artifact, StoryboardFrame.artifact_id == Artifact.id)
+                .where(
+                    StoryboardFrame.project_id == project_id,
+                    Scene.script_id == script.id,
+                    Artifact.status.notin_(INACTIVE_DERIVED_STATUSES),
+                )
                 .order_by(StoryboardFrame.frame_number)
             )
             frames = list(frame_result.scalars())
@@ -156,13 +196,13 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
                 "briefings": await scalar_count(session, Briefing, project_id),
                 "ideas": await scalar_count(session, StoryIdea, project_id),
                 "scripts": await scalar_count(session, Script, project_id),
-                "scenes": await scalar_count(session, Scene, project_id),
-                "shots": await scalar_count(session, Shot, project_id),
-                "characters": await scalar_count(session, Character, project_id),
-                "locations": await scalar_count(session, Location, project_id),
-                "props": await scalar_count(session, Prop, project_id),
-                "visual_refs": await scalar_count(session, VisualReference, project_id),
-                "frames": await scalar_count(session, StoryboardFrame, project_id),
+                "scenes": await active_count(session, Scene, project_id),
+                "shots": await active_count(session, Shot, project_id),
+                "characters": await active_count(session, Character, project_id),
+                "locations": await active_count(session, Location, project_id),
+                "props": await active_count(session, Prop, project_id),
+                "visual_refs": await active_count(session, VisualReference, project_id),
+                "frames": await active_count(session, StoryboardFrame, project_id),
                 "animatics": await scalar_count(session, Animatic, project_id),
                 "clips": await scalar_count(session, VideoClip, project_id),
                 "audio": await scalar_count(session, AudioTrack, project_id),
@@ -186,11 +226,11 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             "export": latest_export,
             "model_settings": list(model_result.scalars()),
             "script": script,
-            "scenes": await latest_many(session, Scene, project_id, 12),
-            "shots": await latest_many(session, Shot, project_id, 20),
-            "characters": await latest_many(session, Character, project_id, 100),
-            "locations": await latest_many(session, Location, project_id, 100),
-            "props": await latest_many(session, Prop, project_id, 100),
+            "scenes": await active_many(session, Scene, project_id, 12),
+            "shots": await active_many(session, Shot, project_id, 20),
+            "characters": await active_many(session, Character, project_id, 100),
+            "locations": await active_many(session, Location, project_id, 100),
+            "props": await active_many(session, Prop, project_id, 100),
             "visual_refs": visual_refs,
             "assets": assets,
             "frames": frames,

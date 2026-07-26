@@ -2,8 +2,11 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
+from app.projects.models import Artifact
 from app.projects.repository import ProjectRepository
+from app.projects.versioning import INACTIVE_DERIVED_STATUSES
 from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
 
@@ -43,17 +46,31 @@ async def list_storyboard_frames(
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         return []
+    frame_artifact = aliased(Artifact)
     statement = (
         select(StoryboardFrame)
+        .join(frame_artifact, StoryboardFrame.artifact_id == frame_artifact.id)
         .where(StoryboardFrame.project_id == project_id)
+        .where(frame_artifact.status.notin_(INACTIVE_DERIVED_STATUSES))
         .order_by(StoryboardFrame.frame_number)
     )
     if script_id is not None:
+        scene_artifact = aliased(Artifact)
+        shot_artifact = aliased(Artifact)
         statement = (
             select(StoryboardFrame)
             .join(Shot, StoryboardFrame.shot_id == Shot.id)
             .join(Scene, Shot.scene_id == Scene.id)
-            .where(StoryboardFrame.project_id == project_id, Scene.script_id == script_id)
+            .join(frame_artifact, StoryboardFrame.artifact_id == frame_artifact.id)
+            .join(shot_artifact, Shot.artifact_id == shot_artifact.id)
+            .join(scene_artifact, Scene.artifact_id == scene_artifact.id)
+            .where(
+                StoryboardFrame.project_id == project_id,
+                Scene.script_id == script_id,
+                frame_artifact.status.notin_(INACTIVE_DERIVED_STATUSES),
+                shot_artifact.status.notin_(INACTIVE_DERIVED_STATUSES),
+                scene_artifact.status.notin_(INACTIVE_DERIVED_STATUSES),
+            )
             .order_by(StoryboardFrame.frame_number)
         )
     result = await session.execute(statement)

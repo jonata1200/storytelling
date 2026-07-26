@@ -6,20 +6,36 @@ from nicegui import background_tasks, ui
 
 from app.database.session import AsyncSessionLocal
 from app.projects.models import Artifact
-from app.projects.versioning import create_artifact_version
+from app.projects.versioning import (
+    create_artifact_version,
+    resolve_stale_artifacts_after_regeneration,
+)
 from app.storytelling.models import Script, ScriptVersion
+from app.storytelling.service import regenerate_scenes_and_shots
 from app.ui.project.workflows import (
     _generate_missing_scenes_in_background,
     _reload_project_when_script_ready,
     _resume_initial_script_in_background,
 )
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, STEP_LOADING_COPY
+from app.visual_bible.service import generate_visual_bible
 
 LoadingDialogFactory = Callable[[str, str], Any]
 ProjectAiActionReader = Callable[[dict[str, Any]], dict[str, Any]]
 AiActionStaleChecker = Callable[[dict[str, Any]], bool]
 RetryInitialScriptHandler = Callable[[UUID, Any], None]
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
+
+
+async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID) -> None:
+    async with AsyncSessionLocal() as session:
+        scenes = await regenerate_scenes_and_shots(session, project_id, script_id)
+        if scenes is None:
+            raise ValueError("não foi possível recriar cenas e planos para o roteiro.")
+        visual = await generate_visual_bible(session, project_id, script_id)
+        if visual is None:
+            raise ValueError("não foi possível atualizar a Biblioteca Visual.")
+        await resolve_stale_artifacts_after_regeneration(session, project_id)
 
 
 async def save_script_from_ui(
@@ -71,7 +87,19 @@ async def save_script_from_ui(
                 )
             )
             await session.commit()
-        ui.notify("Roteiro salvo.", color="positive")
+        try:
+            await _refresh_script_derivatives_from_ui(project_id, script_id)
+        except Exception as exc:
+            ui.notify(
+                (
+                    "Roteiro salvo, mas não consegui atualizar automaticamente "
+                    f"cenas/planos e Biblioteca Visual: {exc}"
+                ),
+                color="warning",
+            )
+            ui.navigate.reload()
+            return
+        ui.notify("Roteiro salvo. Cenas, planos e Biblioteca Visual atualizados.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
         ui.notify(f"Não consegui salvar o roteiro: {exc}", color="negative")

@@ -10,6 +10,7 @@ from app.config.settings import get_settings
 from app.core.enums import ArtifactStatus, ArtifactType, DependencyKind
 from app.production.service import get_or_create_production_settings, resolve_image_model
 from app.projects.models import Artifact, ArtifactVersion
+from app.projects.versioning import INACTIVE_DERIVED_STATUSES
 from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageProvider
 from app.storytelling.models import Scene, Shot
@@ -92,8 +93,8 @@ async def _ordered_shots_for_script(
         .join(scene_artifact, scene_artifact.id == Scene.artifact_id)
         .join(shot_artifact, shot_artifact.id == Shot.artifact_id)
         .where(Shot.project_id == project_id, Scene.script_id == script_id)
-        .where(scene_artifact.status != ArtifactStatus.STALE)
-        .where(shot_artifact.status != ArtifactStatus.STALE)
+        .where(scene_artifact.status.notin_(INACTIVE_DERIVED_STATUSES))
+        .where(shot_artifact.status.notin_(INACTIVE_DERIVED_STATUSES))
         .order_by(Scene.scene_number, Shot.shot_number)
     )
     return [(row[0], row[1]) for row in result.all()]

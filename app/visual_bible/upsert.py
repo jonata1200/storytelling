@@ -1,9 +1,10 @@
 import sys
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import ArtifactType
+from app.core.enums import ArtifactStatus, ArtifactType, DependencyKind
 from app.projects.models import Artifact
 from app.projects.versioning import create_artifact_version
 from app.visual_bible.models import (
@@ -20,6 +21,7 @@ from app.visual_bible.profiles import (
     _visual_key,
     _visual_profile_identity,
 )
+from app.workflows.models import ArtifactDependency
 
 
 def _service_attr(name: str) -> object:
@@ -39,6 +41,27 @@ def _match_visual_target(
         if name_key and _visual_key(item.name) == name_key:
             return item
     return None
+
+
+async def _restore_current_artifact_if_stale(session: AsyncSession, artifact_id: UUID) -> None:
+    artifact = await session.get(Artifact, artifact_id)
+    if artifact is not None and artifact.status == ArtifactStatus.STALE:
+        artifact.status = ArtifactStatus.READY_FOR_REVIEW
+    reference_result = await session.execute(
+        select(Artifact)
+        .join(
+            ArtifactDependency,
+            ArtifactDependency.downstream_artifact_id == Artifact.id,
+        )
+        .where(
+            ArtifactDependency.upstream_artifact_id == artifact_id,
+            ArtifactDependency.dependency_kind == DependencyKind.DERIVED_FROM,
+            Artifact.artifact_type == ArtifactType.VISUAL_REFERENCE,
+            Artifact.status == ArtifactStatus.STALE,
+        )
+    )
+    for reference_artifact in reference_result.scalars():
+        reference_artifact.status = ArtifactStatus.READY_FOR_REVIEW
 
 
 async def _upsert_character_profile(
@@ -73,6 +96,8 @@ async def _upsert_character_profile(
                     profile,
                     change_note="Canonical character profile updated from script",
                 )
+        else:
+            await _restore_current_artifact_if_stale(session, existing.artifact_id)
         await _service_attr("_add_dependency")(session, source_artifact_id, existing.artifact_id)
         return existing
 
@@ -133,6 +158,8 @@ async def _upsert_location_profile(
                     profile,
                     change_note="Canonical location profile updated from script",
                 )
+        else:
+            await _restore_current_artifact_if_stale(session, existing.artifact_id)
         await _service_attr("_add_dependency")(session, source_artifact_id, existing.artifact_id)
         return existing
 
@@ -192,6 +219,8 @@ async def _upsert_prop_profile(
                     profile,
                     change_note="Canonical prop profile updated from script",
                 )
+        else:
+            await _restore_current_artifact_if_stale(session, existing.artifact_id)
         await _service_attr("_add_dependency")(session, source_artifact_id, existing.artifact_id)
         return existing
 

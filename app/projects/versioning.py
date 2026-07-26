@@ -8,6 +8,8 @@ from app.projects.models import Artifact, ArtifactVersion
 from app.workflows.dependencies import collect_dependent_artifacts
 from app.workflows.models import ArtifactDependency
 
+INACTIVE_DERIVED_STATUSES = {ArtifactStatus.STALE, ArtifactStatus.CANCELLED}
+
 
 async def create_artifact_version(
     session: AsyncSession,
@@ -68,3 +70,23 @@ async def mark_dependents_stale(
         for artifact in result.scalars():
             artifact.status = ArtifactStatus.STALE
     return stale_ids
+
+
+async def resolve_stale_artifacts_after_regeneration(
+    session: AsyncSession,
+    project_id: UUID,
+) -> int:
+    result = await session.execute(
+        select(Artifact).where(
+            Artifact.project_id == project_id,
+            Artifact.status == ArtifactStatus.STALE,
+        )
+    )
+    resolved_count = 0
+    for artifact in result.scalars():
+        artifact.status = ArtifactStatus.CANCELLED
+        resolved_count += 1
+    if resolved_count:
+        await session.flush()
+        await session.commit()
+    return resolved_count

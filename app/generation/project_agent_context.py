@@ -8,6 +8,7 @@ from app.core.enums import ArtifactStatus
 from app.finalization.models import Export, SubtitleTrack
 from app.projects.models import Artifact
 from app.projects.repository import ProjectRepository
+from app.projects.versioning import INACTIVE_DERIVED_STATUSES
 from app.quality.models import ContinuityIssue, QualityCheck
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
@@ -57,7 +58,7 @@ async def _active_scene_count_for_script(
         .where(
             Scene.project_id == project_id,
             Scene.script_id == script_id,
-            Artifact.status != ArtifactStatus.STALE,
+            Artifact.status.notin_(INACTIVE_DERIVED_STATUSES),
         )
     )
     return int(value or 0)

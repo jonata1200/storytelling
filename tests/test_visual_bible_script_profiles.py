@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.enums import ArtifactStatus, ArtifactType
 from app.projects.models import Artifact
 from app.providers.image.types import ImageGenerationRequest, ImageResult
 from app.visual_bible import service as visual_bible_service
@@ -39,6 +40,7 @@ from app.visual_bible.service import (
     visual_reference_aspect_ratio,
     visual_reference_prompt,
 )
+from app.visual_bible.upsert import _upsert_character_profile
 
 
 def test_script_fallback_extracts_locations_and_props() -> None:
@@ -375,6 +377,87 @@ async def test_update_visual_target_prompt_versions_character_profile() -> None:
     assert any(isinstance(item, CharacterVersion) for item in session.added)
     assert session.committed is True
     assert session.refreshed is character
+
+
+@pytest.mark.asyncio
+async def test_unchanged_visual_profile_restores_stale_character_and_references(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_artifact_id = uuid4()
+    character_artifact_id = uuid4()
+    reference_artifact = Artifact(
+        id=uuid4(),
+        project_id=project_id,
+        artifact_type=ArtifactType.VISUAL_REFERENCE,
+        name="Clara - front",
+        status=ArtifactStatus.STALE,
+    )
+    character_artifact = Artifact(
+        id=character_artifact_id,
+        project_id=project_id,
+        artifact_type=ArtifactType.CHARACTER,
+        name="Clara",
+        status=ArtifactStatus.STALE,
+    )
+    profile = {
+        "name": "Clara",
+        "role": "protagonista",
+        "canonical_prompt": "Clara com casaco verde",
+    }
+    character = Character(
+        id=uuid4(),
+        project_id=project_id,
+        artifact_id=character_artifact_id,
+        name="Clara",
+        role="protagonista",
+        canonical_profile=dict(profile),
+        character_fingerprint={},
+        current_version=1,
+    )
+    dependency_calls: list[tuple[object, object]] = []
+
+    class FakeScalarResult:
+        def __init__(self, items: list[Artifact]) -> None:
+            self.items = items
+
+        def __iter__(self) -> Any:
+            return iter(self.items)
+
+    class FakeResult:
+        def scalars(self) -> FakeScalarResult:
+            return FakeScalarResult([reference_artifact])
+
+    class FakeSession:
+        async def get(self, model: type[object], item_id: object) -> object | None:
+            if model is Artifact and item_id == character_artifact_id:
+                return character_artifact
+            return None
+
+        async def execute(self, statement: object) -> FakeResult:
+            return FakeResult()
+
+    async def fake_add_dependency(
+        session: object,
+        upstream_artifact_id: object,
+        downstream_artifact_id: object,
+    ) -> None:
+        dependency_calls.append((upstream_artifact_id, downstream_artifact_id))
+
+    monkeypatch.setattr(visual_bible_service, "_add_dependency", fake_add_dependency)
+
+    result = await _upsert_character_profile(
+        FakeSession(),  # type: ignore[arg-type]
+        project_id,
+        script_artifact_id,
+        profile,
+        [character],
+    )
+
+    assert result is character
+    assert character_artifact.status == ArtifactStatus.READY_FOR_REVIEW
+    assert reference_artifact.status == ArtifactStatus.READY_FOR_REVIEW
+    assert dependency_calls == [(script_artifact_id, character_artifact_id)]
 
 
 @pytest.mark.asyncio

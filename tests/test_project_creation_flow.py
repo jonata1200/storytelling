@@ -14,7 +14,7 @@ from app.storytelling.service import (
 from app.ui import page_runtime, pages
 from app.ui.pages import _asset_url, _compact_project_title
 from app.ui.project import actions as project_actions
-from app.ui.workspace import storyboard_video_area
+from app.ui.workspace import script_area, storyboard_video_area
 from app.ui.workspace.assets_area import _character_reference_sheet_asset
 
 
@@ -150,6 +150,101 @@ def test_project_ai_action_reads_production_metadata() -> None:
 
     assert action["status"] == "running"
     assert action["message"] == "Criando roteiro"
+
+
+@pytest.mark.asyncio
+async def test_manual_script_save_refreshes_scene_plan_and_visual_bible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    artifact_id = uuid4()
+    calls: list[str] = []
+    notifications: list[tuple[str, str | None]] = []
+
+    script = SimpleNamespace(
+        id=script_id,
+        project_id=project_id,
+        artifact_id=artifact_id,
+        title="Roteiro antigo",
+        content="Conteudo antigo",
+        language="pt-BR",
+        target_duration_seconds=60,
+        word_count=2,
+    )
+    artifact = SimpleNamespace(
+        id=artifact_id,
+        name="Roteiro antigo",
+        current_version=1,
+    )
+
+    class FakeSession:
+        async def __aenter__(self) -> "FakeSession":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def get(self, model: object, item_id: object) -> object | None:
+            if model is script_area.Script and item_id == script_id:
+                return script
+            if model is script_area.Artifact and item_id == artifact_id:
+                return artifact
+            return None
+
+        def add(self, item: object) -> None:
+            calls.append(type(item).__name__)
+
+        async def commit(self) -> None:
+            calls.append("commit")
+
+    async def fake_create_artifact_version(
+        session: object,
+        requested_artifact: object,
+        payload: dict[str, Any],
+        change_note: str | None = None,
+    ) -> object:
+        calls.append("version")
+        artifact.current_version += 1
+        assert payload["title"] == "Roteiro novo"
+        assert change_note == "Script edited manually in UI"
+        return object()
+
+    async def fake_refresh_derivatives(
+        requested_project_id: object,
+        requested_script_id: object,
+    ) -> None:
+        calls.append("refresh_derivatives")
+        assert requested_project_id == project_id
+        assert requested_script_id == script_id
+
+    monkeypatch.setattr(script_area, "AsyncSessionLocal", lambda: FakeSession())
+    monkeypatch.setattr(script_area, "create_artifact_version", fake_create_artifact_version)
+    monkeypatch.setattr(
+        script_area,
+        "_refresh_script_derivatives_from_ui",
+        fake_refresh_derivatives,
+    )
+    monkeypatch.setattr(
+        script_area.ui,
+        "notify",
+        lambda message, color=None, **_kwargs: notifications.append((message, color)),
+    )
+    monkeypatch.setattr(script_area.ui.navigate, "reload", lambda: calls.append("reload"))
+
+    await script_area.save_script_from_ui(
+        project_id,
+        script_id,
+        " Roteiro novo ",
+        "Cena nova com conflito visual.",
+    )
+
+    assert script.title == "Roteiro novo"
+    assert script.content == "Cena nova com conflito visual."
+    assert calls == ["version", "ScriptVersion", "commit", "refresh_derivatives", "reload"]
+    assert notifications == [
+        ("Roteiro salvo. Cenas, planos e Biblioteca Visual atualizados.", "positive")
+    ]
 
 
 def test_friendly_ai_error_explains_timeout() -> None:

@@ -56,7 +56,10 @@ from app.generation.project_agent_visual import (  # noqa: E402,F401
     _visual_reference_views_for_target,
     _visual_target_kind_from_message,
 )
-from app.projects.versioning import mark_dependents_stale
+from app.projects.versioning import (
+    mark_dependents_stale,
+    resolve_stale_artifacts_after_regeneration,
+)
 from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
 from app.storyboards.service import (
@@ -140,6 +143,7 @@ async def _ensure_script_pipeline(
             script.id,
             progress,
         )
+        await resolve_stale_artifacts_after_regeneration(session, project_id)
         if visual_updated:
             return (
                 script,
@@ -515,14 +519,30 @@ async def handle_project_chat(
                 True,
                 True,
             )
+        visual_updated = await _refresh_visual_bible_after_script_regeneration(
+            session,
+            project_id,
+            revised.id,
+            progress,
+        )
+        await resolve_stale_artifacts_after_regeneration(session, project_id)
         if _requests_specific_script_scenes(message):
             return ProjectChatResult(
-                "Cena(s) revisada(s) e cenas/planos recriados para o roteiro atual.",
+                "Cena(s) revisada(s), cenas/planos recriados e artefatos antigos substituidos.",
+                action,
+                True,
+            )
+        if visual_updated:
+            return ProjectChatResult(
+                (
+                    "Roteiro revisado, cenas/planos recriados e Biblioteca Visual "
+                    "atualizada para o projeto."
+                ),
                 action,
                 True,
             )
         return ProjectChatResult(
-            "Roteiro revisado e cenas/planos recriados para o projeto.",
+            "Roteiro revisado, cenas/planos recriados e artefatos antigos substituidos.",
             action,
             True,
         )

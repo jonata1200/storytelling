@@ -100,10 +100,28 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
         assert args[2] == script_id
         return [SimpleNamespace(id=uuid4())]
 
+    async def fake_refresh_visual(*args: Any, **kwargs: Any) -> bool:
+        calls.append("refresh_visual")
+        return False
+
+    async def fake_resolve_stale(*args: Any, **kwargs: Any) -> int:
+        calls.append("resolve_stale")
+        return 3
+
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
     monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
     monkeypatch.setattr(project_agent, "regenerate_scenes_and_shots", fake_regenerate_scenes)
+    monkeypatch.setattr(
+        project_agent,
+        "_refresh_visual_bible_after_script_regeneration",
+        fake_refresh_visual,
+    )
+    monkeypatch.setattr(
+        project_agent,
+        "resolve_stale_artifacts_after_regeneration",
+        fake_resolve_stale,
+    )
 
     result = await handle_project_chat(
         cast(AsyncSession, object()),
@@ -114,11 +132,17 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
     )
 
     assert result == ProjectChatResult(
-        "Roteiro revisado e cenas/planos recriados para o projeto.",
+        "Roteiro revisado, cenas/planos recriados e artefatos antigos substituidos.",
         "revise_script",
         True,
     )
-    assert calls == ["ensure_script", "revise", "regenerate_scenes"]
+    assert calls == [
+        "ensure_script",
+        "revise",
+        "regenerate_scenes",
+        "refresh_visual",
+        "resolve_stale",
+    ]
 
 
 @pytest.mark.asyncio
@@ -151,10 +175,28 @@ async def test_project_chat_can_revise_specific_script_scenes(
         assert args[2] == script_id
         return [SimpleNamespace(id=uuid4())]
 
+    async def fake_refresh_visual(*args: Any, **kwargs: Any) -> bool:
+        calls.append("refresh_visual")
+        return False
+
+    async def fake_resolve_stale(*args: Any, **kwargs: Any) -> int:
+        calls.append("resolve_stale")
+        return 2
+
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
     monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
     monkeypatch.setattr(project_agent, "regenerate_scenes_and_shots", fake_regenerate_scenes)
+    monkeypatch.setattr(
+        project_agent,
+        "_refresh_visual_bible_after_script_regeneration",
+        fake_refresh_visual,
+    )
+    monkeypatch.setattr(
+        project_agent,
+        "resolve_stale_artifacts_after_regeneration",
+        fake_resolve_stale,
+    )
 
     result = await handle_project_chat(
         cast(AsyncSession, object()),
@@ -165,11 +207,17 @@ async def test_project_chat_can_revise_specific_script_scenes(
     )
 
     assert result == ProjectChatResult(
-        "Cena(s) revisada(s) e cenas/planos recriados para o roteiro atual.",
+        "Cena(s) revisada(s), cenas/planos recriados e artefatos antigos substituidos.",
         "revise_script",
         True,
     )
-    assert calls == ["ensure_script", "revise", "regenerate_scenes"]
+    assert calls == [
+        "ensure_script",
+        "revise",
+        "regenerate_scenes",
+        "refresh_visual",
+        "resolve_stale",
+    ]
 
 
 @pytest.mark.asyncio
@@ -284,6 +332,14 @@ async def test_forced_script_pipeline_refreshes_existing_visual_bible(
         assert requested_script_id == new_script_id
         return ([SimpleNamespace(id=uuid4())], [], [])
 
+    async def fake_resolve_stale(
+        session: AsyncSession,
+        requested_project_id: Any,
+    ) -> int:
+        calls.append("resolve")
+        assert requested_project_id == project_id
+        return 25
+
     async def collect_progress(message: str) -> None:
         progress_messages.append(message)
 
@@ -293,6 +349,11 @@ async def test_forced_script_pipeline_refreshes_existing_visual_bible(
     monkeypatch.setattr(project_agent, "generate_scenes_and_shots", fake_generate_scenes_and_shots)
     monkeypatch.setattr(project_agent, "_count", fake_count)
     monkeypatch.setattr(project_agent, "generate_visual_bible", fake_generate_visual_bible)
+    monkeypatch.setattr(
+        project_agent,
+        "resolve_stale_artifacts_after_regeneration",
+        fake_resolve_stale,
+    )
 
     script, message, changed = await project_agent._ensure_script_pipeline(
         cast(AsyncSession, object()),
@@ -308,7 +369,7 @@ async def test_forced_script_pipeline_refreshes_existing_visual_bible(
         "Roteiro completo gerado novamente, cenas/planos recriados "
         "e biblioteca visual atualizada."
     )
-    assert calls == ["stale", "script", "scenes", "visual"]
+    assert calls == ["stale", "script", "scenes", "visual", "resolve"]
     assert any("Biblioteca visual atualizada" in item for item in progress_messages)
 
 
