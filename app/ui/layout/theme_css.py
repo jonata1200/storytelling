@@ -148,9 +148,27 @@ THEME_HEAD_HTML = r"""
             height:100%!important;
             min-height:0!important;
           }
-          .script-editor-textarea textarea {
+          .storyboard-prompt-textarea,
+          .storyboard-prompt-textarea .q-field__control,
+          .storyboard-prompt-textarea .q-field__native,
+          .storyboard-prompt-textarea textarea {
+            height:100%!important;
+            min-height:0!important;
+          }
+          .script-editor-textarea textarea,
+          .storyboard-prompt-textarea textarea {
             resize:none!important;
             overflow-y:auto!important;
+          }
+          .storyboard-frame-media,
+          .storyboard-frame-media .q-img,
+          .storyboard-frame-media .q-img__container,
+          .storyboard-frame-media .q-img__image {
+            width:100%!important;
+            height:100%!important;
+          }
+          .storyboard-frame-media .q-img__image {
+            object-fit:cover!important;
           }
           body.studio-body:has(.workspace-layout) {
             overflow:hidden;

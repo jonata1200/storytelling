@@ -294,28 +294,33 @@ def render_storyboard_area(
                     with (
                         ui.dialog().props(BLOCKING_DIALOG_PROPS) as prompt_detail_dialog,
                         ui.card().classes(
-                            "entity-card rounded-2xl p-6 w-[min(820px,94vw)] max-h-[86vh]"
+                            "entity-card rounded-2xl p-6 w-[min(820px,94vw)] "
+                            "h-[min(760px,86vh)] flex flex-col overflow-hidden"
                         ),
                     ):
-                        ui.label(
-                            "Cena "
-                            f"{int(preview.get('scene_number') or 0):02d} · "
-                            f"Plano {int(preview.get('shot_number') or 0):02d}"
-                        ).classes("brand-type text-2xl font-bold")
-                        prompt_origin_label = (
-                            "Prompt customizado"
-                            if bool(preview.get("custom_prompt"))
-                            else "Prompt gerado automaticamente"
-                        )
-                        ui.label(prompt_origin_label).classes("text-sm text-[#8d938e]")
-                        prompt_input = (
-                            ui.textarea(
-                                "Prompt do storyboard",
-                                value=str(preview.get("prompt") or ""),
+                        with ui.column().classes("w-full gap-1 shrink-0"):
+                            ui.label(
+                                "Cena "
+                                f"{int(preview.get('scene_number') or 0):02d} · "
+                                f"Plano {int(preview.get('shot_number') or 0):02d}"
+                            ).classes("brand-type text-2xl font-bold")
+                            prompt_origin_label = (
+                                "Prompt customizado"
+                                if bool(preview.get("custom_prompt"))
+                                else "Prompt gerado automaticamente"
                             )
-                            .props("outlined autogrow")
-                            .classes("w-full")
-                        )
+                            ui.label(prompt_origin_label).classes("text-sm text-[#8d938e]")
+                        with ui.column().classes("w-full flex-1 min-h-0 mt-3"):
+                            prompt_input = (
+                                ui.textarea(
+                                    "Prompt do storyboard",
+                                    value=str(preview.get("prompt") or ""),
+                                )
+                                .props("outlined")
+                                .classes(
+                                    "storyboard-prompt-textarea w-full flex-1 min-h-0"
+                                )
+                            )
 
                         async def save_single_prompt(
                             shot_id: UUID = shot_id,
@@ -334,7 +339,9 @@ def render_storyboard_area(
                                 new_prompt,
                             )
 
-                        with ui.row().classes("w-full justify-end gap-2 mt-3"):
+                        with ui.row().classes(
+                            "w-full justify-end gap-2 mt-4 pt-3 border-t border-[#343934] shrink-0"
+                        ):
                             ui.button("Cancelar", on_click=prompt_detail_dialog.close).props(
                                 "flat no-caps"
                             )
@@ -364,51 +371,53 @@ def render_storyboard_area(
                         )
                         with ui.row().classes("w-full items-center justify-between gap-2 mt-2"):
                             if script_id is not None and not approved:
-                                ui.button(
+                                approve_button = ui.button(
                                     "Aprovar prompt",
                                     icon="check_circle",
-                                    on_click=(
-                                        lambda shot_id=shot_id: (
-                                            _approve_storyboard_prompt_from_ui(
-                                                project_id,
-                                                script_id,
-                                                shot_id,
-                                            )
-                                        )
-                                    ),
                                 ).props("unelevated dense no-caps").classes(
                                     "acid-bg rounded-xl"
+                                )
+                                approve_button.on(
+                                    "click.stop",
+                                    lambda shot_id=shot_id: _approve_storyboard_prompt_from_ui(
+                                        project_id,
+                                        script_id,
+                                        shot_id,
+                                    ),
                                 )
                             elif (
                                 script_id is not None
                                 and approved
                                 and not bool(preview.get("generated"))
                             ):
-                                ui.button(
+                                generate_button = ui.button(
                                     "Gerar quadro",
                                     icon="auto_awesome",
-                                    on_click=lambda shot_id=shot_id: _generate_storyboards_from_ui(
+                                ).props("unelevated dense no-caps").classes(
+                                    "acid-bg rounded-xl"
+                                )
+                                generate_button.on(
+                                    "click.stop",
+                                    lambda shot_id=shot_id: _generate_storyboards_from_ui(
                                         project_id,
                                         script_id,
                                         shot_id=shot_id,
                                         approved_only=True,
                                         loading_dialog=generation_dialog,
                                     ),
-                                ).props("unelevated dense no-caps").classes(
-                                    "acid-bg rounded-xl"
                                 )
     with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
         for frame in sorted(summary["frames"], key=lambda f: f.frame_number):
             image_url = _storyboard_frame_image_url(summary, frame)
             with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
                 with ui.element("div").classes(
-                    "visual-placeholder aspect-[9/16] max-h-[72vh] p-0 "
-                    "flex items-center justify-center bg-black"
+                    "storyboard-frame-media visual-placeholder w-full aspect-[9/16] p-0 "
+                    "relative overflow-hidden bg-black"
                 ):
                     if image_url:
                         ui.image(image_url).classes(
-                            "w-full h-full object-contain bg-black"
-                        ).props("fit=contain")
+                            "storyboard-frame-image absolute inset-0 w-full h-full object-cover"
+                        ).props("fit=cover")
                     else:
                         ui.icon("photo_camera").classes("text-5xl text-[#bdc77b]")
                 with ui.column().classes("p-4 gap-1"):
