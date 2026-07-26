@@ -5,17 +5,23 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.storyboards import prompt_approvals
 from app.storyboards import service as storyboard_service
 from app.storyboards.models import StoryboardFrame
+from app.storyboards.prompts import (
+    _store_storyboard_prompt_approval,
+    _store_storyboard_prompt_override,
+    _storyboard_effective_prompt,
+    _storyboard_prompt,
+    _storyboard_prompt_is_approved,
+)
 from app.storyboards.service import (
     _animatic_fingerprint,
     _local_storage_file_exists,
-    _store_storyboard_prompt_approval,
-    _storyboard_prompt,
-    _storyboard_prompt_is_approved,
     approve_storyboard_prompt,
     generate_storyboard_frames,
     storyboard_coverage_errors,
+    update_storyboard_prompt,
 )
 from app.storyboards.timeline import build_visual_timeline_items, build_word_alignment
 from app.storyboards.workflow import _selected_storyboard_shots
@@ -136,6 +142,24 @@ def test_storyboard_prompt_approval_requires_matching_hash() -> None:
     assert not _storyboard_prompt_is_approved(metadata, script_id, shot_id, "hash-b")
 
 
+def test_storyboard_prompt_override_invalidates_previous_approval() -> None:
+    script_id = uuid4()
+    shot_id = uuid4()
+    metadata = _store_storyboard_prompt_approval({}, script_id, shot_id, "hash-a")
+
+    metadata = _store_storyboard_prompt_override(
+        metadata,
+        script_id,
+        shot_id,
+        "Prompt editado para este plano.",
+    )
+
+    assert _storyboard_effective_prompt(metadata, script_id, shot_id, "Prompt original") == (
+        "Prompt editado para este plano."
+    )
+    assert not _storyboard_prompt_is_approved(metadata, script_id, shot_id, "hash-a")
+
+
 @pytest.mark.asyncio
 async def test_approve_storyboard_prompt_stores_single_prompt(
     monkeypatch: pytest.MonkeyPatch,
@@ -168,8 +192,8 @@ async def test_approve_storyboard_prompt_stores_single_prompt(
 
     settings = FakeSettings()
     session = FakeSession()
-    monkeypatch.setattr(storyboard_service, "list_storyboard_prompt_previews", fake_previews)
-    monkeypatch.setattr(storyboard_service, "get_or_create_production_settings", fake_settings)
+    monkeypatch.setattr(prompt_approvals, "list_storyboard_prompt_previews", fake_previews)
+    monkeypatch.setattr(prompt_approvals, "get_or_create_production_settings", fake_settings)
 
     approved = await approve_storyboard_prompt(
         cast(AsyncSession, session),
@@ -181,6 +205,50 @@ async def test_approve_storyboard_prompt_stores_single_prompt(
     assert approved is True
     assert session.committed is True
     assert _storyboard_prompt_is_approved(settings.metadata_json, script_id, shot_id, "hash-a")
+
+
+@pytest.mark.asyncio
+async def test_update_storyboard_prompt_saves_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    shot_id = uuid4()
+
+    class FakeSettings:
+        metadata_json: dict[str, Any] = {}
+
+    class FakeSession:
+        committed = False
+
+        async def commit(self) -> None:
+            self.committed = True
+
+    async def fake_previews(*args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        assert kwargs["shot_id"] == shot_id
+        return [{"shot_id": shot_id}]
+
+    async def fake_settings(*args: Any, **kwargs: Any) -> FakeSettings:
+        return settings
+
+    settings = FakeSettings()
+    session = FakeSession()
+    monkeypatch.setattr(prompt_approvals, "list_storyboard_prompt_previews", fake_previews)
+    monkeypatch.setattr(prompt_approvals, "get_or_create_production_settings", fake_settings)
+
+    updated = await update_storyboard_prompt(
+        cast(AsyncSession, session),
+        project_id,
+        script_id,
+        shot_id,
+        "  Prompt editado para gerar este quadro.  ",
+    )
+
+    assert updated is True
+    assert session.committed is True
+    assert _storyboard_effective_prompt(settings.metadata_json, script_id, shot_id, "Original") == (
+        "Prompt editado para gerar este quadro."
+    )
 
 
 @pytest.mark.asyncio

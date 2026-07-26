@@ -290,7 +290,62 @@ def render_storyboard_area(
             with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
                 for preview in visible_prompt_previews:
                     approved = bool(preview.get("approved"))
-                    with ui.element("div").classes("entity-card rounded-2xl p-4"):
+                    shot_id = preview["shot_id"]
+                    with (
+                        ui.dialog().props(BLOCKING_DIALOG_PROPS) as prompt_detail_dialog,
+                        ui.card().classes(
+                            "entity-card rounded-2xl p-6 w-[min(820px,94vw)] max-h-[86vh]"
+                        ),
+                    ):
+                        ui.label(
+                            "Cena "
+                            f"{int(preview.get('scene_number') or 0):02d} · "
+                            f"Plano {int(preview.get('shot_number') or 0):02d}"
+                        ).classes("brand-type text-2xl font-bold")
+                        prompt_origin_label = (
+                            "Prompt customizado"
+                            if bool(preview.get("custom_prompt"))
+                            else "Prompt gerado automaticamente"
+                        )
+                        ui.label(prompt_origin_label).classes("text-sm text-[#8d938e]")
+                        prompt_input = (
+                            ui.textarea(
+                                "Prompt do storyboard",
+                                value=str(preview.get("prompt") or ""),
+                            )
+                            .props("outlined autogrow")
+                            .classes("w-full")
+                        )
+
+                        async def save_single_prompt(
+                            shot_id: UUID = shot_id,
+                            prompt_input: Any = prompt_input,
+                            dialog: Any = prompt_detail_dialog,
+                        ) -> None:
+                            new_prompt = str(prompt_input.value or "").strip()
+                            if not new_prompt:
+                                ui.notify("Informe um prompt antes de salvar.", color="warning")
+                                return
+                            dialog.close()
+                            await _save_storyboard_prompt_from_ui(
+                                project_id,
+                                script_id,
+                                shot_id,
+                                new_prompt,
+                            )
+
+                        with ui.row().classes("w-full justify-end gap-2 mt-3"):
+                            ui.button("Cancelar", on_click=prompt_detail_dialog.close).props(
+                                "flat no-caps"
+                            )
+                            ui.button(
+                                "Salvar",
+                                icon="save",
+                                on_click=save_single_prompt,
+                            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                    with ui.element("div").classes(
+                        "entity-card rounded-2xl p-4 cursor-pointer"
+                    ).on("click", prompt_detail_dialog.open):
                         with ui.row().classes("w-full items-start justify-between gap-3"):
                             with ui.column().classes("gap-0 min-w-0"):
                                 ui.label(
@@ -312,12 +367,14 @@ def render_storyboard_area(
                                 ui.button(
                                     "Aprovar prompt",
                                     icon="check_circle",
-                                    on_click=lambda shot_id=preview[
-                                        "shot_id"
-                                    ]: _approve_storyboard_prompt_from_ui(
-                                        project_id,
-                                        script_id,
-                                        shot_id,
+                                    on_click=(
+                                        lambda shot_id=shot_id: (
+                                            _approve_storyboard_prompt_from_ui(
+                                                project_id,
+                                                script_id,
+                                                shot_id,
+                                            )
+                                        )
                                     ),
                                 ).props("unelevated dense no-caps").classes(
                                     "acid-bg rounded-xl"
@@ -330,9 +387,7 @@ def render_storyboard_area(
                                 ui.button(
                                     "Gerar quadro",
                                     icon="auto_awesome",
-                                    on_click=lambda shot_id=preview[
-                                        "shot_id"
-                                    ]: _generate_storyboards_from_ui(
+                                    on_click=lambda shot_id=shot_id: _generate_storyboards_from_ui(
                                         project_id,
                                         script_id,
                                         shot_id=shot_id,
@@ -342,12 +397,6 @@ def render_storyboard_area(
                                 ).props("unelevated dense no-caps").classes(
                                     "acid-bg rounded-xl"
                                 )
-                            if prompt_dialog is not None:
-                                ui.button(
-                                    "Ver prompt completo",
-                                    icon="visibility",
-                                    on_click=prompt_dialog.open,
-                                ).props("flat dense no-caps").classes("text-[#d8dbd8]")
     with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
         for frame in sorted(summary["frames"], key=lambda f: f.frame_number):
             image_url = _storyboard_frame_image_url(summary, frame)
