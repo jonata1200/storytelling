@@ -442,6 +442,24 @@ def apply_body_style() -> None:
             color:inherit;
             text-shadow:none!important;
           }
+          .q-dialog__inner > .q-card,
+          .q-dialog__inner > .entity-card {
+            background:#0c1722!important;
+            background-image:none!important;
+            opacity:1!important;
+            backdrop-filter:none!important;
+          }
+          .q-dialog__inner > .entity-card::before {
+            display:none!important;
+          }
+          body:not(.body--dark) .q-dialog__inner > .q-card,
+          body:not(.body--dark) .q-dialog__inner > .entity-card {
+            background:#ffffff!important;
+            background-image:none!important;
+            color:#07121d!important;
+            opacity:1!important;
+            backdrop-filter:none!important;
+          }
         </style>
         """
     )

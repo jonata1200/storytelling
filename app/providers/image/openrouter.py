@@ -14,6 +14,9 @@ from app.providers.image.types import ImageEditRequest, ImageGenerationRequest, 
 from app.providers.media_utils import extension_from_media_type, local_uri_to_data_url
 
 SOURCEFUL_RESOLUTIONS = {"512", "1K", "2K", "4K"}
+DEFAULT_IMAGE_TIMEOUT_SECONDS = 360
+MIN_IMAGE_TIMEOUT_SECONDS = 30
+MAX_IMAGE_TIMEOUT_SECONDS = 900
 
 
 class OpenRouterImageProvider:
@@ -213,9 +216,21 @@ class OpenRouterImageProvider:
             return "2K"
         return "4K"
 
+    @staticmethod
+    def _request_timeout_seconds(settings: Any) -> int:
+        try:
+            timeout = int(
+                getattr(settings, "openrouter_image_timeout_seconds", None)
+                or DEFAULT_IMAGE_TIMEOUT_SECONDS
+            )
+        except (TypeError, ValueError):
+            timeout = DEFAULT_IMAGE_TIMEOUT_SECONDS
+        return max(MIN_IMAGE_TIMEOUT_SECONDS, min(MAX_IMAGE_TIMEOUT_SECONDS, timeout))
+
     def _post_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         settings = get_settings()
         url = f"{settings.openrouter_base_url.rstrip('/')}{path}"
+        timeout_seconds = self._request_timeout_seconds(settings)
         request = urllib.request.Request(
             url,
             data=json.dumps(body).encode("utf-8"),
@@ -228,7 +243,7 @@ class OpenRouterImageProvider:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=180) as response:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
                 parsed = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -236,7 +251,10 @@ class OpenRouterImageProvider:
         except urllib.error.URLError as exc:
             raise RuntimeError(f"OpenRouter Images network error: {exc.reason}") from exc
         except TimeoutError as exc:
-            raise RuntimeError("OpenRouter Images timeout ao aguardar resposta") from exc
+            raise RuntimeError(
+                "OpenRouter Images timeout ao aguardar resposta "
+                f"apos {timeout_seconds}s"
+            ) from exc
         except OSError as exc:
             raise RuntimeError(f"OpenRouter Images connection error: {exc}") from exc
         except json.JSONDecodeError as exc:

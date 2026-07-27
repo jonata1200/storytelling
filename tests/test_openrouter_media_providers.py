@@ -381,6 +381,59 @@ def test_openrouter_image_provider_wraps_network_errors(
         provider._post_json("/images", {"model": "model", "prompt": "prompt"})
 
 
+def test_openrouter_image_provider_uses_configured_timeout(monkeypatch: Any) -> None:
+    provider = OpenRouterImageProvider()
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(
+            openrouter_api_key="sk-or-v1-test",
+            openrouter_image_timeout_seconds=420,
+        ),
+    )
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"data":[]}'
+
+    def fake_urlopen(*args: object, **kwargs: object) -> FakeResponse:
+        captured["timeout"] = kwargs.get("timeout")
+        return FakeResponse()
+
+    monkeypatch.setattr("app.providers.image.openrouter.urllib.request.urlopen", fake_urlopen)
+
+    provider._post_json("/images", {"model": "model", "prompt": "prompt"})
+
+    assert captured["timeout"] == 420
+
+
+def test_openrouter_image_provider_reports_configured_timeout(monkeypatch: Any) -> None:
+    provider = OpenRouterImageProvider()
+
+    monkeypatch.setattr(
+        "app.providers.image.openrouter.get_settings",
+        lambda: Settings(
+            openrouter_api_key="sk-or-v1-test",
+            openrouter_image_timeout_seconds=420,
+        ),
+    )
+
+    def raise_timeout(*args: object, **kwargs: object) -> None:
+        raise TimeoutError()
+
+    monkeypatch.setattr("app.providers.image.openrouter.urllib.request.urlopen", raise_timeout)
+
+    with pytest.raises(RuntimeError, match="apos 420s"):
+        provider._post_json("/images", {"model": "model", "prompt": "prompt"})
+
+
 def test_openrouter_image_provider_rejects_invalid_base64(monkeypatch: Any, tmp_path: Path) -> None:
     provider = OpenRouterImageProvider()
     monkeypatch.setattr(

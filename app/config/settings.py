@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     openrouter_default_model: str = "deepseek/deepseek-v4-flash"
     openrouter_image_model: str = "sourceful/riverflow-v2-fast"
     openrouter_video_model: str = "bytedance/seedance-2.0-fast"
+    openrouter_image_timeout_seconds: int = 360
     storyboard_image_concurrency: int = 3
     user_display_name: str = "Jonata"
     user_email: str = ""
