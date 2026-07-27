@@ -45,13 +45,16 @@ def register_settings_page(
         home_sidebar("settings")
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
             with ui.column().classes("w-full max-w-5xl mx-auto px-6 py-8 gap-7"):
-                with ui.row().classes("w-full items-center justify-between"):
-                    with ui.column().classes("gap-1"):
-                        ui.label("Configurações").classes("brand-type text-4xl font-bold")
-                        ui.label("Gerencie seu perfil e os modelos usados pelo estúdio.").classes(
-                            "text-[#8f9590]"
+                with ui.row().classes("w-full items-start justify-between gap-3 flex-nowrap"):
+                    with ui.column().classes("gap-1 min-w-0 flex-1"):
+                        ui.label("Configurações").classes(
+                            "brand-type text-2xl md:text-4xl font-bold"
                         )
-                    theme_toggle()
+                        ui.label("Gerencie seu perfil e os modelos usados pelo estúdio.").classes(
+                            "text-xs md:text-base text-[#8f9590]"
+                        )
+                    with ui.element("div").classes("shrink-0 ml-auto"):
+                        theme_toggle()
 
                 with (
                     ui.tabs()

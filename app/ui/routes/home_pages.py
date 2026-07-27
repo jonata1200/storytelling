@@ -131,19 +131,25 @@ def register_home_pages(
         home_sidebar("projects")
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
             with ui.column().classes("w-full max-w-6xl mx-auto px-6 py-8 gap-7"):
-                with ui.row().classes("w-full items-center justify-between"):
-                    with ui.column().classes("gap-1"):
-                        ui.label("Projetos").classes("brand-type text-4xl font-bold")
-                        ui.label("Acompanhe e continue suas produções de vídeo.").classes(
-                            "text-[#8f9590]"
-                        )
-                    with ui.row().classes("items-center gap-2"):
-                        theme_toggle()
+                with ui.column().classes("w-full gap-3"):
+                    with ui.row().classes("w-full items-start justify-between gap-3 flex-nowrap"):
+                        with ui.column().classes("gap-1 min-w-0 flex-1"):
+                            ui.label("Projetos").classes(
+                                "brand-type text-2xl md:text-4xl font-bold"
+                            )
+                            ui.label("Acompanhe e continue suas produções de vídeo.").classes(
+                                "text-xs md:text-base text-[#8f9590]"
+                            )
+                        with ui.element("div").classes("shrink-0 ml-auto"):
+                            theme_toggle()
+                    with ui.row().classes("w-full justify-center md:justify-start"):
                         ui.button(
                             "Novo projeto",
                             icon="add",
                             on_click=lambda: ui.navigate.to("/dashboard"),
-                        ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                        ).props("unelevated no-caps").classes(
+                            "acid-bg rounded-xl text-base md:text-sm px-9 md:px-4 py-3 md:py-0 min-w-64 md:min-w-0"
+                        )
                 if not projects:
                     with ui.element("div").classes(
                         "w-full border border-dashed border-[#363b36] rounded-2xl min-h-64 flex flex-col items-center justify-center text-[#969c97]"
@@ -172,17 +178,18 @@ def register_home_pages(
         saved_ideas = load_saved_ideas()
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
             with ui.column().classes("w-full max-w-6xl mx-auto px-6 py-8 gap-7"):
-                with ui.row().classes("w-full items-center justify-between"):
-                    with ui.column().classes("gap-1"):
-                        with ui.row().classes("items-center gap-3"):
-                            ui.icon("lightbulb").classes("text-4xl acid")
+                with ui.row().classes("w-full items-start justify-between gap-3 flex-nowrap"):
+                    with ui.column().classes("gap-1 min-w-0 flex-1"):
+                        with ui.row().classes("items-center gap-2 md:gap-3 flex-nowrap"):
+                            ui.icon("lightbulb").classes("text-3xl md:text-4xl acid shrink-0")
                             ui.label("Laboratório de Ideias").classes(
-                                "brand-type text-4xl font-bold"
+                                "brand-type text-xl md:text-4xl font-bold leading-tight"
                             )
                         ui.label(
                             "Explore histórias livremente, sem criar um projeto de vídeo."
-                        ).classes("text-[#8f9590]")
-                    theme_toggle()
+                        ).classes("text-xs md:text-base text-[#8f9590]")
+                    with ui.element("div").classes("shrink-0 ml-auto"):
+                        theme_toggle()
 
                 with ui.element("div").classes("hidden"):
                     _ = (
