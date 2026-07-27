@@ -185,6 +185,8 @@ async def list_story_ideas(session: AsyncSession, project_id: UUID) -> list[Stor
     if project is None:
         return []
     result = await session.execute(
-        select(StoryIdea).where(StoryIdea.project_id == project_id).order_by(StoryIdea.created_at)
+        select(StoryIdea)
+        .where(StoryIdea.project_id == project_id)
+        .order_by(StoryIdea.created_at.desc())
     )
     return list(result.scalars())

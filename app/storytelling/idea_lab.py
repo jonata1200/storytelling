@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -195,7 +196,8 @@ def replace_generated_ideas(
     ideas: list[dict[str, Any]],
     path: Path = GENERATED_IDEAS_PATH,
 ) -> list[dict[str, Any]]:
-    normalized = [_normalize_idea(item) for item in ideas]
+    created_at = datetime.now(UTC).isoformat()
+    normalized = [_normalize_idea(item, created_at=created_at) for item in ideas]
     _write_ideas(normalized, path)
     return normalized
 
@@ -233,7 +235,7 @@ def _load_ideas(path: Path, label: str) -> list[dict[str, Any]]:
             ideas.append(_normalize_idea(item))
         except GenerationOutputError:
             continue
-    return ideas
+    return sorted(ideas, key=_idea_created_at_sort_key, reverse=True)
 
 
 def save_idea(idea: dict[str, Any], path: Path = SAVED_IDEAS_PATH) -> dict[str, Any]:
@@ -254,12 +256,21 @@ def delete_saved_idea(idea_id: str, path: Path = SAVED_IDEAS_PATH) -> None:
     _write_ideas(ideas, path)
 
 
-def _normalize_idea(idea: dict[str, Any], default_duration_minutes: float = 5.0) -> dict[str, Any]:
+def _normalize_idea(
+    idea: dict[str, Any],
+    default_duration_minutes: float = 5.0,
+    created_at: str | None = None,
+) -> dict[str, Any]:
     normalized = normalize_story_idea_payload(
         idea, default_duration_minutes=default_duration_minutes
     )
     normalized.setdefault("id", uuid.uuid4().hex)
+    normalized.setdefault("created_at", created_at or datetime.now(UTC).isoformat())
     return normalized
+
+
+def _idea_created_at_sort_key(idea: dict[str, Any]) -> str:
+    return str(idea.get("created_at") or "")
 
 
 def _idea_dedupe_key(idea: dict[str, Any]) -> tuple[str, str, str, str]:

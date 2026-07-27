@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 from typing import NoReturn
 
@@ -431,6 +432,45 @@ def test_generated_ideas_can_be_persisted_and_discarded(tmp_path: Path) -> None:
     delete_generated_idea("idea-pending-1", path)
 
     assert load_generated_ideas(path) == []
+
+
+def test_idea_lab_loads_ideas_newest_first(tmp_path: Path) -> None:
+    path = tmp_path / "saved-ideas.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "older",
+                    "title": "Ideia antiga",
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                },
+                {
+                    "id": "newer",
+                    "title": "Ideia nova",
+                    "created_at": "2026-01-02T00:00:00+00:00",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert [idea["id"] for idea in load_saved_ideas(path)] == ["newer", "older"]
+
+
+def test_replace_generated_ideas_preserves_batch_order_with_shared_created_at(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "generated-ideas.json"
+
+    replace_generated_ideas(
+        [
+            {"id": "first", "title": "Primeira ideia"},
+            {"id": "second", "title": "Segunda ideia"},
+        ],
+        path,
+    )
+
+    assert [idea["id"] for idea in load_generated_ideas(path)] == ["first", "second"]
 
 
 def test_all_ideas_can_be_deleted_at_once(tmp_path: Path) -> None:
