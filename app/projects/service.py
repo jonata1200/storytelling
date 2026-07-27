@@ -11,6 +11,7 @@ from app.projects.models import Artifact, ArtifactVersion, Project, ProjectVersi
 from app.projects.repository import ProjectRepository
 from app.projects.schemas import ArtifactCreate, ProjectCreate
 from app.projects.versioning import create_artifact_version, mark_dependents_stale
+from app.storage.service import delete_local_storage_files
 from app.storytelling.models import Scene, Script, Shot, StoryIdea
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import assert_project_transition
@@ -290,8 +291,19 @@ async def hard_delete_project(session: AsyncSession, project_id: UUID) -> bool:
     if not project_count:
         await session.rollback()
         return False
+    asset_rows = await session.execute(
+        text(
+            """
+            SELECT storage_uri
+            FROM assets
+            WHERE project_id IN (SELECT id FROM tmp_target_projects)
+            """
+        )
+    )
+    asset_storage_uris = [str(row[0] or "") for row in asset_rows.all()]
     for statement in PROJECT_GRAPH_DELETE_STATEMENTS:
         await session.execute(text(statement.replace("target_projects", "tmp_target_projects")))
+    delete_local_storage_files(asset_storage_uris)
     await session.commit()
     return True
 

@@ -93,8 +93,9 @@ class _FakeHardDeleteSession:
             return self.project_count
         return self.scalar_calls
 
-    async def execute(self, statement: Any, params: Any | None = None) -> None:
+    async def execute(self, statement: Any, params: Any | None = None) -> Any:
         self.executed.append(str(statement))
+        return SimpleNamespace(all=lambda: [])
 
     async def commit(self) -> None:
         self.committed = True
@@ -160,8 +161,10 @@ class _FakeStoryIdeaDeleteSession:
             return self.story_idea
         return self.script_count
 
-    async def execute(self, statement: Any, params: Any | None = None) -> None:
-        self.executed.append(str(statement))
+    async def execute(self, statement: Any, params: Any | None = None) -> Any:
+        sql = str(statement)
+        self.executed.append(sql)
+        return SimpleNamespace(all=lambda: [])
 
     async def commit(self) -> None:
         self.committed = True

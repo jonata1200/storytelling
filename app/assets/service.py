@@ -3,9 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.assets.models import Asset, AssetVersion
 from app.assets.schemas import AssetCreate
 from app.projects.repository import ProjectRepository
+from app.storage.service import validate_asset_uri_size
 
 
 async def create_asset(session: AsyncSession, data: AssetCreate) -> Asset | None:
+    validate_asset_uri_size(data.storage_uri)
     project = await ProjectRepository(session).get_project(data.project_id)
     if project is None:
         return None

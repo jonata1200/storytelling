@@ -28,6 +28,8 @@ class Settings(BaseSettings):
 
     storage_backend: str = "local"
     local_storage_path: Path = Path("./storage")
+    max_upload_bytes: int = 25 * 1024 * 1024
+    max_generated_asset_bytes: int = 750 * 1024 * 1024
     allow_user_registration: bool = False
 
     openrouter_api_key: str | None = Field(default=None, repr=False)

@@ -15,20 +15,39 @@ Controlar crescimento do storage local, reduzir arquivos orfaos e tornar assets 
 
 ## Checklist de acoes
 
-- [ ] Mapear todos os caminhos onde arquivos sao escritos em `storage`.
-- [ ] Mapear todos os caminhos onde arquivos sao apagados.
-- [ ] Criar servico para calcular uso de storage por projeto.
-- [ ] Criar endpoint ou tela de resumo de uso.
-- [ ] Definir limite maximo de tamanho para avatar/upload.
-- [ ] Definir limite maximo de tamanho para assets gerados.
-- [ ] Criar rotina de limpeza de arquivos orfaos com modo dry-run.
-- [ ] Criar rotina de limpeza efetiva com validacao de path dentro do storage.
-- [ ] Integrar hard delete de projeto com remocao de arquivos associados.
+- [x] Mapear todos os caminhos onde arquivos sao escritos em `storage`.
+- [x] Mapear todos os caminhos onde arquivos sao apagados.
+- [x] Criar servico para calcular uso de storage por projeto.
+- [x] Criar endpoint ou tela de resumo de uso.
+- [x] Definir limite maximo de tamanho para avatar/upload.
+- [x] Definir limite maximo de tamanho para assets gerados.
+- [x] Criar rotina de limpeza de arquivos orfaos com modo dry-run.
+- [x] Criar rotina de limpeza efetiva com validacao de path dentro do storage.
+- [x] Integrar hard delete de projeto com remocao de arquivos associados.
 - [ ] Integrar delete de storyboard/video/export com remocao de arquivos associados.
-- [ ] Criar testes para arquivos fora do storage.
-- [ ] Criar testes para arquivos orfaos.
-- [ ] Criar testes para limite de tamanho.
-- [ ] Revisar uso direto de `/storage` na UI.
+- [x] Criar testes para arquivos fora do storage.
+- [x] Criar testes para arquivos orfaos.
+- [x] Criar testes para limite de tamanho.
+- [x] Revisar uso direto de `/storage` na UI.
+
+## Implementado
+
+- `app/storage/service.py` centraliza resolucao segura de paths, inventario de arquivos locais,
+  relatorio de uso por projeto, listagem de orfaos e limpeza com `dry_run`.
+- `app/storage/router.py` expoe endpoints privados:
+  - `GET /api/v1/storage/usage`
+  - `GET /api/v1/storage/projects/{project_id}/usage`
+  - `GET /api/v1/storage/orphans`
+  - `POST /api/v1/storage/orphans/cleanup?dry_run=true`
+- `MAX_UPLOAD_BYTES` e `MAX_GENERATED_ASSET_BYTES` limitam avatar/uploads e assets locais
+  registrados.
+- `hard_delete_project` coleta `storage_uri` antes de remover o grafo do banco e apaga apenas
+  arquivos resolvidos dentro do storage local.
+
+## Pendencias
+
+- Separar deletes especificos de video/export quando houver rotas dedicadas para esses recursos.
+- Transformar a auditoria de storage em tela operacional, se fizer sentido para o uso diario.
 
 ## Entregaveis
 

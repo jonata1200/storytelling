@@ -7,6 +7,7 @@ from app.config.preferences import save_preferences
 from app.config.settings import get_settings
 from app.projects.models import Project
 from app.providers.media_utils import local_uri_to_data_url
+from app.storage.service import validate_file_size
 from app.ui.shared.page_config import BRAND_MARK_URL, WORKSPACE_TABS
 from app.ui.workspace.rules import workspace_section_access
 
@@ -56,10 +57,14 @@ def avatar_data_uri(path_value: str) -> str | None:
 
 def save_avatar_file(filename: str, content: bytes) -> Path:
     suffix = Path(filename).suffix.lower()
-    target_dir = get_settings().local_storage_path / "profile"
+    settings = get_settings()
+    if len(content) > settings.max_upload_bytes:
+        raise ValueError(f"Avatar excede o limite de {settings.max_upload_bytes} bytes")
+    target_dir = settings.local_storage_path / "profile"
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"avatar{suffix}"
     target.write_bytes(content)
+    validate_file_size(target, settings.max_upload_bytes, "Avatar")
     return target
 
 

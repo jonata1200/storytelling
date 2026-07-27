@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.costs.service import CostBudgetExceededError
 from app.database.session import get_session
 from app.video_generation.schemas import (
     ClipReviewCreate,
@@ -55,6 +56,8 @@ async def post_generate_video_clips(
             payload.provider,
             payload.model,
         )
+    except CostBudgetExceededError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if result is None:

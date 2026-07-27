@@ -20,7 +20,12 @@ from app.core.enums import (
     ProjectStatus,
 )
 from app.costs.models import CostEntry
-from app.costs.service import calculate_total_cost, estimate_batch_cost
+from app.costs.service import (
+    assert_project_budget_allows,
+    calculate_total_cost,
+    estimate_batch_cost,
+    estimate_operation_cost,
+)
 from app.production.service import get_or_create_production_settings, resolve_video_model
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
@@ -206,6 +211,19 @@ async def generate_video_clips(
     )
     production_settings = await get_or_create_production_settings(session, project_id)
     production_metadata = production_settings.metadata_json or {}
+    billable_seconds = sum(frame.duration_seconds for frame in frames) * variants_per_frame
+    video_cost_estimate = estimate_operation_cost(
+        "image_to_video",
+        Decimal(billable_seconds),
+        provider=resolved_provider,
+        model=resolved_model,
+    )
+    await assert_project_budget_allows(
+        session,
+        project_id,
+        video_cost_estimate.estimated,
+        stage="video",
+    )
     shot_context = await _shot_context_for_frames(session, frames)
     video_dir = get_settings().local_storage_path / video_dir_name / str(project_id)
     jobs: list[GenerationJob] = []

@@ -141,6 +141,38 @@ pelo fluxo de login. O endpoint `/api/v1/health/live` permanece publico; o
 readiness e as demais rotas exigem autenticacao quando a aplicacao nao esta em
 ambiente local/test.
 
+## Storage e custos
+
+O storage local e auditavel por API. Os limites padrao podem ser ajustados no
+`.env`:
+
+```env
+MAX_UPLOAD_BYTES=26214400
+MAX_GENERATED_ASSET_BYTES=786432000
+```
+
+Endpoints operacionais:
+
+```text
+GET  /api/v1/storage/usage
+GET  /api/v1/storage/projects/{project_id}/usage
+GET  /api/v1/storage/orphans
+POST /api/v1/storage/orphans/cleanup?dry_run=true
+```
+
+Custos e orcamentos usam uma politica padrao por operacao, com limites por
+projeto e por etapa gravados em `project_production_settings.metadata_json`.
+A geracao de video valida o limite antes de chamar o provider externo.
+
+```text
+GET   /api/v1/costs/policies
+POST  /api/v1/costs/operation-estimate
+GET   /api/v1/costs/projects/{project_id}/budget
+PATCH /api/v1/costs/projects/{project_id}/budget
+POST  /api/v1/costs/budget-check
+GET   /api/v1/costs/projects/{project_id}/summary
+```
+
 ## Testes
 
 ```powershell
