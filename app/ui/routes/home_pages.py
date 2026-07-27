@@ -12,6 +12,11 @@ from app.storytelling.idea_lab import (
     replace_generated_ideas,
     save_idea,
 )
+from app.storytelling.reference_upload import (
+    ReferenceUploadError,
+    prepare_reference_upload,
+)
+from app.storytelling.script_upload import ScriptUploadError, extract_script_text
 from app.storytelling.service import coerce_duration_minutes
 from app.ui.shared.page_config import (
     DEFAULT_STORY_DURATION_MINUTES,
@@ -27,7 +32,7 @@ from app.ui.shared.page_config import (
 BodyStyle = Callable[[], None]
 ProjectCardsLoader = Callable[[], Awaitable[list[Any]]]
 ProjectCardRenderer = Callable[[Any, str], None]
-ChatProjectCreator = Callable[[str], Awaitable[None]]
+ChatProjectCreator = Callable[[str, list[dict[str, Any]] | None], Awaitable[None]]
 IdeaProjectCreator = Callable[[dict[str, Any]], Awaitable[None]]
 IdeaDeleter = Callable[[str, str], Awaitable[bool]]
 LoadingDialogFactory = Callable[[str, str], Any]
@@ -64,24 +69,120 @@ def register_home_pages(
                         theme_toggle()
                         user_avatar(size="48px")
                 with ui.column().classes("w-full max-w-4xl mx-auto items-center text-center gap-4"):
+                    reference_uploads: list[dict[str, Any]] = []
                     with ui.element("div").classes(
-                        "chat-shell glass rounded-3xl p-4 w-full min-h-[240px] flex flex-col"
+                        "chat-shell glass rounded-3xl p-4 md:p-5 w-full min-h-[260px] flex flex-col gap-3"
                     ):
+                        with ui.row().classes("w-full items-center justify-between gap-3"):
+                            with ui.row().classes("items-center gap-2 min-w-0"):
+                                ui.icon("edit_note").classes("text-2xl acid shrink-0")
+                                with ui.column().classes("gap-0 text-left min-w-0"):
+                                    ui.label("Comece sua história").classes(
+                                        "brand-type text-lg md:text-xl font-bold"
+                                    )
+                                    ui.label(
+                                        "Digite uma ideia, cole um roteiro ou envie um arquivo."
+                                    ).classes("text-xs text-[#8f9590]")
+                            ui.button(icon="help_outline").props("flat round dense").classes(
+                                "text-[#8f9590]"
+                            ).tooltip(
+                                "Um prompt simples ja basta: o agente cria briefing, ideia e roteiro inicial."
+                            )
                         idea = (
                             ui.textarea(
                                 placeholder="Descreva sua história, cole um roteiro ou peça uma ideia..."
                             )
-                            .props("borderless autogrow input-style='min-height:140px'")
-                            .classes("w-full text-lg flex-1 text-left")
+                            .props("outlined autogrow input-style='min-height:140px'")
+                            .classes("w-full text-base md:text-lg flex-1 text-left")
                         )
-                        with ui.row().classes("w-full items-center px-2 pb-1 gap-2"):
-                            ui.space()
+
+                        async def upload_script(event: Any) -> None:
+                            try:
+                                content = await event.file.read()
+                                extracted = extract_script_text(event.file.name, content)
+                            except ScriptUploadError as exc:
+                                ui.notify(str(exc), color="warning")
+                                return
+                            except Exception as exc:
+                                ui.notify(f"Não foi possível ler o arquivo: {exc}", color="negative")
+                                return
+                            idea.value = extracted
+                            idea.update()
+                            ui.notify(
+                                f"Roteiro importado de {event.file.name}.",
+                                color="positive",
+                            )
+
+                        @ui.refreshable
+                        def reference_upload_list() -> None:
+                            if not reference_uploads:
+                                ui.label("Nenhuma imagem de referência anexada.").classes(
+                                    "text-xs text-[#8f9590]"
+                                )
+                                return
+                            with ui.row().classes("w-full gap-2 flex-wrap"):
+                                for item in reference_uploads:
+                                    ui.badge(
+                                        f"Referência visual: {item['filename']}"
+                                    ).classes(
+                                        "rounded-lg px-2 py-1 bg-[#243342] text-[#dcecff]"
+                        )
+
+                        async def upload_reference_image(event: Any) -> None:
+                            try:
+                                content = await event.file.read()
+                                prepared = prepare_reference_upload(
+                                    event.file.name,
+                                    content,
+                                )
+                            except ReferenceUploadError as exc:
+                                ui.notify(str(exc), color="warning")
+                                return
+                            except Exception as exc:
+                                ui.notify(f"Não foi possível anexar a imagem: {exc}", color="negative")
+                                return
+                            reference_uploads.append(prepared)
+                            reference_upload_list.refresh()
+                            ui.notify(
+                                "Referência visual anexada.",
+                                color="positive",
+                            )
+
+                        with ui.row().classes(
+                            "w-full items-center justify-between gap-3 flex-wrap px-1 pb-1"
+                        ):
+                            with ui.row().classes("items-center gap-2 flex-wrap"):
+                                ui.upload(
+                                    label="Enviar roteiro",
+                                    on_upload=upload_script,
+                                    on_rejected=lambda: ui.notify(
+                                        "Envie PDF ou DOCX com ate 10 MB.", color="warning"
+                                    ),
+                                    auto_upload=True,
+                                    max_file_size=10_000_000,
+                                ).props("accept=.pdf,.docx").classes(
+                                    "script-upload-control text-left"
+                                )
+                                ui.upload(
+                                    label="Enviar imagens",
+                                    on_upload=upload_reference_image,
+                                    on_rejected=lambda: ui.notify(
+                                        "Envie JPG, PNG ou WebP com ate 10 MB.", color="warning"
+                                    ),
+                                    auto_upload=True,
+                                    max_file_size=10_000_000,
+                                ).props("accept=.jpg,.jpeg,.png,.webp").classes(
+                                    "script-upload-control text-left"
+                                )
                             ui.button(
                                 icon="arrow_upward",
                                 on_click=lambda: create_project_from_chat_prompt(
-                                    str(idea.value or "")
+                                    str(idea.value or ""),
+                                    list(reference_uploads),
                                 ),
-                            ).props("round unelevated").classes("acid-bg")
+                            ).props("round unelevated size=lg").classes("acid-bg shadow-lg")
+                        with ui.column().classes("w-full gap-2 text-left px-1"):
+                            reference_upload_list()
                 with (
                     ui.column().props("id=projects").classes("w-full max-w-6xl mx-auto gap-4 pt-3")
                 ):

@@ -182,6 +182,37 @@ THEME_HEAD_HTML = r"""
           .entity-card:hover { transform:translateY(-2px); border-color:#555d4c; }
           .visual-placeholder { background:radial-gradient(circle at 70% 15%,#4e5531 0,#24281e 32%,#141614 70%); }
           .chat-shell { box-shadow:0 30px 90px rgba(0,0,0,.45); }
+          .script-upload-control {
+            width:auto!important;
+            min-width:172px;
+          }
+          .script-upload-control .q-uploader {
+            width:auto!important;
+            min-width:172px;
+            max-height:44px!important;
+            border-radius:14px!important;
+            background:rgba(90,163,240,.10)!important;
+            border:1px solid rgba(90,163,240,.30)!important;
+            box-shadow:none!important;
+            overflow:hidden!important;
+          }
+          .script-upload-control .q-uploader__header {
+            min-height:42px!important;
+            padding:0 12px!important;
+            background:transparent!important;
+            color:#d9ecff!important;
+          }
+          .script-upload-control .q-uploader__list,
+          .script-upload-control .q-uploader__subtitle {
+            display:none!important;
+          }
+          body:not(.body--dark) .script-upload-control .q-uploader {
+            background:#edf6ff!important;
+            border-color:#c9e2f8!important;
+          }
+          body:not(.body--dark) .script-upload-control .q-uploader__header {
+            color:#256fa8!important;
+          }
           .q-field__label { color: #b9beb9 !important; }
           .q-field__native, .q-field__input, .q-textarea textarea {
             color: #f8fafc !important;

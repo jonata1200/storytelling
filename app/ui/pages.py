@@ -30,6 +30,7 @@ from app.storytelling.models import (
     Script,
     StoryIdea,
 )
+from app.storytelling.reference_upload import persist_reference_uploads
 from app.storytelling.schemas import BriefingCreate
 from app.storytelling.service import (
     coerce_duration_minutes,
@@ -398,7 +399,15 @@ async def _create_project_from_form(
                     item.strip() for item in form["constraints"].splitlines() if item.strip()
                 ],
             )
-            await create_briefing(session, project.id, briefing)
+            created_briefing = await create_briefing(session, project.id, briefing)
+            reference_uploads = form.get("reference_uploads")
+            if created_briefing is not None and isinstance(reference_uploads, list):
+                await persist_reference_uploads(
+                    session,
+                    project.id,
+                    created_briefing.artifact_id,
+                    reference_uploads,
+                )
             if generate_initial_script:
                 await enqueue_project_step(
                     session,
@@ -420,7 +429,10 @@ async def _create_project_from_form(
         ui.notify(f"Não foi possível criar o projeto: {exc}", color="negative")
 
 
-async def _create_project_from_chat_prompt(prompt: str) -> None:
+async def _create_project_from_chat_prompt(
+    prompt: str,
+    reference_uploads: list[dict[str, Any]] | None = None,
+) -> None:
     cleaned_prompt = prompt.strip()
     if not cleaned_prompt:
         ui.notify("Descreva a ideia ou cole um roteiro antes de criar o projeto.", color="warning")
@@ -451,6 +463,7 @@ async def _create_project_from_chat_prompt(prompt: str) -> None:
         "motion_intensity": 5,
         "image_model": get_settings().openrouter_image_model,
         "video_model": get_settings().openrouter_video_model,
+        "reference_uploads": reference_uploads or [],
     }
     await _create_project_from_form(form, generate_initial_script=True)
 
