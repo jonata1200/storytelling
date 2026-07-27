@@ -294,6 +294,7 @@ def render_storyboard_area(
     )
     prompt_dialog: Any | None = None
     if script_id is not None and prompt_previews:
+        active_script_id: UUID = script_id
         with (
             ui.dialog().props(BLOCKING_DIALOG_PROPS) as prompt_dialog,
             ui.card().classes("entity-card rounded-2xl p-6 w-[min(920px,94vw)] max-h-[86vh]"),
@@ -432,7 +433,7 @@ def render_storyboard_area(
                             dialog.close()
                             await _save_storyboard_prompt_from_ui(
                                 project_id,
-                                script_id,
+                                active_script_id,
                                 shot_id,
                                 new_prompt,
                             )

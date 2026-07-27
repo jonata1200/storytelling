@@ -2,6 +2,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from app.config.settings import get_settings
@@ -13,7 +14,7 @@ from app.video_generation.retry import exponential_backoff_seconds
 VIDEO_PROMPT_OVERRIDES_KEY = "video_prompt_overrides"
 
 
-def _service_attr(name: str, fallback: object) -> object:
+def _service_attr(name: str, fallback: object) -> Any:
     service = sys.modules.get("app.video_generation.service")
     return getattr(service, name, fallback) if service is not None else fallback
 

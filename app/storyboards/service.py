@@ -415,12 +415,20 @@ async def delete_storyboard_outputs(session: AsyncSession, project_id: UUID) -> 
     storyboard_artifact_ids = [row[1] for row in frame_data]
     asset_ids = {row[2] for row in frame_data if row[2] is not None}
 
-    clip_rows = await session.execute(
-        select(VideoClip.id, VideoClip.artifact_id, VideoClip.asset_id, VideoClip.generation_job_id)
-        .where(VideoClip.project_id == project_id)
-        .where(VideoClip.storyboard_frame_id.in_(frame_ids) if frame_ids else False)
-    )
-    clip_data = list(clip_rows.all())
+    if frame_ids:
+        clip_rows = await session.execute(
+            select(
+                VideoClip.id,
+                VideoClip.artifact_id,
+                VideoClip.asset_id,
+                VideoClip.generation_job_id,
+            )
+            .where(VideoClip.project_id == project_id)
+            .where(VideoClip.storyboard_frame_id.in_(frame_ids))
+        )
+        clip_data = list(clip_rows.all())
+    else:
+        clip_data = []
     clip_ids = [row[0] for row in clip_data]
     video_artifact_ids = [row[1] for row in clip_data]
     asset_ids.update(row[2] for row in clip_data if row[2] is not None)
@@ -436,21 +444,25 @@ async def delete_storyboard_outputs(session: AsyncSession, project_id: UUID) -> 
     animatic_artifact_ids = [row[1] for row in animatic_data]
     audio_track_ids = [row[2] for row in animatic_data if row[2] is not None]
 
-    timeline_rows = await session.execute(
-        select(Timeline.id, Timeline.artifact_id)
-        .where(Timeline.project_id == project_id)
-        .where(Timeline.animatic_id.in_(animatic_ids) if animatic_ids else False)
-    )
-    timeline_data = list(timeline_rows.all())
+    if animatic_ids:
+        timeline_rows = await session.execute(
+            select(Timeline.id, Timeline.artifact_id)
+            .where(Timeline.project_id == project_id)
+            .where(Timeline.animatic_id.in_(animatic_ids))
+        )
+        timeline_data = list(timeline_rows.all())
+    else:
+        timeline_data = []
     timeline_ids = [row[0] for row in timeline_data]
     timeline_artifact_ids = [row[1] for row in timeline_data]
 
-    audio_rows = await session.execute(
-        select(AudioTrack.artifact_id).where(
-            AudioTrack.id.in_(audio_track_ids) if audio_track_ids else False
+    if audio_track_ids:
+        audio_rows = await session.execute(
+            select(AudioTrack.artifact_id).where(AudioTrack.id.in_(audio_track_ids))
         )
-    )
-    audio_artifact_ids = [row[0] for row in audio_rows.all()]
+        audio_artifact_ids = [row[0] for row in audio_rows.all()]
+    else:
+        audio_artifact_ids = []
 
     artifact_ids = set(
         storyboard_artifact_ids

@@ -1,4 +1,5 @@
 import sys
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -24,7 +25,7 @@ from app.visual_bible.profiles import (
 from app.workflows.models import ArtifactDependency
 
 
-def _service_attr(name: str) -> object:
+def _service_attr(name: str) -> Any:
     service = sys.modules["app.visual_bible.service"]
     return getattr(service, name)
 

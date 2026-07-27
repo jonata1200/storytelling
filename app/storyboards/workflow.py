@@ -1,4 +1,5 @@
 import sys
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -17,7 +18,7 @@ from app.storytelling.models import Scene, Shot
 from app.workflows.models import ArtifactDependency
 
 
-def _service_attr(name: str, fallback: object) -> object:
+def _service_attr(name: str, fallback: object) -> Any:
     service = sys.modules.get("app.storyboards.service")
     return getattr(service, name, fallback) if service is not None else fallback
 

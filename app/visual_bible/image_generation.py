@@ -1,4 +1,5 @@
 import sys
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +11,7 @@ from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider, ImageResult
 
 
-def _service_attr(name: str, fallback: object) -> object:
+def _service_attr(name: str, fallback: object) -> Any:
     service = sys.modules.get("app.visual_bible.service")
     return getattr(service, name, fallback) if service is not None else fallback
 

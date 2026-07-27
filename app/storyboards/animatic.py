@@ -1,5 +1,6 @@
 import json
 import sys
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -15,7 +16,7 @@ from app.storytelling.models import Script
 from app.workflows.state_machine import advance_project_status
 
 
-def _service_attr(name: str) -> object:
+def _service_attr(name: str) -> Any:
     service = sys.modules["app.storyboards.service"]
     return getattr(service, name)
 

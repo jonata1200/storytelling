@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,7 +9,7 @@ from app.config.settings import get_settings
 from app.storyboards.models import StoryboardFrame
 
 
-def _service_attr(name: str, fallback: object) -> object:
+def _service_attr(name: str, fallback: object) -> Any:
     service = sys.modules.get("app.storyboards.service")
     return getattr(service, name, fallback) if service is not None else fallback
 

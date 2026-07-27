@@ -15,12 +15,18 @@ com dominio versionado, aprovacao humana e pipeline recuperavel.
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+python -m pip install --upgrade pip
+pip install -r requirements.lock
+pip install -e . --no-deps
 Copy-Item .env.example .env
 docker compose up -d
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
+
+O arquivo `requirements.lock` trava as versoes usadas em desenvolvimento e CI.
+Quando dependencias mudarem em `pyproject.toml`, regenere o lock em um ambiente
+limpo e rode `pip check`, `ruff check .`, `mypy app tests` e `pytest`.
 
 Depois da primeira configuracao, voce pode usar o script unificado da pasta `scripts`:
 

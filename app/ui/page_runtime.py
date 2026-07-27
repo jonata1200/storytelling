@@ -16,7 +16,7 @@ from app.ui.workspace.script_area import render_script_area, save_script_from_ui
 from app.ui.workspace.storyboard_video_area import render_storyboard_area, render_video_area
 
 
-def _page_attr(name: str) -> object:
+def _page_attr(name: str) -> Any:
     pages = sys.modules["app.ui.pages"]
     return getattr(pages, name)
 

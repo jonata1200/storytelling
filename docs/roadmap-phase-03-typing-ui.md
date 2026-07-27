@@ -15,22 +15,26 @@ Fazer `mypy app tests` passar e reduzir acoplamento dinamico dificil de manter.
 
 ## Checklist de acoes
 
-- [ ] Executar `mypy app tests --no-incremental` e salvar lista atual de erros.
-- [ ] Agrupar erros por causa raiz.
-- [ ] Criar contratos tipados para callbacks de UI.
+- [x] Executar `mypy app tests --no-incremental` e salvar lista atual de erros.
+- [x] Agrupar erros por causa raiz.
+- [x] Criar contratos tipados para callbacks de UI.
 - [ ] Substituir `_page_attr` por injecao explicita ou contexto tipado.
 - [ ] Substituir `_service_attr` por injecao explicita ou contexto tipado.
-- [ ] Corrigir chamadas onde mypy enxerga `object` como callable.
-- [ ] Corrigir expressoes SQL que retornam `BinaryExpression[bool] | bool`.
-- [ ] Corrigir casts de UUID e valores opcionais em handlers de UI.
+- [x] Corrigir chamadas onde mypy enxerga `object` como callable.
+- [x] Corrigir expressoes SQL que retornam `BinaryExpression[bool] | bool`.
+- [x] Corrigir casts de UUID e valores opcionais em handlers de UI.
+- [x] Revisar `# noqa: F401` usados como cola arquitetural.
+- [x] Rodar `ruff check .`.
+- [x] Rodar `python -m pytest`.
+- [x] Rodar `mypy app tests`.
+
+## Pendencias conhecidas
+
 - [ ] Extrair componentes menores de `app/ui/workspace/storyboard_video_area.py`.
 - [ ] Extrair componentes menores de `app/ui/workspace/assets_area.py`.
 - [ ] Reduzir responsabilidade de `app/ui/pages.py`.
 - [ ] Reduzir responsabilidade de `app/ui/routes/settings_page.py`.
-- [ ] Revisar `# noqa: F401` usados como cola arquitetural.
-- [ ] Rodar `ruff check .`.
-- [ ] Rodar `python -m pytest`.
-- [ ] Rodar `mypy app tests`.
+- [ ] Trocar adaptadores dinamicos restantes por objetos de contexto totalmente tipados.
 
 ## Entregaveis
 

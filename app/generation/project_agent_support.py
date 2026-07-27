@@ -1,4 +1,5 @@
 import sys
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +12,7 @@ from app.visual_bible.models import Character, Location, Prop
 from app.visual_bible.service import generate_visual_bible
 
 
-def _facade_attr(name: str, fallback: object) -> object:
+def _facade_attr(name: str, fallback: object) -> Any:
     facade = sys.modules.get("app.generation.project_agent")
     return getattr(facade, name, fallback) if facade is not None else fallback
 

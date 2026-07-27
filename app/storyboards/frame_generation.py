@@ -29,7 +29,14 @@ class StoryboardFrameGenerationPlan:
 
 def storyboard_image_concurrency(value: object) -> int:
     try:
-        parsed = int(value or DEFAULT_STORYBOARD_IMAGE_CONCURRENCY)
+        if value is None or value == 0:
+            parsed = DEFAULT_STORYBOARD_IMAGE_CONCURRENCY
+        elif isinstance(value, int):
+            parsed = value
+        elif isinstance(value, str):
+            parsed = int(value)
+        else:
+            parsed = int(str(value))
     except (TypeError, ValueError):
         parsed = DEFAULT_STORYBOARD_IMAGE_CONCURRENCY
     return max(1, min(MAX_STORYBOARD_IMAGE_CONCURRENCY, parsed))
