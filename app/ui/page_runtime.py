@@ -149,7 +149,12 @@ def _render_storyboard_area(project_id: UUID, summary: dict[str, Any]) -> None:
 
 
 def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
-    render_video_area(project_id, summary, section_title=_section_title)
+    render_video_area(
+        project_id,
+        summary,
+        section_title=_section_title,
+        loading_dialog_factory=_page_attr("_generation_loading_dialog"),
+    )
 
 
 def register_ui_pages() -> None:

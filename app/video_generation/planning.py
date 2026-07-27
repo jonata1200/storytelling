@@ -10,6 +10,8 @@ from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
 from app.video_generation.retry import exponential_backoff_seconds
 
+VIDEO_PROMPT_OVERRIDES_KEY = "video_prompt_overrides"
+
 
 def _service_attr(name: str, fallback: object) -> object:
     service = sys.modules.get("app.video_generation.service")
@@ -115,6 +117,38 @@ def _video_motion_prompt(
     )
 
 
+def _video_prompt_override_map(metadata: dict) -> dict[str, str]:
+    raw_store = metadata.get(VIDEO_PROMPT_OVERRIDES_KEY)
+    if not isinstance(raw_store, dict):
+        return {}
+    return {
+        str(frame_id): str(prompt)
+        for frame_id, prompt in raw_store.items()
+        if str(prompt or "").strip()
+    }
+
+
+def _video_prompt_override(metadata: dict, frame_id: UUID) -> str | None:
+    return _video_prompt_override_map(metadata).get(str(frame_id))
+
+
+def _video_effective_prompt(
+    metadata: dict,
+    frame: StoryboardFrame,
+    shot: Shot | None = None,
+    scene: Scene | None = None,
+) -> str:
+    return _video_prompt_override(metadata, frame.id) or _video_motion_prompt(frame, shot, scene)
+
+
+def _store_video_prompt_override(metadata: dict, frame_id: UUID, prompt: str) -> dict:
+    updated = dict(metadata or {})
+    store = dict(_video_prompt_override_map(updated))
+    store[str(frame_id)] = prompt.strip()
+    updated[VIDEO_PROMPT_OVERRIDES_KEY] = store
+    return updated
+
+
 def _local_storage_path(storage_uri: str | None) -> Path | None:
     if not storage_uri:
         return None
@@ -137,13 +171,15 @@ def video_generation_validation_errors(
     source_image_uri: str | None,
     provider: VideoProvider,
     aspect_ratio: str,
+    video_prompt: str | None = None,
 ) -> list[str]:
     errors: list[str] = []
+    prompt_to_validate = video_prompt or frame.prompt
     if frame.asset_id is None:
         errors.append("frame sem asset_id")
-    if not str(frame.prompt or "").strip():
+    if not str(prompt_to_validate or "").strip():
         errors.append("prompt vazio")
-    elif len(str(frame.prompt).split()) < 10:
+    elif len(str(prompt_to_validate).split()) < 10:
         errors.append("prompt generico demais")
     if not source_image_uri:
         errors.append("imagem fonte ausente")

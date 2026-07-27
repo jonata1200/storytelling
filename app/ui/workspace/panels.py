@@ -224,9 +224,9 @@ def _render_timeline_strip(timeline: Timeline | None, items: list[TimelineItem])
     with ui.card().classes(_card_classes("w-full")):
         with ui.row().classes("items-center gap-2"):
             ui.icon("timeline").classes("text-cyan-300")
-            ui.label("Timeline Assembly").classes("text-lg font-semibold")
+            ui.label("Montagem da timeline").classes("text-lg font-semibold")
         if timeline is None:
-            ui.label("A timeline aparece depois do animatic ou da finalizacao.").classes(
+            ui.label("A montagem aparece quando os clipes estiverem prontos.").classes(
                 "text-sm text-slate-500"
             )
             return
@@ -236,8 +236,10 @@ def _render_timeline_strip(timeline: Timeline | None, items: list[TimelineItem])
         with ui.row().classes("w-full gap-1 overflow-x-auto"):
             for item in items:
                 width = max(44, min(160, (item.end_ms - item.start_ms) // 80))
-                color = "bg-cyan-900" if item.layer == "video" else "bg-emerald-900"
-                ui.label(item.layer).classes(
+                is_video = item.layer == "video"
+                color = "bg-cyan-900" if is_video else "bg-emerald-900"
+                label = "video" if is_video else "audio"
+                ui.label(label).classes(
                     f"{color} text-xs text-slate-100 rounded px-2 py-3 text-center"
                 ).style(f"width: {width}px")
 

@@ -285,7 +285,14 @@ async def _approve_all_visual_targets_from_ui(
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
-async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]) -> None:
+async def _approve_video_prompts_from_ui(
+    project_id: UUID,
+    frame_ids: list[UUID],
+    *,
+    loading_dialog: Any | None = None,
+) -> None:
+    if loading_dialog is not None:
+        loading_dialog.open()
     try:
         async with AsyncSessionLocal() as session:
             result = await generate_video_clips(
@@ -310,6 +317,9 @@ async def _approve_video_prompts_from_ui(project_id: UUID, frame_ids: list[UUID]
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            loading_dialog.close()
 
 
 

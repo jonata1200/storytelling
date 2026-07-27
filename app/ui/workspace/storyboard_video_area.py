@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -7,6 +9,7 @@ from nicegui import ui
 
 from app.config.settings import get_settings
 from app.database.session import AsyncSessionLocal
+from app.production.service import get_or_create_production_settings
 from app.storyboards.service import (
     approve_storyboard_prompt,
     approve_storyboard_prompts,
@@ -20,6 +23,7 @@ from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, friendly_ai_error, 
 from app.ui.visual.actions import _approve_video_prompts_from_ui
 from app.ui.visual.helpers import asset_url
 from app.ui.workspace.panels import _render_timeline_strip
+from app.video_generation.planning import _store_video_prompt_override
 
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
 LoadingDialogFactory = Callable[[str, str], Any]
@@ -183,6 +187,29 @@ async def _generate_storyboards_from_ui(
     finally:
         if loading_dialog is not None:
             loading_dialog.close()
+
+
+async def _save_video_prompt_from_ui(
+    project_id: UUID,
+    frame_id: UUID,
+    prompt: str,
+    *,
+    reload_page: bool = True,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            production_settings = await get_or_create_production_settings(session, project_id)
+            production_settings.metadata_json = _store_video_prompt_override(
+                production_settings.metadata_json or {},
+                frame_id,
+                prompt,
+            )
+            await session.commit()
+        if reload_page:
+            ui.notify("Prompt de vídeo atualizado.", color="positive")
+            ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
 def _local_asset_file_exists(storage_uri: str) -> bool:
@@ -486,11 +513,25 @@ def render_storyboard_area(
                         ).props("fit=cover")
                     else:
                         ui.icon("photo_camera").classes("text-5xl text-[#bdc77b]")
-                with ui.column().classes("p-4 gap-1"):
+                with ui.column().classes("p-4 gap-2"):
                     ui.label(f"PLANO {frame.frame_number:02d} · {frame.duration_seconds}s").classes(
                         "text-xs acid font-semibold"
                     )
                     ui.label(frame.prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
+                    if script_id is not None:
+                        ui.button(
+                            "Gerar novamente este quadro",
+                            icon="refresh",
+                            on_click=lambda shot_id=frame.shot_id: _generate_storyboards_from_ui(
+                                project_id,
+                                script_id,
+                                shot_id=shot_id,
+                                force=True,
+                                loading_dialog=generation_dialog,
+                            ),
+                        ).props("flat dense no-caps").classes(
+                            "self-start text-[#d8dbd8] rounded-xl"
+                        )
         if not summary["frames"]:
             ui.label(
                 "O Diretor IA pode criar os quadros quando roteiro e ativos estiverem prontos."
@@ -502,79 +543,390 @@ def render_video_area(
     summary: dict[str, Any],
     *,
     section_title: SectionTitle,
+    loading_dialog_factory: LoadingDialogFactory | None = None,
 ) -> None:
     section_title(
-        "Produção de vídeo",
-        "Gere clipes, escolha variações e finalize sua montagem.",
+        "Produ\u00e7\u00e3o de v\u00eddeo",
+        "Transforme cada quadro aprovado em clipes e acompanhe a montagem final.",
         None,
         None,
     )
     sorted_frames = sorted(summary["frames"], key=lambda frame: frame.frame_number)
     clip_frame_ids = {clip.storyboard_frame_id for clip in summary["clips"]}
     pending_frames = [frame for frame in sorted_frames if frame.id not in clip_frame_ids]
+    video_prompt_previews = list(summary.get("video_prompt_previews", []))
+    video_prompt_by_frame_id = {
+        preview["frame_id"]: preview
+        for preview in video_prompt_previews
+        if preview.get("frame_id") is not None
+    }
+    frame_by_id = {frame.id: frame for frame in sorted_frames}
+    generated_count = len(summary["clips"])
+    total_frames = len(sorted_frames)
+    pending_count = len(pending_frames)
+    timeline = summary["timeline"]
+    total_duration = sum(
+        int(getattr(frame, "duration_seconds", 0) or 0) for frame in sorted_frames
+    )
+    loading_dialog = (
+        loading_dialog_factory(
+            "Gerando clipes",
+            "A IA est\u00e1 convertendo os quadros aprovados em v\u00eddeo.",
+        )
+        if loading_dialog_factory is not None
+        else None
+    )
+
+    with ui.element("section").classes("entity-card rounded-2xl p-5 w-full"):
+        with ui.row().classes("w-full items-start justify-between gap-4"):
+            with ui.column().classes("gap-1 min-w-0"):
+                ui.label("Pr\u00f3xima a\u00e7\u00e3o").classes(
+                    "text-xs acid font-semibold uppercase"
+                )
+                if not sorted_frames:
+                    ui.label("Gere o storyboard antes de criar v\u00eddeos.").classes(
+                        "brand-type text-2xl font-bold"
+                    )
+                    ui.label(
+                        "A etapa de v\u00eddeo usa os quadros do storyboard como base "
+                        "para gerar um clipe por plano."
+                    ).classes("text-sm text-[#8d938e] leading-6")
+                elif pending_frames:
+                    ui.label("Revise e gere os clipes pendentes.").classes(
+                        "brand-type text-2xl font-bold"
+                    )
+                    ui.label(
+                        "Cada plano aprovado vira um clipe. Abra a revis\u00e3o para "
+                        "conferir os prompts e iniciar a gera\u00e7\u00e3o."
+                    ).classes("text-sm text-[#8d938e] leading-6")
+                else:
+                    ui.label("Todos os planos j\u00e1 t\u00eam clipes.").classes(
+                        "brand-type text-2xl font-bold"
+                    )
+                    ui.label(
+                        "Revise os clipes criados e acompanhe a ordem da montagem na timeline."
+                    ).classes("text-sm text-[#8d938e] leading-6")
+            with ui.row().classes("gap-2 shrink-0"):
+                for label, value in [
+                    ("planos", total_frames),
+                    ("clipes", generated_count),
+                    ("pendentes", pending_count),
+                ]:
+                    with ui.element("div").classes(
+                        "rounded-xl border border-[#343934] px-4 py-3 min-w-24 text-center"
+                    ):
+                        ui.label(str(value)).classes("brand-type text-2xl font-bold")
+                        ui.label(label).classes("text-[11px] text-[#8d938e] uppercase")
+
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
         with (
             ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_dialog,
-            ui.card().classes("entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"),
+            ui.card().classes(
+                "entity-card rounded-2xl p-6 w-[min(920px,94vw)] max-h-[86vh]"
+            ),
         ):
-            ui.label("Aprovar prompts de vídeo").classes("brand-type text-2xl font-bold")
-            ui.label("Confira os prompts antes de gerar os clipes a partir do storyboard.").classes(
-                "text-sm text-[#8d938e]"
-            )
+            ui.label("Revisar prompts e gerar clipes").classes("brand-type text-2xl font-bold")
+            ui.label(
+                "Confira os planos que ainda n\u00e3o possuem v\u00eddeo. Ao confirmar, "
+                "a IA gera um clipe para cada plano listado."
+            ).classes("text-sm text-[#8d938e]")
             with ui.scroll_area().classes("w-full max-h-[52vh] pr-2"):
                 with ui.column().classes("w-full gap-3"):
                     for frame in pending_frames:
-                        with ui.element("div").classes("border border-[#343934] rounded-xl p-4"):
-                            ui.label(
-                                f"PLANO {frame.frame_number:02d} - {frame.duration_seconds}s"
-                            ).classes("text-xs acid font-semibold")
-                            ui.label(frame.prompt).classes(
-                                "text-sm text-[#d8dbd8] whitespace-pre-wrap"
+                        preview = video_prompt_by_frame_id.get(frame.id, {})
+                        with ui.element("div").classes(
+                            "border border-[#343934] rounded-xl p-4"
+                        ):
+                            with ui.row().classes("w-full items-start justify-between gap-3"):
+                                ui.label(f"Plano {frame.frame_number:02d}").classes(
+                                    "text-sm font-semibold"
+                                )
+                                ui.badge(f"{frame.duration_seconds}s").classes(
+                                    "bg-[#243342] text-[#bfe2ff]"
+                                )
+                            ui.label(str(preview.get("prompt") or frame.prompt)).classes(
+                                "text-sm text-[#d8dbd8] whitespace-pre-wrap mt-2 leading-6"
                             )
 
-            async def confirm_video_prompts(
-                frame_ids: list[UUID] = pending_frame_ids,
-            ) -> None:
+            async def confirm_video_prompts(frame_ids: list[UUID] = pending_frame_ids) -> None:
                 video_prompt_dialog.close()
-                await _approve_video_prompts_from_ui(project_id, frame_ids)
+                await _approve_video_prompts_from_ui(
+                    project_id,
+                    frame_ids,
+                    loading_dialog=loading_dialog,
+                )
 
             with ui.row().classes("w-full justify-end gap-2 mt-3"):
                 ui.button("Cancelar", on_click=video_prompt_dialog.close).props("flat no-caps")
                 ui.button(
-                    "Aprovar e gerar clipes",
+                    f"Gerar {len(pending_frames)} clipe(s)",
                     icon="check_circle",
                     on_click=confirm_video_prompts,
                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-        with ui.row().classes("w-full justify-end mb-3"):
+        with ui.row().classes("w-full items-center justify-between gap-3 mt-4"):
+            with ui.column().classes("gap-0"):
+                ui.label("Planos aguardando clipe").classes("brand-type text-2xl font-bold")
+                ui.label(
+                    "Esses quadros j\u00e1 vieram do storyboard e ser\u00e3o usados "
+                    "como base visual."
+                ).classes("text-sm text-[#8d938e]")
             ui.button(
-                f"Aprovar prompts pendentes ({len(pending_frames)})",
-                icon="check_circle",
+                f"Revisar e gerar ({len(pending_frames)})",
+                icon="movie_creation",
                 on_click=video_prompt_dialog.open,
             ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-    with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
-        for i, clip in enumerate(summary["clips"], 1):
-            with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
-                with ui.element("div").classes(
-                    "visual-placeholder aspect-video flex items-center justify-center relative"
+        with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
+            for frame in pending_frames:
+                preview = video_prompt_by_frame_id.get(frame.id, {})
+                video_prompt = str(preview.get("prompt") or frame.prompt)
+                custom_prompt = bool(preview.get("custom_prompt"))
+                image_url = _storyboard_frame_image_url(summary, frame)
+                with (
+                    ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_detail_dialog,
+                    ui.card().classes(
+                        "entity-card rounded-2xl p-6 w-[min(820px,94vw)] "
+                        "h-[min(760px,86vh)] flex flex-col overflow-hidden"
+                    ),
                 ):
-                    ui.button(icon="play_arrow").props("round unelevated").classes("acid-bg")
-                with ui.column().classes("p-4 gap-2"):
-                    with ui.row().classes("w-full justify-between"):
-                        ui.label(f"Clipe {i:02d}").classes("font-semibold")
-                        ui.badge("Selecionado" if clip.selected else "Variação").classes(
-                            "bg-[#30362b] text-[#eaf878]"
+                    with ui.column().classes("w-full gap-1 shrink-0"):
+                        ui.label(f"Plano {frame.frame_number:02d}").classes(
+                            "brand-type text-2xl font-bold"
                         )
-                    ui.label(f"{clip.duration_seconds}s · {clip.model}").classes(
-                        "text-xs text-[#878d88]"
-                    )
-        if not summary["clips"] and not pending_frames:
-            ui.label(
-                "O Diretor IA pode criar os clipes quando o storyboard estiver pronto."
-            ).classes("text-[#858b86]")
-        elif not summary["clips"]:
-            ui.label("Aprove os prompts pendentes acima para criar os primeiros clipes.").classes(
-                "text-[#858b86]"
+                        ui.label(
+                            "Prompt customizado"
+                            if custom_prompt
+                            else "Prompt de vídeo gerado automaticamente"
+                        ).classes("text-sm text-[#8d938e]")
+                    with ui.column().classes("w-full flex-1 min-h-0 mt-3"):
+                        video_prompt_input = (
+                            ui.textarea("Prompt de vídeo", value=video_prompt)
+                            .props("outlined")
+                            .classes("storyboard-prompt-textarea w-full flex-1 min-h-0")
+                        )
+
+                    async def save_video_prompt(
+                        frame_id: UUID = frame.id,
+                        prompt_input: Any = video_prompt_input,
+                        dialog: Any = video_prompt_detail_dialog,
+                    ) -> None:
+                        new_prompt = str(prompt_input.value or "").strip()
+                        if not new_prompt:
+                            ui.notify("Informe um prompt antes de salvar.", color="warning")
+                            return
+                        dialog.close()
+                        await _save_video_prompt_from_ui(project_id, frame_id, new_prompt)
+
+                    async def generate_single_clip(
+                        frame_id: UUID = frame.id,
+                        prompt_input: Any = video_prompt_input,
+                        dialog: Any = video_prompt_detail_dialog,
+                    ) -> None:
+                        new_prompt = str(prompt_input.value or "").strip()
+                        if not new_prompt:
+                            ui.notify("Informe um prompt antes de gerar.", color="warning")
+                            return
+                        dialog.close()
+                        await _save_video_prompt_from_ui(
+                            project_id,
+                            frame_id,
+                            new_prompt,
+                            reload_page=False,
+                        )
+                        await _approve_video_prompts_from_ui(
+                            project_id,
+                            [frame_id],
+                            loading_dialog=loading_dialog,
+                        )
+
+                    with ui.row().classes(
+                        "w-full justify-end gap-2 mt-4 pt-3 border-t border-[#343934] shrink-0"
+                    ):
+                        ui.button(
+                            "Cancelar",
+                            on_click=video_prompt_detail_dialog.close,
+                        ).props("flat no-caps")
+                        ui.button(
+                            "Salvar",
+                            icon="save",
+                            on_click=save_video_prompt,
+                        ).props("flat no-caps").classes("rounded-xl")
+                        ui.button(
+                            "Salvar e gerar clipe",
+                            icon="movie_creation",
+                            on_click=generate_single_clip,
+                        ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+
+                with (
+                    ui.element("div")
+                    .classes("entity-card rounded-2xl overflow-hidden cursor-pointer")
+                    .on("click", video_prompt_detail_dialog.open)
+                ):
+                    with ui.element("div").classes(
+                        "storyboard-frame-media visual-placeholder w-full aspect-video p-0 "
+                        "relative overflow-hidden bg-black"
+                    ):
+                        if image_url:
+                            ui.image(image_url).classes(
+                                "storyboard-frame-image absolute inset-0 w-full h-full object-cover"
+                            ).props("fit=cover")
+                        else:
+                            ui.icon("movie_creation").classes("text-5xl text-[#bdc77b]")
+                    with ui.column().classes("p-4 gap-2"):
+                        with ui.row().classes("w-full items-center justify-between gap-2"):
+                            ui.label(f"Plano {frame.frame_number:02d}").classes("font-semibold")
+                            ui.badge("custom" if custom_prompt else "automático").classes(
+                                "bg-[#30362b] text-[#eaf878]"
+                                if custom_prompt
+                                else "bg-[#243342] text-[#bfe2ff]"
+                            )
+                        ui.label(f"{frame.duration_seconds}s").classes("text-xs acid")
+                        ui.label(video_prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
+                        with ui.row().classes("w-full justify-end mt-1"):
+                            open_button = (
+                                ui.button("Editar prompt", icon="edit")
+                                .props("flat dense no-caps")
+                                .classes("text-[#d8dbd8] rounded-xl")
+                            )
+                            open_button.on("click.stop", video_prompt_detail_dialog.open)
+
+    if summary["clips"]:
+        with ui.row().classes("w-full items-end justify-between gap-3 mt-6"):
+            with ui.column().classes("gap-0"):
+                ui.label("Clipes gerados").classes("brand-type text-2xl font-bold")
+                ui.label(
+                    "Revise os resultados por plano antes de seguir para a finaliza\u00e7\u00e3o."
+                ).classes("text-sm text-[#8d938e]")
+            ui.badge(f"{generated_count}/{total_frames} criado(s)").classes(
+                "bg-[#26301f] text-[#eaf878]"
             )
-    ui.label("Timeline").classes("brand-type text-2xl font-bold mt-6")
-    _render_timeline_strip(summary["timeline"], summary["timeline_items"])
+        with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
+            for i, clip in enumerate(summary["clips"], 1):
+                frame = frame_by_id.get(clip.storyboard_frame_id)
+                preview = video_prompt_by_frame_id.get(clip.storyboard_frame_id, {})
+                video_prompt = str(
+                    preview.get("prompt")
+                    or (frame.prompt if frame is not None else "")
+                    or "Prompt de vídeo indisponível para este clipe."
+                )
+                custom_prompt = bool(preview.get("custom_prompt"))
+                if frame is not None:
+                    with (
+                        ui.dialog().props(BLOCKING_DIALOG_PROPS) as clip_prompt_dialog,
+                        ui.card().classes(
+                            "entity-card rounded-2xl p-6 w-[min(820px,94vw)] "
+                            "h-[min(760px,86vh)] flex flex-col overflow-hidden"
+                        ),
+                    ):
+                        with ui.column().classes("w-full gap-1 shrink-0"):
+                            ui.label(f"Clipe {i:02d}").classes("brand-type text-2xl font-bold")
+                            ui.label(
+                                "Edite o prompt e gere uma nova variação para este plano."
+                            ).classes("text-sm text-[#8d938e]")
+                        with ui.column().classes("w-full flex-1 min-h-0 mt-3"):
+                            clip_prompt_input = (
+                                ui.textarea("Prompt de vídeo", value=video_prompt)
+                                .props("outlined")
+                                .classes("storyboard-prompt-textarea w-full flex-1 min-h-0")
+                            )
+
+                        async def save_clip_prompt(
+                            frame_id: UUID = clip.storyboard_frame_id,
+                            prompt_input: Any = clip_prompt_input,
+                            dialog: Any = clip_prompt_dialog,
+                        ) -> None:
+                            new_prompt = str(prompt_input.value or "").strip()
+                            if not new_prompt:
+                                ui.notify("Informe um prompt antes de salvar.", color="warning")
+                                return
+                            dialog.close()
+                            await _save_video_prompt_from_ui(project_id, frame_id, new_prompt)
+
+                        async def generate_clip_variation(
+                            frame_id: UUID = clip.storyboard_frame_id,
+                            prompt_input: Any = clip_prompt_input,
+                            dialog: Any = clip_prompt_dialog,
+                        ) -> None:
+                            new_prompt = str(prompt_input.value or "").strip()
+                            if not new_prompt:
+                                ui.notify("Informe um prompt antes de gerar.", color="warning")
+                                return
+                            dialog.close()
+                            await _save_video_prompt_from_ui(
+                                project_id,
+                                frame_id,
+                                new_prompt,
+                                reload_page=False,
+                            )
+                            await _approve_video_prompts_from_ui(
+                                project_id,
+                                [frame_id],
+                                loading_dialog=loading_dialog,
+                            )
+
+                        with ui.row().classes(
+                            "w-full justify-end gap-2 mt-4 pt-3 border-t border-[#343934] shrink-0"
+                        ):
+                            ui.button("Cancelar", on_click=clip_prompt_dialog.close).props(
+                                "flat no-caps"
+                            )
+                            ui.button(
+                                "Salvar",
+                                icon="save",
+                                on_click=save_clip_prompt,
+                            ).props("flat no-caps").classes("rounded-xl")
+                            ui.button(
+                                "Salvar e gerar variação",
+                                icon="movie_creation",
+                                on_click=generate_clip_variation,
+                            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+
+                with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
+                    with ui.element("div").classes(
+                        "visual-placeholder aspect-video flex items-center justify-center relative"
+                    ):
+                        ui.button(icon="play_arrow").props("round unelevated").classes("acid-bg")
+                    with ui.column().classes("p-4 gap-2"):
+                        with ui.row().classes("w-full justify-between"):
+                            ui.label(f"Clipe {i:02d}").classes("font-semibold")
+                            ui.badge("Selecionado" if clip.selected else "Varia\u00e7\u00e3o").classes(
+                                "bg-[#30362b] text-[#eaf878]"
+                            )
+                        ui.label(f"{clip.duration_seconds}s \u00b7 {clip.model}").classes(
+                            "text-xs text-[#878d88]"
+                        )
+                        ui.label(video_prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
+                        if frame is not None:
+                            with ui.row().classes("w-full items-center justify-between gap-2"):
+                                ui.badge("custom" if custom_prompt else "automático").classes(
+                                    "bg-[#30362b] text-[#eaf878]"
+                                    if custom_prompt
+                                    else "bg-[#243342] text-[#bfe2ff]"
+                                )
+                                ui.button(
+                                    "Editar prompt",
+                                    icon="edit",
+                                    on_click=clip_prompt_dialog.open,
+                                ).props("flat dense no-caps").classes(
+                                    "text-[#d8dbd8] rounded-xl"
+                                )
+    elif not pending_frames:
+        with ui.element("div").classes("entity-card rounded-2xl p-6 w-full mt-4"):
+            ui.label("Nenhum clipe para gerar ainda").classes("brand-type text-2xl font-bold")
+            ui.label(
+                "Quando o storyboard estiver pronto, esta tela mostrar\u00e1 os planos "
+                "que podem virar clipes."
+            ).classes("text-sm text-[#8d938e] leading-6")
+
+    if summary["clips"]:
+        with ui.row().classes("w-full items-center justify-between gap-3 mt-6"):
+            with ui.column().classes("gap-0"):
+                ui.label("Montagem").classes("brand-type text-2xl font-bold")
+                ui.label(
+                    f"Previs\u00e3o de dura\u00e7\u00e3o: {total_duration}s"
+                    if total_duration
+                    else "A timeline organiza os clipes na ordem dos planos."
+                ).classes("text-sm text-[#8d938e]")
+            if timeline is None:
+                ui.badge("timeline pendente").classes("bg-[#243342] text-[#bfe2ff]")
+        _render_timeline_strip(timeline, summary["timeline_items"])

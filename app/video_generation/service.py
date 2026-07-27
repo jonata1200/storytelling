@@ -31,7 +31,7 @@ from app.storytelling.models import Scene, Shot
 from app.video_generation.models import ClipReview, GenerationJob, VideoClip
 from app.video_generation.planning import (
     _failed_job_payload,
-    _video_motion_prompt,
+    _video_effective_prompt,
     _video_request_fingerprint,
     video_generation_validation_errors,
 )
@@ -204,6 +204,8 @@ async def generate_video_clips(
     provider, resolved_provider, resolved_model, video_dir_name, aspect_ratio, video_size = (
         await _video_provider_for_project(session, project_id, provider_name, model)
     )
+    production_settings = await get_or_create_production_settings(session, project_id)
+    production_metadata = production_settings.metadata_json or {}
     shot_context = await _shot_context_for_frames(session, frames)
     video_dir = get_settings().local_storage_path / video_dir_name / str(project_id)
     jobs: list[GenerationJob] = []
@@ -212,7 +214,7 @@ async def generate_video_clips(
     for frame in frames:
         source_image_uri = await _asset_storage_uri(session, frame.asset_id)
         shot, scene = shot_context.get(frame.shot_id, (None, None))
-        video_prompt = _video_motion_prompt(frame, shot, scene)
+        video_prompt = _video_effective_prompt(production_metadata, frame, shot, scene)
         for variant_index in range(1, variants_per_frame + 1):
             request_fingerprint = _video_request_fingerprint(
                 frame,
@@ -274,7 +276,11 @@ async def generate_video_clips(
                 "request_fingerprint": request_fingerprint,
             }
             validation_errors = video_generation_validation_errors(
-                frame, source_image_uri, provider, aspect_ratio
+                frame,
+                source_image_uri,
+                provider,
+                aspect_ratio,
+                video_prompt,
             )
             if job is None:
                 job = GenerationJob(

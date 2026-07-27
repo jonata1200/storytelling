@@ -3,13 +3,15 @@ from uuid import uuid4
 from app.providers.video.mock import MockVideoProvider
 from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
-from app.video_generation.retry import exponential_backoff_seconds
-from app.video_generation.service import (
+from app.video_generation.planning import (
+    _store_video_prompt_override,
+    _video_effective_prompt,
     _video_motion_prompt,
     _video_request_fingerprint,
     video_generation_validation_errors,
     video_idempotency_key,
 )
+from app.video_generation.retry import exponential_backoff_seconds
 
 
 def test_exponential_backoff_caps_delay() -> None:
@@ -49,6 +51,51 @@ def test_video_idempotency_key_changes_when_frame_fingerprint_changes() -> None:
     assert video_idempotency_key(
         frame.id, 1, "mock", "mock-video", first_fingerprint
     ) != video_idempotency_key(frame.id, 1, "mock", "mock-video", second_fingerprint)
+
+
+def test_video_effective_prompt_uses_saved_frame_override() -> None:
+    frame = StoryboardFrame(
+        id=uuid4(),
+        shot_id=uuid4(),
+        asset_id=uuid4(),
+        frame_number=1,
+        duration_seconds=5,
+        prompt="Prompt de storyboard completo para video vertical.",
+    )
+    metadata = _store_video_prompt_override({}, frame.id, "Mover lentamente a camera.")
+
+    assert _video_effective_prompt(metadata, frame) == "Mover lentamente a camera."
+
+
+def test_video_fingerprint_changes_when_video_prompt_changes() -> None:
+    frame = StoryboardFrame(
+        id=uuid4(),
+        asset_id=uuid4(),
+        duration_seconds=5,
+        prompt="Prompt de storyboard completo para video vertical.",
+        metadata_json={"frame_fingerprint": "frame-a"},
+    )
+
+    first_fingerprint = _video_request_fingerprint(
+        frame,
+        "asset://frame-a",
+        "mock",
+        "mock-video",
+        "9:16",
+        "1080x1920",
+        "Movimento suave.",
+    )
+    second_fingerprint = _video_request_fingerprint(
+        frame,
+        "asset://frame-a",
+        "mock",
+        "mock-video",
+        "9:16",
+        "1080x1920",
+        "Movimento rapido.",
+    )
+
+    assert first_fingerprint != second_fingerprint
 
 
 def test_video_motion_prompt_guides_image_to_video_continuity() -> None:
@@ -107,3 +154,22 @@ def test_video_generation_validation_reports_bad_frame_inputs() -> None:
     assert "imagem fonte ausente" in errors
     assert "duracao 99s nao suportada pelo provider" in errors
     assert "aspect_ratio 16:9 nao suportado pelo provider" in errors
+
+
+def test_video_generation_validation_uses_effective_video_prompt() -> None:
+    frame = StoryboardFrame(
+        id=uuid4(),
+        asset_id=uuid4(),
+        duration_seconds=5,
+        prompt="curto",
+    )
+
+    errors = video_generation_validation_errors(
+        frame,
+        "asset://frame-a",
+        MockVideoProvider(),
+        "9:16",
+        "Prompt de video suficientemente detalhado para animar este plano cinematografico.",
+    )
+
+    assert "prompt generico demais" not in errors

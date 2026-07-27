@@ -22,6 +22,7 @@ from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeli
 from app.storyboards.service import list_storyboard_prompt_previews
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
 from app.video_generation.models import GenerationJob, VideoClip
+from app.video_generation.planning import _video_effective_prompt, _video_prompt_override
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 
 
@@ -174,6 +175,47 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             if script is not None
             else []
         )
+        clips = await latest_many(session, VideoClip, project_id, 100)
+        generated_clip_frame_result = await session.execute(
+            select(VideoClip.storyboard_frame_id).where(VideoClip.project_id == project_id)
+        )
+        generated_clip_frame_ids = set(generated_clip_frame_result.scalars())
+        video_prompt_previews: list[dict[str, Any]] = []
+        if frames:
+            frame_shot_ids = [frame.shot_id for frame in frames if frame.shot_id is not None]
+            shot_context: dict[UUID, tuple[Shot, Scene]] = {}
+            if frame_shot_ids:
+                shot_context_result = await session.execute(
+                    select(Shot, Scene)
+                    .join(Scene, Shot.scene_id == Scene.id)
+                    .where(Shot.id.in_(frame_shot_ids))
+                )
+                shot_context = {shot.id: (shot, scene) for shot, scene in shot_context_result.all()}
+            production_metadata = production_settings.metadata_json or {}
+            for frame in frames:
+                shot, scene = shot_context.get(frame.shot_id, (None, None))
+                video_prompt_previews.append(
+                    {
+                        "frame_id": frame.id,
+                        "shot_id": frame.shot_id,
+                        "frame_number": frame.frame_number,
+                        "scene_number": getattr(scene, "scene_number", None),
+                        "shot_number": getattr(shot, "shot_number", None),
+                        "duration_seconds": frame.duration_seconds,
+                        "prompt": _video_effective_prompt(
+                            production_metadata,
+                            frame,
+                            shot,
+                            scene,
+                        ),
+                        "custom_prompt": _video_prompt_override(
+                            production_metadata,
+                            frame.id,
+                        )
+                        is not None,
+                        "generated": frame.id in generated_clip_frame_ids,
+                    }
+                )
         visual_asset_ids = {
             reference.asset_id for reference in visual_refs if reference.asset_id is not None
         }
@@ -235,7 +277,8 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             "assets": assets,
             "frames": frames,
             "storyboard_prompt_previews": storyboard_prompt_previews,
-            "clips": await latest_many(session, VideoClip, project_id, 100),
+            "video_prompt_previews": video_prompt_previews,
+            "clips": clips,
             "timeline": latest_timeline,
             "timeline_items": timeline_items,
         }
