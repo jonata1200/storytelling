@@ -253,6 +253,13 @@ def _storyboard_frame_image_url(summary: dict[str, Any], frame: Any) -> str:
     return asset_url(asset.storage_uri)
 
 
+def _video_clip_asset_url(clip: Any) -> str:
+    asset_id = getattr(clip, "asset_id", None)
+    if asset_id is None:
+        return ""
+    return f"/api/v1/assets/{asset_id}/content"
+
+
 def render_storyboard_area(
     project_id: UUID,
     summary: dict[str, Any],
@@ -513,14 +520,8 @@ def render_storyboard_area(
                         ).props("fit=cover")
                     else:
                         ui.icon("photo_camera").classes("text-5xl text-[#bdc77b]")
-                with ui.column().classes("p-4 gap-2"):
-                    ui.label(f"PLANO {frame.frame_number:02d} · {frame.duration_seconds}s").classes(
-                        "text-xs acid font-semibold"
-                    )
-                    ui.label(frame.prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
                     if script_id is not None:
                         ui.button(
-                            "Gerar novamente este quadro",
                             icon="refresh",
                             on_click=lambda shot_id=frame.shot_id: _generate_storyboards_from_ui(
                                 project_id,
@@ -529,8 +530,27 @@ def render_storyboard_area(
                                 force=True,
                                 loading_dialog=generation_dialog,
                             ),
-                        ).props("flat dense no-caps").classes(
-                            "self-start text-[#d8dbd8] rounded-xl"
+                        ).props("round unelevated dense").classes(
+                            "acid-bg absolute right-3 top-3 z-10 shadow-lg"
+                        ).tooltip("Gerar novamente este storyboard")
+                with ui.column().classes("p-4 gap-2"):
+                    ui.label(f"PLANO {frame.frame_number:02d} · {frame.duration_seconds}s").classes(
+                        "text-xs acid font-semibold"
+                    )
+                    ui.label(frame.prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
+                    if script_id is not None:
+                        ui.button(
+                            "Gerar novamente",
+                            icon="refresh",
+                            on_click=lambda shot_id=frame.shot_id: _generate_storyboards_from_ui(
+                                project_id,
+                                script_id,
+                                shot_id=shot_id,
+                                force=True,
+                                loading_dialog=generation_dialog,
+                            ),
+                        ).props("unelevated dense no-caps").classes(
+                            "acid-bg self-start rounded-xl"
                         )
         if not summary["frames"]:
             ui.label(
@@ -563,7 +583,6 @@ def render_video_area(
     frame_by_id = {frame.id: frame for frame in sorted_frames}
     generated_count = len(summary["clips"])
     total_frames = len(sorted_frames)
-    pending_count = len(pending_frames)
     timeline = summary["timeline"]
     total_duration = sum(
         int(getattr(frame, "duration_seconds", 0) or 0) for frame in sorted_frames
@@ -576,47 +595,6 @@ def render_video_area(
         if loading_dialog_factory is not None
         else None
     )
-
-    with ui.element("section").classes("entity-card rounded-2xl p-5 w-full"):
-        with ui.row().classes("w-full items-start justify-between gap-4"):
-            with ui.column().classes("gap-1 min-w-0"):
-                ui.label("Pr\u00f3xima a\u00e7\u00e3o").classes(
-                    "text-xs acid font-semibold uppercase"
-                )
-                if not sorted_frames:
-                    ui.label("Gere o storyboard antes de criar v\u00eddeos.").classes(
-                        "brand-type text-2xl font-bold"
-                    )
-                    ui.label(
-                        "A etapa de v\u00eddeo usa os quadros do storyboard como base "
-                        "para gerar um clipe por plano."
-                    ).classes("text-sm text-[#8d938e] leading-6")
-                elif pending_frames:
-                    ui.label("Revise e gere os clipes pendentes.").classes(
-                        "brand-type text-2xl font-bold"
-                    )
-                    ui.label(
-                        "Cada plano aprovado vira um clipe. Abra a revis\u00e3o para "
-                        "conferir os prompts e iniciar a gera\u00e7\u00e3o."
-                    ).classes("text-sm text-[#8d938e] leading-6")
-                else:
-                    ui.label("Todos os planos j\u00e1 t\u00eam clipes.").classes(
-                        "brand-type text-2xl font-bold"
-                    )
-                    ui.label(
-                        "Revise os clipes criados e acompanhe a ordem da montagem na timeline."
-                    ).classes("text-sm text-[#8d938e] leading-6")
-            with ui.row().classes("gap-2 shrink-0"):
-                for label, value in [
-                    ("planos", total_frames),
-                    ("clipes", generated_count),
-                    ("pendentes", pending_count),
-                ]:
-                    with ui.element("div").classes(
-                        "rounded-xl border border-[#343934] px-4 py-3 min-w-24 text-center"
-                    ):
-                        ui.label(str(value)).classes("brand-type text-2xl font-bold")
-                        ui.label(label).classes("text-[11px] text-[#8d938e] uppercase")
 
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
@@ -664,13 +642,7 @@ def render_video_area(
                     icon="check_circle",
                     on_click=confirm_video_prompts,
                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-        with ui.row().classes("w-full items-center justify-between gap-3 mt-4"):
-            with ui.column().classes("gap-0"):
-                ui.label("Planos aguardando clipe").classes("brand-type text-2xl font-bold")
-                ui.label(
-                    "Esses quadros j\u00e1 vieram do storyboard e ser\u00e3o usados "
-                    "como base visual."
-                ).classes("text-sm text-[#8d938e]")
+        with ui.row().classes("w-full items-center justify-end gap-3"):
             ui.button(
                 f"Revisar e gerar ({len(pending_frames)})",
                 icon="movie_creation",
@@ -804,12 +776,49 @@ def render_video_area(
             for i, clip in enumerate(summary["clips"], 1):
                 frame = frame_by_id.get(clip.storyboard_frame_id)
                 preview = video_prompt_by_frame_id.get(clip.storyboard_frame_id, {})
+                clip_url = _video_clip_asset_url(clip)
+                download_filename = f"storytelling-clipe-{i:02d}.mp4"
                 video_prompt = str(
                     preview.get("prompt")
                     or (frame.prompt if frame is not None else "")
                     or "Prompt de vídeo indisponível para este clipe."
                 )
                 custom_prompt = bool(preview.get("custom_prompt"))
+                if clip_url:
+                    with (
+                        ui.dialog().props("maximized") as video_preview_dialog,
+                        ui.card().classes(
+                            "entity-card rounded-2xl p-6 w-[min(980px,94vw)] "
+                            "max-h-[92vh] flex flex-col overflow-hidden"
+                        ),
+                    ):
+                        with ui.row().classes("w-full items-center justify-between gap-3"):
+                            with ui.column().classes("gap-0 min-w-0"):
+                                ui.label(f"Clipe {i:02d}").classes(
+                                    "brand-type text-2xl font-bold"
+                                )
+                                ui.label(f"{clip.duration_seconds}s · {clip.model}").classes(
+                                    "text-sm text-[#8d938e]"
+                                )
+                            with ui.row().classes("gap-2 shrink-0"):
+                                ui.button(
+                                    "Baixar vídeo",
+                                    icon="download",
+                                    on_click=lambda url=clip_url, filename=download_filename: ui.download(
+                                        url,
+                                        filename,
+                                    ),
+                                ).props("flat no-caps").classes("rounded-xl")
+                                ui.button(
+                                    "Fechar",
+                                    on_click=video_preview_dialog.close,
+                                ).props("flat no-caps")
+                        with ui.element("div").classes(
+                            "w-full flex-1 min-h-0 flex items-center justify-center bg-black rounded-xl overflow-hidden"
+                        ):
+                            ui.video(clip_url, controls=True).classes(
+                                "w-full h-full max-h-[78vh] object-contain"
+                            )
                 if frame is not None:
                     with (
                         ui.dialog().props(BLOCKING_DIALOG_PROPS) as clip_prompt_dialog,
@@ -883,9 +892,16 @@ def render_video_area(
 
                 with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
                     with ui.element("div").classes(
-                        "visual-placeholder aspect-video flex items-center justify-center relative"
+                        "visual-placeholder aspect-video flex items-center justify-center relative bg-black overflow-hidden"
                     ):
-                        ui.button(icon="play_arrow").props("round unelevated").classes("acid-bg")
+                        if clip_url:
+                            ui.video(clip_url, controls=True).classes(
+                                "w-full h-full object-contain"
+                            )
+                        else:
+                            ui.button(icon="play_arrow").props("round unelevated").classes(
+                                "acid-bg"
+                            )
                     with ui.column().classes("p-4 gap-2"):
                         with ui.row().classes("w-full justify-between"):
                             ui.label(f"Clipe {i:02d}").classes("font-semibold")
@@ -896,20 +912,43 @@ def render_video_area(
                             "text-xs text-[#878d88]"
                         )
                         ui.label(video_prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
-                        if frame is not None:
+                        if frame is not None or clip_url:
                             with ui.row().classes("w-full items-center justify-between gap-2"):
-                                ui.badge("custom" if custom_prompt else "automático").classes(
-                                    "bg-[#30362b] text-[#eaf878]"
-                                    if custom_prompt
-                                    else "bg-[#243342] text-[#bfe2ff]"
-                                )
-                                ui.button(
-                                    "Editar prompt",
-                                    icon="edit",
-                                    on_click=clip_prompt_dialog.open,
-                                ).props("flat dense no-caps").classes(
-                                    "text-[#d8dbd8] rounded-xl"
-                                )
+                                if frame is not None:
+                                    ui.badge("custom" if custom_prompt else "automático").classes(
+                                        "bg-[#30362b] text-[#eaf878]"
+                                        if custom_prompt
+                                        else "bg-[#243342] text-[#bfe2ff]"
+                                    )
+                                else:
+                                    ui.space()
+                                with ui.row().classes("gap-1"):
+                                    if clip_url:
+                                        ui.button(
+                                            "Visualizar",
+                                            icon="play_arrow",
+                                            on_click=video_preview_dialog.open,
+                                        ).props("flat dense no-caps").classes(
+                                            "text-[#d8dbd8] rounded-xl"
+                                        )
+                                        ui.button(
+                                            "Baixar",
+                                            icon="download",
+                                            on_click=lambda url=clip_url, filename=download_filename: ui.download(
+                                                url,
+                                                filename,
+                                            ),
+                                        ).props("flat dense no-caps").classes(
+                                            "text-[#d8dbd8] rounded-xl"
+                                        )
+                                    if frame is not None:
+                                        ui.button(
+                                            "Editar prompt",
+                                            icon="edit",
+                                            on_click=clip_prompt_dialog.open,
+                                        ).props("flat dense no-caps").classes(
+                                            "text-[#d8dbd8] rounded-xl"
+                                        )
     elif not pending_frames:
         with ui.element("div").classes("entity-card rounded-2xl p-6 w-full mt-4"):
             ui.label("Nenhum clipe para gerar ainda").classes("brand-type text-2xl font-bold")

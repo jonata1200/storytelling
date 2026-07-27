@@ -615,6 +615,15 @@ def test_storyboard_frame_image_url_ignores_missing_local_file(
     assert image_url == ""
 
 
+def test_video_clip_asset_url_uses_asset_content_endpoint() -> None:
+    asset_id = uuid4()
+    clip = SimpleNamespace(asset_id=asset_id)
+
+    assert storyboard_video_area._video_clip_asset_url(clip) == (
+        f"/api/v1/assets/{asset_id}/content"
+    )
+
+
 @pytest.mark.asyncio
 async def test_approve_all_storyboard_prompts_generates_frames_when_ready(
     monkeypatch: pytest.MonkeyPatch,
