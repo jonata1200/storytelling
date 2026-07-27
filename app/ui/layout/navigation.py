@@ -10,6 +10,20 @@ from app.providers.media_utils import local_uri_to_data_url
 from app.ui.shared.page_config import BRAND_MARK_URL, WORKSPACE_TABS
 from app.ui.workspace.rules import workspace_section_access
 
+HOME_NAV_ITEMS = [
+    ("ideas", "lightbulb_outline", "Ideias", "/"),
+    ("create", "chat_bubble_outline", "Criar", "/dashboard"),
+    ("projects", "folder_open", "Projetos", "/projects"),
+    ("settings", "settings", "Ajustes", "/settings"),
+]
+
+WORKSPACE_NAV_ICONS = {
+    "script": "description",
+    "assets": "palette",
+    "storyboard": "view_comfy",
+    "video": "movie",
+}
+
 
 def studio_logo(compact: bool = False) -> None:
     with ui.row().classes("items-center gap-3"):
@@ -71,12 +85,7 @@ def home_sidebar(active: str = "") -> None:
         "items-center py-6 gap-6 bg-[#0b0d0c] z-20"
     ):
         studio_logo(compact=True)
-        for key, icon, label, target in [
-            ("ideas", "lightbulb_outline", "Ideias", "/"),
-            ("create", "chat_bubble_outline", "Criar", "/dashboard"),
-            ("projects", "folder_open", "Projetos", "/projects"),
-            ("settings", "settings", "Ajustes", "/settings"),
-        ]:
+        for key, icon, label, target in HOME_NAV_ITEMS:
             active_classes = "acid" if key == active else "text-[#8d928e]"
             with (
                 ui.column()
@@ -91,6 +100,19 @@ def home_sidebar(active: str = "") -> None:
         ui.space()
         with ui.element("div").classes("mb-2"):
             user_avatar(size="48px")
+    with ui.element("nav").classes("mobile-bottom-nav mobile-home-nav"):
+        for key, icon, label, target in HOME_NAV_ITEMS:
+            item_classes = "mobile-nav-item"
+            if key == active:
+                item_classes += " mobile-nav-active"
+            with (
+                ui.element("button")
+                .classes(item_classes)
+                .props("type=button")
+                .on("click", lambda t=target: ui.navigate.to(t))
+            ):
+                ui.icon(icon).classes("mobile-nav-icon")
+                ui.label(label).classes("mobile-nav-label")
 
 
 def workspace_header(project: Project, active: str, counts: dict[str, int]) -> None:
@@ -130,5 +152,25 @@ def workspace_header(project: Project, active: str, counts: dict[str, int]) -> N
             ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
                 "acid-bg workspace-export-button rounded-xl font-semibold shrink-0"
             )
+    with ui.element("nav").classes("mobile-bottom-nav mobile-workspace-nav"):
+        for label, key in WORKSPACE_TABS:
+            allowed, reason = workspace_section_access(key, counts)
+            item_classes = "mobile-nav-item"
+            if active == key:
+                item_classes += " mobile-nav-active"
+            if not allowed:
+                item_classes += " mobile-nav-disabled"
+            with (
+                ui.element("button")
+                .classes(item_classes)
+                .props("type=button" if allowed else "type=button disabled")
+                .on("click", lambda k=key: ui.navigate.to(f"/projects/{project.id}/{k}"))
+            ) as nav_button:
+                ui.icon(WORKSPACE_NAV_ICONS.get(key, "radio_button_unchecked")).classes(
+                    "mobile-nav-icon"
+                )
+                ui.label(label).classes("mobile-nav-label")
+            if not allowed:
+                nav_button.tooltip(reason)
 
 
