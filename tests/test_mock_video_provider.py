@@ -25,10 +25,3 @@ async def test_mock_video_provider_generates_mockvideo_file(tmp_path: Path) -> N
     assert result.file_path.exists()
     assert result.sha256 is not None
     assert provider.capabilities.image_to_video
-
-
-@pytest.mark.asyncio
-async def test_mock_video_provider_status_is_succeeded() -> None:
-    provider = MockVideoProvider()
-
-    assert await provider.get_status("mock-job") == GenerationJobStatus.SUCCEEDED

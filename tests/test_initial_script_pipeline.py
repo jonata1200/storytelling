@@ -14,7 +14,6 @@ from app.storytelling.models import StoryIdea
 from app.storytelling.service import (
     GenerationOutputError,
     _bounded_required_str,
-    _fallback_script_content_from_bible,
     _fallback_script_content_from_idea,
     _shot_narration_text,
     _story_idea_db_text,
@@ -23,11 +22,9 @@ from app.storytelling.service import (
     normalize_scene_plan_payload,
     normalize_scene_plan_payload_from_script,
     normalize_script_payload,
-    normalize_story_bible_payload,
     normalize_story_idea_payload,
     scene_plan_payload_from_script_content,
     screenplay_validation_errors,
-    story_bible_validation_errors,
     story_idea_validation_errors,
 )
 from app.ui import pages

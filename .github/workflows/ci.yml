@@ -70,5 +70,8 @@ jobs:
       - name: Type check
         run: mypy app tests
 
+      - name: Validate test markers
+        run: pytest --collect-only -q -m "unit or integration or provider or ui or security"
+
       - name: Test
         run: pytest

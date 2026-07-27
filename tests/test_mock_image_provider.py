@@ -26,22 +26,3 @@ async def test_mock_image_provider_creates_svg_reference(tmp_path: Path) -> None
     assert "front_portrait" in result.file_path.name
     svg = result.file_path.read_text(encoding="utf-8")
     assert 'width="1920" height="1080"' in svg
-
-
-@pytest.mark.asyncio
-async def test_mock_image_provider_sanitizes_filename_parts(tmp_path: Path) -> None:
-    provider = MockImageProvider()
-
-    result = await provider.generate(
-        ImageGenerationRequest(
-            prompt="Referencia",
-            target_id="../target",
-            view_type="bad/view",
-            output_dir=tmp_path,
-        )
-    )
-
-    assert result.file_path.exists()
-    assert result.file_path.parent == tmp_path
-    assert "/" not in result.file_path.name
-    assert "\\" not in result.file_path.name

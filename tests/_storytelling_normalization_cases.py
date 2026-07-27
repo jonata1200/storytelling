@@ -27,7 +27,6 @@ from app.storytelling.service import (
     normalize_story_idea_payload,
     scene_plan_payload_from_script_content,
     screenplay_validation_errors,
-    story_bible_validation_errors,
     story_idea_validation_errors,
 )
 from app.ui import pages
@@ -198,76 +197,6 @@ def test_story_bible_payload_is_normalized_to_structured_model() -> None:
     assert "script_contract" in payload
     assert "visual_contract" in payload
     assert payload["quality_report"]["completeness_score"] < 80
-
-
-def test_complete_story_bible_payload_has_contracts_and_passes_validation() -> None:
-    payload = normalize_story_bible_payload(
-        {
-            "title": "A carta azul",
-            "logline": "Uma filha recebe uma mensagem atrasada do pai.",
-            "theme": "perdao",
-            "genre": "drama",
-            "story_engine": {
-                "dramatic_question": "Clara conseguira contar a verdade?",
-                "central_conflict": "A carta muda a memoria da familia.",
-                "emotional_promise": "A verdade dolorosa permite reconciliacao.",
-                "inciting_incident": "Clara encontra a carta azul na sala.",
-                "midpoint_turn": "Ela percebe que culpou a pessoa errada.",
-                "climax": "Clara le a carta diante da familia.",
-                "ending_image": "A porta da casa fica aberta ao amanhecer.",
-            },
-            "characters": [
-                {
-                    "name": "Clara",
-                    "role": "protagonista",
-                    "desire": "entender por que o pai partiu",
-                    "fear": "descobrir que foi abandonada",
-                    "arc": "troca culpa por coragem",
-                    "base_outfit": {
-                        "main_piece": "camisa azul",
-                        "color": "azul frio",
-                        "fabric": "algodao",
-                        "texture": "tecido gasto",
-                        "wear_marks": "punhos amassados",
-                    },
-                }
-            ],
-            "locations": [
-                {
-                    "name": "Casa da familia",
-                    "description": "sala pequena com fotos antigas",
-                    "lighting": "luz fria de fim de tarde",
-                }
-            ],
-            "props": [
-                {
-                    "name": "Carta azul",
-                    "narrative_importance": "revela o segredo familiar",
-                }
-            ],
-            "continuity_rules": ["a carta sempre aparece com a mesma dobra"],
-        }
-    )
-
-    assert payload["story_engine"]["midpoint_turn"] == "Ela percebe que culpou a pessoa errada."
-    assert payload["script_contract"]["title"] == "A carta azul"
-    assert payload["visual_contract"]["characters"][0]["name"] == "Clara"
-    assert payload["quality_report"]["completeness_score"] >= 80
-    assert story_bible_validation_errors(payload) == []
-
-
-def test_story_bible_validation_reports_missing_production_fields() -> None:
-    payload = normalize_story_bible_payload(
-        {
-            "title": "A carta",
-            "logline": "Uma carta muda uma familia.",
-        }
-    )
-
-    errors = story_bible_validation_errors(payload)
-
-    assert "characters[].name/role/desire/arc/base_outfit" in errors
-    assert "story_engine.inciting_incident" in errors
 
 
 def test_story_bible_payload_accepts_named_location_and_prop_maps() -> None:

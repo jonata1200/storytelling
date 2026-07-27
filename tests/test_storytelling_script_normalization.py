@@ -39,6 +39,9 @@ test_scene_plan_payload_can_be_derived_from_structured_script_without_llm = (
 test_script_payload_builds_content_from_scene_list_when_content_is_empty = (
     cases.test_script_payload_builds_content_from_scene_list_when_content_is_empty
 )
+test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_script = (
+    cases.test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_script
+)
 test_fallback_script_content_from_idea_scales_scene_count_with_duration = (
     cases.test_fallback_script_content_from_idea_scales_scene_count_with_duration
 )

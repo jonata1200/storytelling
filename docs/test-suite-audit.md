@@ -7,12 +7,12 @@ A aplicacao tem uma suite grande, mas a maior parte dela ainda tem serventia. O 
 Inventario atual:
 
 - 43 arquivos de teste coletaveis pelo pytest.
-- 308 testes coletados.
+- 301 testes coletados.
 - 3 modulos internos concentram casos migrados mecanicamente: `_project_creation_flow_cases.py`, `_project_agent_cases.py` e `_storytelling_normalization_cases.py`.
-- Ultima validacao completa registrada apos as fases 1 e 2: `308 passed`, com 1 aviso de deprecacao do Starlette/FastAPI TestClient.
-- Arquivos de coleta mais relevantes apos a reorganizacao: `test_project_creation_ui.py`, `test_project_creation_assets.py`, `test_project_creation_storyboard.py`, `test_project_creation_workspace.py`, `test_project_agent_routing.py`, `test_project_agent_script.py`, `test_project_agent_visual.py`, `test_project_agent_storyboard_video.py`, `test_storytelling_idea_normalization.py`, `test_storytelling_script_normalization.py` e `test_storytelling_story_bible_legacy.py`.
+- Ultima validacao completa registrada apos as fases 1 a 5: `301 passed`, com 1 aviso de deprecacao do Starlette/FastAPI TestClient.
+- Arquivos de coleta mais relevantes apos a reorganizacao: `test_project_creation_ui.py`, `test_project_creation_assets.py`, `test_project_creation_storyboard.py`, `test_project_creation_workspace.py`, `test_project_agent_routing.py`, `test_project_agent_script.py`, `test_project_agent_visual.py`, `test_project_agent_storyboard_video.py`, `test_storytelling_idea_normalization.py`, `test_storytelling_script_normalization.py` e `test_storytelling_story_bible_compatibility.py`.
 
-Conclusao: nao recomendo remover testes em massa agora. Recomendo reorganizar, consolidar casos muito pequenos e revisar testes legados ligados ao antigo fluxo de Story Bible e aos providers mock. A suite pode ficar mais legivel e mais barata de manter sem perder a protecao que ela da hoje.
+Conclusao: nao recomendo remover testes em massa. As fases 1 a 5 ja reorganizaram arquivos grandes, consolidaram testes pequenos, reduziram o legado de Story Bible, deixaram providers mock como ferramentas de teste com smoke coverage minima e criaram cortes por marcador para execucao local.
 
 ## Status de implementacao
 
@@ -20,6 +20,9 @@ Fases implementadas:
 
 - Fase 1 concluida: os arquivos grandes foram divididos em arquivos de coleta por dominio, mantendo os casos originais em modulos internos para evitar reescrita arriscada.
 - Fase 2 concluida: `test_health.py`, `test_story_ideas_ordering.py` e `test_director_agent.py` foram consolidados em arquivos de dominio.
+- Fase 3 concluida: Story Bible deixou de ser tratado como pipeline ativo nos testes e ficou restrito a compatibilidade/fallback.
+- Fase 4 concluida: providers mock ficaram com um smoke test por provider nos arquivos proprios.
+- Fase 5 concluida: a suite agora possui marcadores `unit`, `integration`, `provider`, `ui` e `security`, aplicados automaticamente por dominio.
 
 Arquivos criados na fase 1:
 
@@ -33,13 +36,35 @@ Arquivos criados na fase 1:
 - `test_project_agent_storyboard_video.py`
 - `test_storytelling_idea_normalization.py`
 - `test_storytelling_script_normalization.py`
-- `test_storytelling_story_bible_legacy.py`
+- `test_storytelling_story_bible_compatibility.py`
 
 Arquivos consolidados na fase 2:
 
 - `test_health.py` foi absorvido por `test_auth.py`.
 - `test_story_ideas_ordering.py` foi absorvido por `test_idea_lab.py`.
 - `test_director_agent.py` foi absorvido por `test_project_agent_routing.py`, usando o modulo interno `_project_agent_cases.py`.
+
+Marcadores disponiveis:
+
+- `unit`: 52 testes coletados.
+- `integration`: 121 testes coletados.
+- `provider`: 87 testes coletados.
+- `ui`: 68 testes coletados.
+- `security`: 39 testes coletados.
+
+Comandos locais recomendados:
+
+```bash
+pytest
+pytest -m unit
+pytest -m "not integration"
+pytest -m integration
+pytest -m provider
+pytest -m ui
+pytest -m security
+```
+
+O CI continua executando a suite completa e agora tambem valida a cobertura dos marcadores com coleta antes da etapa `pytest`.
 
 ## Resposta direta
 
@@ -55,7 +80,7 @@ Sim, em boa parte. O numero alto e justificavel porque a aplicacao tem muitos po
 
 Existem testes antigos sem serventia?
 
-Provavelmente existem alguns testes que podem ser fundidos, renomeados ou removidos depois de revisao. Os principais candidatos estao nas areas de Story Bible legado, providers mock e alguns testes muito pequenos de health/director/ordenacao. Mesmo assim, alguns desses testes ainda servem como protecao indireta para migracoes recentes, entao a remocao deve ser faseada.
+Ainda existem testes que podem ser fundidos, renomeados ou removidos em fases futuras, principalmente nos grupos de Visual Bible, OpenRouter media providers e UI de criacao. Os candidatos iniciais de Story Bible legado, providers mock e arquivos pequenos ja foram tratados nas fases 1 a 4.
 
 ## Classificacao geral
 
@@ -103,14 +128,14 @@ Esses testes parecem importantes, mas os arquivos estao grandes ou misturam resp
 
 Esses arquivos ou grupos podem conter testes antigos, redundantes ou de baixo valor isolado:
 
-- `test_mock_llm_provider.py`
-- `test_mock_image_provider.py`
-- `test_mock_speech_provider.py`
-- `test_mock_video_provider.py`
+- `test_mock_llm_provider.py`, ja reduzido a smoke test
+- `test_mock_image_provider.py`, ja reduzido a smoke test
+- `test_mock_speech_provider.py`, ja reduzido a smoke test
+- `test_mock_video_provider.py`, ja reduzido a smoke test
 - `test_director_agent.py`, ja consolidado em `test_project_agent_routing.py`
 - `test_health.py`, ja consolidado em `test_auth.py`
 - `test_story_ideas_ordering.py`, ja consolidado em `test_idea_lab.py`
-- Testes de Story Bible legado em `test_initial_script_pipeline.py`, `test_storytelling_normalization_flow.py` e `test_visual_bible.py`
+- Testes de Story Bible legado ja revisados em `test_initial_script_pipeline.py` e `test_storytelling_story_bible_compatibility.py`; `test_visual_bible.py` ainda usa compatibilidade de payload visual.
 
 ## Analise por arquivo
 
@@ -123,11 +148,11 @@ Esses arquivos ou grupos podem conter testes antigos, redundantes ou de baixo va
 | `test_finalization_profile.py` | 6 | 91 | Alto | Manter. Fase recente e ligada a entrega final. |
 | `test_health.py` | 0 | 0 | Consolidado | Removido como arquivo separado; caso migrado para `test_auth.py`. |
 | `test_idea_lab.py` | 17 | 513 | Alto | Manter. Cobre laboratorio de ideias, validacao, filtros, persistencia e ordenacao por data. |
-| `test_initial_script_pipeline.py` | 5 | 282 | Medio/alto | Manter por enquanto. Revisar o teste legado que garante remocao do pipeline inicial de Story Bible. |
-| `test_mock_image_provider.py` | 2 | 47 | Medio | Reduzir para contrato minimo ou mover para grupo de providers de teste. |
-| `test_mock_llm_provider.py` | 4 | 112 | Medio | Revisar. Provider mock ainda e util para testes, mas nao deve ocupar muito espaco de produto. |
+| `test_initial_script_pipeline.py` | 5 | 279 | Medio/alto | Manter. Garante que a criacao inicial usa roteiro e que o pipeline inicial de Story Bible continua removido. |
+| `test_mock_image_provider.py` | 1 | 28 | Medio | Reduzido a smoke test do contrato minimo do provider de imagem. |
+| `test_mock_llm_provider.py` | 1 | 27 | Medio | Reduzido a smoke test do contrato minimo do provider LLM. |
 | `test_mock_speech_provider.py` | 1 | 25 | Medio | Manter como smoke test ou consolidar com outros mocks. |
-| `test_mock_video_provider.py` | 2 | 34 | Medio | Manter como smoke test ou consolidar com outros mocks. |
+| `test_mock_video_provider.py` | 1 | 27 | Medio | Reduzido a smoke test do contrato minimo do provider de video. |
 | `test_observability_events.py` | 3 | 65 | Alto | Manter. Observabilidade foi fase recente e regressao aqui reduz visibilidade de falhas. |
 | `test_observability_middleware.py` | 1 | 13 | Alto | Manter. Pequeno e protege correlation id. |
 | `test_openrouter_media_providers.py` | 16 | 529 | Alto | Manter. Dividir em imagem e video se crescer mais. |
@@ -148,7 +173,7 @@ Esses arquivos ou grupos podem conter testes antigos, redundantes ou de baixo va
 | `test_storage_governance.py` | 4 | 100 | Alto | Manter. Storage e retencao sao areas de risco. |
 | `test_story_ideas_ordering.py` | 0 | 0 | Consolidado | Removido como arquivo separado; caso migrado para `test_idea_lab.py`. |
 | `test_storyboard_timeline.py` | 15 | 476 | Alto | Manter. Protege storyboard e timeline. |
-| `test_storytelling_normalization_flow.py` | 28 | 708 | Alto, com legado | Dividido em `test_storytelling_idea_normalization.py`, `test_storytelling_script_normalization.py` e `test_storytelling_story_bible_legacy.py`; casos preservados em `_storytelling_normalization_cases.py`. |
+| `test_storytelling_normalization_flow.py` | 26 | 637 | Alto, com compatibilidade | Dividido em `test_storytelling_idea_normalization.py`, `test_storytelling_script_normalization.py` e `test_storytelling_story_bible_compatibility.py`; casos preservados em `_storytelling_normalization_cases.py`. |
 | `test_subtitles.py` | 3 | 32 | Medio/alto | Manter se legendas seguem no fluxo de video. |
 | `test_video_durations.py` | 3 | 30 | Alto | Manter. Pequeno e protege duracao/custos/geracao. |
 | `test_video_retry.py` | 7 | 175 | Alto | Manter. Retry/idempotencia sao criticos em jobs externos. |
@@ -187,27 +212,28 @@ Status implementado: casos preservados em `_project_agent_cases.py` e expostos p
 
 E importante porque protege normalizacao de respostas de IA. Porem, parte do arquivo ainda fala de Story Bible, enquanto o pipeline inicial de Story Bible foi removido. Isso pode ser legado util ou ruído historico, dependendo de quanto esse contrato ainda alimenta o Visual Bible/script fallback.
 
-Recomendacao:
+Recomendacao implementada:
 
 - Separar `test_story_idea_normalization.py`.
 - Separar `test_script_normalization.py`.
-- Separar `test_story_bible_legacy_contracts.py`.
-- Depois revisar o arquivo legado e remover somente o que nao for consumido por nenhum fluxo atual.
+- Separar `test_storytelling_story_bible_compatibility.py`.
+- Remover dois testes de validacao profunda do pipeline legado que nao tinham mais caminho direto no fluxo atual.
+- Mover o fallback de roteiro baseado em payload antigo para `test_storytelling_script_normalization.py`.
 
-Status implementado parcialmente: casos preservados em `_storytelling_normalization_cases.py` e expostos por arquivos de coleta menores. A revisao de remocao de legado fica para a fase 3.
+Status implementado: Story Bible ficou como compatibilidade explicita, e nao como etapa ativa de pipeline.
 
 ### 4. Providers mock
 
 Os providers mock aparecem em arquivos proprios e em testes de fallback. Como a aplicacao passou a bloquear mock em fluxos de producao, alguns testes podem parecer antigos. Ainda assim, mocks continuam uteis como doubles de teste e como contrato minimo.
 
-Recomendacao:
+Recomendacao implementada:
 
 - Manter um smoke test por provider mock.
 - Remover testes que validem detalhes internos sem impacto no produto.
 - Garantir que testes de producao continuem bloqueando mock/free models.
 - Nao remover mocks enquanto eles forem usados por testes de agente, retry ou jobs.
 
-Status sugerido: reduzir com cuidado.
+Status implementado: `test_mock_llm_provider.py`, `test_mock_image_provider.py`, `test_mock_speech_provider.py` e `test_mock_video_provider.py` ficaram com um teste cada.
 
 ### 5. Arquivos de um unico teste
 
@@ -246,7 +272,7 @@ Checklist:
 
 - [x] Dividir `test_project_creation_flow.py` em arquivos menores por dominio.
 - [x] Dividir `test_project_agent.py` por tipo de comportamento.
-- [x] Dividir `test_storytelling_normalization_flow.py` em ideias, roteiro e Story Bible legado.
+- [x] Dividir `test_storytelling_normalization_flow.py` em ideias, roteiro e compatibilidade de Story Bible.
 - [x] Rodar coleta de testes apos a reorganizacao.
 - [x] Confirmar que a reorganizacao nao reduziu a cobertura dos casos migrados.
 
@@ -268,11 +294,11 @@ Objetivo: reduzir dispersao sem apagar protecoes.
 
 Checklist:
 
-- [ ] Mapear quais funcoes de Story Bible ainda sao chamadas pelo fluxo atual.
-- [ ] Separar testes que protegem contratos atuais de testes que apenas documentam historico.
-- [ ] Remover apenas testes sem caminho de execucao ou sem contrato publico.
-- [ ] Atualizar nomes para deixar claro o que e legado.
-- [ ] Rodar suite completa e fluxo manual de criacao de historia.
+- [x] Mapear quais funcoes de Story Bible ainda sao chamadas pelo fluxo atual.
+- [x] Separar testes que protegem contratos atuais de testes que apenas documentam historico.
+- [x] Remover apenas testes sem caminho de execucao ou sem contrato publico.
+- [x] Atualizar nomes para deixar claro o que e compatibilidade.
+- [x] Rodar suite completa.
 
 Objetivo: remover ruido historico sem quebrar fallback visual/script.
 
@@ -280,11 +306,11 @@ Objetivo: remover ruido historico sem quebrar fallback visual/script.
 
 Checklist:
 
-- [ ] Listar onde cada provider mock ainda e usado.
-- [ ] Manter um smoke test por provider mock.
-- [ ] Remover asserts sobre detalhes internos que nao afetam contrato.
-- [ ] Garantir cobertura de bloqueio de mock em producao.
-- [ ] Rodar testes de providers, agentes e producao.
+- [x] Listar onde cada provider mock ainda e usado.
+- [x] Manter um smoke test por provider mock.
+- [x] Remover asserts sobre detalhes internos que nao afetam contrato.
+- [x] Garantir cobertura de bloqueio de mock em producao.
+- [x] Rodar testes de providers, agentes e producao.
 
 Objetivo: manter mocks como ferramentas de teste, nao como produto paralelo.
 
@@ -292,10 +318,10 @@ Objetivo: manter mocks como ferramentas de teste, nao como produto paralelo.
 
 Checklist:
 
-- [ ] Definir marcadores `unit`, `integration`, `provider`, `ui`, `security`.
-- [ ] Marcar testes mais lentos ou integrados.
-- [ ] Criar comandos documentados para rodar subconjuntos.
-- [ ] Ajustar CI para rodar suite completa em PR e subconjuntos em desenvolvimento local.
+- [x] Definir marcadores `unit`, `integration`, `provider`, `ui`, `security`.
+- [x] Marcar testes mais lentos ou integrados.
+- [x] Criar comandos documentados para rodar subconjuntos.
+- [x] Ajustar CI para validar marcadores e manter suite completa em PR.
 
 Objetivo: reduzir custo diario sem reduzir confianca.
 
@@ -304,9 +330,9 @@ Objetivo: reduzir custo diario sem reduzir confianca.
 1. Dividir `test_project_creation_flow.py`.
 2. Dividir `test_project_agent.py`.
 3. Consolidar `test_health.py`, `test_story_ideas_ordering.py` e talvez `test_director_agent.py`.
-4. Separar Story Bible legado de contratos atuais.
-5. Reduzir testes de providers mock.
-6. Adicionar marcadores de teste.
+4. Separar Story Bible legado de contratos atuais. Concluido.
+5. Reduzir testes de providers mock. Concluido.
+6. Adicionar marcadores de teste. Concluido.
 
 ## Resultado esperado
 
