@@ -782,6 +782,68 @@ async def test_approve_last_storyboard_prompt_generates_frames(
     assert notifications == ["Ultimo prompt aprovado. 1 storyboard(s) gerado(s)."]
 
 
+@pytest.mark.asyncio
+async def test_regenerate_single_storyboard_skips_animatic_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    shot_id = uuid4()
+    calls: list[tuple[str, dict[str, object]]] = []
+    notifications: list[str] = []
+    reloads: list[bool] = []
+
+    class FakeSessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    async def fake_generate_frames(*args: object, **kwargs: object) -> list[object]:
+        calls.append(("generate_frames", dict(kwargs)))
+        return [object()]
+
+    async def fake_frames_need_generation(*args: object, **kwargs: object) -> bool:
+        calls.append(("frames_need_generation", dict(kwargs)))
+        return False
+
+    async def fake_generate_animatic(*args: object, **kwargs: object) -> object:
+        calls.append(("generate_animatic", dict(kwargs)))
+        return object()
+
+    monkeypatch.setattr(storyboard_video_area, "AsyncSessionLocal", lambda: FakeSessionContext())
+    monkeypatch.setattr(storyboard_video_area, "generate_storyboard_frames", fake_generate_frames)
+    monkeypatch.setattr(
+        storyboard_video_area,
+        "storyboard_frames_need_generation",
+        fake_frames_need_generation,
+    )
+    monkeypatch.setattr(storyboard_video_area, "generate_animatic_bundle", fake_generate_animatic)
+    monkeypatch.setattr(
+        storyboard_video_area.ui,
+        "notify",
+        lambda message, **_kwargs: notifications.append(message),
+    )
+    monkeypatch.setattr(storyboard_video_area.ui.navigate, "reload", lambda: reloads.append(True))
+
+    await storyboard_video_area._generate_storyboards_from_ui(
+        project_id,
+        script_id,
+        shot_id=shot_id,
+        force=True,
+    )
+
+    assert calls == [
+        (
+            "generate_frames",
+            {"shot_id": shot_id, "force": True, "approved_only": False},
+        )
+    ]
+    assert notifications == ["Storyboards gerados."]
+    assert reloads == [True]
+
+
 def test_visual_library_cards_ready_when_any_card_type_exists() -> None:
     assert pages._visual_library_cards_ready(
         {"characters": [object()], "locations": [object()], "props": [object()]}

@@ -166,6 +166,7 @@ async def _generate_storyboards_from_ui(
     if loading_dialog is not None:
         loading_dialog.open()
     try:
+        should_refresh_animatic = shot_id is None
         async with AsyncSessionLocal() as session:
             frames = await generate_storyboard_frames(
                 session,
@@ -178,7 +179,11 @@ async def _generate_storyboards_from_ui(
             if not frames:
                 ui.notify("Não foi possível gerar storyboards.", color="negative")
                 return
-            if not await storyboard_frames_need_generation(session, project_id, script_id):
+            if should_refresh_animatic and not await storyboard_frames_need_generation(
+                session,
+                project_id,
+                script_id,
+            ):
                 await generate_animatic_bundle(session, project_id, script_id)
         ui.notify("Storyboards gerados.", color="positive")
         ui.navigate.reload()
