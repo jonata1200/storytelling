@@ -10,6 +10,8 @@ from typing import Any
 from app.config.model_policy import validate_openrouter_model_name
 from app.config.settings import get_settings
 from app.core.enums import GenerationJobStatus
+from app.observability.middleware import current_correlation_id
+from app.observability.redaction import redact_secrets
 from app.providers.media_utils import local_uri_to_data_url
 from app.providers.video.types import ProviderCapabilities, VideoRequest, VideoResult
 from app.video_generation.durations import (
@@ -159,6 +161,7 @@ class OpenRouterVideoProvider:
             "Content-Type": "application/json",
             "HTTP-Referer": settings.openrouter_site_url,
             "X-OpenRouter-Title": settings.openrouter_app_title,
+            "X-Correlation-ID": current_correlation_id() or "",
         }
 
     def _post_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -173,7 +176,9 @@ class OpenRouterVideoProvider:
                 parsed = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenRouter Videos HTTP {exc.code}: {detail}") from exc
+            raise RuntimeError(
+                f"OpenRouter Videos HTTP {exc.code}: {redact_secrets(detail)}"
+            ) from exc
         return self._checked_json(parsed)
 
     def _get_json(self, path: str) -> dict[str, Any]:
@@ -183,7 +188,9 @@ class OpenRouterVideoProvider:
                 parsed = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenRouter Videos HTTP {exc.code}: {detail}") from exc
+            raise RuntimeError(
+                f"OpenRouter Videos HTTP {exc.code}: {redact_secrets(detail)}"
+            ) from exc
         return self._checked_json(parsed)
 
     def _download(self, path_or_url: str) -> bytes:
@@ -198,13 +205,17 @@ class OpenRouterVideoProvider:
                 return content
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenRouter Videos download HTTP {exc.code}: {detail}") from exc
+            raise RuntimeError(
+                f"OpenRouter Videos download HTTP {exc.code}: {redact_secrets(detail)}"
+            ) from exc
 
     def _checked_json(self, parsed: Any) -> dict[str, Any]:
         if not isinstance(parsed, dict):
             raise RuntimeError("OpenRouter Videos retornou resposta fora do formato esperado")
         if error := parsed.get("error"):
-            raise RuntimeError(f"OpenRouter Videos retornou erro: {error}")
+            raise RuntimeError(
+                f"OpenRouter Videos retornou erro: {redact_secrets(error)}"
+            )
         return parsed
 
     def _map_status(self, status: str) -> GenerationJobStatus:

@@ -24,6 +24,9 @@ class ExportRequest(BaseModel):
     embed_subtitles: bool = True
     fps: int = 30
     bitrate: str = "8M"
+    resolution: str = "1080x1920"
+    video_codec: str = "h264"
+    audio_codec: str = "aac"
 
 
 class SubtitleTrackRead(BaseModel):

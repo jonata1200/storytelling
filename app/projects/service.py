@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.assets.models import Asset
 from app.core.enums import ArtifactStatus, DependencyKind, ProjectStatus
 from app.generation.models import PromptExecution
+from app.observability.models import OperationalEvent
 from app.projects.models import Artifact, ArtifactVersion, Project, ProjectVersion
 from app.projects.repository import ProjectRepository
 from app.projects.schemas import ArtifactCreate, ProjectCreate
@@ -92,6 +93,7 @@ PROJECT_GRAPH_DELETE_STATEMENTS = (
         JOIN target_projects ON video_clips.project_id = target_projects.id
     )
     """,
+    "DELETE FROM operational_events WHERE project_id IN (SELECT id FROM target_projects)",
     "DELETE FROM exports WHERE project_id IN (SELECT id FROM target_projects)",
     "DELETE FROM subtitle_tracks WHERE project_id IN (SELECT id FROM target_projects)",
     "DELETE FROM video_clips WHERE project_id IN (SELECT id FROM target_projects)",
@@ -224,6 +226,7 @@ IDEA_GRAPH_TRUNCATE_TABLES = (
     "locations",
     "prop_versions",
     "props",
+    "operational_events",
     "asset_versions",
     "assets",
     "script_versions",
@@ -249,6 +252,10 @@ NON_BRIEFING_ARTIFACT_DELETE_STATEMENTS = (
     DELETE FROM artifact_dependencies
     WHERE upstream_artifact_id IN (SELECT id FROM artifacts WHERE artifact_type <> 'BRIEFING')
        OR downstream_artifact_id IN (SELECT id FROM artifacts WHERE artifact_type <> 'BRIEFING')
+    """,
+    """
+    DELETE FROM operational_events
+    WHERE artifact_id IN (SELECT id FROM artifacts WHERE artifact_type <> 'BRIEFING')
     """,
     """
     DELETE FROM cost_entries
@@ -327,6 +334,7 @@ APPLICATION_DATA_COUNT_MODELS = (
     Shot,
     Asset,
     PromptExecution,
+    OperationalEvent,
 )
 
 

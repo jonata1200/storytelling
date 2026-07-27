@@ -6,6 +6,8 @@ from typing import Any
 
 from app.config.model_policy import validate_openrouter_model_name
 from app.config.settings import get_settings, normalize_openrouter_api_key
+from app.observability.middleware import current_correlation_id
+from app.observability.redaction import redact_secrets
 from app.providers.llm.types import LLMRequest, LLMResult
 
 OPENROUTER_LLM_HTTP_TIMEOUT_SECONDS = 300
@@ -66,6 +68,7 @@ class OpenRouterLLMProvider:
                 "Content-Type": "application/json",
                 "HTTP-Referer": settings.openrouter_site_url,
                 "X-OpenRouter-Title": settings.openrouter_app_title,
+                "X-Correlation-ID": current_correlation_id() or "",
             },
             method="POST",
         )
@@ -78,13 +81,17 @@ class OpenRouterLLMProvider:
             detail = exc.read().decode("utf-8", errors="replace")
             if use_response_format and exc.code in {400, 422}:
                 return self._send_request(request, False)
-            raise RuntimeError(f"OpenRouter HTTP {exc.code}: {detail}") from exc
+            raise RuntimeError(
+                f"OpenRouter HTTP {exc.code}: {redact_secrets(detail)}"
+            ) from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"OpenRouter network error: {exc.reason}") from exc
+            raise RuntimeError(
+                f"OpenRouter network error: {redact_secrets(exc.reason)}"
+            ) from exc
         except TimeoutError as exc:
             raise RuntimeError("OpenRouter timeout ao aguardar resposta") from exc
         except OSError as exc:
-            raise RuntimeError(f"OpenRouter connection error: {exc}") from exc
+            raise RuntimeError(f"OpenRouter connection error: {redact_secrets(exc)}") from exc
         except json.JSONDecodeError as exc:
             raise RuntimeError("OpenRouter retornou resposta HTTP que nao e JSON valido") from exc
         if not isinstance(parsed, dict):
@@ -97,7 +104,7 @@ class OpenRouterLLMProvider:
                 message = error.get("message") or error.get("code") or error
             else:
                 message = error
-            raise RuntimeError(f"OpenRouter retornou erro: {message}")
+            raise RuntimeError(f"OpenRouter retornou erro: {redact_secrets(message)}")
 
         choices = response.get("choices")
         if not isinstance(choices, list) or not choices:

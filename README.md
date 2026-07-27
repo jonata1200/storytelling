@@ -92,8 +92,8 @@ O arquivo `.env` permanece somente para configuracao de inicializacao e nao e
 modificado pela aplicacao em execucao.
 
 Os providers reais atualmente implementados usam OpenRouter para texto, imagem e
-video. A narracao final mock foi bloqueada; enquanto nao houver provider real de
-voz configurado/implementado, essa etapa retorna erro claro para a interface.
+video. A narracao final usa provider de fala OpenAI-compativel quando `SPEECH_API_KEY`
+e `SPEECH_MODEL` estao configurados; provider mock de voz permanece bloqueado no fluxo.
 
 ## Experiencia de producao
 
@@ -173,6 +173,33 @@ POST  /api/v1/costs/budget-check
 GET   /api/v1/costs/projects/{project_id}/summary
 ```
 
+## Finalizacao e observabilidade
+
+A narracao final usa provider de fala real OpenAI-compativel. Configure no `.env`:
+
+```env
+SPEECH_PROVIDER=openai_compatible
+SPEECH_BASE_URL=https://api.openai.com/v1
+SPEECH_API_KEY=sua_chave_aqui
+SPEECH_MODEL=seu_modelo_de_voz
+SPEECH_VOICE=alloy
+```
+
+A exportacao final aceita perfil configuravel e tenta normalizar clipes via FFmpeg quando o
+concat direto falha. Quando FFmpeg nao esta disponivel ou a renderizacao falha, o fluxo grava
+um manifest estruturado com mensagem redigida.
+
+Eventos operacionais por projeto ficam disponiveis em:
+
+```text
+GET /api/v1/observability/projects/{project_id}/events
+GET /api/v1/observability/projects/{project_id}/summary
+GET /api/v1/observability/readiness
+```
+
+O readiness separa API, banco, Redis, broker do worker, FFmpeg, OpenRouter e provider de voz.
+Correlation ID e propagado por `X-Correlation-ID` nas chamadas externas relevantes.
+
 ## Testes
 
 ```powershell
@@ -198,8 +225,8 @@ Fases 1 a 8 estao implementadas em base funcional:
 - Personagens, locais, objetos e referencias visuais reais via OpenRouter Images.
 - Storyboards, narracao provisoria, animatic e timeline preliminar.
 - Jobs de video via OpenRouter, clipes e revisao humana.
-- Narracao final bloqueada ate provider real de voz, legendas SRT, timeline final
-  e export manifest.
+- Narracao final por provider de voz configuravel, legendas SRT, timeline final
+  e export MP4/manifest.
 - Continuity Ledger, quality gate, varredura inicial de seguranca e correlation
   ID por requisicao.
 - Testes de health, maquina de estados, dependencias, custos e mock LLM.
@@ -277,9 +304,9 @@ POST /api/v1/finalization/projects/{project_id}/timeline/final
 POST /api/v1/finalization/projects/{project_id}/exports
 ```
 
-A geracao de narracao final mock esta bloqueada ate existir provider real de
-voz. As legendas sao geradas em SRT e a exportacao grava um manifesto JSON
-quando `ffmpeg` nao esta disponivel no PATH.
+A geracao de narracao final usa provider de voz real configuravel. As legendas
+sao geradas em SRT e a exportacao grava um manifesto JSON quando `ffmpeg` nao
+esta disponivel no PATH ou quando a renderizacao falha.
 
 ## Fluxo de qualidade inicial
 

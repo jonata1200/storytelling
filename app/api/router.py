@@ -7,6 +7,7 @@ from app.auth.router import router as auth_router
 from app.costs.router import router as costs_router
 from app.finalization.router import router as finalization_router
 from app.jobs.router import router as jobs_router
+from app.observability.router import router as observability_router
 from app.projects.router import router as projects_router
 from app.quality.router import router as quality_router
 from app.quality.router import security_router as quality_security_router
@@ -33,4 +34,5 @@ private_api_router.include_router(quality_router)
 private_api_router.include_router(quality_security_router)
 private_api_router.include_router(jobs_router)
 private_api_router.include_router(storage_router)
+private_api_router.include_router(observability_router)
 api_router.include_router(private_api_router)

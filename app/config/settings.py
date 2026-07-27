@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     openrouter_video_model: str = "bytedance/seedance-2.0-fast"
     openrouter_image_timeout_seconds: int = 360
     storyboard_image_concurrency: int = 3
+    speech_provider: str = "openai_compatible"
+    speech_base_url: str = "https://api.openai.com/v1"
+    speech_api_key: str | None = Field(default=None, repr=False)
+    speech_model: str = ""
+    speech_voice: str = "alloy"
+    speech_timeout_seconds: int = 120
     user_display_name: str = "Jonata"
     user_email: str = ""
     user_avatar_path: str = ""

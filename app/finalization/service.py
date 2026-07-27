@@ -1,7 +1,10 @@
 import asyncio
+import hashlib
 import json
 import shutil
 import subprocess
+import tempfile
+from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -10,12 +13,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetVersion
 from app.config.settings import get_settings
-from app.core.enums import ArtifactStatus, ArtifactType, AssetKind, DependencyKind, ProjectStatus
+from app.core.enums import (
+    ArtifactStatus,
+    ArtifactType,
+    AssetKind,
+    CostEntryType,
+    DependencyKind,
+    ProjectStatus,
+)
+from app.costs.models import CostEntry
+from app.costs.service import estimate_operation_cost
 from app.finalization.models import Export, SubtitleTrack
 from app.finalization.subtitles import build_srt_from_alignment, safe_area_profile
+from app.observability.redaction import redact_secrets
+from app.observability.schemas import OperationalEventCreate
+from app.observability.service import emit_project_event
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
+from app.providers.speech.service import speech_provider_from_settings
+from app.providers.speech.types import SpeechRequest
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
+from app.storyboards.timeline import build_word_alignment
 from app.video_generation.models import VideoClip
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
@@ -33,6 +51,47 @@ def export_profile(fps: int = 30, bitrate: str = "8M", embed_subtitles: bool = T
         "embed_subtitles": embed_subtitles,
         "safe_area": safe_area_profile(),
     }
+
+
+def export_profile_from_payload(
+    fps: int = 30,
+    bitrate: str = "8M",
+    embed_subtitles: bool = True,
+    resolution: str = "1080x1920",
+    video_codec: str = "h264",
+    audio_codec: str = "aac",
+) -> dict:
+    profile = export_profile(
+        fps=fps,
+        bitrate=bitrate,
+        embed_subtitles=embed_subtitles,
+    )
+    profile["resolution"] = resolution
+    profile["video_codec"] = video_codec
+    profile["audio_codec"] = audio_codec
+    return profile
+
+
+def _resolution_dimensions(resolution: str) -> tuple[int, int]:
+    parts = resolution.lower().split("x", 1)
+    if len(parts) != 2:
+        return 1080, 1920
+    try:
+        width = int(parts[0])
+        height = int(parts[1])
+    except ValueError:
+        return 1080, 1920
+    return max(1, width), max(1, height)
+
+
+def clip_compatibility_errors(clip_paths: list[Path]) -> list[str]:
+    errors: list[str] = []
+    for path in clip_paths:
+        if not path.exists():
+            errors.append(f"Clipe nao encontrado: {path.name}")
+        elif path.stat().st_size <= 0:
+            errors.append(f"Clipe vazio: {path.name}")
+    return errors
 
 
 def final_timeline_coverage_errors(
@@ -104,6 +163,7 @@ def _render_timeline_video(
     ffmpeg_path: str,
     clip_paths: list[Path],
     output_path: Path,
+    profile: dict,
 ) -> str:
     concat_path = output_path.with_suffix(".concat.txt")
     concat_path.write_text(
@@ -126,8 +186,77 @@ def _render_timeline_video(
     try:
         completed = subprocess.run(command, check=True, capture_output=True, text=True)
         return completed.stderr[-2000:]
+    except subprocess.CalledProcessError:
+        return _render_timeline_video_normalized(ffmpeg_path, clip_paths, output_path, profile)
     finally:
         concat_path.unlink(missing_ok=True)
+
+
+def _render_timeline_video_normalized(
+    ffmpeg_path: str,
+    clip_paths: list[Path],
+    output_path: Path,
+    profile: dict,
+) -> str:
+    resolution = str(profile.get("resolution") or "1080x1920")
+    width, height = _resolution_dimensions(resolution)
+    fps = int(profile.get("fps") or 30)
+    bitrate = str(profile.get("bitrate") or "8M")
+    logs: list[str] = []
+    with tempfile.TemporaryDirectory() as temporary_dir:
+        temporary_path = Path(temporary_dir)
+        normalized_paths: list[Path] = []
+        for index, clip_path in enumerate(clip_paths, start=1):
+            normalized_path = temporary_path / f"clip_{index:03d}.mp4"
+            normalize_command = [
+                ffmpeg_path,
+                "-y",
+                "-i",
+                str(clip_path),
+                "-vf",
+                f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,fps={fps},format=yuv420p",
+                "-c:v",
+                "libx264",
+                "-b:v",
+                bitrate,
+                "-c:a",
+                "aac",
+                "-ar",
+                "48000",
+                "-ac",
+                "2",
+                str(normalized_path),
+            ]
+            completed = subprocess.run(
+                normalize_command,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            logs.append(completed.stderr[-1000:])
+            normalized_paths.append(normalized_path)
+        concat_path = temporary_path / "normalized.concat.txt"
+        concat_path.write_text(
+            "\n".join(_concat_file_line(path) for path in normalized_paths) + "\n",
+            encoding="utf-8",
+        )
+        concat_command = [
+            ffmpeg_path,
+            "-y",
+            "-safe",
+            "0",
+            "-f",
+            "concat",
+            "-i",
+            str(concat_path),
+            "-c",
+            "copy",
+            str(output_path),
+        ]
+        completed = subprocess.run(concat_command, check=True, capture_output=True, text=True)
+        logs.append(completed.stderr[-1000:])
+    return "FFmpeg normalized incompatible clips before concat. " + "\n".join(logs)[-2000:]
 
 
 async def _create_artifact(
@@ -179,10 +308,112 @@ async def synthesize_narration(
     if project is None or source_track is None or source_track.project_id != project_id:
         return None
 
-    _ = voice_profile_id
-    raise ValueError(
-        "Narração mock bloqueada. Configure um provider real de voz antes de gerar narração final."
+    settings = get_settings()
+    provider = speech_provider_from_settings()
+    output_dir = settings.local_storage_path / "speech" / str(project_id)
+    speech_result = await provider.synthesize(
+        SpeechRequest(
+            text=source_track.transcript,
+            voice_profile_id=voice_profile_id,
+            output_dir=output_dir,
+            model=settings.speech_model,
+        )
     )
+    alignment = speech_result.alignment or build_word_alignment(
+        source_track.transcript,
+        speech_result.duration_seconds,
+    )
+    artifact = await _create_artifact(
+        session,
+        project_id,
+        ArtifactType.AUDIO_TRACK,
+        "Narracao final",
+        {
+            "source_audio_track_id": str(source_track.id),
+            "voice_profile_id": voice_profile_id,
+            "provider": speech_result.provider,
+            "model": speech_result.model,
+            "duration_seconds": speech_result.duration_seconds,
+        },
+    )
+    await _add_dependency(session, source_track.artifact_id, artifact.id)
+    file_bytes = speech_result.file_path.read_bytes()
+    asset = Asset(
+        project_id=project_id,
+        artifact_id=artifact.id,
+        kind=AssetKind.AUDIO,
+        name="Narracao final",
+        storage_uri=speech_result.storage_uri,
+        content_type=speech_result.content_type,
+        sha256=speech_result.sha256 or hashlib.sha256(file_bytes).hexdigest(),
+        metadata_json={
+            "provider": speech_result.provider,
+            "model": speech_result.model,
+            "voice_profile_id": voice_profile_id,
+        },
+    )
+    session.add(asset)
+    await session.flush()
+    session.add(
+        AssetVersion(
+            asset_id=asset.id,
+            version_number=1,
+            storage_uri=asset.storage_uri,
+            sha256=asset.sha256,
+            metadata_json=asset.metadata_json,
+        )
+    )
+    narration = AudioTrack(
+        project_id=project_id,
+        artifact_id=artifact.id,
+        name="Narracao final",
+        track_type="final_narration",
+        duration_seconds=speech_result.duration_seconds,
+        transcript=source_track.transcript,
+        alignment=alignment,
+    )
+    session.add(narration)
+    cost_estimate = estimate_operation_cost(
+        "speech_generation",
+        Decimal(max(1, len(source_track.transcript))) / Decimal("1000"),
+        provider=speech_result.provider,
+        model=speech_result.model,
+    )
+    session.add(
+        CostEntry(
+            project_id=project_id,
+            artifact_id=artifact.id,
+            entry_type=CostEntryType.ESTIMATE,
+            provider=speech_result.provider,
+            model=speech_result.model,
+            operation="speech_generation",
+            quantity=cost_estimate.quantity,
+            unit=cost_estimate.unit,
+            unit_cost=cost_estimate.unit_cost,
+            total_cost=cost_estimate.estimated,
+            currency=cost_estimate.currency,
+            metadata_json={"stage": "audio", "asset_id": str(asset.id)},
+        )
+    )
+    await emit_project_event(
+        session,
+        OperationalEventCreate(
+            project_id=project_id,
+            artifact_id=artifact.id,
+            event_type="narration",
+            status="succeeded",
+            provider=speech_result.provider,
+            model=speech_result.model,
+            operation="speech_generation",
+            estimated_cost=cost_estimate.estimated,
+            message="Narracao final gerada",
+            details={"asset_id": str(asset.id), "voice_profile_id": voice_profile_id},
+        ),
+    )
+    advance_project_status(project, ProjectStatus.AUDIO_GENERATION)
+    await session.commit()
+    await session.refresh(narration)
+    return narration
 
 
 async def generate_subtitles(
@@ -242,6 +473,18 @@ async def generate_subtitles(
         safe_area=safe_area_profile(),
     )
     session.add(subtitle)
+    await emit_project_event(
+        session,
+        OperationalEventCreate(
+            project_id=project_id,
+            artifact_id=artifact.id,
+            event_type="subtitles",
+            status="succeeded",
+            operation="subtitle_generation",
+            message="Legenda SRT gerada",
+            details={"asset_id": str(asset.id), "language": language},
+        ),
+    )
     await session.commit()
     await session.refresh(subtitle)
     return subtitle
@@ -331,6 +574,9 @@ async def export_timeline(
     fps: int = 30,
     bitrate: str = "8M",
     embed_subtitles: bool = True,
+    resolution: str = "1080x1920",
+    video_codec: str = "h264",
+    audio_codec: str = "aac",
 ) -> Export | None:
     project = await ProjectRepository(session).get_project(project_id)
     timeline = await session.get(Timeline, timeline_id)
@@ -343,7 +589,14 @@ async def export_timeline(
         if subtitle is None or subtitle.project_id != project_id:
             return None
 
-    profile = export_profile(fps=fps, bitrate=bitrate, embed_subtitles=embed_subtitles)
+    profile = export_profile_from_payload(
+        fps=fps,
+        bitrate=bitrate,
+        embed_subtitles=embed_subtitles,
+        resolution=resolution,
+        video_codec=video_codec,
+        audio_codec=audio_codec,
+    )
     settings = get_settings()
     export_dir = settings.local_storage_path / "exports" / str(project_id)
     export_dir.mkdir(parents=True, exist_ok=True)
@@ -351,7 +604,7 @@ async def export_timeline(
     status = "MANIFEST_ONLY"
     output_path = export_dir / f"export_{uuid4().hex[:8]}.json"
     render_log = "FFmpeg not found; wrote structured export manifest."
-    manifest = {
+    manifest: dict[str, object] = {
         "timeline_id": str(timeline.id),
         "subtitle_track_id": str(subtitle.id) if subtitle else None,
         "profile": profile,
@@ -363,6 +616,8 @@ async def export_timeline(
     if ffmpeg_path:
         clip_paths = await _timeline_video_asset_paths(session, timeline.id)
         manifest["clip_count"] = len(clip_paths)
+        compatibility_errors = clip_compatibility_errors(clip_paths)
+        manifest["compatibility_errors"] = compatibility_errors
         if clip_paths:
             mp4_path = export_dir / f"export_{uuid4().hex[:8]}.mp4"
             try:
@@ -371,9 +626,13 @@ async def export_timeline(
                     ffmpeg_path,
                     clip_paths,
                     mp4_path,
+                    profile,
                 )
             except (OSError, subprocess.CalledProcessError) as exc:
-                render_log = f"FFmpeg render failed; wrote structured export manifest. {exc}"
+                render_log = (
+                    "FFmpeg render failed; wrote structured export manifest. "
+                    f"{redact_secrets(exc)}"
+                )
                 output_path.write_text(
                     json.dumps(manifest, indent=2, ensure_ascii=True), encoding="utf-8"
                 )
@@ -447,6 +706,22 @@ async def export_timeline(
         render_log=render_log,
     )
     session.add(export)
+    await emit_project_event(
+        session,
+        OperationalEventCreate(
+            project_id=project_id,
+            artifact_id=artifact.id,
+            event_type="export",
+            status="succeeded" if status == "RENDERED" else "degraded",
+            operation="final_export",
+            message=render_log,
+            details={
+                "asset_id": str(asset.id),
+                "status": status,
+                "ffmpeg_available": ffmpeg_path is not None,
+            },
+        ),
+    )
     advance_project_status(project, ProjectStatus.FINAL_APPROVAL)
     await session.commit()
     await session.refresh(export)

@@ -26,6 +26,8 @@ from app.costs.service import (
     estimate_batch_cost,
     estimate_operation_cost,
 )
+from app.observability.schemas import OperationalEventCreate
+from app.observability.service import emit_project_event
 from app.production.service import get_or_create_production_settings, resolve_video_model
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
@@ -320,6 +322,27 @@ async def generate_video_clips(
                     started_at=datetime.now(UTC),
                 )
                 session.add(job)
+                await session.flush()
+                await emit_project_event(
+                    session,
+                    OperationalEventCreate(
+                        project_id=project_id,
+                        artifact_id=frame.artifact_id,
+                        job_id=job.id,
+                        event_type="video_job",
+                        status="started",
+                        provider=resolved_provider,
+                        model=resolved_model,
+                        operation="image_to_video",
+                        estimated_cost=video_cost_estimate.estimated,
+                        message="Geracao de video iniciada",
+                        details={
+                            "frame_id": str(frame.id),
+                            "variant_index": variant_index,
+                            "duration_seconds": frame.duration_seconds,
+                        },
+                    ),
+                )
             else:
                 job.request_payload = request_payload
                 job.response_payload = {}
@@ -332,6 +355,21 @@ async def generate_video_clips(
                     frame, variant_index, reason, job.attempts
                 )
                 job.completed_at = datetime.now(UTC)
+                await emit_project_event(
+                    session,
+                    OperationalEventCreate(
+                        project_id=project_id,
+                        artifact_id=frame.artifact_id,
+                        job_id=job.id,
+                        event_type="video_job",
+                        status="failed",
+                        provider=resolved_provider,
+                        model=resolved_model,
+                        operation="image_to_video",
+                        message=reason,
+                        details={"frame_id": str(frame.id), "variant_index": variant_index},
+                    ),
+                )
                 jobs.append(job)
                 continue
 
@@ -354,6 +392,21 @@ async def generate_video_clips(
                     frame, variant_index, str(exc), job.attempts
                 )
                 job.completed_at = datetime.now(UTC)
+                await emit_project_event(
+                    session,
+                    OperationalEventCreate(
+                        project_id=project_id,
+                        artifact_id=frame.artifact_id,
+                        job_id=job.id,
+                        event_type="video_job",
+                        status="failed",
+                        provider=resolved_provider,
+                        model=resolved_model,
+                        operation="image_to_video",
+                        message=str(exc),
+                        details={"frame_id": str(frame.id), "variant_index": variant_index},
+                    ),
+                )
                 jobs.append(job)
                 continue
 
@@ -450,6 +503,26 @@ async def generate_video_clips(
                         "external_job_id": result.external_job_id,
                     },
                 )
+            )
+            await emit_project_event(
+                session,
+                OperationalEventCreate(
+                    project_id=project_id,
+                    artifact_id=artifact.id,
+                    job_id=job.id,
+                    event_type="video_job",
+                    status="succeeded",
+                    provider=result.provider,
+                    model=result.model,
+                    operation="image_to_video",
+                    estimated_cost=Decimal(result.estimated_cost),
+                    message="Geracao de video concluida",
+                    details={
+                        "clip_id": str(clip.id),
+                        "asset_id": str(asset.id),
+                        "external_job_id": result.external_job_id,
+                    },
+                ),
             )
 
     if clips:

@@ -10,6 +10,8 @@ from uuid import uuid4
 
 from app.config.model_policy import validate_openrouter_model_name
 from app.config.settings import get_settings
+from app.observability.middleware import current_correlation_id
+from app.observability.redaction import redact_secrets
 from app.providers.image.types import ImageEditRequest, ImageGenerationRequest, ImageResult
 from app.providers.media_utils import extension_from_media_type, local_uri_to_data_url
 
@@ -239,6 +241,7 @@ class OpenRouterImageProvider:
                 "Content-Type": "application/json",
                 "HTTP-Referer": settings.openrouter_site_url,
                 "X-OpenRouter-Title": settings.openrouter_app_title,
+                "X-Correlation-ID": current_correlation_id() or "",
             },
             method="POST",
         )
@@ -247,16 +250,22 @@ class OpenRouterImageProvider:
                 parsed = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenRouter Images HTTP {exc.code}: {detail}") from exc
+            raise RuntimeError(
+                f"OpenRouter Images HTTP {exc.code}: {redact_secrets(detail)}"
+            ) from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"OpenRouter Images network error: {exc.reason}") from exc
+            raise RuntimeError(
+                f"OpenRouter Images network error: {redact_secrets(exc.reason)}"
+            ) from exc
         except TimeoutError as exc:
             raise RuntimeError(
                 "OpenRouter Images timeout ao aguardar resposta "
                 f"apos {timeout_seconds}s"
             ) from exc
         except OSError as exc:
-            raise RuntimeError(f"OpenRouter Images connection error: {exc}") from exc
+            raise RuntimeError(
+                f"OpenRouter Images connection error: {redact_secrets(exc)}"
+            ) from exc
         except json.JSONDecodeError as exc:
             raise RuntimeError(
                 "OpenRouter Images retornou resposta HTTP que nao e JSON valido"
@@ -264,5 +273,7 @@ class OpenRouterImageProvider:
         if not isinstance(parsed, dict):
             raise RuntimeError("OpenRouter Images retornou resposta fora do formato esperado")
         if error := parsed.get("error"):
-            raise RuntimeError(f"OpenRouter Images retornou erro: {error}")
+            raise RuntimeError(
+                f"OpenRouter Images retornou erro: {redact_secrets(error)}"
+            )
         return parsed

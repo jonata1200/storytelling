@@ -1,13 +1,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from redis.asyncio import Redis
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_authenticated_user
 from app.config.settings import Settings, get_settings
 from app.database.session import get_session
+from app.observability.service import readiness_dashboard
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -23,10 +22,5 @@ async def ready(
     settings: Annotated[Settings, Depends(get_settings)],
     _username: Annotated[str, Depends(require_authenticated_user)],
 ) -> dict[str, str]:
-    await session.execute(text("SELECT 1"))
-    redis = Redis.from_url(settings.redis_url)
-    try:
-        await redis.ping()
-    finally:
-        await redis.aclose()
-    return {"status": "ready"}
+    dashboard = await readiness_dashboard(session, settings)
+    return {"status": dashboard.status}

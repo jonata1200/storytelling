@@ -102,6 +102,9 @@ async def post_export(
         payload.fps,
         payload.bitrate,
         payload.embed_subtitles,
+        payload.resolution,
+        payload.video_codec,
+        payload.audio_codec,
     )
     if export is None:
         raise HTTPException(
