@@ -1,0 +1,27 @@
+import _storytelling_normalization_cases as cases
+
+test_idea_lab_duration_and_count_options_match_generation_controls = (
+    cases.test_idea_lab_duration_and_count_options_match_generation_controls
+)
+test_story_idea_payload_is_normalized_for_pipeline = (
+    cases.test_story_idea_payload_is_normalized_for_pipeline
+)
+test_story_idea_payload_preserves_selected_duration = (
+    cases.test_story_idea_payload_preserves_selected_duration
+)
+test_story_idea_payload_coerces_non_integer_scores = (
+    cases.test_story_idea_payload_coerces_non_integer_scores
+)
+test_story_idea_payload_defaults_unknown_scores = (
+    cases.test_story_idea_payload_defaults_unknown_scores
+)
+test_story_idea_validation_requires_narrative_engine_fields = (
+    cases.test_story_idea_validation_requires_narrative_engine_fields
+)
+test_story_idea_validation_accepts_complete_payload = (
+    cases.test_story_idea_validation_accepts_complete_payload
+)
+test_story_idea_payload_requires_title = cases.test_story_idea_payload_requires_title
+test_story_idea_db_text_truncates_long_protagonist_for_varchar_column = (
+    cases.test_story_idea_db_text_truncates_long_protagonist_for_varchar_column
+)

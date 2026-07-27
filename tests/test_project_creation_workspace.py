@@ -1,0 +1,22 @@
+import _project_creation_flow_cases as cases
+
+test_delete_lab_idea_does_not_remove_local_when_database_delete_is_blocked = (
+    cases.test_delete_lab_idea_does_not_remove_local_when_database_delete_is_blocked
+)
+test_manual_script_save_refreshes_scene_plan_and_visual_bible = (
+    cases.test_manual_script_save_refreshes_scene_plan_and_visual_bible
+)
+test_retry_initial_script_opens_loading_dialog_and_watches_status = (
+    cases.test_retry_initial_script_opens_loading_dialog_and_watches_status
+)
+test_characters_section_unlocks_when_script_exists_without_shots = (
+    cases.test_characters_section_unlocks_when_script_exists_without_shots
+)
+test_script_section_is_entry_point = cases.test_script_section_is_entry_point
+test_unknown_workspace_section_is_rejected = cases.test_unknown_workspace_section_is_rejected
+test_storyboard_section_waits_for_all_visual_references = (
+    cases.test_storyboard_section_waits_for_all_visual_references
+)
+test_storyboard_section_unlocks_after_visual_references_are_complete = (
+    cases.test_storyboard_section_unlocks_after_visual_references_are_complete
+)

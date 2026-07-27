@@ -1,0 +1,60 @@
+import _project_creation_flow_cases as cases
+
+test_settings_tab_key_keeps_data_tab_after_destructive_actions = (
+    cases.test_settings_tab_key_keeps_data_tab_after_destructive_actions
+)
+test_register_ui_pages_resolves_page_facade_dependencies = (
+    cases.test_register_ui_pages_resolves_page_facade_dependencies
+)
+test_chat_prompt_title_is_compact = cases.test_chat_prompt_title_is_compact
+test_chat_prompt_title_uses_first_sentence = cases.test_chat_prompt_title_uses_first_sentence
+test_clean_idea_title_removes_numbered_prefix = (
+    cases.test_clean_idea_title_removes_numbered_prefix
+)
+test_ai_action_without_timestamp_is_stale = cases.test_ai_action_without_timestamp_is_stale
+test_recent_ai_action_is_not_stale = cases.test_recent_ai_action_is_not_stale
+test_project_ai_action_reads_production_metadata = (
+    cases.test_project_ai_action_reads_production_metadata
+)
+test_friendly_ai_error_explains_timeout = cases.test_friendly_ai_error_explains_timeout
+test_expected_ai_timeout_logs_warning_without_traceback = (
+    cases.test_expected_ai_timeout_logs_warning_without_traceback
+)
+test_ai_failure_notification_is_shown_once = cases.test_ai_failure_notification_is_shown_once
+test_ai_action_sync_adds_only_one_chat_message_per_action = (
+    cases.test_ai_action_sync_adds_only_one_chat_message_per_action
+)
+test_safe_client_navigation_uses_captured_client = (
+    cases.test_safe_client_navigation_uses_captured_client
+)
+test_safe_client_navigation_ignores_deleted_slot_runtime_error = (
+    cases.test_safe_client_navigation_ignores_deleted_slot_runtime_error
+)
+test_safe_refresh_ignores_deleted_slot_runtime_error = (
+    cases.test_safe_refresh_ignores_deleted_slot_runtime_error
+)
+test_legacy_assistant_greeting_is_removed_from_chat_history = (
+    cases.test_legacy_assistant_greeting_is_removed_from_chat_history
+)
+test_visual_card_detail_formats_character_profile_without_raw_dict = (
+    cases.test_visual_card_detail_formats_character_profile_without_raw_dict
+)
+test_visual_card_detail_formats_location_profile = (
+    cases.test_visual_card_detail_formats_location_profile
+)
+test_visual_card_detail_prefers_explicit_description = (
+    cases.test_visual_card_detail_prefers_explicit_description
+)
+test_shot_narration_falls_back_to_action_when_empty = (
+    cases.test_shot_narration_falls_back_to_action_when_empty
+)
+test_bounded_required_str_preserves_database_limits = (
+    cases.test_bounded_required_str_preserves_database_limits
+)
+test_scenes_are_ordered_by_scene_number_for_display = (
+    cases.test_scenes_are_ordered_by_scene_number_for_display
+)
+test_production_steps_do_not_include_story_bible = (
+    cases.test_production_steps_do_not_include_story_bible
+)
+test_workspace_tabs_start_with_script = cases.test_workspace_tabs_start_with_script

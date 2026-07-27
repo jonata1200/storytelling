@@ -11,6 +11,8 @@ from app.generation.project_agent import (
     classify_project_chat_action,
     handle_project_chat,
 )
+from app.providers.llm.mock import MockLLMProvider
+from app.providers.llm.types import LLMRequest
 
 
 def test_project_chat_action_classifier_routes_creation_requests() -> None:
@@ -62,6 +64,24 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("aprove o prompt da Clara para gerar imagem", "assets") == (
         "approve_visual_prompt"
     )
+
+
+@pytest.mark.asyncio
+async def test_mock_director_agent_uses_section_and_project_context() -> None:
+    result = await MockLLMProvider().generate_structured(
+        LLMRequest(
+            task="director_agent_chat",
+            prompt="Ajude com o storyboard",
+            variables={
+                "section": "storyboard",
+                "message": "Crie uma segunda versao",
+                "project_context": {"summary": "1 roteiro e 8 quadros"},
+            },
+        )
+    )
+
+    assert "storyboard" in result.content["message"]
+    assert "1 roteiro e 8 quadros" in result.content["message"]
 
 
 def test_project_chat_extracts_storyboard_scene_number() -> None:

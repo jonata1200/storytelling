@@ -6,12 +6,40 @@ A aplicacao tem uma suite grande, mas a maior parte dela ainda tem serventia. O 
 
 Inventario atual:
 
-- 38 arquivos de teste.
-- 306 testes coletados.
-- Ultima validacao completa registrada no projeto: `306 passed`, com 1 aviso de deprecacao do Starlette/FastAPI TestClient.
-- Arquivos mais pesados: `test_project_creation_flow.py`, `test_project_agent.py`, `test_storytelling_normalization_flow.py`, `test_visual_bible.py`, `test_visual_bible_script_profiles.py` e `test_openrouter_media_providers.py`.
+- 43 arquivos de teste coletaveis pelo pytest.
+- 308 testes coletados.
+- 3 modulos internos concentram casos migrados mecanicamente: `_project_creation_flow_cases.py`, `_project_agent_cases.py` e `_storytelling_normalization_cases.py`.
+- Ultima validacao completa registrada apos as fases 1 e 2: `308 passed`, com 1 aviso de deprecacao do Starlette/FastAPI TestClient.
+- Arquivos de coleta mais relevantes apos a reorganizacao: `test_project_creation_ui.py`, `test_project_creation_assets.py`, `test_project_creation_storyboard.py`, `test_project_creation_workspace.py`, `test_project_agent_routing.py`, `test_project_agent_script.py`, `test_project_agent_visual.py`, `test_project_agent_storyboard_video.py`, `test_storytelling_idea_normalization.py`, `test_storytelling_script_normalization.py` e `test_storytelling_story_bible_legacy.py`.
 
 Conclusao: nao recomendo remover testes em massa agora. Recomendo reorganizar, consolidar casos muito pequenos e revisar testes legados ligados ao antigo fluxo de Story Bible e aos providers mock. A suite pode ficar mais legivel e mais barata de manter sem perder a protecao que ela da hoje.
+
+## Status de implementacao
+
+Fases implementadas:
+
+- Fase 1 concluida: os arquivos grandes foram divididos em arquivos de coleta por dominio, mantendo os casos originais em modulos internos para evitar reescrita arriscada.
+- Fase 2 concluida: `test_health.py`, `test_story_ideas_ordering.py` e `test_director_agent.py` foram consolidados em arquivos de dominio.
+
+Arquivos criados na fase 1:
+
+- `test_project_creation_ui.py`
+- `test_project_creation_assets.py`
+- `test_project_creation_storyboard.py`
+- `test_project_creation_workspace.py`
+- `test_project_agent_routing.py`
+- `test_project_agent_script.py`
+- `test_project_agent_visual.py`
+- `test_project_agent_storyboard_video.py`
+- `test_storytelling_idea_normalization.py`
+- `test_storytelling_script_normalization.py`
+- `test_storytelling_story_bible_legacy.py`
+
+Arquivos consolidados na fase 2:
+
+- `test_health.py` foi absorvido por `test_auth.py`.
+- `test_story_ideas_ordering.py` foi absorvido por `test_idea_lab.py`.
+- `test_director_agent.py` foi absorvido por `test_project_agent_routing.py`, usando o modulo interno `_project_agent_cases.py`.
 
 ## Resposta direta
 
@@ -47,9 +75,9 @@ Esses grupos protegem comportamento critico e devem continuar existindo:
 - `test_prompt_compiler.py`
 - `test_visual_bible.py`
 - `test_visual_bible_script_profiles.py`
-- `test_storytelling_normalization_flow.py`, com revisao dos trechos legados
-- `test_project_creation_flow.py`, com divisao por dominio
-- `test_project_agent.py`, com divisao por dominio
+- `test_storytelling_normalization_flow.py`, ja dividido em arquivos de coleta por dominio
+- `test_project_creation_flow.py`, ja dividido em arquivos de coleta por dominio
+- `test_project_agent.py`, ja dividido em arquivos de coleta por dominio
 - `test_project_bulk_delete.py`
 - `test_video_retry.py`
 - `test_video_durations.py`
@@ -62,9 +90,9 @@ Esses grupos protegem comportamento critico e devem continuar existindo:
 
 Esses testes parecem importantes, mas os arquivos estao grandes ou misturam responsabilidades:
 
-- `test_project_creation_flow.py`
-- `test_project_agent.py`
-- `test_storytelling_normalization_flow.py`
+- `test_project_creation_flow.py`, implementado via arquivos de coleta por dominio
+- `test_project_agent.py`, implementado via arquivos de coleta por dominio
+- `test_storytelling_normalization_flow.py`, implementado via arquivos de coleta por dominio
 - `test_visual_bible.py`
 - `test_visual_bible_script_profiles.py`
 - `test_openrouter_media_providers.py`
@@ -79,22 +107,22 @@ Esses arquivos ou grupos podem conter testes antigos, redundantes ou de baixo va
 - `test_mock_image_provider.py`
 - `test_mock_speech_provider.py`
 - `test_mock_video_provider.py`
-- `test_director_agent.py`
-- `test_health.py`
-- `test_story_ideas_ordering.py`
+- `test_director_agent.py`, ja consolidado em `test_project_agent_routing.py`
+- `test_health.py`, ja consolidado em `test_auth.py`
+- `test_story_ideas_ordering.py`, ja consolidado em `test_idea_lab.py`
 - Testes de Story Bible legado em `test_initial_script_pipeline.py`, `test_storytelling_normalization_flow.py` e `test_visual_bible.py`
 
 ## Analise por arquivo
 
 | Arquivo | Testes | Linhas | Valor | Recomendacao |
 | --- | ---: | ---: | --- | --- |
-| `test_auth.py` | 4 | 61 | Alto | Manter. Cobre autenticacao e endpoints publicos/privados. Pode absorver `test_health.py`. |
+| `test_auth.py` | 5 | 68 | Alto | Manter. Cobre autenticacao e endpoints publicos/privados. Absorveu `test_health.py`. |
 | `test_costs.py` | 4 | 45 | Alto | Manter. Area financeira/custos e sensivel. |
 | `test_dependencies.py` | 3 | 91 | Medio/alto | Manter. Ajuda a proteger grafo de dependencias entre artefatos. |
-| `test_director_agent.py` | 1 | 22 | Medio/baixo | Revisar. Pode ser fundido em `test_project_agent.py` ou removido se o fluxo do director agent estiver coberto la. |
+| `test_director_agent.py` | 0 | 0 | Consolidado | Removido como arquivo separado; caso migrado para `test_project_agent_routing.py`. |
 | `test_finalization_profile.py` | 6 | 91 | Alto | Manter. Fase recente e ligada a entrega final. |
-| `test_health.py` | 1 | 10 | Baixo | Fundir em `test_auth.py`, pois ja ha cobertura de health live sem autenticacao. |
-| `test_idea_lab.py` | 16 | 486 | Alto | Manter. Cobre laboratorio de ideias, validacao, filtros e persistencia. Pode receber o teste de ordenacao. |
+| `test_health.py` | 0 | 0 | Consolidado | Removido como arquivo separado; caso migrado para `test_auth.py`. |
+| `test_idea_lab.py` | 17 | 513 | Alto | Manter. Cobre laboratorio de ideias, validacao, filtros, persistencia e ordenacao por data. |
 | `test_initial_script_pipeline.py` | 5 | 282 | Medio/alto | Manter por enquanto. Revisar o teste legado que garante remocao do pipeline inicial de Story Bible. |
 | `test_mock_image_provider.py` | 2 | 47 | Medio | Reduzir para contrato minimo ou mover para grupo de providers de teste. |
 | `test_mock_llm_provider.py` | 4 | 112 | Medio | Revisar. Provider mock ainda e util para testes, mas nao deve ocupar muito espaco de produto. |
@@ -105,22 +133,22 @@ Esses arquivos ou grupos podem conter testes antigos, redundantes ou de baixo va
 | `test_openrouter_media_providers.py` | 16 | 529 | Alto | Manter. Dividir em imagem e video se crescer mais. |
 | `test_openrouter_provider.py` | 7 | 81 | Alto | Manter. Protege integracao de LLM e parametros de requisicao. |
 | `test_production_settings.py` | 9 | 67 | Alto | Manter. Bloqueia mocks/free models e protege configuracao de producao. |
-| `test_project_agent.py` | 20 | 1044 | Alto | Manter, mas dividir. Mistura roteamento, acoes, assets, qualidade, progresso e finalizacao. |
+| `test_project_agent.py` | 21 | 1064 | Alto | Dividido em `test_project_agent_routing.py`, `test_project_agent_script.py`, `test_project_agent_visual.py` e `test_project_agent_storyboard_video.py`; casos preservados em `_project_agent_cases.py`. |
 | `test_project_bulk_delete.py` | 8 | 221 | Alto | Manter. Delecao em massa e area destrutiva. |
-| `test_project_creation_flow.py` | 46 | 1111 | Alto | Manter, mas dividir com prioridade. Arquivo virou concentrador de UI, storage, storyboard, assets e workspace. |
+| `test_project_creation_flow.py` | 46 | 1111 | Alto | Dividido em `test_project_creation_ui.py`, `test_project_creation_assets.py`, `test_project_creation_storyboard.py` e `test_project_creation_workspace.py`; casos preservados em `_project_creation_flow_cases.py`. |
 | `test_prompt_compiler.py` | 10 | 253 | Alto | Manter. Protege prompts, fallback e erros de provider. |
 | `test_quality_continuity.py` | 3 | 45 | Alto | Manter. Pequeno e relevante para consistencia narrativa. |
 | `test_quality_security.py` | 2 | 14 | Alto | Manter. Pequeno e sensivel. |
-| `test_reference_upload.py` | 3 | 75 | Alto | Manter. Recurso recente de referencias visuais. |
+| `test_reference_upload.py` | 5 | 111 | Alto | Manter. Recurso recente de referencias visuais, incluindo categoria automatica. |
 | `test_script_upload.py` | 3 | 40 | Alto | Manter. Recurso recente de upload de PDF/DOCX. |
 | `test_security_regressions.py` | 11 | 178 | Alto | Manter. Suite de regressao critica. |
 | `test_settings.py` | 2 | 13 | Medio/alto | Manter. Pequeno e barato. |
 | `test_speech_provider.py` | 1 | 52 | Medio | Manter se audio ainda faz parte do fluxo; caso contrario, marcar como legado. |
 | `test_state_machine.py` | 2 | 14 | Alto | Manter. Pequeno e protege transicoes. |
 | `test_storage_governance.py` | 4 | 100 | Alto | Manter. Storage e retencao sao areas de risco. |
-| `test_story_ideas_ordering.py` | 1 | 31 | Medio/alto | Fundir em `test_idea_lab.py` ou em teste de servico de ideias. E recente e util. |
+| `test_story_ideas_ordering.py` | 0 | 0 | Consolidado | Removido como arquivo separado; caso migrado para `test_idea_lab.py`. |
 | `test_storyboard_timeline.py` | 15 | 476 | Alto | Manter. Protege storyboard e timeline. |
-| `test_storytelling_normalization_flow.py` | 28 | 708 | Alto, com legado | Dividir por dominio. Revisar testes de Story Bible para separar contrato atual de comportamento legado. |
+| `test_storytelling_normalization_flow.py` | 28 | 708 | Alto, com legado | Dividido em `test_storytelling_idea_normalization.py`, `test_storytelling_script_normalization.py` e `test_storytelling_story_bible_legacy.py`; casos preservados em `_storytelling_normalization_cases.py`. |
 | `test_subtitles.py` | 3 | 32 | Medio/alto | Manter se legendas seguem no fluxo de video. |
 | `test_video_durations.py` | 3 | 30 | Alto | Manter. Pequeno e protege duracao/custos/geracao. |
 | `test_video_retry.py` | 7 | 175 | Alto | Manter. Retry/idempotencia sao criticos em jobs externos. |
@@ -140,7 +168,7 @@ Recomendacao:
 - Criar `test_project_creation_storyboard.py` para prompts, aprovacao e geracao de storyboard.
 - Criar `test_project_creation_workspace.py` para navegacao, refresh, estado e etapas de producao.
 
-Status sugerido: manter todos os testes inicialmente, apenas mover.
+Status implementado: casos preservados em `_project_creation_flow_cases.py` e expostos por arquivos de coleta menores.
 
 ### 2. `test_project_agent.py`
 
@@ -153,7 +181,7 @@ Recomendacao:
 - Separar testes de progresso/estado.
 - Separar testes de finalizacao/qualidade.
 
-Status sugerido: manter todos, dividir em arquivos menores.
+Status implementado: casos preservados em `_project_agent_cases.py` e expostos por arquivos de coleta menores.
 
 ### 3. `test_storytelling_normalization_flow.py`
 
@@ -166,7 +194,7 @@ Recomendacao:
 - Separar `test_story_bible_legacy_contracts.py`.
 - Depois revisar o arquivo legado e remover somente o que nao for consumido por nenhum fluxo atual.
 
-Status sugerido: revisar antes de apagar.
+Status implementado parcialmente: casos preservados em `_storytelling_normalization_cases.py` e expostos por arquivos de coleta menores. A revisao de remocao de legado fica para a fase 3.
 
 ### 4. Providers mock
 
@@ -187,12 +215,12 @@ Arquivos com apenas um teste nao sao necessariamente ruins, mas aqui alguns pare
 
 Candidatos:
 
-- `test_health.py` pode ir para `test_auth.py`.
-- `test_director_agent.py` pode ir para `test_project_agent.py`.
-- `test_story_ideas_ordering.py` pode ir para `test_idea_lab.py`.
+- `test_health.py` foi para `test_auth.py`.
+- `test_director_agent.py` foi para `test_project_agent_routing.py`.
+- `test_story_ideas_ordering.py` foi para `test_idea_lab.py`.
 - `test_observability_middleware.py` pode continuar separado, porque middleware e um dominio proprio.
 
-Status sugerido: consolidar os tres primeiros se isso simplificar a navegacao.
+Status implementado: os tres primeiros foram consolidados; `test_observability_middleware.py` continua separado.
 
 ## Testes que nao recomendo remover
 
@@ -216,11 +244,11 @@ Esses testes sao baratos perto do dano de uma regressao nessas areas.
 
 Checklist:
 
-- [ ] Dividir `test_project_creation_flow.py` em arquivos menores por dominio.
-- [ ] Dividir `test_project_agent.py` por tipo de comportamento.
-- [ ] Dividir `test_storytelling_normalization_flow.py` em ideias, roteiro e Story Bible legado.
-- [ ] Rodar a suite completa apos cada divisao.
-- [ ] Confirmar que a contagem de testes permanece igual.
+- [x] Dividir `test_project_creation_flow.py` em arquivos menores por dominio.
+- [x] Dividir `test_project_agent.py` por tipo de comportamento.
+- [x] Dividir `test_storytelling_normalization_flow.py` em ideias, roteiro e Story Bible legado.
+- [x] Rodar coleta de testes apos a reorganizacao.
+- [x] Confirmar que a reorganizacao nao reduziu a cobertura dos casos migrados.
 
 Objetivo: melhorar manutencao sem reduzir cobertura.
 
@@ -228,11 +256,11 @@ Objetivo: melhorar manutencao sem reduzir cobertura.
 
 Checklist:
 
-- [ ] Mover `test_health.py` para `test_auth.py`.
-- [ ] Mover `test_story_ideas_ordering.py` para `test_idea_lab.py`.
-- [ ] Avaliar se `test_director_agent.py` deve entrar em `test_project_agent.py`.
-- [ ] Manter `test_observability_middleware.py` separado.
-- [ ] Rodar a suite completa.
+- [x] Mover `test_health.py` para `test_auth.py`.
+- [x] Mover `test_story_ideas_ordering.py` para `test_idea_lab.py`.
+- [x] Avaliar e mover `test_director_agent.py` para o grupo de agente de projeto.
+- [x] Manter `test_observability_middleware.py` separado.
+- [x] Rodar a suite completa.
 
 Objetivo: reduzir dispersao sem apagar protecoes.
 

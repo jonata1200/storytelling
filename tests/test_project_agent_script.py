@@ -1,0 +1,12 @@
+import _project_agent_cases as cases
+
+test_project_chat_can_revise_script = cases.test_project_chat_can_revise_script
+test_project_chat_can_revise_specific_script_scenes = (
+    cases.test_project_chat_can_revise_specific_script_scenes
+)
+test_project_chat_can_force_full_script_regeneration = (
+    cases.test_project_chat_can_force_full_script_regeneration
+)
+test_forced_script_pipeline_refreshes_existing_visual_bible = (
+    cases.test_forced_script_pipeline_refreshes_existing_visual_bible
+)

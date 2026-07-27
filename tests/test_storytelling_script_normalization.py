@@ -1,0 +1,44 @@
+import _storytelling_normalization_cases as cases
+
+test_script_payload_accepts_common_ai_field_names = (
+    cases.test_script_payload_accepts_common_ai_field_names
+)
+test_script_payload_preserves_briefing_duration_over_model_output = (
+    cases.test_script_payload_preserves_briefing_duration_over_model_output
+)
+test_script_payload_adds_scene_markers_to_screenplay_without_cena_labels = (
+    cases.test_script_payload_adds_scene_markers_to_screenplay_without_cena_labels
+)
+test_script_payload_normalizes_inline_scene_heading_from_model_response = (
+    cases.test_script_payload_normalizes_inline_scene_heading_from_model_response
+)
+test_screenplay_validator_rejects_technical_planning_document = (
+    cases.test_screenplay_validator_rejects_technical_planning_document
+)
+test_screenplay_validator_rejects_scene_and_slugline_on_same_line = (
+    cases.test_screenplay_validator_rejects_scene_and_slugline_on_same_line
+)
+test_screenplay_validator_rejects_compacted_inline_numbered_sluglines = (
+    cases.test_screenplay_validator_rejects_compacted_inline_numbered_sluglines
+)
+test_script_payload_retries_compacted_inline_numbered_sluglines = (
+    cases.test_script_payload_retries_compacted_inline_numbered_sluglines
+)
+test_script_payload_preserves_embedded_production_plan_separately = (
+    cases.test_script_payload_preserves_embedded_production_plan_separately
+)
+test_scene_plan_payload_normalizes_shots_to_seedance_duration_range = (
+    cases.test_scene_plan_payload_normalizes_shots_to_seedance_duration_range
+)
+test_scene_plan_payload_uses_script_scene_markers_when_ai_returns_one_scene = (
+    cases.test_scene_plan_payload_uses_script_scene_markers_when_ai_returns_one_scene
+)
+test_scene_plan_payload_can_be_derived_from_structured_script_without_llm = (
+    cases.test_scene_plan_payload_can_be_derived_from_structured_script_without_llm
+)
+test_script_payload_builds_content_from_scene_list_when_content_is_empty = (
+    cases.test_script_payload_builds_content_from_scene_list_when_content_is_empty
+)
+test_fallback_script_content_from_idea_scales_scene_count_with_duration = (
+    cases.test_fallback_script_content_from_idea_scales_scene_count_with_duration
+)

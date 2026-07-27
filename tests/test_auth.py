@@ -20,6 +20,13 @@ def test_health_live_does_not_require_authentication() -> None:
     assert response.json()["status"] == "ok"
 
 
+def test_live_health() -> None:
+    client = TestClient(create_app(include_ui=False))
+    response = client.get("/api/v1/health/live")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
 def test_operational_api_endpoint_does_not_require_authentication() -> None:
     client = TestClient(create_app(include_ui=False))
     response = client.post(

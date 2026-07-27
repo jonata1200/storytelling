@@ -1,0 +1,26 @@
+import _project_creation_flow_cases as cases
+
+test_asset_url_maps_local_storage_file_to_public_storage_route = (
+    cases.test_asset_url_maps_local_storage_file_to_public_storage_route
+)
+test_asset_url_maps_storage_prefixed_relative_path = (
+    cases.test_asset_url_maps_storage_prefixed_relative_path
+)
+test_asset_url_rejects_files_outside_configured_storage = (
+    cases.test_asset_url_rejects_files_outside_configured_storage
+)
+test_visual_references_are_sorted_by_expected_view_order = (
+    cases.test_visual_references_are_sorted_by_expected_view_order
+)
+test_visual_references_prefer_newest_image_for_same_view = (
+    cases.test_visual_references_prefer_newest_image_for_same_view
+)
+test_character_reference_sheet_asset_is_available_only_for_characters = (
+    cases.test_character_reference_sheet_asset_is_available_only_for_characters
+)
+test_visual_library_cards_ready_when_any_card_type_exists = (
+    cases.test_visual_library_cards_ready_when_any_card_type_exists
+)
+test_visual_batch_requests_include_all_missing_views = (
+    cases.test_visual_batch_requests_include_all_missing_views
+)

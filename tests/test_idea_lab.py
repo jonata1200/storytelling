@@ -1,9 +1,12 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import NoReturn
+from types import SimpleNamespace
+from typing import Any, NoReturn, cast
+from uuid import uuid4
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import Settings
 from app.providers.llm.types import LLMRequest, LLMResult
@@ -20,6 +23,7 @@ from app.storytelling.idea_lab import (
     save_idea,
 )
 from app.storytelling.story_idea_normalization import _normalize_generated_story_ideas
+from app.storytelling.story_ideas import list_story_ideas
 
 
 def test_idea_lab_prompt_guides_quality_and_output_contract() -> None:
@@ -484,3 +488,26 @@ def test_all_ideas_can_be_deleted_at_once(tmp_path: Path) -> None:
     assert deleted_count == 2
     assert load_saved_ideas(saved_path) == []
     assert load_generated_ideas(generated_path) == []
+
+
+class _FakeStoryIdeasSession:
+    def __init__(self) -> None:
+        self.executed_sql = ""
+
+    async def get(self, model: type, identifier: object) -> SimpleNamespace:
+        _ = model, identifier
+        return SimpleNamespace(deleted_at=None)
+
+    async def execute(self, statement: Any) -> Any:
+        self.executed_sql = str(statement)
+        return SimpleNamespace(scalars=lambda: [])
+
+
+@pytest.mark.asyncio
+async def test_list_story_ideas_orders_newest_first() -> None:
+    session = _FakeStoryIdeasSession()
+
+    ideas = await list_story_ideas(cast(AsyncSession, session), uuid4())
+
+    assert ideas == []
+    assert "story_ideas.created_at DESC" in session.executed_sql

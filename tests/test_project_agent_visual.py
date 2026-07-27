@@ -1,0 +1,14 @@
+import _project_agent_cases as cases
+
+test_visual_pipeline_creates_prompts_without_auto_generating_images = (
+    cases.test_visual_pipeline_creates_prompts_without_auto_generating_images
+)
+test_visual_prompt_approval_matches_target_name_and_generates_initial_view = (
+    cases.test_visual_prompt_approval_matches_target_name_and_generates_initial_view
+)
+test_visual_prompt_approval_asks_for_target_when_ambiguous = (
+    cases.test_visual_prompt_approval_asks_for_target_when_ambiguous
+)
+test_project_chat_forces_regeneration_for_visual_requests = (
+    cases.test_project_chat_forces_regeneration_for_visual_requests
+)
