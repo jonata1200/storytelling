@@ -34,6 +34,13 @@ Para iniciar a API em segundo plano:
 .\scripts\app.ps1 start -Background
 ```
 
+Para processar jobs longos em paralelo com a API, mantenha Redis ativo pelo
+Docker Compose e inicie um worker Celery em outro terminal:
+
+```powershell
+celery -A app.workers.celery_app.celery_app worker --loglevel=info --pool=solo
+```
+
 Para finalizar a API e parar os containers:
 
 ```powershell
@@ -119,12 +126,14 @@ Health check:
 http://localhost:8000/api/v1/health/live
 ```
 
-Credenciais basicas iniciais:
+Autenticacao:
 
-```text
-usuario: admin
-senha: admin
-```
+Em `APP_ENV=local` ou `APP_ENV=test`, a API operacional usa bypass local para
+preservar a experiencia de desenvolvimento. Em ambientes fora de local/test, as
+rotas operacionais em `/api/v1` exigem cookie de sessao ou token bearer gerado
+pelo fluxo de login. O endpoint `/api/v1/health/live` permanece publico; o
+readiness e as demais rotas exigem autenticacao quando a aplicacao nao esta em
+ambiente local/test.
 
 ## Testes
 

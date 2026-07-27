@@ -5,6 +5,7 @@ from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import require_authenticated_user
 from app.config.settings import Settings, get_settings
 from app.database.session import get_session
 
@@ -20,6 +21,7 @@ async def live(settings: Annotated[Settings, Depends(get_settings)]) -> dict[str
 async def ready(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
+    _username: Annotated[str, Depends(require_authenticated_user)],
 ) -> dict[str, str]:
     await session.execute(text("SELECT 1"))
     redis = Redis.from_url(settings.redis_url)

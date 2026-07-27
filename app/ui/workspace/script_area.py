@@ -1,10 +1,11 @@
-﻿from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
-from nicegui import background_tasks, ui
+from nicegui import ui
 
 from app.database.session import AsyncSessionLocal
+from app.jobs.service import enqueue_project_step
 from app.projects.models import Artifact
 from app.projects.versioning import (
     create_artifact_version,
@@ -13,9 +14,7 @@ from app.projects.versioning import (
 from app.storytelling.models import Script, ScriptVersion
 from app.storytelling.service import regenerate_scenes_and_shots
 from app.ui.project.workflows import (
-    _generate_missing_scenes_in_background,
     _reload_project_when_script_ready,
-    _resume_initial_script_in_background,
 )
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, STEP_LOADING_COPY
 from app.visual_bible.service import generate_visual_bible
@@ -23,7 +22,7 @@ from app.visual_bible.service import generate_visual_bible
 LoadingDialogFactory = Callable[[str, str], Any]
 ProjectAiActionReader = Callable[[dict[str, Any]], dict[str, Any]]
 AiActionStaleChecker = Callable[[dict[str, Any]], bool]
-RetryInitialScriptHandler = Callable[[UUID, Any], None]
+RetryInitialScriptHandler = Callable[[UUID, Any], Awaitable[None]]
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
 
 
@@ -36,6 +35,11 @@ async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID)
         if visual is None:
             raise ValueError("não foi possível atualizar a Biblioteca Visual.")
         await resolve_stale_artifacts_after_regeneration(session, project_id)
+
+
+async def _enqueue_script_pipeline_from_ui(project_id: UUID) -> None:
+    async with AsyncSessionLocal() as session:
+        await enqueue_project_step(session, project_id, "script")
 
 
 async def save_script_from_ui(
@@ -130,15 +134,9 @@ def render_script_area(
         and ai_action_is_stale(ai_action)
     )
     if should_recover_missing_scenes:
-        background_tasks.create(
-            _generate_missing_scenes_in_background(project_id, script.id),
-            name=f"generate missing scenes {project_id}",
-        )
+        ui.timer(0.1, lambda: _enqueue_script_pipeline_from_ui(project_id), once=True)
     if should_resume_stale_script:
-        background_tasks.create(
-            _resume_initial_script_in_background(project_id),
-            name=f"resume initial script {project_id}",
-        )
+        ui.timer(0.1, lambda: _enqueue_script_pipeline_from_ui(project_id), once=True)
     generation_in_progress = (
         ai_status in {"queued", "running"}
         or should_recover_missing_scenes
@@ -202,8 +200,8 @@ def render_script_area(
                     "A IA está tentando criar o roteiro inicial novamente.",
                 )
 
-                def retry_initial_script() -> None:
-                    retry_initial_script_from_ui(project_id, retry_loading_dialog)
+                async def retry_initial_script() -> None:
+                    await retry_initial_script_from_ui(project_id, retry_loading_dialog)
 
                 with ui.element("div").classes(
                     "border border-red-900 bg-red-950/40 rounded-2xl p-4 text-red-100"

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from nicegui import background_tasks, ui
+from nicegui import ui
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import AsyncSessionLocal
@@ -328,16 +328,6 @@ async def _reload_project_when_script_ready(project_id: UUID) -> None:
         status = str(action.get("status") or "") if isinstance(action, dict) else ""
     if status in {"completed", "failed"} or (script is not None and scene_count > 0):
         ui.navigate.reload()
-
-
-def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -> None:
-    loading_dialog.open()
-    background_tasks.create(
-        _resume_initial_script_in_background(project_id),
-        name=f"retry initial script {project_id}",
-    )
-    ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
-    ui.notify("Retomando a criação do roteiro.", color="positive")
 
 
 def _requests_script_generation(message: str, active: str) -> bool:

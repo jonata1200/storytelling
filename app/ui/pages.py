@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from nicegui import app as nicegui_app  # noqa: F401
-from nicegui import background_tasks, ui
+from nicegui import ui
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import get_settings
@@ -15,6 +15,7 @@ from app.database.session import AsyncSessionLocal
 from app.generation.model_settings import (
     ensure_default_model_settings,
 )
+from app.jobs.service import enqueue_project_step
 from app.production.service import (
     update_production_settings,
 )
@@ -155,13 +156,10 @@ from app.ui.project.text import (
     format_idea_payload_for_project as _format_idea_payload_for_project,
 )
 from app.ui.project.workflows import (
-    _generate_initial_script_in_background,
-    _reload_project_when_script_ready,
-    _resume_initial_script_in_background,
-    _set_project_ai_action_status,
+    _log_ai_background_failure as _workflow_log_ai_background_failure,
 )
 from app.ui.project.workflows import (
-    _log_ai_background_failure as _workflow_log_ai_background_failure,
+    _reload_project_when_script_ready,
 )
 from app.ui.shared import assistant_state
 from app.ui.shared.assistant_state import (  # noqa: F401
@@ -306,12 +304,10 @@ async def _generate_initial_script(
     return script
 
 
-def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -> None:
+async def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -> None:
     loading_dialog.open()
-    background_tasks.create(
-        _resume_initial_script_in_background(project_id),
-        name=f"retry initial script {project_id}",
-    )
+    async with AsyncSessionLocal() as session:
+        await enqueue_project_step(session, project_id, "initial_script")
     ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
     ui.notify("Retomando a criação do roteiro.", color="positive")
 
@@ -404,22 +400,14 @@ async def _create_project_from_form(
             )
             await create_briefing(session, project.id, briefing)
             if generate_initial_script:
-                await _set_project_ai_action_status(
+                await enqueue_project_step(
                     session,
                     project.id,
-                    status="queued",
-                    message="A IA vai iniciar a criacao do roteiro inicial.",
+                    "initial_script",
+                    {"source_idea": dict(source_idea) if source_idea is not None else None},
                 )
         if generate_initial_script:
-            background_tasks.create(
-                _generate_initial_script_in_background(
-                    project_id,
-                    dict(source_idea) if source_idea is not None else None,
-                ),
-                name=f"initial-script-{project_id}",
-            )
-        if generate_initial_script:
-            message = f"Projeto criado. A IA já iniciou o roteiro de {duration:g} minutos."
+            message = f"Projeto criado. O roteiro de {duration:g} minutos foi enfileirado."
         else:
             message = "Projeto criado com briefing inicial."
         ui.notify(message, color="positive")

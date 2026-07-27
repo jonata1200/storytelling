@@ -401,11 +401,11 @@ def test_safe_refresh_ignores_deleted_slot_runtime_error() -> None:
     pages._safe_refresh(DeletedRefreshable())
 
 
-def test_retry_initial_script_opens_loading_dialog_and_watches_status(
+async def test_retry_initial_script_opens_loading_dialog_and_watches_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
-    created_tasks: list[dict[str, Any]] = []
+    enqueued_jobs: list[dict[str, Any]] = []
     timers: list[dict[str, Any]] = []
     notifications: list[str] = []
 
@@ -415,15 +415,35 @@ def test_retry_initial_script_opens_loading_dialog_and_watches_status(
         def open(self) -> None:
             self.opened = True
 
-    def fake_create(task: object, *, name: str) -> None:
-        created_tasks.append({"task": task, "name": name})
+    class FakeSessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    async def fake_enqueue_project_step(
+        session: object,
+        requested_project_id: Any,
+        step: str,
+        payload: dict[str, Any] | None = None,
+    ) -> object:
+        enqueued_jobs.append(
+            {
+                "session": session,
+                "project_id": requested_project_id,
+                "step": step,
+                "payload": payload,
+            }
+        )
+        return object()
 
     def fake_timer(interval: float, callback: object) -> None:
         timers.append({"interval": interval, "callback": callback})
 
     dialog = FakeDialog()
-    monkeypatch.setattr(pages, "_resume_initial_script_in_background", lambda item_id: "task")
-    monkeypatch.setattr(pages.background_tasks, "create", fake_create)
+    monkeypatch.setattr(pages, "AsyncSessionLocal", lambda: FakeSessionContext())
+    monkeypatch.setattr(pages, "enqueue_project_step", fake_enqueue_project_step)
     monkeypatch.setattr(pages.ui, "timer", fake_timer)
     monkeypatch.setattr(
         pages.ui,
@@ -431,10 +451,13 @@ def test_retry_initial_script_opens_loading_dialog_and_watches_status(
         lambda message, **kwargs: notifications.append(str(message)),
     )
 
-    pages._retry_initial_script_from_ui(project_id, dialog)
+    await pages._retry_initial_script_from_ui(project_id, dialog)
 
     assert dialog.opened is True
-    assert created_tasks == [{"task": "task", "name": f"retry initial script {project_id}"}]
+    assert enqueued_jobs
+    assert enqueued_jobs[0]["project_id"] == project_id
+    assert enqueued_jobs[0]["step"] == "initial_script"
+    assert enqueued_jobs[0]["payload"] is None
     assert timers and timers[0]["interval"] == 5.0
     assert notifications == ["Retomando a criação do roteiro."]
 

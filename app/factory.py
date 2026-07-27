@@ -5,9 +5,12 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
+from app.auth.ui_routes import router as auth_ui_router
 from app.config.settings import get_settings
 from app.observability.middleware import CorrelationIdMiddleware
 from app.workflows.state_machine import WorkflowStateError
+
+LOCAL_STORAGE_MOUNT_ENVS = {"local", "test"}
 
 
 def create_app(include_ui: bool = True) -> FastAPI:
@@ -15,6 +18,7 @@ def create_app(include_ui: bool = True) -> FastAPI:
     app = FastAPI(title=settings.app_name, debug=settings.app_debug)
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(api_router)
+    app.include_router(auth_ui_router)
 
     @app.exception_handler(WorkflowStateError)
     async def workflow_state_error_handler(
@@ -32,11 +36,12 @@ def create_app(include_ui: bool = True) -> FastAPI:
             StaticFiles(directory=Path(__file__).parent / "ui"),
             name="ui-assets",
         )
-        app.mount(
-            "/storage",
-            StaticFiles(directory=settings.local_storage_path),
-            name="storage",
-        )
+        if settings.app_env.lower() in LOCAL_STORAGE_MOUNT_ENVS:
+            app.mount(
+                "/storage",
+                StaticFiles(directory=settings.local_storage_path),
+                name="storage",
+            )
         register_ui_pages()
         ui.run_with(
             app,

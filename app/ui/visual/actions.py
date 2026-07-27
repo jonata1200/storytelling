@@ -7,9 +7,9 @@ from nicegui import ui
 from sqlalchemy import select
 
 from app.database.session import AsyncSessionLocal
+from app.jobs.service import enqueue_project_step
 from app.ui.shared.page_config import friendly_ai_error, show_ai_error_popup
 from app.ui.visual.helpers import visual_reference_views_for as _visual_reference_views_for
-from app.video_generation.service import generate_video_clips
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (
     approve_visual_target_and_generate_views,
@@ -295,12 +295,16 @@ async def _approve_video_prompts_from_ui(
         loading_dialog.open()
     try:
         async with AsyncSessionLocal() as session:
-            result = await generate_video_clips(
+            job = await enqueue_project_step(
                 session,
                 project_id,
-                frame_ids=frame_ids,
-                variants_per_frame=1,
+                "video",
+                {"frame_ids": [str(frame_id) for frame_id in frame_ids]},
             )
+        ui.notify(f"Prompts aprovados. Job de video enfileirado: {job.id}.", color="positive")
+        ui.navigate.reload()
+        return
+        result = None
         if result is None:
             ui.notify("Não encontrei o projeto para gerar os clipes.", color="negative")
             return
