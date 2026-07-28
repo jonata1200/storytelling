@@ -8,10 +8,10 @@ reduzir risco em texto, imagem, vídeo e vozes de personagens.
 
 - A aplicação deve continuar usando modelos reais; providers `mock` seguem
   bloqueados no fluxo de produção.
-- OpenRouter deve permanecer disponível como fallback até a fase final de corte.
+- OpenRouter permanece disponível como fallback temporário após a fase final de corte.
 - OmniRoute deve ser tratado como provider novo, não apenas como renomeação de
   variáveis.
-- Chat/texto deve migrar primeiro, imagem depois, vídeo por último.
+- Chat/texto migrou primeiro, imagem depois, vídeo por último.
 - Speech deve ser avaliado separadamente porque a aplicação usa vozes
   consistentes por personagem na finalização.
 
@@ -29,4 +29,3 @@ reduzir risco em texto, imagem, vídeo e vozes de personagens.
 
 - OmniRoute API Reference: https://github.com/diegosouzapw/OmniRoute/blob/main/docs/API_REFERENCE.md
 - OmniRouters API docs: https://docs.omnirouters.com/api/
-

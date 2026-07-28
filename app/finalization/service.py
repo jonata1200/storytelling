@@ -639,6 +639,26 @@ async def _add_dialogue_audio_items(
                     },
                 )
             )
+            await emit_project_event(
+                session,
+                OperationalEventCreate(
+                    project_id=project_id,
+                    artifact_id=artifact.id,
+                    event_type="speech_generation",
+                    status="succeeded",
+                    provider=speech_result.provider,
+                    model=speech_result.model,
+                    operation="speech_generation",
+                    estimated_cost=cost_estimate.estimated,
+                    message="Voz de personagem sintetizada",
+                    details={
+                        "asset_id": str(asset.id),
+                        "speaker": dialogue.speaker,
+                        "voice_profile_id": voice_profile_id,
+                        "storyboard_frame_id": str(frame.id),
+                    },
+                ),
+            )
             created_count += 1
             order_index += 1
             cursor_ms = end_ms

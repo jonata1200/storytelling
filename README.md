@@ -70,26 +70,27 @@ existindo por compatibilidade e chamam o script unificado.
 
 ## Provedores de IA
 
-OpenRouter segue como provider padrão durante a migração para OmniRoute. Sem
-chave válida do provider ativo, as etapas de IA retornam erro para a interface,
-em vez de gerar conteúdo mock.
+OmniRoute é o provider padrão para texto, imagem e vídeo. Sem chave válida do
+provider ativo, as etapas de IA retornam erro para a interface, em vez de gerar
+conteúdo mock. OpenRouter permanece disponível como rollback temporário via
+configuração.
 Configure no `.env`:
 
 ```env
-OPENROUTER_API_KEY=sua_chave_aqui
-AI_PROVIDER=openrouter
+OMNIROUTE_API_KEY=sua_chave_aqui
+AI_PROVIDER=omniroute
 TEXT_PROVIDER=
 IMAGE_PROVIDER=
 VIDEO_PROVIDER=
-OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash
-OPENROUTER_IMAGE_MODEL=sourceful/riverflow-v2-fast
-OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0-fast
-OMNIROUTE_API_KEY=
 OMNIROUTE_BASE_URL=https://omnirouters.com/v1
 OMNIROUTE_DEFAULT_MODEL=deepseek/deepseek-v4-flash
 OMNIROUTE_IMAGE_MODEL=sourceful/riverflow-v2-fast
 OMNIROUTE_VIDEO_MODEL=bytedance/seedance-2.0-fast
 OMNIROUTE_SPEECH_MODEL=
+OPENROUTER_API_KEY=
+OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash
+OPENROUTER_IMAGE_MODEL=sourceful/riverflow-v2-fast
+OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0-fast
 SPEECH_PROVIDER=openai_compatible
 SPEECH_MODEL=
 ALLOW_USER_REGISTRATION=true
@@ -101,9 +102,10 @@ definir provider e modelos diferentes para ideias, roteiro e cenas/planos.
 Modelos com sufixo `:free` e modelos `mock-*` são bloqueados porque tendem a
 falhar ou confundir o fluxo de produção.
 
-OmniRoute já pode ser configurado por `AI_PROVIDER=omniroute` ou pelos campos
-por mídia (`TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VIDEO_PROVIDER`). Texto, imagem
-e vídeo já usam providers OmniRoute reais. Para vozes dos personagens, use
+OmniRoute pode ser configurado globalmente por `AI_PROVIDER=omniroute` ou por
+mídia (`TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VIDEO_PROVIDER`). Para rollback,
+use `AI_PROVIDER=openrouter` ou selecione OpenRouter apenas no canal desejado.
+Para vozes dos personagens, use
 `SPEECH_PROVIDER=omniroute` com `OMNIROUTE_API_KEY` e `OMNIROUTE_SPEECH_MODEL`
 ou mantenha `SPEECH_PROVIDER=openai_compatible`.
 
@@ -216,8 +218,8 @@ GET /api/v1/observability/projects/{project_id}/summary
 GET /api/v1/observability/readiness
 ```
 
-O readiness separa API, banco, Redis, broker do worker, FFmpeg, provider de IA e
-vozes de personagens.
+O readiness separa API, banco, Redis, broker do worker, FFmpeg, providers de
+texto, imagem, vídeo e vozes de personagens.
 Correlation ID é propagado por `X-Correlation-ID` nas chamadas externas relevantes.
 
 ## Testes
@@ -240,11 +242,11 @@ Fases 1 a 8 estão implementadas em base funcional:
 - Alembic async usando `asyncpg`.
 - Projetos, versões, artefatos, aprovações, dependências, assets e custos.
 - Máquina de estados inicial para o pipeline de projeto.
-- Briefing, ideias, Story Bible, roteiro, cenas e planos com OpenRouter.
+- Briefing, ideias, Story Bible, roteiro, cenas e planos com OmniRoute.
 - Templates e execuções de prompt auditáveis.
-- Personagens, locais, objetos e referências visuais reais via OpenRouter Images.
+- Personagens, locais, objetos e referências visuais reais via OmniRoute Images.
 - Storyboards, animatic visual e timeline preliminar.
-- Jobs de vídeo via OpenRouter, clipes e revisão humana.
+- Jobs de vídeo via OmniRoute, clipes e revisão humana.
 - Timeline final e export MP4/manifest sem narração, com mix de vozes por personagem.
 - Continuity Ledger, quality gate, varredura inicial de segurança e correlation
   ID por requisição.
@@ -263,7 +265,7 @@ POST /api/v1/storytelling/projects/{project_id}/script/generate
 POST /api/v1/storytelling/projects/{project_id}/scenes/generate
 ```
 
-As gerações da Fase 3 usam OpenRouter no fluxo da aplicação. Sem chave válida,
+As gerações da Fase 3 usam o provider de texto configurado no fluxo da aplicação. Sem chave válida,
 com modelo `:free` ou com modelo `mock-*`, a etapa retorna erro em vez de criar
 conteúdo falso.
 
@@ -280,7 +282,7 @@ POST /api/v1/visual-bible/projects/{project_id}/references/generate
 GET  /api/v1/visual-bible/projects/{project_id}/consistency/{target_kind}/{target_id}
 ```
 
-As referências visuais usam OpenRouter Images. Fallback para imagem mock local
+As referências visuais usam o provider de imagem configurado. Fallback para imagem mock local
 está bloqueado; falhas do provedor devem aparecer como erro para o usuário.
 
 ## Fluxo de storyboard inicial
@@ -308,7 +310,7 @@ GET  /api/v1/video/projects/{project_id}/jobs/{job_id}
 POST /api/v1/video/projects/{project_id}/clips/{clip_id}/review
 ```
 
-Os clipes usam OpenRouter Videos. Provider `mock` e modelo `mock-video` são
+Os clipes usam o provider de vídeo configurado. Provider `mock` e modelo `mock-video` são
 recusados no fluxo da aplicação.
 
 ## Fluxo de finalização inicial

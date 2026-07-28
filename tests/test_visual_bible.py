@@ -81,6 +81,8 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         visual_bible_service,
         "get_settings",
         lambda: SimpleNamespace(
+            ai_provider="openrouter",
+            image_provider="openrouter",
             openrouter_api_key="sk-or-v1-test",
             openrouter_image_model="krea/krea-2-medium-turbo",
         ),
@@ -147,6 +149,8 @@ async def test_image_provider_reports_missing_key_for_real_image_model(
         visual_bible_service,
         "get_settings",
         lambda: SimpleNamespace(
+            ai_provider="openrouter",
+            image_provider="openrouter",
             openrouter_api_key=None,
             openrouter_image_model="krea/krea-2-medium-turbo",
         ),

@@ -143,7 +143,7 @@ def friendly_ai_error(exc: BaseException) -> str:
             "O provedor de IA recusou a chamada por limite de uso. Aguarde alguns minutos "
             "ou troque para um modelo com mais disponibilidade."
         )
-    if "openrouter" in normalized and (
+    if ("openrouter" in normalized or "omniroute" in normalized) and (
         "network" in normalized
         or "connection" in normalized
         or "dns" in normalized
@@ -151,7 +151,7 @@ def friendly_ai_error(exc: BaseException) -> str:
     ):
         return (
             "Não foi possível conectar ao provedor de IA. Verifique a internet, a chave "
-            "do OpenRouter e tente novamente."
+            "do provider configurado e tente novamente."
         )
     if "json" in normalized:
         return (

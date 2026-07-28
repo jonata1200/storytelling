@@ -69,7 +69,7 @@ def _visual_reference_used_fallback(reference: VisualReference) -> bool:
 def _visual_fallback_notice() -> str:
     return (
         "Esta referência foi criada antes do bloqueio de mock. Gere novamente com um modelo "
-        "real da OpenRouter para substituir o arquivo local."
+        "real do provider configurado para substituir o arquivo local."
     )
 
 

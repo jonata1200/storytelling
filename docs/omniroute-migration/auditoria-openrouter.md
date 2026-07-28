@@ -79,7 +79,7 @@
 
 ## Rollout
 
-- OpenRouter permanece como provider padrão e fallback temporário.
-- OmniRoute pode ser configurado e salvo; texto e imagem já possuem providers
-  reais, enquanto vídeo permanece em OpenRouter até a fase específica.
+- OmniRoute é o provider padrão após a fase 7.
+- OpenRouter permanece como fallback temporário configurável até a validação real
+  completa e uma tarefa futura de remoção.
 - Mocks seguem bloqueados no fluxo da aplicação.

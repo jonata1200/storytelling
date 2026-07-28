@@ -31,6 +31,7 @@ def _log_ai_background_failure(message: str, identifier: UUID, exc: Exception) -
         "timeout",
         "timed out",
         "openrouter",
+        "omniroute",
         "rate limit",
         "429",
         "network",

@@ -172,6 +172,20 @@ class OmniRouteVideoProvider:
             raise RuntimeError(
                 f"OmniRoute Videos HTTP {exc.code}: {redact_secrets(detail)}"
             ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"OmniRoute Videos network error: {redact_secrets(exc.reason)}"
+            ) from exc
+        except TimeoutError as exc:
+            raise RuntimeError("OmniRoute Videos timeout ao enviar job") from exc
+        except OSError as exc:
+            raise RuntimeError(
+                f"OmniRoute Videos connection error: {redact_secrets(exc)}"
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "OmniRoute Videos retornou resposta HTTP que não é JSON válido"
+            ) from exc
         return self._checked_json(parsed)
 
     def _get_json(self, path: str) -> dict[str, Any]:
@@ -183,6 +197,20 @@ class OmniRouteVideoProvider:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(
                 f"OmniRoute Videos HTTP {exc.code}: {redact_secrets(detail)}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"OmniRoute Videos polling network error: {redact_secrets(exc.reason)}"
+            ) from exc
+        except TimeoutError as exc:
+            raise RuntimeError("OmniRoute Videos timeout ao consultar status") from exc
+        except OSError as exc:
+            raise RuntimeError(
+                f"OmniRoute Videos polling connection error: {redact_secrets(exc)}"
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "OmniRoute Videos retornou status HTTP que não é JSON válido"
             ) from exc
         return self._checked_json(parsed)
 
@@ -200,6 +228,16 @@ class OmniRouteVideoProvider:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(
                 f"OmniRoute Videos download HTTP {exc.code}: {redact_secrets(detail)}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"OmniRoute Videos download network error: {redact_secrets(exc.reason)}"
+            ) from exc
+        except TimeoutError as exc:
+            raise RuntimeError("OmniRoute Videos timeout ao baixar vídeo final") from exc
+        except OSError as exc:
+            raise RuntimeError(
+                f"OmniRoute Videos download connection error: {redact_secrets(exc)}"
             ) from exc
 
     def _checked_json(self, parsed: Any) -> dict[str, Any]:

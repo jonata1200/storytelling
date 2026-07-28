@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     omniroute_video_model: str = "bytedance/seedance-2.0-fast"
     omniroute_speech_model: str = ""
     omniroute_image_timeout_seconds: int = 360
-    ai_provider: str = "openrouter"
+    ai_provider: str = "omniroute"
     text_provider: str | None = None
     image_provider: str | None = None
     video_provider: str | None = None

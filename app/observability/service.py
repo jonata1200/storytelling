@@ -13,7 +13,9 @@ from app.config.provider_policy import (
     SUPPORTED_AI_PROVIDERS,
     effective_provider_for_channel,
     provider_api_key,
+    provider_base_url,
     provider_display_name,
+    provider_model,
 )
 from app.config.settings import Settings, get_settings
 from app.observability.middleware import current_correlation_id
@@ -65,6 +67,11 @@ async def emit_project_event(
             "project_id": str(data.project_id),
             "event_type": data.event_type,
             "status": data.status,
+            "provider": data.provider,
+            "model": data.model,
+            "operation": data.operation,
+            "estimated_cost": str(_cost(data.estimated_cost) or ""),
+            "actual_cost": str(_cost(data.actual_cost) or ""),
             "correlation_id": event.correlation_id,
         },
     )
@@ -123,6 +130,52 @@ async def _redis_check(name: str, url: str) -> ReadinessComponentRead:
     return ReadinessComponentRead(name=name, status="ready", message="Redis respondeu ao ping")
 
 
+def _provider_model_env_name(provider: str, channel: str) -> str:
+    suffix_by_channel = {
+        "text": "DEFAULT_MODEL",
+        "image": "IMAGE_MODEL",
+        "video": "VIDEO_MODEL",
+    }
+    return f"{provider.upper()}_{suffix_by_channel[channel]}"
+
+
+def _provider_channel_readiness(settings: Settings, channel: str) -> ReadinessComponentRead:
+    provider = effective_provider_for_channel(settings, channel)  # type: ignore[arg-type]
+    display_name = provider_display_name(provider)
+    api_key = provider_api_key(settings, provider)
+    model = provider_model(settings, provider, channel)  # type: ignore[arg-type]
+    missing: list[str] = []
+    if not api_key:
+        missing.append(f"{provider.upper()}_API_KEY")
+    if not model:
+        missing.append(_provider_model_env_name(provider, channel))
+
+    labels = {
+        "text": "texto",
+        "image": "imagem",
+        "video": "vídeo",
+    }
+    channel_label = labels[channel]
+    ready = not missing
+    message = (
+        f"{display_name} pronto para {channel_label}"
+        if ready
+        else f"Configure {', '.join(missing)} para {channel_label}"
+    )
+    return ReadinessComponentRead(
+        name=f"{channel}_provider",
+        status="ready" if ready else "degraded",
+        message=message,
+        details={
+            "provider": provider,
+            "model": model,
+            "base_url": provider_base_url(settings, provider),
+            "api_key_configured": str(bool(api_key)).lower(),
+            "supported_providers": ", ".join(SUPPORTED_AI_PROVIDERS),
+        },
+    )
+
+
 async def readiness_dashboard(
     session: AsyncSession,
     settings: Settings | None = None,
@@ -157,25 +210,9 @@ async def readiness_dashboard(
             details={"path": ffmpeg_path},
         )
     )
-    configured_text_provider = effective_provider_for_channel(app_settings, "text")
-    components.append(
-        ReadinessComponentRead(
-            name="ai_provider",
-            status=(
-                "ready"
-                if provider_api_key(app_settings, configured_text_provider)
-                else "degraded"
-            ),
-            message=(
-                f"{provider_display_name(configured_text_provider)} configurado"
-                if provider_api_key(app_settings, configured_text_provider)
-                else f"{configured_text_provider.upper()}_API_KEY ausente"
-            ),
-            details={
-                "provider": configured_text_provider,
-                "supported_providers": list(SUPPORTED_AI_PROVIDERS),
-            },
-        )
+    components.extend(
+        _provider_channel_readiness(app_settings, channel)
+        for channel in ("text", "image", "video")
     )
     speech_ready, speech_message, speech_details = speech_configuration_status(app_settings)
     components.append(

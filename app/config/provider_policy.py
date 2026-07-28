@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 ProviderChannel = Literal["text", "image", "video", "speech"]
 
-DEFAULT_PROVIDER = "openrouter"
+DEFAULT_PROVIDER = "omniroute"
 SUPPORTED_AI_PROVIDERS = ("openrouter", "omniroute")
 SUPPORTED_MODEL_PROVIDERS = frozenset(SUPPORTED_AI_PROVIDERS)
 MOCK_MODEL_IDS = {

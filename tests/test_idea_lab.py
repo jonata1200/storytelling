@@ -135,7 +135,7 @@ async def test_generate_freeform_ideas_returns_ten_ai_suggested_ideas(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(
@@ -155,7 +155,7 @@ async def test_generate_freeform_ideas_respects_selected_genre(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(count=10, genre="Aventura")
@@ -171,7 +171,7 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(count=99, target_duration_minutes=25)
@@ -184,7 +184,11 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
 async def test_generate_freeform_ideas_requires_openrouter_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(idea_lab, "get_settings", lambda: Settings(openrouter_api_key=None))
+    monkeypatch.setattr(
+        idea_lab,
+        "get_settings",
+        lambda: Settings(ai_provider="openrouter", openrouter_api_key=None),
+    )
 
     with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
         await generate_freeform_ideas(count=3)
@@ -203,7 +207,7 @@ async def test_generate_freeform_ideas_reports_openrouter_failure(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", FailingOpenRouterProvider)
 
@@ -225,7 +229,7 @@ async def test_generate_freeform_ideas_reports_openrouter_timeout(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", SlowOpenRouterProvider)
     monkeypatch.setattr(idea_lab, "IDEA_PROVIDER_TIMEOUT_SECONDS", 0.001)
@@ -298,7 +302,7 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", lambda: provider)
 
@@ -353,7 +357,7 @@ async def test_generate_freeform_ideas_keeps_partial_valid_openrouter_response(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", PartialProvider)
 

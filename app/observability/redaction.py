@@ -7,12 +7,14 @@ SECRET_KEY_PATTERN = re.compile(
 )
 OPENROUTER_KEY_PATTERN = re.compile(r"sk-or-[A-Za-z0-9_\-]+")
 OPENAI_KEY_PATTERN = re.compile(r"sk-[A-Za-z0-9_\-]+")
+BEARER_TOKEN_PATTERN = re.compile(r"(?i)\bbearer\s+([^\s,;]+)")
 
 
 def redact_secrets(value: object) -> str:
     text = str(value)
     text = OPENROUTER_KEY_PATTERN.sub("[REDACTED]", text)
     text = OPENAI_KEY_PATTERN.sub("[REDACTED]", text)
+    text = BEARER_TOKEN_PATTERN.sub("Bearer [REDACTED]", text)
     return SECRET_KEY_PATTERN.sub(lambda match: f"{match.group(1)}=[REDACTED]", text)
 
 

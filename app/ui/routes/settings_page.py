@@ -172,7 +172,7 @@ def register_settings_page(
                                 and normalize_omniroute_api_key(saved_omniroute_api_key) is None
                             )
                             if current.openrouter_api_key:
-                                ui.label("Chave OpenRouter válida configurada.").classes(
+                                ui.label("Fallback OpenRouter configurado.").classes(
                                     "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 border border-emerald-800"
                                 )
                             elif saved_api_key_invalid:
@@ -183,12 +183,12 @@ def register_settings_page(
                                 )
                             else:
                                 ui.label(
-                                    "Sem chave OpenRouter válida: modelos reais de imagem, vídeo e texto não serão chamados."
+                                    "Sem chave OpenRouter válida: o rollback manual para OpenRouter ficará indisponível."
                                 ).classes(
                                     "text-xs px-2 py-1 rounded-md bg-amber-950 text-amber-200 border border-amber-800"
                                 )
                             if current.omniroute_api_key:
-                                ui.label("Chave OmniRoute configurada.").classes(
+                                ui.label("Chave OmniRoute configurada para o fluxo principal.").classes(
                                     "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 border border-emerald-800 mt-2"
                                 )
                             elif saved_omniroute_api_key_invalid:
@@ -197,13 +197,13 @@ def register_settings_page(
                                 )
                             else:
                                 ui.label(
-                                    "OmniRoute pode ser selecionado, mas as chamadas reais serão ativadas nas próximas fases da migração."
+                                    "OmniRoute é o provider padrão; configure a chave para executar gerações reais."
                                 ).classes(
                                     "text-xs px-2 py-1 rounded-md bg-slate-900 text-slate-300 border border-slate-800 mt-2"
                                 )
                             ai_provider = (
                                 ui.select(
-                                    ["openrouter", "omniroute"],
+                                    ["omniroute", "openrouter"],
                                     label="Provider principal",
                                     value=current.ai_provider,
                                 )

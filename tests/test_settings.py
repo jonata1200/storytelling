@@ -1,6 +1,12 @@
 from app.config.settings import Settings
 
 
+def test_settings_defaults_to_omniroute_provider() -> None:
+    settings = Settings()
+
+    assert settings.ai_provider == "omniroute"
+
+
 def test_settings_rejects_invalid_openrouter_api_key() -> None:
     settings = Settings(openrouter_api_key="JKl1464&*")
 
