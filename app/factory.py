@@ -5,18 +5,28 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
+from app.auth.ui_middleware import UIBasicAuthMiddleware
 from app.auth.ui_routes import router as auth_ui_router
 from app.config.settings import get_settings
 from app.observability.middleware import CorrelationIdMiddleware
 from app.workflows.state_machine import WorkflowStateError
 
 LOCAL_STORAGE_MOUNT_ENVS = {"local", "test"}
+LOCAL_DOCS_ENVS = {"local", "development", "test"}
 
 
 def create_app(include_ui: bool = True) -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title=settings.app_name, debug=settings.app_debug)
+    docs_enabled = settings.app_env.lower() in LOCAL_DOCS_ENVS
+    app = FastAPI(
+        title=settings.app_name,
+        debug=settings.app_debug,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
+    )
     app.add_middleware(CorrelationIdMiddleware)
+    app.add_middleware(UIBasicAuthMiddleware)
     app.include_router(api_router)
     app.include_router(auth_ui_router)
 

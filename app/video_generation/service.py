@@ -213,7 +213,39 @@ async def generate_video_clips(
     )
     production_settings = await get_or_create_production_settings(session, project_id)
     production_metadata = production_settings.metadata_json or {}
-    billable_seconds = sum(frame.duration_seconds for frame in frames) * variants_per_frame
+    shot_context = await _shot_context_for_frames(session, frames)
+    billable_seconds = 0
+    for frame in frames:
+        source_image_uri = await _asset_storage_uri(session, frame.asset_id)
+        shot, scene = shot_context.get(frame.shot_id, (None, None))
+        video_prompt = _video_effective_prompt(production_metadata, frame, shot, scene)
+        for variant_index in range(1, variants_per_frame + 1):
+            request_fingerprint = _video_request_fingerprint(
+                frame,
+                source_image_uri,
+                resolved_provider,
+                resolved_model,
+                aspect_ratio,
+                video_size,
+                video_prompt,
+            )
+            idempotency_key = video_idempotency_key(
+                frame.id,
+                variant_index,
+                resolved_provider,
+                resolved_model,
+                request_fingerprint,
+            )
+            existing = await session.execute(
+                select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
+            )
+            existing_job = existing.scalars().first()
+            if existing_job is not None and (
+                existing_job.status != GenerationJobStatus.FAILED
+                or existing_job.attempts >= existing_job.max_attempts
+            ):
+                continue
+            billable_seconds += frame.duration_seconds
     video_cost_estimate = estimate_operation_cost(
         "image_to_video",
         Decimal(billable_seconds),
@@ -226,7 +258,6 @@ async def generate_video_clips(
         video_cost_estimate.estimated,
         stage="video",
     )
-    shot_context = await _shot_context_for_frames(session, frames)
     video_dir = get_settings().local_storage_path / video_dir_name / str(project_id)
     jobs: list[GenerationJob] = []
     clips: list[VideoClip] = []
@@ -454,7 +485,15 @@ async def generate_video_clips(
             job.external_job_id = result.external_job_id
             job.result_artifact_id = artifact.id
             job.response_payload = result.metadata
-            job.cost_estimate = Decimal(result.estimated_cost)
+            clip_cost_estimate = estimate_operation_cost(
+                "image_to_video",
+                Decimal(frame.duration_seconds),
+                provider=result.provider,
+                model=result.model,
+            )
+            provider_cost = Decimal(str(result.estimated_cost or "0.000000"))
+            total_cost = provider_cost if provider_cost > 0 else clip_cost_estimate.estimated
+            job.cost_estimate = total_cost
             job.completed_at = datetime.now(UTC)
 
             selected = False
@@ -494,13 +533,14 @@ async def generate_video_clips(
                     operation="image_to_video",
                     quantity=Decimal(frame.duration_seconds),
                     unit="second",
-                    unit_cost=MOCK_VIDEO_UNIT_COST_PER_SECOND,
-                    total_cost=Decimal(result.estimated_cost),
+                    unit_cost=clip_cost_estimate.unit_cost,
+                    total_cost=total_cost,
                     currency="USD",
                     metadata_json={
                         "job_id": str(job.id),
                         "provider": result.provider,
                         "external_job_id": result.external_job_id,
+                        "provider_reported_cost": str(provider_cost),
                     },
                 )
             )
@@ -515,7 +555,7 @@ async def generate_video_clips(
                     provider=result.provider,
                     model=result.model,
                     operation="image_to_video",
-                    estimated_cost=Decimal(result.estimated_cost),
+                    estimated_cost=total_cost,
                     message="Geracao de video concluida",
                     details={
                         "clip_id": str(clip.id),

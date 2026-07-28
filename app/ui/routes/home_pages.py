@@ -88,14 +88,6 @@ def register_home_pages(
                             ).tooltip(
                                 "Um prompt simples ja basta: o agente cria briefing, ideia e roteiro inicial."
                             )
-                        idea = (
-                            ui.textarea(
-                                placeholder="Descreva sua história, cole um roteiro ou peça uma ideia..."
-                            )
-                            .props("outlined autogrow input-style='min-height:140px'")
-                            .classes("w-full text-base md:text-lg flex-1 text-left")
-                        )
-
                         async def upload_script(event: Any) -> None:
                             try:
                                 content = await event.file.read()
@@ -148,10 +140,17 @@ def register_home_pages(
                                 color="positive",
                             )
 
-                        with ui.row().classes(
-                            "w-full items-center justify-between gap-3 flex-wrap px-1 pb-1"
-                        ):
-                            with ui.row().classes("items-center gap-2 flex-wrap"):
+                        with ui.element("div").classes("prompt-composer w-full relative"):
+                            idea = (
+                                ui.textarea(
+                                    placeholder="Descreva sua história, cole um roteiro ou peça uma ideia..."
+                                )
+                                .props("outlined autogrow input-style='min-height:160px'")
+                                .classes(
+                                    "prompt-composer-input w-full text-base md:text-lg flex-1 text-left"
+                                )
+                            )
+                            with ui.element("div").classes("hidden"):
                                 ui.upload(
                                     label="Enviar roteiro",
                                     on_upload=upload_script,
@@ -160,9 +159,7 @@ def register_home_pages(
                                     ),
                                     auto_upload=True,
                                     max_file_size=10_000_000,
-                                ).props("accept=.pdf,.docx").classes(
-                                    "script-upload-control text-left"
-                                )
+                                ).props("id=prompt-script-upload accept=.pdf,.docx")
                                 ui.upload(
                                     label="Enviar imagens",
                                     on_upload=upload_reference_image,
@@ -171,16 +168,34 @@ def register_home_pages(
                                     ),
                                     auto_upload=True,
                                     max_file_size=10_000_000,
-                                ).props("accept=.jpg,.jpeg,.png,.webp").classes(
-                                    "script-upload-control text-left"
+                                ).props("id=prompt-reference-upload accept=.jpg,.jpeg,.png,.webp")
+                            with ui.row().classes(
+                                "prompt-composer-toolbar absolute items-center justify-between gap-2"
+                            ):
+                                with ui.row().classes("items-center gap-2 min-w-0"):
+                                    ui.button(
+                                        "Roteiro",
+                                        icon="description",
+                                        on_click=lambda: ui.run_javascript(
+                                            "document.querySelector('#prompt-script-upload input[type=file]').click()"
+                                        ),
+                                    ).props("flat no-caps dense").classes("prompt-tool-button")
+                                    ui.button(
+                                        "Imagens",
+                                        icon="image",
+                                        on_click=lambda: ui.run_javascript(
+                                            "document.querySelector('#prompt-reference-upload input[type=file]').click()"
+                                        ),
+                                    ).props("flat no-caps dense").classes("prompt-tool-button")
+                                ui.button(
+                                    icon="arrow_upward",
+                                    on_click=lambda: create_project_from_chat_prompt(
+                                        str(idea.value or ""),
+                                        list(reference_uploads),
+                                    ),
+                                ).props("round unelevated").classes(
+                                    "prompt-send-button acid-bg shadow-lg"
                                 )
-                            ui.button(
-                                icon="arrow_upward",
-                                on_click=lambda: create_project_from_chat_prompt(
-                                    str(idea.value or ""),
-                                    list(reference_uploads),
-                                ),
-                            ).props("round unelevated size=lg").classes("acid-bg shadow-lg")
                         with ui.column().classes("w-full gap-2 text-left px-1"):
                             reference_upload_list()
                 with (

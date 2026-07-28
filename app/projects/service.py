@@ -310,8 +310,8 @@ async def hard_delete_project(session: AsyncSession, project_id: UUID) -> bool:
     asset_storage_uris = [str(row[0] or "") for row in asset_rows.all()]
     for statement in PROJECT_GRAPH_DELETE_STATEMENTS:
         await session.execute(text(statement.replace("target_projects", "tmp_target_projects")))
-    delete_local_storage_files(asset_storage_uris)
     await session.commit()
+    delete_local_storage_files(asset_storage_uris)
     return True
 
 

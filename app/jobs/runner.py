@@ -17,6 +17,7 @@ from app.jobs.service import (
     mark_job_progress,
     mark_job_running,
     mark_job_succeeded,
+    project_job_can_run,
 )
 from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic, AudioTrack
@@ -175,7 +176,7 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
         step = str(job.request_payload.get("step") or "")
         payload = job.request_payload.get("payload")
         payload = payload if isinstance(payload, dict) else {}
-        if job.status in {"SUCCEEDED", "CANCELLED"}:
+        if not project_job_can_run(job):
             return dict(job.response_payload or {})
 
         await mark_job_running(

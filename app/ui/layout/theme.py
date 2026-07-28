@@ -115,6 +115,81 @@ def apply_body_style() -> None:
               linear-gradient(180deg, rgba(15,31,45,.92), rgba(5,10,16,.94))!important;
             box-shadow:0 0 0 1px rgba(90,163,240,.13), 0 28px 80px rgba(0,0,0,.5), var(--studio-glow)!important;
           }
+          .prompt-composer {
+            min-height:220px;
+          }
+          .prompt-composer-input .q-field__control {
+            min-height:220px!important;
+            border-radius:8px!important;
+            background:
+              linear-gradient(180deg, rgba(8,18,28,.94), rgba(5,10,16,.96))!important;
+            box-shadow:
+              inset 0 0 0 1px rgba(90,163,240,.18),
+              0 12px 34px rgba(0,0,0,.2)!important;
+          }
+          .prompt-composer-input.q-field--focused .q-field__control {
+            box-shadow:
+              inset 0 0 0 1px var(--studio-cyan),
+              0 0 24px rgba(90,163,240,.18)!important;
+          }
+          .prompt-composer-input textarea {
+            min-height:160px!important;
+            padding:18px 18px 78px!important;
+            line-height:1.55!important;
+            resize:none!important;
+          }
+          .prompt-composer-toolbar {
+            left:14px;
+            right:14px;
+            bottom:14px;
+            min-height:44px;
+            z-index:2;
+          }
+          .prompt-tool-button {
+            min-height:36px!important;
+            height:36px;
+            padding:0 12px!important;
+            color:#d9ecff!important;
+            background:rgba(90,163,240,.10)!important;
+            border:1px solid rgba(90,163,240,.28)!important;
+            box-shadow:inset 0 0 0 1px rgba(255,255,255,.03);
+          }
+          .prompt-tool-button:hover {
+            color:#ffffff!important;
+            background:rgba(90,163,240,.18)!important;
+            border-color:rgba(90,163,240,.48)!important;
+          }
+          .prompt-tool-button .q-icon,
+          .prompt-tool-button .q-btn__content,
+          .prompt-tool-button .q-btn__content span {
+            color:inherit!important;
+          }
+          .prompt-send-button {
+            width:44px!important;
+            height:44px!important;
+            min-height:44px!important;
+            flex:0 0 44px;
+          }
+          .prompt-send-button .q-icon,
+          .prompt-send-button .q-btn__content {
+            color:#031019!important;
+          }
+          body:not(.body--dark) .prompt-composer-input .q-field__control {
+            background:#ffffff!important;
+            box-shadow:
+              inset 0 0 0 1px rgba(90,163,240,.24),
+              0 14px 34px rgba(29,68,96,.10)!important;
+          }
+          body:not(.body--dark) .prompt-tool-button {
+            color:#256fa8!important;
+            background:#edf6ff!important;
+            border-color:#c9e2f8!important;
+          }
+          body:not(.body--dark) .prompt-tool-button:hover {
+            color:#0f4770!important;
+            background:#dff0ff!important;
+            border-color:#9dccf1!important;
+          }
           .visual-placeholder {
             background:
               linear-gradient(135deg, rgba(90,163,240,.22), rgba(90,163,240,.08) 42%, rgba(5,10,16,.96) 100%)!important;

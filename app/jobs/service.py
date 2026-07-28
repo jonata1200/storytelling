@@ -47,6 +47,14 @@ def job_idempotency_key(project_id: UUID, step: str, payload: dict) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def project_job_can_run(job: GenerationJob) -> bool:
+    if job.status in TERMINAL_JOB_STATUSES:
+        return False
+    return not (
+        job.status == GenerationJobStatus.FAILED and job.attempts >= job.max_attempts
+    )
+
+
 async def _set_project_job_action(
     session: AsyncSession,
     job: GenerationJob,
@@ -129,15 +137,21 @@ async def create_or_resume_project_job(
         job.completed_at = None
         job.response_payload = {}
         await session.flush()
+    if job.status == GenerationJobStatus.SUCCEEDED:
+        action_status = "completed"
+        action_message = "Etapa ja concluida anteriormente."
+    elif not project_job_can_run(job):
+        action_status = "failed"
+        action_message = "Etapa falhou e atingiu o limite de tentativas."
+    else:
+        action_status = "queued"
+        action_message = "Etapa enfileirada para execucao pelo worker."
     await _set_project_job_action(
         session,
         job,
-        status="queued" if job.status != GenerationJobStatus.SUCCEEDED else "completed",
-        message=(
-            "Etapa enfileirada para execucao pelo worker."
-            if job.status != GenerationJobStatus.SUCCEEDED
-            else "Etapa ja concluida anteriormente."
-        ),
+        status=action_status,
+        message=action_message,
+        error=job.error if action_status == "failed" else None,
     )
     await session.commit()
     await session.refresh(job)
@@ -233,6 +247,6 @@ async def enqueue_project_step(
     dispatch: bool = True,
 ) -> GenerationJob:
     job = await create_or_resume_project_job(session, project_id, step, payload)
-    if dispatch and job.status not in TERMINAL_JOB_STATUSES:
+    if dispatch and project_job_can_run(job):
         dispatch_project_job(job.id)
     return job
