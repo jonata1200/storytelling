@@ -9,8 +9,8 @@ from app.assets.models import Asset, AssetVersion
 from app.config.model_policy import ensure_openrouter_api_key
 from app.config.provider_policy import (
     effective_provider_for_channel,
+    ensure_provider_api_key,
     provider_model,
-    unavailable_provider_error,
 )
 from app.config.settings import get_settings
 from app.core.enums import (
@@ -36,6 +36,7 @@ from app.observability.service import emit_project_event
 from app.production.service import get_or_create_production_settings, resolve_video_model
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
+from app.providers.video.omniroute import OmniRouteVideoProvider
 from app.providers.video.openrouter import OpenRouterVideoProvider
 from app.providers.video.types import VideoProvider, VideoRequest
 from app.storyboards.models import StoryboardFrame
@@ -183,7 +184,15 @@ async def _video_provider_for_project(
             production_settings.video_resolution,
         )
     if resolved_provider == "omniroute":
-        raise unavailable_provider_error("omniroute", "fase 5")
+        ensure_provider_api_key(app_settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
+        return (
+            OmniRouteVideoProvider(),
+            "omniroute",
+            requested_model,
+            "omniroute_videos",
+            production_settings.aspect_ratio,
+            production_settings.video_resolution,
+        )
     if resolved_provider == "mock":
         raise ValueError("Provider mock bloqueado. Use um provider real de vídeo.")
     raise ValueError(f"Unsupported video provider: {provider_name}")

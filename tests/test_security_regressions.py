@@ -69,10 +69,18 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     path = tmp_path / "preferences.json"
     save_runtime_preferences({"USER_THEME": "light"}, path)
     assert load_runtime_preferences(path) == {"user_theme": "light"}
-    save_runtime_preferences({"AI_PROVIDER": "omniroute", "OMNIROUTE_API_KEY": "secret"}, path)
+    save_runtime_preferences(
+        {
+            "AI_PROVIDER": "omniroute",
+            "OMNIROUTE_API_KEY": "secret",
+            "OMNIROUTE_SPEECH_MODEL": "tts-model",
+        },
+        path,
+    )
     preferences = load_runtime_preferences(path)
     assert preferences["ai_provider"] == "omniroute"
     assert preferences["omniroute_api_key"] == "secret"
+    assert preferences["omniroute_speech_model"] == "tts-model"
 
     with pytest.raises(ValueError, match="not allowed"):
         save_runtime_preferences({"DATABASE_URL": "attacker"}, path)

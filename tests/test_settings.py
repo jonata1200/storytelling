@@ -21,6 +21,7 @@ def test_settings_reads_omniroute_configuration() -> None:
         omniroute_default_model="vendor/text-model",
         omniroute_image_model="vendor/image-model",
         omniroute_video_model="vendor/video-model",
+        omniroute_speech_model="vendor/speech-model",
     )
 
     assert settings.ai_provider == "omniroute"
@@ -29,6 +30,7 @@ def test_settings_reads_omniroute_configuration() -> None:
     assert settings.omniroute_default_model == "vendor/text-model"
     assert settings.omniroute_image_model == "vendor/image-model"
     assert settings.omniroute_video_model == "vendor/video-model"
+    assert settings.omniroute_speech_model == "vendor/speech-model"
 
 
 def test_settings_rejects_unknown_ai_provider() -> None:

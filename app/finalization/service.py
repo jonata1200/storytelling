@@ -33,7 +33,11 @@ from app.observability.schemas import OperationalEventCreate
 from app.observability.service import emit_project_event
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
-from app.providers.speech.service import speech_provider_from_settings
+from app.providers.speech.service import (
+    speech_configuration_status,
+    speech_model_from_settings,
+    speech_provider_from_settings,
+)
 from app.providers.speech.types import SpeechRequest
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.timeline import build_word_alignment
@@ -502,11 +506,11 @@ async def _add_dialogue_audio_items(
         return 0
 
     settings = get_settings()
-    if not settings.speech_api_key or not settings.speech_model:
-        raise ValueError(
-            "Configure SPEECH_API_KEY e SPEECH_MODEL para gerar vozes dos personagens."
-        )
+    speech_ready, speech_message, _speech_details = speech_configuration_status(settings)
+    if not speech_ready:
+        raise ValueError(speech_message)
     provider = speech_provider_from_settings()
+    speech_model = speech_model_from_settings(settings)
     output_dir = settings.local_storage_path / "dialogue" / str(project_id)
     voice_by_key = await _character_voice_map(session, project_id)
     order_index = first_audio_order_index
@@ -525,7 +529,7 @@ async def _add_dialogue_audio_items(
                     text=dialogue.text,
                     voice_profile_id=voice_profile_id,
                     output_dir=output_dir,
-                    model=settings.speech_model,
+                    model=speech_model,
                 )
             )
             duration_ms = max(1, speech_result.duration_seconds) * 1000

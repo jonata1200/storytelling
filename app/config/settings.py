@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     omniroute_default_model: str = "deepseek/deepseek-v4-flash"
     omniroute_image_model: str = "sourceful/riverflow-v2-fast"
     omniroute_video_model: str = "bytedance/seedance-2.0-fast"
+    omniroute_speech_model: str = ""
     omniroute_image_timeout_seconds: int = 360
     ai_provider: str = "openrouter"
     text_provider: str | None = None

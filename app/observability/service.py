@@ -27,6 +27,7 @@ from app.observability.schemas import (
     ReadinessComponentRead,
     ReadinessDashboardRead,
 )
+from app.providers.speech.service import speech_configuration_status
 
 logger = logging.getLogger(__name__)
 
@@ -176,16 +177,13 @@ async def readiness_dashboard(
             },
         )
     )
-    speech_ready = bool(app_settings.speech_api_key and app_settings.speech_model)
+    speech_ready, speech_message, speech_details = speech_configuration_status(app_settings)
     components.append(
         ReadinessComponentRead(
             name="character_speech",
             status="ready" if speech_ready else "degraded",
-            message=(
-                "Provider de vozes dos personagens configurado"
-                if speech_ready
-                else "SPEECH_API_KEY ou SPEECH_MODEL ausente"
-            ),
+            message=speech_message,
+            details=speech_details,
         )
     )
     overall = "ready" if all(item.status == "ready" for item in components) else "degraded"

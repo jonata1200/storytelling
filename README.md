@@ -89,6 +89,9 @@ OMNIROUTE_BASE_URL=https://omnirouters.com/v1
 OMNIROUTE_DEFAULT_MODEL=deepseek/deepseek-v4-flash
 OMNIROUTE_IMAGE_MODEL=sourceful/riverflow-v2-fast
 OMNIROUTE_VIDEO_MODEL=bytedance/seedance-2.0-fast
+OMNIROUTE_SPEECH_MODEL=
+SPEECH_PROVIDER=openai_compatible
+SPEECH_MODEL=
 ALLOW_USER_REGISTRATION=true
 SINGLE_USER_MODE=true
 ```
@@ -99,20 +102,21 @@ Modelos com sufixo `:free` e modelos `mock-*` são bloqueados porque tendem a
 falhar ou confundir o fluxo de produção.
 
 OmniRoute já pode ser configurado por `AI_PROVIDER=omniroute` ou pelos campos
-por mídia (`TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VIDEO_PROVIDER`). Texto e imagem
-já usam providers OmniRoute reais; vídeo continua em OpenRouter até a fase
-específica do plano em `docs/omniroute-migration`.
+por mídia (`TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VIDEO_PROVIDER`). Texto, imagem
+e vídeo já usam providers OmniRoute reais. Para vozes dos personagens, use
+`SPEECH_PROVIDER=omniroute` com `OMNIROUTE_API_KEY` e `OMNIROUTE_SPEECH_MODEL`
+ou mantenha `SPEECH_PROVIDER=openai_compatible`.
 
 Preferências alteradas pela interface são gravadas em `.runtime/preferences.json`.
 O arquivo `.env` permanece somente para configuração de inicialização e não é
 modificado pela aplicação em execução.
 
 Os providers reais atualmente implementados usam OpenRouter ou OmniRoute para
-texto e imagem, e OpenRouter para vídeo. Os clipes são gerados sem narração
+texto, imagem e vídeo. Os clipes são gerados sem narração
 nativa; o roteiro e a decupagem priorizam
 interação e diálogo entre personagens. Na finalização, falas presentes em
 `dialogue_text` podem ser sintetizadas como vozes de personagens quando
-`SPEECH_API_KEY` e `SPEECH_MODEL` estão configurados.
+o provider de speech escolhido está configurado.
 
 ## Experiência de produção
 
