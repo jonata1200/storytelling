@@ -1,4 +1,4 @@
-# ruff: noqa: E501
+﻿# ruff: noqa: E501
 
 import logging
 from collections.abc import Awaitable, Callable
@@ -563,7 +563,7 @@ def _render_step_card(project_id: UUID, step: ProductionStep, counts: dict[str, 
     ready = _step_ready(step.key, counts)
     loading_title, loading_message = STEP_LOADING_COPY.get(
         step.key,
-        ("Executando etapa", "A IA está trabalhando nesta etapa."),
+        ("Executando etapa", "A IA está trabalhando nestá etapa."),
     )
     status_text = "pronto" if ready else "pendente"
     status_classes = (

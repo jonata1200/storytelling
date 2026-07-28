@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 import re
 from html import escape
 from pathlib import Path

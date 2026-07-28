@@ -1,4 +1,4 @@
-from types import SimpleNamespace
+﻿from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
 

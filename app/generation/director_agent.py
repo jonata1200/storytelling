@@ -1,4 +1,4 @@
-from typing import Any
+﻿from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,4 +58,4 @@ async def ask_director_agent(
     )
     await session.commit()
     response = result.content.get("message")
-    return str(response or "Posso ajudar a desenvolver esta etapa. O que deseja ajustar?")
+    return str(response or "Posso ajudar a desenvolver está etapa. O que deseja ajustar?")

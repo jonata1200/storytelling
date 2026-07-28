@@ -1,4 +1,4 @@
-from app.finalization.subtitles import (
+﻿from app.finalization.subtitles import (
     build_srt_from_alignment,
     milliseconds_to_srt_timestamp,
     safe_area_profile,

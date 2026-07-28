@@ -1,4 +1,4 @@
-import re
+﻿import re
 
 from app.storytelling.normalization_common import (
     GenerationOutputError,
@@ -72,7 +72,7 @@ def _script_block_to_text(value: object) -> str:
 
 SCRIPT_TECHNICAL_LABEL_RE = re.compile(
     r"(?im)^\s*(?:"
-    r"numero|n[uú]mero|cabecalho|cabe[cç]alho|resumo|"
+    r"número|n[uú]mero|cabeçalho|cabe[cç]alho|resumo|"
     r"objetivo(?: dram[aá]tico)?|personagens?|local|ambiente|"
     r"objetos?|a[cç][aã]o|narra[cç][aã]o|di[aá]logo|"
     r"dura[cç][aã]o|indicacao para (?:storyboard|video)|"
@@ -167,17 +167,17 @@ def screenplay_validation_errors(content: str) -> list[str]:
     if not SCREENPLAY_SLUGLINE_RE.search(text):
         errors.append("faltou slugline INT./EXT.")
     if SCRIPT_TECHNICAL_LABEL_RE.search(text):
-        errors.append("conteudo contem rotulos tecnicos")
+        errors.append("conteúdo contem rotulos tecnicos")
     if re.search(r"(?i)\bCENA\s+\d+\s*[-:]\s*(?:INT|EXT|INT/EXT|EXT/INT)\.", text):
         errors.append("cenas e sluglines precisam ficar em linhas separadas")
     if FADE_IN_WITH_INLINE_TEXT_RE.search(text):
         errors.append("FADE IN precisa ficar em linha propria")
     if INLINE_NUMBERED_SLUGLINE_RE.search(text):
-        errors.append("sluglines numeradas nao podem ficar dentro de paragrafos")
+        errors.append("sluglines numeradas não podem ficar dentro de parágrafos")
     if PLACEHOLDER_SCENE_SLUGLINE_RE.search(text):
         errors.append("slugline generica INT. CENA precisa ser substituida por local real")
     if len(text.split()) < 12:
-        errors.append("conteudo curto demais para roteiro")
+        errors.append("conteúdo curto demais para roteiro")
     return errors
 
 
@@ -391,8 +391,8 @@ def _production_plan_candidate(payload: dict) -> object:
         "production_plan",
         "scene_plan",
         "technical_plan",
-        "plano_producao",
-        "plano_de_producao",
+        "plano_produção",
+        "plano_de_produção",
         "cenas_e_planos",
     ):
         value = payload.get(key)
@@ -449,7 +449,7 @@ def _fallback_script_content_from_bible(
                 "CENA 01\n"
                 f"INT. {location} - FIM DE TARDE\n\n"
                 f"{protagonist} permanece diante de uma mesa coberta por marcas do passado. "
-                f"O {prop} aparece onde nao deveria estar. Ela toca o objeto como se a "
+                f"O {prop} aparece onde não deveria estar. Ela toca o objeto como se a "
                 "casa inteira prendesse a respiracao.\n\n"
                 f"{protagonist}\n"
                 "Eu achei que essa historia tinha acabado."
@@ -465,7 +465,7 @@ def _fallback_script_content_from_bible(
                 "CENA 03\n"
                 "EXT. RUA DIANTE DA CASA - MADRUGADA\n\n"
                 f"{protagonist} sai para a rua vazia com o {prop} contra o peito. "
-                "O silencio deixa claro que a proxima escolha nao podera ser escondida."
+                "O silencio deixa claro que a próxima escolha não podera ser escondida."
             ),
             (
                 "CENA 04\n"
@@ -511,9 +511,9 @@ def _fallback_script_content_from_idea(
         (
             "INT. CASA DA FAMILIA - FIM DE TARDE",
             f"{protagonist_upper} percebe um detalhe fora do lugar. "
-            f"{hook or 'Uma pista simples muda o peso da casa inteira.'}\n\n"
+            f"{hook or 'Uma pista simples muda o péso da casa inteira.'}\n\n"
             f"{protagonist_upper}\n"
-            "Isso nao podia estar aqui.",
+            "Isso não podia estar aqui.",
         ),
         (
             "INT. CORREDOR DA CASA - NOITE",
@@ -523,12 +523,12 @@ def _fallback_script_content_from_idea(
         (
             "INT. SALA DA FAMILIA - MADRUGADA",
             f"{protagonist_upper} junta as pistas e entende que a historia escondida "
-            "nao era sobre culpa simples. Era sobre uma escolha que feriu todos ao redor.",
+            "não era sobre culpa simples. Era sobre uma escolha que feriu todos ao redor.",
         ),
         (
             "EXT. RUA DIANTE DA CASA - AMANHECER",
             f"{protagonist_upper} atravessa a primeira luz do dia decidido a contar "
-            f"a verdade. {payoff or 'A reparacao nao apaga a dor, mas abre uma porta.'}",
+            f"a verdade. {payoff or 'A reparacao não apaga a dor, mas abre uma porta.'}",
         ),
     ]
     expanded_beats: list[str] = []
@@ -536,7 +536,7 @@ def _fallback_script_content_from_idea(
         slugline, action = base_beats[index % len(base_beats)]
         turn = (
             "O conflito ganha nova camada, com uma escolha concreta que empurra "
-            "a historia para a proxima virada."
+            "a historia para a próxima virada."
             if index >= len(base_beats)
             else ""
         )

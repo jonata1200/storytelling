@@ -1,4 +1,4 @@
-# ruff: noqa: F401
+﻿# ruff: noqa: F401
 import os
 import re
 from datetime import datetime
@@ -108,13 +108,13 @@ def test_script_fallback_does_not_turn_screenplay_markers_into_characters() -> N
     Isso precisa parar.
 
     MAE
-    Ele esta cansado.
+    Ele está cansado.
 
     EXT. PATIO DA ESCOLA - DIA
-    Um MENINO se aproxima.
+    Um MENINO se apróxima.
 
     MENINO
-    O que voce desenha?
+    O que você desenha?
 
     PASSARO
     Desenhe mais.
@@ -169,7 +169,7 @@ def test_script_fallback_keeps_temporal_character_variants_with_evidence() -> No
     script = """
     CENA 01
     INT. MERCADO - NOITE
-    OMERO (34) vende memorias.
+    OMERO (34) vende memórias.
 
     OMERO
     Eu lembro.
@@ -179,7 +179,7 @@ def test_script_fallback_keeps_temporal_character_variants_with_evidence() -> No
     OMERO CRIANCA (8) segura uma esfera.
 
     OMERO CRIANCA
-    Mae, nao quero esquecer.
+    Mae, não quero esquecer.
     """
 
     profiles = _script_character_profiles(script)
@@ -254,7 +254,7 @@ def test_script_fallback_repairs_missing_character_names() -> None:
     DONA LOURDES (88) mexe a panela.
 
     DONA LOURDES
-    Agora e seu.
+    Agora é seu.
 
     NETE
     Eu prometo.

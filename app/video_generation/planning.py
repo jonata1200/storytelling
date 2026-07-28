@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 import json
 import sys
 from pathlib import Path
@@ -82,11 +82,11 @@ def _video_motion_prompt(
     )
     dialogue = str(getattr(shot, "dialogue_text", "") or frame.dialogue_text or "").strip()
     audio_guidance = (
-        "Dialogo dos personagens como referencia de atuacao, ritmo e leitura labial; "
-        f"nao gerar narracao, legendas visuais ou cartelas: {dialogue}."
+        "Diálogo dos personagens como referência de atuação, ritmo e leitura labial; "
+        f"não gerar narracao, legendas visuais ou cartelas: {dialogue}."
         if dialogue
         else (
-            "Cena sem fala neste plano; nao criar narracao, legendas, "
+            "Cena sem fala neste plano; não criar narracao, legendas, "
             "cartelas ou palavras na cena."
         )
     )
@@ -94,12 +94,12 @@ def _video_motion_prompt(
         "Gere um clipe image-to-video vertical 9:16 a partir do primeiro frame fornecido.\n"
         f"Duracao obrigatoria: {frame.duration_seconds}s.\n"
         f"Origem narrativa: {scene_label}, {shot_label}.\n\n"
-        "Use o primeiro frame como referencia visual absoluta:\n"
+        "Use o primeiro frame como referência visual absoluta:\n"
         "- mantenha exatamente os mesmos personagens, rostos, idade aparente, figurino, "
         "objetos, luz, paleta, ambiente, escala e composicao de partida\n"
-        "- nao redesenhe personagens, nao troque roupa, cabelo, cenario ou objeto\n"
-        "- nao adicione personagens, textos, logos, legendas, marcas d'agua, UI ou "
-        "elementos que nao aparecem no frame\n\n"
+        "- não redesenhe personagens, não troque roupa, cabelo, cenario ou objeto\n"
+        "- não adicione personagens, textos, logos, legendas, marcas d'agua, UI ou "
+        "elementos que não aparecem no frame\n\n"
         f"Movimento narrativo do clipe: {action}.\n"
         f"Emocao dominante: {emotion}.\n"
         f"Movimento de camera: {camera_movement}.\n"
@@ -109,13 +109,13 @@ def _video_motion_prompt(
         "- comece exatamente do primeiro frame fornecido\n"
         "- execute apenas uma acao principal clara durante o clipe\n"
         "- mantenha movimento natural, sutil e fisicamente plausivel\n"
-        "- preserve continuidade espacial, proporcoes corporais e escala dos objetos\n"
+        "- preserve continuidade espacial, proporções corporais e escala dos objetos\n"
         "- evite cortes, transicoes, zooms bruscos, flicker, warping, morphing, "
         "mudanca de identidade ou troca de roupa\n"
         "- termine em um estado visual coerente com a acao do plano\n\n"
-        "Estilo: cinematografico, realista, iluminacao consistente, movimento suave, "
-        "sem distorcao de rosto, maos, olhos, boca ou objetos. O clipe deve parecer "
-        "uma extensao natural do storyboard, nao uma nova cena."
+        "Estilo: cinematográfico, realista, iluminação consistente, movimento suave, "
+        "sem distorcao de rosto, mãos, olhos, boca ou objetos. O clipe deve parecer "
+        "uma extensão natural do storyboard, não uma nova cena."
     )
 
 
@@ -188,21 +188,21 @@ def video_generation_validation_errors(
     elif _local_storage_path(source_image_uri) is None and not source_image_uri.startswith(
         ("http://", "https://", "data:", "asset://")
     ):
-        errors.append("imagem fonte nao encontrada no armazenamento local")
+        errors.append("imagem fonte não encontrada no armazenamento local")
     capabilities = provider.capabilities
     if capabilities.supported_durations and (
         frame.duration_seconds not in capabilities.supported_durations
     ):
         errors.append(
-            f"duracao {frame.duration_seconds}s nao suportada pelo provider"
+            f"duração {frame.duration_seconds}s não suportada pelo provider"
         )
     if (
         capabilities.supported_aspect_ratios
         and aspect_ratio not in capabilities.supported_aspect_ratios
     ):
-        errors.append(f"aspect_ratio {aspect_ratio} nao suportado pelo provider")
+        errors.append(f"aspect_ratio {aspect_ratio} não suportado pelo provider")
     if not capabilities.image_to_video:
-        errors.append("provider nao suporta image-to-video")
+        errors.append("provider não suporta image-to-video")
     return errors
 
 

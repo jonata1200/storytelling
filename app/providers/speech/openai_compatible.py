@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import hashlib
 import json
 import urllib.error
@@ -23,10 +23,10 @@ class OpenAICompatibleSpeechProvider:
         settings = get_settings()
         api_key = settings.speech_api_key
         if not api_key:
-            raise RuntimeError("SPEECH_API_KEY nao configurada para provider de voz real")
+            raise RuntimeError("SPEECH_API_KEY não configurada para provider de voz real")
         model = request.model or settings.speech_model
         if not model:
-            raise RuntimeError("SPEECH_MODEL nao configurado para provider de voz real")
+            raise RuntimeError("SPEECH_MODEL não configurado para provider de voz real")
 
         body = self._speech_request_body(request, model, settings.speech_voice)
         audio_bytes = self._post_speech(settings.speech_base_url, api_key, body)

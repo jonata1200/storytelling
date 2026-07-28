@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+﻿from collections.abc import Mapping
 from uuid import UUID
 
 from sqlalchemy import select

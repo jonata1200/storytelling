@@ -1,4 +1,4 @@
-from types import SimpleNamespace
+﻿from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
 
@@ -74,7 +74,7 @@ async def test_mock_director_agent_uses_section_and_project_context() -> None:
             prompt="Ajude com o storyboard",
             variables={
                 "section": "storyboard",
-                "message": "Crie uma segunda versao",
+                "message": "Crie uma segunda versão",
                 "project_context": {"summary": "1 roteiro e 8 quadros"},
             },
         )
@@ -797,7 +797,7 @@ async def test_video_pipeline_stops_when_visual_references_block_storyboard(
         )
 
     async def fail_latest_many(*args: Any, **kwargs: Any) -> list[Any]:
-        raise AssertionError("video nao deve consultar frames quando o storyboard esta bloqueado")
+        raise AssertionError("video não deve consultar frames quando o storyboard está bloqueado")
 
     monkeypatch.setattr(project_agent, "_ensure_storyboard_pipeline", fake_storyboard)
     monkeypatch.setattr(project_agent, "_latest_many", fail_latest_many)

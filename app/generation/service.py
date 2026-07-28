@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 from time import perf_counter
 from uuid import UUID
 
@@ -34,18 +34,18 @@ CREATIVE_NARRATIVE_TASKS = {
 
 DEFAULT_TEMPLATES: dict[str, str] = {
     "generate_story_ideas": (
-        "Voce e uma sala de desenvolvimento narrativo com repertorio amplo. Gere tres "
+        "Você é uma sala de desenvolvimento narrativo com repertorio amplo. Gere tres "
         "ideias estruturadas para uma historia vertical de {target_duration_minutes} "
-        "minutos. Cada ideia precisa sustentar a duracao escolhida com conflito, virada e payoff. "
-        "Tema: {theme}. Genero preferido: {genre}. Publico: {audience}. "
+        "minutos. Cada ideia precisa sustentar a duração escolhida com conflito, virada e payoff. "
+        "Tema: {theme}. Gênero preferido: {genre}. Publico: {audience}. "
         "Emocao: {primary_emotion}. "
         "Memoria de ideias/personagens ja usados que devem ser evitados: {diversity_memory}. "
         "As tres ideias precisam ser radicalmente diferentes entre si: mude protagonista, "
-        "profissao, idade/faixa de vida, mundo social, local principal, objeto dramatico, "
+        "profissão, idade/faixa de vida, mundo social, local principal, objeto dramatico, "
         "fonte de antagonismo, tipo de segredo/revelacao, dilema moral, ritmo e imagem final. "
-        "Nao use a mesma pessoa com nomes diferentes. Nao repita cuidadora, carta/mensagem "
+        "Não use a mesma péssoa com nomes diferentes. Não repita cuidadora, carta/mensagem "
         "atrasada, casa de familia, segredo do passado, heranca misteriosa ou reconciliacao "
-        "familiar como motor padrao, a menos que o briefing exija explicitamente. "
+        "familiar como motor padrão, a menos que o briefing exija explicitamente. "
         "Antes de responder, descarte mentalmente qualquer ideia que compartilhe protagonista, "
         "conflito, twist ou payoff com outra. "
         "Cada ideia deve deixar claro conflito, obstaculos, stakes, twist, climax, payoff "
@@ -60,70 +60,70 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         '"production_complexity":35}}]}}'
     ),
     "generate_script": (
-        "Voce e um roteirista cinematografico senior e diretor de desenvolvimento "
-        "narrativo. Crie um roteiro profissional em {language}, no padrao de roteiro "
-        "de filme, para uma historia vertical 9:16 com duracao total fixa de "
+        "Você é um roteirista cinematográfico senior e diretor de desenvolvimento "
+        "narrativo. Crie um roteiro profissional em {language}, no padrão de roteiro "
+        "de filme, para uma historia vertical 9:16 com duração total fixa de "
         "{target_duration_seconds}s. Use obrigatoriamente a ideia aprovada em {idea} "
         "e o contrato narrativo em {narrative_contract}. Preserve a promessa emocional "
         "da ideia, com protagonista ativo, desejo claro, conflito crescente, obstaculos "
         "concretos, virada central, climax baseado em escolha dificil e payoff emocional "
         "coerente. "
-        "A duracao escolhida deve orientar a profundidade: roteiros curtos precisam ser "
+        "A duração escolhida deve orientar a profundidade: roteiros curtos precisam ser "
         "diretos, com conflito simples e payoff rapido; roteiros mais longos precisam "
         "de escalada mais rica, consequencias progressivas, virada central mais forte "
         "e desenvolvimento emocional mais gradual. Nenhuma cena deve parecer "
         "preenchimento: cada cena precisa alterar a situacao, revelar uma informacao "
         "importante ou pressionar o protagonista. "
-        "Use formato cinematografico de filme, nao formato de documento de planejamento: "
-        "titulo, FADE IN:, cenas numeradas e slugline em caixa alta no padrao "
-        "INT./EXT. LOCAL - PERIODO, sem duracao na slugline, linhas de acao no presente, "
-        "personagens em caixa alta na primeira aparicao, blocos de dialogo com nome do "
+        "Use formato cinematográfico de filme, não formato de documento de planejamento: "
+        "titulo, FADE IN:, cenas numeradas e slugline em caixa alta no padrão "
+        "INT./EXT. LOCAL - PERIODO, sem duração na slugline, linhas de acao no presente, "
+        "personagens em caixa alta na primeira aparição, blocos de diálogo com nome do "
         "personagem em caixa alta, parenteticos apenas quando essenciais, transicoes "
         "raras como CORTE PARA: ou FADE OUT:. "
-        "Formato obrigatorio de quebra de linhas: FADE IN deve ficar sozinho em uma linha; "
+        "Formato obrigatório de quebra de linhas: FADE IN deve ficar sozinho em uma linha; "
         "cada CENA NN deve ficar sozinha em uma linha; a slugline INT./EXT. deve ficar "
         "sozinha na linha seguinte; a acao deve comecar em outro paragrafo. Nunca compacte "
         "cenas como 'FADE IN: 1. INT...' ou '2. EXT...' dentro de um paragrafo. "
         "Nunca use slugline generica como 'INT. CENA 1 - DIA'; use sempre o local real. "
         "Organize em exatamente {expected_scene_count} cenas numeradas, com "
-        "desenvolvimento proporcional a duracao escolhida e ritmo de filme: gancho "
+        "desenvolvimento proporcional a duração escolhida e ritmo de filme: gancho "
         "visual imediato, incidente incitante, escalada, virada central, crise, climax "
         "e imagem final memoravel. Evite exposicao longa e descricao abstrata; cada "
-        "paragrafo de acao deve ser especifico, visual e filmavel. "
-        "Nao use narrador, narracao em off ou texto expositivo lido. A historia deve "
+        "paragrafo de acao deve ser específico, visual e filmavel. "
+        "Não use narrador, narracao em off ou texto expositivo lido. A historia deve "
         "ser conduzida por conflito visivel, subtexto, gestos e interacao direta entre "
         "personagens; quando houver fala, escreva dialogos naturais com o nome do "
         "personagem em caixa alta. "
-        "Nao use listas tecnicas dentro do roteiro, nao escreva 'objetivo', "
-        "'personagens', 'local', 'duracao', 'storyboard', 'video', 'camera' ou "
+        "Não use listas técnicas dentro do roteiro, não escreva 'objetivo', "
+        "'personagens', 'local', 'duração', 'storyboard', 'video', 'camera' ou "
         "'objetos narrativos' como campos aparentes dentro de content. A informacao "
-        "deve aparecer naturalmente em acao, imagem e dialogo. "
-        "Escreva somente o roteiro cinematografico. Nao retorne plano tecnico, "
+        "deve aparecer naturalmente em ação, imagem e diálogo. "
+        "Escreva somente o roteiro cinematográfico. Não retorne plano tecnico, "
         "production_plan, lista de shots, storyboard, camera_movement ou campos de video; "
-        "a decupagem tecnica sera derivada em outra etapa. {retry_guidance}"
-        "Responda somente JSON valido, sem markdown e sem texto fora do objeto, neste "
+        "a decupagem técnica será derivada em outra etapa. {retry_guidance}"
+        "Responda somente JSON válido, sem markdown e sem texto fora do objeto, neste "
         "formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
         '"word_count":650,"content":"ROTEIRO CINEMATOGRAFICO COMPLETO AQUI"}}'
     ),
     "generate_scenes_and_shots": (
-        "Divida o roteiro em {script} em cenas e planos prontos para geracao de video "
-        "vertical 9:16. A duracao total obrigatoria e {target_duration_seconds}s. "
+        "Divida o roteiro em {script} em cenas e planos prontos para geração de video "
+        "vertical 9:16. A duração total obrigatoria e {target_duration_seconds}s. "
         "A etapa de video usa Seedance 2.0 Fast: cada plano deve ter entre "
         "{clip_min_seconds}s e {clip_max_seconds}s. Use exatamente {expected_clip_count} "
-        "planos com esta distribuicao de duracao, na ordem: {clip_durations}. "
+        "planos com está distribuicao de duração, na ordem: {clip_durations}. "
         "A soma dos planos precisa ser exatamente {target_duration_seconds}s. "
         "Cenas podem agrupar varios planos; duration_seconds de cada cena deve ser a soma "
         "dos seus planos. Extraia personagens, locais, objetos, acao filmavel e "
-        "dialogo de cada trecho. Nao criar narrador nem fala em off. "
+        "diálogo de cada trecho. Não criar narrador nem fala em off. "
         "visual_composition deve descrever enquadramento vertical, "
-        "sujeito principal, ambiente, luz, profundidade e referencia de continuidade. "
+        "sujeito principal, ambiente, luz, profundidade e referência de continuidade. "
         "camera_movement deve orientar movimento realista compativel com clipe curto. "
-        "action deve ser visivel, especifica e executavel em uma unica tomada curta. "
-        "narration_text e um campo tecnico legado: preencha com uma descricao visual "
+        "action deve ser visivel, especifica e executavel em uma única tomada curta. "
+        "narration_text é um campo tecnico legado: preencha com uma descricao visual "
         "curta do que acontece no plano, sem texto para ser narrado. dialogue_text deve "
         "conter apenas falas de personagens; inclua o nome do personagem quando houver "
-        "dialogo. Se o plano nao tiver fala, dialogue_text pode ser string vazia. "
+        "diálogo. Se o plano não tiver fala, dialogue_text pode ser string vazia. "
         "Responda somente JSON neste formato exato: "
         '{{"scenes":[{{"scene_number":1,"title":"...","summary":"...",'
         '"duration_seconds":45,"shots":[{{"shot_number":1,"duration_seconds":15,'
@@ -133,21 +133,21 @@ DEFAULT_TEMPLATES: dict[str, str] = {
     "revise_script": (
         "Revise o roteiro existente atendendo ao pedido do usuario. "
         "Preserve a continuidade da ideia, dos personagens e dos ativos visuais, "
-        "mantendo a duracao alvo de "
+        "mantendo a duração alvo de "
         "{target_duration_seconds}s. Pedido do usuario: {instruction}. "
         "Contexto do projeto: {project_context}. Roteiro atual: {current_script}. "
-        "Se o pedido citar cenas especificas por numero, reescreva somente essas cenas "
-        "e preserve as demais cenas com o mesmo conteudo, ordem e numeracao. Se o pedido "
-        "solicitar roteiro completo, nova versao ou reescrita geral, reescreva o roteiro "
+        "Se o pedido citar cenas especificas por número, reescreva somente essas cenas "
+        "e preserve as demais cenas com o mesmo conteúdo, ordem e numeração. Se o pedido "
+        "solicitar roteiro completo, nova versão ou reescrita geral, reescreva o roteiro "
         "inteiro mantendo o contrato narrativo do projeto. "
-        "Mantenha formato cinematografico de filme, nao ficha tecnica: FADE IN:, "
-        "cenas numeradas, sluglines INT./EXT. em caixa alta sem duracao, "
+        "Mantenha formato cinematográfico de filme, não ficha técnica: FADE IN:, "
+        "cenas numeradas, sluglines INT./EXT. em caixa alta sem duração, "
         "acao filmavel no presente, primeira aparicao de personagem em caixa alta, "
         "dialogos em bloco com nome do personagem, parenteticos raros e transicoes discretas. "
-        "Nao adicionar narrador, narracao em off ou texto expositivo lido; preservar "
+        "Não adicionar narrador, narracao em off ou texto expositivo lido; preservar "
         "a historia baseada em interacao entre personagens. "
-        "Nao transforme o roteiro em lista tecnica com campos de objetivo/personagens/local/"
-        "duracao/storyboard/video/camera. {retry_guidance}"
+        "Não transforme o roteiro em lista técnica com campos de objetivo/personagens/local/"
+        "duração/storyboard/video/camera. {retry_guidance}"
         "Responda somente JSON neste formato exato: "
         '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
         '"word_count":650,"content":"ROTEIRO CINEMATOGRAFICO REVISADO COMPLETO AQUI"}}'
@@ -188,7 +188,7 @@ def should_fallback_to_mock(exc: Exception) -> bool:
         "openrouter retornou choices fora",
         "openrouter retornou message fora",
         "openrouter retornou content vazio",
-        "openrouter retornou conteudo que nao e json valido",
+        "openrouter retornou conteúdo que não é json válido",
         "openrouter retornou json fora",
     )
     return any(term in message for term in transient_terms)

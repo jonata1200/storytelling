@@ -1,4 +1,4 @@
-from uuid import UUID
+﻿from uuid import UUID
 
 from sqlalchemy import Enum, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column

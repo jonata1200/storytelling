@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 
 from app.video_generation.durations import (
     VIDEO_CLIP_MAX_SECONDS,

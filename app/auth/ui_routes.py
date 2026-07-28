@@ -1,4 +1,4 @@
-# ruff: noqa: E501
+﻿# ruff: noqa: E501
 
 from html import escape
 from typing import Annotated
@@ -35,7 +35,7 @@ def _auth_page(mode: str, message: str = "", status_code: int = 200) -> HTMLResp
         else ""
     )
     password_hint = (
-        '<p class="hint">Use 6+ caracteres com maiuscula, minuscula, numero e simbolo.</p>'
+        '<p class="hint">Use 6+ caracteres com maiúscula, minúscula, número e símbolo.</p>'
         if is_register
         else ""
     )
@@ -116,7 +116,7 @@ async def login(
 ) -> Response:
     user = await authenticate_user(session, email, password)
     if user is None:
-        return _auth_page("login", "E-mail ou senha invalidos.")
+        return _auth_page("login", "E-mail ou senha inválidos.")
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
         SESSION_COOKIE_NAME,

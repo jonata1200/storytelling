@@ -283,7 +283,7 @@ async def _generate_missing_scenes_in_background(project_id: UUID, script_id: UU
                     session,
                     project_id,
                     status="completed",
-                    message="Cenas e planos já estavam criados.",
+                    message="Cenas e planos já estávam criados.",
                     action="create_script_scenes",
                 )
                 return

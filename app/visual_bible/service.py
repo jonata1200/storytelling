@@ -1,4 +1,4 @@
-from decimal import Decimal
+﻿from decimal import Decimal
 from time import perf_counter
 from typing import TypedDict
 from uuid import UUID
@@ -268,7 +268,7 @@ async def update_visual_target_prompt(
 ) -> Character | Location | Prop | None:
     prompt = canonical_prompt.strip()
     if not prompt:
-        raise ValueError("O prompt nao pode ficar vazio")
+        raise ValueError("O prompt não pode ficar vazio")
 
     target: Character | Location | Prop | None
     if target_kind == "character":
@@ -590,7 +590,7 @@ async def check_visual_consistency(
     issues = [
         ConsistencyIssue(
             code="missing_visual_reference",
-            message=f"Referencia visual ausente: {view_type}",
+            message=f"Referência visual ausente: {view_type}",
             severity="warning",
         )
         for view_type in missing

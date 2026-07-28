@@ -1,4 +1,4 @@
-from app.quality.security import security_scan_text
+﻿from app.quality.security import security_scan_text
 
 
 def test_security_scan_detects_prompt_injection_in_portuguese() -> None:

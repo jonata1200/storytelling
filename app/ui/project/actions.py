@@ -135,7 +135,7 @@ async def _save_model_setting(
         model = validate_openrouter_model_name(model)
         async with AsyncSessionLocal() as session:
             await set_model_setting(session, project_id, task, provider, model)
-        ui.notify("Modelo salvo para esta etapa.", color="positive")
+        ui.notify("Modelo salvo para está etapa.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
         ui.notify(f"Não foi possível salvar modelo: {exc}", color="negative")

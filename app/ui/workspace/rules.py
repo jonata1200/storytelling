@@ -1,4 +1,4 @@
-from app.visual_bible.prompts import default_views_for
+﻿from app.visual_bible.prompts import default_views_for
 
 WORKSPACE_SECTIONS = ("script", "assets", "storyboard", "video")
 VISUAL_REFERENCE_VIEW_COUNTS = {

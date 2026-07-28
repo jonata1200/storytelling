@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 import json
 from uuid import UUID
 
@@ -125,13 +125,13 @@ def _storyboard_visual_context_text(visual_context: dict | None) -> str:
 def _storyboard_prompt(shot: Shot, scene: Scene, visual_context: dict | None = None) -> str:
     visual_context_text = _storyboard_visual_context_text(visual_context)
     return (
-        "Storyboard frame cinematografico para video vertical 9:16.\n"
+        "Storyboard frame cinematográfico para video vertical 9:16.\n"
         f"Cena {scene.scene_number}, plano {shot.shot_number}.\n\n"
         f"Acao principal do plano: {shot.action}.\n"
         f"Emocao dominante: {shot.emotion}.\n"
         f"Composicao planejada: {shot.visual_composition}.\n"
         f"Movimento de camera previsto: {shot.camera_movement}.\n\n"
-        "Crie um unico quadro de storyboard que funcione como primeiro frame util "
+        "Crie um único quadro de storyboard que funcione como primeiro frame util "
         "para image-to-video. O quadro deve mostrar o instante inicial mais claro "
         "e filmavel da acao, com sujeito principal legivel, silhueta reconhecivel, "
         "ambiente coerente, profundidade espacial e direcao de movimento compreensivel.\n\n"
@@ -140,9 +140,9 @@ def _storyboard_prompt(shot: Shot, scene: Scene, visual_context: dict | None = N
         "- composicao cinematografica, clara e sem poluicao visual\n"
         "- continuidade rigorosa de rosto, idade, figurino, objetos, paleta, luz e ambiente\n"
         "- nenhum texto, legenda, marca d'agua, baloes, UI ou anotacao dentro da imagem\n"
-        "- nao criar montagem, colagem, split screen ou multiplas cenas no mesmo quadro\n"
-        "- nao adicionar personagens, objetos ou locais que nao estejam no plano\n"
-        "- nao mudar o genero visual definido pelos ativos canonicos\n"
+        "- não criar montagem, colagem, split screen ou multiplas cenas no mesmo quadro\n"
+        "- não adicionar personagens, objetos ou locais que não estejam no plano\n"
+        "- não mudar o gênero visual definido pelos ativos canonicos\n"
         "- deixar espaco visual suficiente para movimento curto de camera ou personagem"
         f"{visual_context_text}"
     )

@@ -165,7 +165,7 @@ def register_settings_page(
                                 )
                             elif saved_api_key_invalid:
                                 ui.label(
-                                    "A chave OpenRouter salva e inválida. Cole uma chave iniciada por sk-or-."
+                                    "A chave OpenRouter salva é inválida. Cole uma chave iniciada por sk-or-."
                                 ).classes(
                                     "text-xs px-2 py-1 rounded-md bg-red-950 text-red-200 border border-red-800"
                                 )

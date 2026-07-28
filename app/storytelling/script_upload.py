@@ -1,4 +1,4 @@
-import re
+﻿import re
 import zipfile
 from io import BytesIO
 from typing import Any
@@ -25,7 +25,7 @@ def extract_script_text(filename: str, content: bytes) -> str:
     cleaned = _clean_extracted_text(text)
     if not cleaned:
         raise ScriptUploadError(
-            "Nao consegui extrair texto desse arquivo. PDFs escaneados precisam de OCR."
+            "Não consegui extrair texto desse arquivo. PDFs escaneados precisam de OCR."
         )
     return cleaned
 
@@ -51,7 +51,7 @@ def _extract_docx_text(content: bytes) -> str:
             ]
             return "\n".join(_text_from_docx_xml(archive.read(name)) for name in document_names)
     except (OSError, KeyError, zipfile.BadZipFile, ElementTree.ParseError) as exc:
-        raise ScriptUploadError("DOCX invalido ou corrompido.") from exc
+        raise ScriptUploadError("DOCX inválido ou corrompido.") from exc
 
 
 def _text_from_docx_xml(xml_content: bytes) -> str:

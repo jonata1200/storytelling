@@ -1,4 +1,4 @@
-from app.storytelling.models import Shot
+﻿from app.storytelling.models import Shot
 
 OBJECT_EXIT_WORDS = ("deixa", "entrega", "perde", "guarda", "some", "desaparece")
 
@@ -36,7 +36,7 @@ def build_initial_shot_state(shot: Shot, story_bible_payload: dict) -> dict:
             "name": location.get("name", "Local principal"),
         },
         "time_of_day": "continuidade narrativa",
-        "weather": "nao especificado",
+        "weather": "não especificado",
         "lighting": "consistente com biblia visual",
         "environment_state": "sem mudancas bruscas",
         "action": shot.action,

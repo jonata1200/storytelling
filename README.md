@@ -1,16 +1,16 @@
-# Storytelling
+﻿# Storytelling
 
-Aplicacao para producao estruturada de historias emocionais em videos verticais,
-com dominio versionado, aprovacao humana e pipeline recuperavel.
+Aplicação para produção estruturada de histórias emocionais em vídeos verticais,
+com domínio versionado, aprovação humana e pipeline recuperável.
 
 ## Requisitos locais
 
 - Python 3.12 ou superior
 - Docker Desktop com WSL 2 no Windows
 - Git
-- FFmpeg sera necessario nas fases de renderizacao
+- FFmpeg será necessário nas fases de renderização
 
-## Configuracao
+## Configuração
 
 ```powershell
 python -m venv .venv
@@ -24,11 +24,11 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-O arquivo `requirements.lock` trava as versoes usadas em desenvolvimento e CI.
-Quando dependencias mudarem em `pyproject.toml`, regenere o lock em um ambiente
+O arquivo `requirements.lock` trava as versões usadas em desenvolvimento e CI.
+Quando dependências mudarem em `pyproject.toml`, regenere o lock em um ambiente
 limpo e rode `pip check`, `ruff check .`, `mypy app tests` e `pytest`.
 
-Depois da primeira configuracao, voce pode usar o script unificado da pasta `scripts`:
+Depois da primeira configuração, você pode usar o script unificado da pasta `scripts`:
 
 ```powershell
 .\scripts\app.ps1 start
@@ -53,7 +53,7 @@ Para finalizar a API e parar os containers:
 .\scripts\app.ps1 stop
 ```
 
-Para reiniciar tudo em um unico comando:
+Para reiniciar tudo em um único comando:
 
 ```powershell
 .\scripts\app.ps1 restart
@@ -70,8 +70,8 @@ existindo por compatibilidade e chamam o script unificado.
 
 ## OpenRouter
 
-A aplicacao usa modelos reais via OpenRouter no fluxo normal. Sem chave valida,
-as etapas de IA retornam erro para a interface, em vez de gerar conteudo mock.
+A aplicação usa modelos reais via OpenRouter no fluxo normal. Sem chave válida,
+as etapas de IA retornam erro para a interface, em vez de gerar conteúdo mock.
 Configure no `.env`:
 
 ```env
@@ -84,37 +84,37 @@ ALLOW_USER_REGISTRATION=true
 
 No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para
 definir modelos OpenRouter diferentes para ideias, roteiro e cenas/planos.
-Modelos com sufixo `:free` e modelos `mock-*` sao bloqueados porque tendem a
-falhar ou confundir o fluxo de producao.
+Modelos com sufixo `:free` e modelos `mock-*` são bloqueados porque tendem a
+falhar ou confundir o fluxo de produção.
 
-Preferencias alteradas pela interface sao gravadas em `.runtime/preferences.json`.
-O arquivo `.env` permanece somente para configuracao de inicializacao e nao e
-modificado pela aplicacao em execucao.
+Preferências alteradas pela interface são gravadas em `.runtime/preferences.json`.
+O arquivo `.env` permanece somente para configuração de inicialização e não é
+modificado pela aplicação em execução.
 
 Os providers reais atualmente implementados usam OpenRouter para texto, imagem e
-video. Os clipes sao gerados sem narracao nativa; o roteiro e a decupagem priorizam
-interacao e dialogo entre personagens. Na finalizacao, falas presentes em
+vídeo. Os clipes são gerados sem narração nativa; o roteiro e a decupagem priorizam
+interação e diálogo entre personagens. Na finalização, falas presentes em
 `dialogue_text` podem ser sintetizadas como vozes de personagens quando
-`SPEECH_API_KEY` e `SPEECH_MODEL` estao configurados.
+`SPEECH_API_KEY` e `SPEECH_MODEL` estão configurados.
 
-## Experiencia de producao
+## Experiência de produção
 
-A interface principal funciona como um cockpit de producao:
+A interface principal funciona como um cockpit de produção:
 
 - Ideia inicial em linguagem natural.
 - Core Setup com formato, resolucao, workflow e modelos.
-- Passos guiados para narrativa, visual, storyboard, video, finalizacao e QA.
-- Asset Canvas para personagens, cenarios, objetos e referencias.
+- Passos guiados para narrativa, visual, storyboard, vídeo, finalização e QA.
+- Asset Canvas para personagens, cenários, objetos e referências.
 - Storyboard Grid para revisar quadros antes de gerar clipes.
 - Timeline Assembly para acompanhar a montagem.
-- Criacao de proximo episodio herdando configuracoes e briefing.
+- Criação de próximo episódio herdando configurações e briefing.
 
-Esse fluxo preserva o backend versionado ja existente, mas reorganiza o uso para
-ficar mais proximo de uma plataforma full-pipeline de video com IA: primeiro a
-ideia, depois configuracao de producao, ativos reutilizaveis, storyboard,
-geracao de clipes, montagem e exportacao.
+Esse fluxo preserva o backend versionado já existente, mas reorganiza o uso para
+ficar mais próximo de uma plataforma full-pipeline de vídeo com IA: primeiro a
+ideia, depois configuração de produção, ativos reutilizáveis, storyboard,
+geração de clipes, montagem e exportação.
 
-Se o comando `docker` nao aparecer no PowerShell logo apos instalar o Docker
+Se o comando `docker` não aparecer no PowerShell logo após instalar o Docker
 Desktop, reinicie o VS Code/terminal ou use temporariamente:
 
 ```powershell
@@ -134,23 +134,23 @@ Health check:
 http://localhost:8000/api/v1/health/live
 ```
 
-Autenticacao:
+Autenticação:
 
 Em `APP_ENV=local` ou `APP_ENV=test`, a API operacional usa bypass local para
-preservar a experiencia de desenvolvimento. Em ambientes fora de local/test, as
-rotas operacionais em `/api/v1` exigem cookie de sessao ou token bearer gerado
-pelo fluxo de login. O endpoint `/api/v1/health/live` permanece publico; o
-readiness e as demais rotas exigem autenticacao quando a aplicacao nao esta em
+preservar a experiência de desenvolvimento. Em ambientes fora de local/test, as
+rotas operacionais em `/api/v1` exigem cookie de sessão ou token bearer gerado
+pelo fluxo de login. O endpoint `/api/v1/health/live` permanece público; o
+readiness e as demais rotas exigem autenticação quando a aplicação não está em
 ambiente local/test.
 
 O cadastro usa e-mail como login e exige senha forte: pelo menos 6 caracteres,
-com letra maiuscula, letra minuscula, numero e simbolo. Defina
+com letra maiúscula, letra minúscula, número e símbolo. Defina
 `ALLOW_USER_REGISTRATION=false` para fechar novos cadastros depois de criar os
-usuarios desejados.
+usuários desejados.
 
 ## Storage e custos
 
-O storage local e auditavel por API. Os limites padrao podem ser ajustados no
+O storage local é auditável por API. Os limites padrão podem ser ajustados no
 `.env`:
 
 ```env
@@ -167,9 +167,9 @@ GET  /api/v1/storage/orphans
 POST /api/v1/storage/orphans/cleanup?dry_run=true
 ```
 
-Custos e orcamentos usam uma politica padrao por operacao, com limites por
+Custos e orçamentos usam uma política padrão por operação, com limites por
 projeto e por etapa gravados em `project_production_settings.metadata_json`.
-A geracao de video valida o limite antes de chamar o provider externo.
+A geração de vídeo valida o limite antes de chamar o provider externo.
 
 ```text
 GET   /api/v1/costs/policies
@@ -180,13 +180,13 @@ POST  /api/v1/costs/budget-check
 GET   /api/v1/costs/projects/{project_id}/summary
 ```
 
-## Finalizacao e observabilidade
+## Finalização e observabilidade
 
-A exportacao final aceita perfil configuravel e tenta normalizar clipes via FFmpeg quando o
-concat direto falha. Quando FFmpeg nao esta disponivel ou a renderizacao falha, o fluxo grava
+A exportação final aceita perfil configurável e tenta normalizar clipes via FFmpeg quando o
+concat direto falha. Quando FFmpeg não está disponível ou a renderização falha, o fluxo grava
 um manifest estruturado com mensagem redigida.
 
-Eventos operacionais por projeto ficam disponiveis em:
+Eventos operacionais por projeto ficam disponíveis em:
 
 ```text
 GET /api/v1/observability/projects/{project_id}/events
@@ -196,7 +196,7 @@ GET /api/v1/observability/readiness
 
 O readiness separa API, banco, Redis, broker do worker, FFmpeg, OpenRouter e
 vozes de personagens.
-Correlation ID e propagado por `X-Correlation-ID` nas chamadas externas relevantes.
+Correlation ID é propagado por `X-Correlation-ID` nas chamadas externas relevantes.
 
 ## Testes
 
@@ -206,27 +206,27 @@ ruff check .
 mypy app tests
 ```
 
-Os testes automatizados nao devem chamar APIs pagas. Providers externos entram por
-interfaces falsas nos testes; o fluxo da aplicacao nao deve escolher mocks.
+Os testes automatizados não devem chamar APIs pagas. Providers externos entram por
+interfaces falsas nos testes; o fluxo da aplicação não deve escolher mocks.
 
 ## Estado atual
 
-Fases 1 a 8 estao implementadas em base funcional:
+Fases 1 a 8 estão implementadas em base funcional:
 
 - API FastAPI com UI NiceGUI inicial.
 - PostgreSQL, pgvector e Redis via Docker Compose.
 - Alembic async usando `asyncpg`.
-- Projetos, versoes, artefatos, aprovacoes, dependencias, assets e custos.
-- Maquina de estados inicial para o pipeline de projeto.
+- Projetos, versões, artefatos, aprovações, dependências, assets e custos.
+- Máquina de estados inicial para o pipeline de projeto.
 - Briefing, ideias, Story Bible, roteiro, cenas e planos com OpenRouter.
-- Templates e execucoes de prompt auditaveis.
-- Personagens, locais, objetos e referencias visuais reais via OpenRouter Images.
+- Templates e execuções de prompt auditáveis.
+- Personagens, locais, objetos e referências visuais reais via OpenRouter Images.
 - Storyboards, animatic visual e timeline preliminar.
-- Jobs de video via OpenRouter, clipes e revisao humana.
-- Timeline final e export MP4/manifest sem narracao, com mix de vozes por personagem.
-- Continuity Ledger, quality gate, varredura inicial de seguranca e correlation
-  ID por requisicao.
-- Testes de health, maquina de estados, dependencias, custos e mock LLM.
+- Jobs de vídeo via OpenRouter, clipes e revisão humana.
+- Timeline final e export MP4/manifest sem narração, com mix de vozes por personagem.
+- Continuity Ledger, quality gate, varredura inicial de segurança e correlation
+  ID por requisição.
+- Testes de health, maquina de estados, dependências, custos e mock LLM.
 
 ## Fluxo narrativo inicial
 
@@ -241,9 +241,9 @@ POST /api/v1/storytelling/projects/{project_id}/script/generate
 POST /api/v1/storytelling/projects/{project_id}/scenes/generate
 ```
 
-As geracoes da Fase 3 usam OpenRouter no fluxo da aplicacao. Sem chave valida,
+As gerações da Fase 3 usam OpenRouter no fluxo da aplicação. Sem chave válida,
 com modelo `:free` ou com modelo `mock-*`, a etapa retorna erro em vez de criar
-conteudo falso.
+conteúdo falso.
 
 ## Fluxo visual inicial
 
@@ -258,8 +258,8 @@ POST /api/v1/visual-bible/projects/{project_id}/references/generate
 GET  /api/v1/visual-bible/projects/{project_id}/consistency/{target_kind}/{target_id}
 ```
 
-As referencias visuais usam OpenRouter Images. Fallback para imagem mock local
-esta bloqueado; falhas do provedor devem aparecer como erro para o usuario.
+As referências visuais usam OpenRouter Images. Fallback para imagem mock local
+está bloqueado; falhas do provedor devem aparecer como erro para o usuário.
 
 ## Fluxo de storyboard inicial
 
@@ -271,10 +271,10 @@ GET  /api/v1/storyboards/projects/{project_id}/frames
 POST /api/v1/storyboards/projects/{project_id}/animatic/generate
 ```
 
-O animatic da Fase 5 e um manifesto JSON com quadros, duracoes, dialogos de
-referencia e timeline preliminar. Renderizacao em video fica para a fase de FFmpeg.
+O animatic da Fase 5 é um manifesto JSON com quadros, durações, diálogos de
+referência e timeline preliminar. Renderização em vídeo fica para a fase de FFmpeg.
 
-## Fluxo de video inicial
+## Fluxo de vídeo inicial
 
 Endpoints principais da Fase 6:
 
@@ -286,10 +286,10 @@ GET  /api/v1/video/projects/{project_id}/jobs/{job_id}
 POST /api/v1/video/projects/{project_id}/clips/{clip_id}/review
 ```
 
-Os clipes usam OpenRouter Videos. Provider `mock` e modelo `mock-video` sao
-recusados no fluxo da aplicacao.
+Os clipes usam OpenRouter Videos. Provider `mock` e modelo `mock-video` são
+recusados no fluxo da aplicação.
 
-## Fluxo de finalizacao inicial
+## Fluxo de finalização inicial
 
 Endpoints principais da Fase 7:
 
@@ -298,9 +298,9 @@ POST /api/v1/finalization/projects/{project_id}/timeline/final
 POST /api/v1/finalization/projects/{project_id}/exports
 ```
 
-A finalizacao monta a timeline final, sintetiza dialogos com voz consistente por
-personagem quando o provider de speech esta configurado, e grava um manifesto JSON
-quando `ffmpeg` nao esta disponivel no PATH ou quando a renderizacao falha.
+A finalização monta a timeline final, sintetiza diálogos com voz consistente por
+personagem quando o provider de speech está configurado, e grava um manifesto JSON
+quando `ffmpeg` não está disponível no PATH ou quando a renderização falha.
 
 ## Fluxo de qualidade inicial
 
@@ -316,5 +316,5 @@ POST /api/v1/quality/security/scan
 ```
 
 O controle de qualidade cria estados de continuidade por plano, alerta
-divergencias estruturadas e resume jobs, custos, artefatos obsoletos e score de
+divergências estruturadas e resume jobs, custos, artefatos obsoletos e score de
 qualidade do projeto.

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+﻿from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import func, select, text
@@ -42,7 +42,7 @@ async def list_projects(session: AsyncSession) -> list[Project]:
 async def rename_project(session: AsyncSession, project_id: UUID, title: str) -> Project | None:
     cleaned_title = title.strip()
     if not cleaned_title:
-        raise ValueError("O nome do projeto nao pode ficar vazio")
+        raise ValueError("O nome do projeto não pode ficar vazio")
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         return None

@@ -1,4 +1,4 @@
-from typing import Any, cast
+﻿from typing import Any, cast
 from uuid import UUID
 
 from nicegui import app as nicegui_app
@@ -10,7 +10,7 @@ def assistant_initial_message(
     return {
         "role": "assistant",
         "content": (
-            "Estou acompanhando esta etapa. Posso revisar, propor variações "
+            "Estou acompanhando está etapa. Posso revisar, propor variações "
             "e orientar a próxima ação mantendo a continuidade do projeto.\n\n"
             f"{assistant_suggestions.get(active, '')}"
         ),
@@ -25,7 +25,7 @@ def assistant_chat_store() -> dict[str, list[dict[str, str]]]:
 
 
 def is_legacy_assistant_greeting(role: str, content: str) -> bool:
-    return role == "assistant" and content.startswith("Estou acompanhando esta etapa.")
+    return role == "assistant" and content.startswith("Estou acompanhando está etapa.")
 
 
 def load_assistant_messages(

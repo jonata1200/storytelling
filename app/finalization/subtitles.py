@@ -1,4 +1,4 @@
-def milliseconds_to_srt_timestamp(milliseconds: int) -> str:
+﻿def milliseconds_to_srt_timestamp(milliseconds: int) -> str:
     hours, remainder = divmod(milliseconds, 3_600_000)
     minutes, remainder = divmod(remainder, 60_000)
     seconds, millis = divmod(remainder, 1_000)

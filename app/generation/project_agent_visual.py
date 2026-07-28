@@ -1,4 +1,4 @@
-import re
+﻿import re
 import sys
 import unicodedata
 from dataclasses import dataclass
@@ -49,7 +49,7 @@ def _requests_visual_prompt_approval(message: str) -> bool:
         "imagens",
         "vista",
         "vistas",
-        "referencia",
+        "referência",
         "visual",
         "ativo",
         "personagem",
@@ -166,7 +166,7 @@ async def _approve_visual_prompt_from_chat(
     targets = await visual_chat_targets(session, project_id, target_kind)
     if not targets:
         return ProjectChatResult(
-            "Nao encontrei personagens, locais ou objetos para aprovar. "
+            "Não encontrei personagens, locais ou objetos para aprovar. "
             "Crie os ativos visuais primeiro.",
             "approve_visual_prompt",
             False,
@@ -179,7 +179,7 @@ async def _approve_visual_prompt_from_chat(
     if not selected_targets:
         options = ", ".join(target.name for target in targets[:8])
         return ProjectChatResult(
-            f"Preciso saber qual ativo visual voce quer aprovar. Disponiveis agora: {options}.",
+            f"Preciso saber qual ativo visual você quer aprovar. Disponiveis agora: {options}.",
             "approve_visual_prompt",
             False,
         )
@@ -216,14 +216,14 @@ async def _approve_visual_prompt_from_chat(
 
     if approved_count == 0:
         return ProjectChatResult(
-            "Nao consegui aprovar nenhum ativo visual com esse pedido.",
+            "Não consegui aprovar nenhum ativo visual com esse pedido.",
             "approve_visual_prompt",
             False,
             True,
         )
     if created_count == 0:
         return ProjectChatResult(
-            f"{approved_count} ativo(s) visual(is) ja estavam com as imagens solicitadas criadas.",
+            f"{approved_count} ativo(s) visual(is) ja estávam com as imagens solicitadas criadas.",
             "approve_visual_prompt",
             True,
         )

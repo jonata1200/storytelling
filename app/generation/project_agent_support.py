@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 from typing import Any
 from uuid import UUID
 
@@ -28,7 +28,7 @@ async def _ensure_ideas_pipeline(
     briefing = await latest(session, Briefing, project_id)
     if briefing is None:
         return ProjectChatResult(
-            "Este projeto ainda nao tem briefing para orientar as ideias.",
+            "Este projeto ainda não tem briefing para orientar as ideias.",
             "generate_ideas",
         )
 
@@ -79,7 +79,7 @@ async def _refresh_visual_bible_after_script_regeneration(
     if visual is None:
         await _emit_progress(
             progress,
-            "Nao consegui atualizar automaticamente a biblioteca visual.",
+            "Não consegui atualizar automaticamente a biblioteca visual.",
         )
         return False
     await _emit_progress(

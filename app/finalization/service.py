@@ -118,7 +118,7 @@ def clip_compatibility_errors(clip_paths: list[Path]) -> list[str]:
     errors: list[str] = []
     for path in clip_paths:
         if not path.exists():
-            errors.append(f"Clipe nao encontrado: {path.name}")
+            errors.append(f"Clipe não encontrado: {path.name}")
         elif path.stat().st_size <= 0:
             errors.append(f"Clipe vazio: {path.name}")
     return errors
@@ -539,7 +539,7 @@ async def _add_dialogue_audio_items(
                 session,
                 project_id,
                 ArtifactType.AUDIO_TRACK,
-                f"Dialogo {dialogue.speaker}",
+                f"Diálogo {dialogue.speaker}",
                 {
                     "speaker": dialogue.speaker,
                     "voice_profile_id": voice_profile_id,

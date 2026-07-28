@@ -1,4 +1,4 @@
-from uuid import UUID
+﻿from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,7 @@ def _validated_production_payload(payload: dict) -> dict:
     for key, allowed_values in validators.items():
         if key in validated and validated[key] not in allowed_values:
             allowed = ", ".join(sorted(allowed_values))
-            raise ValueError(f"Valor invalido para {key}: {validated[key]}. Use: {allowed}")
+            raise ValueError(f"Valor inválido para {key}: {validated[key]}. Use: {allowed}")
     for key in ("image_model", "video_model"):
         if key in validated:
             validated[key] = _validate_model_name(validated[key], key)

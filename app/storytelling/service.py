@@ -1,4 +1,4 @@
-from decimal import Decimal
+﻿from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -217,9 +217,9 @@ async def generate_script(
             if attempt == SCRIPT_GENERATION_MAX_ATTEMPTS - 1:
                 break
             variables["retry_guidance"] = (
-                "A resposta anterior foi recusada porque nao seguiu o formato exigido: "
+                "A resposta anterior foi recusada porque não seguiu o formato exigido: "
                 f"{exc}. Reescreva mantendo content como roteiro de filme limpo e "
-                "sem plano tecnico, lista de shots, cenas compactadas em paragrafos ou "
+                "sem plano tecnico, lista de shots, cenas compactadas em parágrafos ou "
                 "sluglines numeradas como '1. INT.'."
             )
     if payload is None:
@@ -316,7 +316,7 @@ async def revise_script(
             if attempt == SCRIPT_GENERATION_MAX_ATTEMPTS - 1:
                 break
             variables["retry_guidance"] = (
-                "A resposta anterior foi recusada porque nao seguiu o formato exigido: "
+                "A resposta anterior foi recusada porque não seguiu o formato exigido: "
                 f"{exc}. Reescreva mantendo apenas roteiro de filme em content, com "
                 "FADE IN, CENA, slugline, acao e dialogo em linhas separadas."
             )
@@ -335,7 +335,7 @@ async def revise_script(
         session,
         artifact,
         payload,
-        change_note=f"Revisao por chat: {instruction[:160]}",
+        change_note=f"Revisão por chat: {instruction[:160]}",
     )
     session.add(
         ScriptVersion(

@@ -1,4 +1,4 @@
-import re
+﻿import re
 import secrets
 from hashlib import pbkdf2_hmac
 
@@ -10,7 +10,7 @@ EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 def normalize_email(value: str) -> str:
     email = str(value or "").strip().lower()
     if not EMAIL_PATTERN.fullmatch(email):
-        raise ValueError("Informe um e-mail valido.")
+        raise ValueError("Informe um e-mail válido.")
     return email
 
 
@@ -18,12 +18,12 @@ def validate_strong_password(password: str, email: str | None = None) -> None:
     if len(password) < PASSWORD_MIN_LENGTH:
         raise ValueError("A senha deve ter pelo menos 6 caracteres.")
     if any(character.isspace() for character in password):
-        raise ValueError("A senha nao deve conter espacos.")
+        raise ValueError("A senha não deve conter espaços.")
     checks = (
-        (r"[a-z]", "uma letra minuscula"),
-        (r"[A-Z]", "uma letra maiuscula"),
-        (r"\d", "um numero"),
-        (r"[^A-Za-z0-9]", "um simbolo"),
+        (r"[a-z]", "uma letra minúscula"),
+        (r"[A-Z]", "uma letra maiúscula"),
+        (r"\d", "um número"),
+        (r"[^A-Za-z0-9]", "um símbolo"),
     )
     missing = [message for pattern, message in checks if re.search(pattern, password) is None]
     if missing:
@@ -31,7 +31,7 @@ def validate_strong_password(password: str, email: str | None = None) -> None:
     if email:
         local_part = normalize_email(email).split("@", 1)[0]
         if local_part and local_part.lower() in password.lower():
-            raise ValueError("A senha nao deve conter partes do e-mail.")
+            raise ValueError("A senha não deve conter partes do e-mail.")
 
 
 def hash_password(password: str) -> str:

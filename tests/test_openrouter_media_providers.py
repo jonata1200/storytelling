@@ -1,4 +1,4 @@
-import base64
+﻿import base64
 import urllib.error
 from pathlib import Path
 from typing import Any
@@ -430,7 +430,7 @@ def test_openrouter_image_provider_reports_configured_timeout(monkeypatch: Any) 
 
     monkeypatch.setattr("app.providers.image.openrouter.urllib.request.urlopen", raise_timeout)
 
-    with pytest.raises(RuntimeError, match="apos 420s"):
+    with pytest.raises(RuntimeError, match="após 420s"):
         provider._post_json("/images", {"model": "model", "prompt": "prompt"})
 
 
@@ -446,7 +446,7 @@ def test_openrouter_image_provider_rejects_invalid_base64(monkeypatch: Any, tmp_
         lambda path, body: {"data": [{"b64_json": "not valid base64"}]},
     )
 
-    with pytest.raises(RuntimeError, match="b64_json invalido"):
+    with pytest.raises(RuntimeError, match="b64_json inválido"):
         provider._generate(
             ImageGenerationRequest(
                 prompt="dramatic character portrait",
@@ -493,7 +493,7 @@ def test_openrouter_video_provider_downloads_completed_video(
         image_to_video=True,
     )
 
-    assert posted["path"] == "/videos"
+    assert posted["path"] == "/vídeos"
     assert posted["body"]["model"] == "bytedance/seedance-2.0-fast"
     assert posted["body"]["size"] == "1080x1920"
     assert result.status == GenerationJobStatus.SUCCEEDED

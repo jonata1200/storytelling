@@ -1,4 +1,4 @@
-import _project_creation_flow_cases as cases
+﻿import _project_creation_flow_cases as cases
 
 test_settings_tab_key_keeps_data_tab_after_destructive_actions = (
     cases.test_settings_tab_key_keeps_data_tab_after_destructive_actions

@@ -1,4 +1,4 @@
-import re
+﻿import re
 
 from app.storytelling.normalization_common import (
     GenerationOutputError,
@@ -26,7 +26,7 @@ def _script_scene_sections(script_content: str) -> list[dict]:
                 (
                     line
                     for line in lines
-                    if not re.match(r"(?i)^(duracao|dura[cç][aã]o|objetivo)\s*:", line)
+                    if not re.match(r"(?i)^(duração|dura[cç][aã]o|objetivo)\s*:", line)
                 ),
                 f"Cena {index + 1}",
             )
@@ -100,9 +100,9 @@ def _scene_plan_from_script_sections(sections: list[dict], target_duration_secon
                 "narration_text": section["summary"],
                 "dialogue_text": "",
                 "action": section["summary"],
-                "emotion": "progressao dramatica",
+                "emotion": "progressão dramatica",
                 "visual_composition": (
-                    "Composicao vertical 9:16 baseada nesta cena do roteiro, "
+                    "Composicao vertical 9:16 baseada nestá cena do roteiro, "
                     "com sujeito principal, local, objeto narrativo e luz consistentes."
                 ),
                 "camera_movement": "movimento curto e realista",
@@ -203,7 +203,7 @@ def normalize_scene_plan_payload_from_script(
         shot.setdefault("narration_text", str(shot.get("action") or "Acao visual do plano."))
         shot.setdefault("dialogue_text", "")
         shot.setdefault("action", str(shot.get("narration_text") or "Acao visual do plano."))
-        shot.setdefault("emotion", "tensao emocional")
+        shot.setdefault("emotion", "tensão emocional")
         shot.setdefault(
             "visual_composition",
             "Composicao vertical 9:16 com sujeito principal, ambiente e luz definidos.",

@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,23 +28,23 @@ from app.storytelling.story_ideas import list_story_ideas
 
 def test_idea_lab_prompt_guides_quality_and_output_contract() -> None:
     prompt = build_idea_lab_prompt(
-        "historias sobre escolhas impossiveis",
+        "histórias sobre escolhas impossíveis",
         count=4,
         genre="Drama",
         duration_minutes=20,
-        retry_guidance="campo obrigatorio vazio: conflict",
+        retry_guidance="campo obrigatório vazio: conflict",
     )
 
     assert "gere exatamente 4 ideias" in prompt
     assert "Duracao obrigatoria" in prompt
     assert "20 minutos" in prompt
-    assert "Genero obrigatorio" in prompt
+    assert "Gênero obrigatório" in prompt
     assert "Drama" in prompt
-    assert "Nao numere os titulos" in prompt
-    assert "somente JSON valido" in prompt
+    assert "Não numere os títulos" in prompt
+    assert "somente JSON válido" in prompt
     assert '"ideas"' in prompt
     assert "duration_minutes igual a 20" in prompt
-    assert "campo obrigatorio vazio: conflict" in prompt
+    assert "campo obrigatório vazio: conflict" in prompt
 
 
 def test_project_story_idea_normalization_accepts_one_valid_idea() -> None:
@@ -68,7 +68,7 @@ def test_project_story_idea_normalization_accepts_one_valid_idea() -> None:
                     "twist": "O erro original não foi dela, mas ela encobriu o responsável.",
                     "climax": "Marta atravessa a ponte durante a evacuação.",
                     "payoff": "Ela escolhe verdade em vez de reputação.",
-                    "resolution": "A ponte é reparada e recebe o nome das vítimas.",
+                    "resolution": "A ponte e reparada e recebe o nome das vítimas.",
                     "duration_minutes": 5,
                     "retention_potential": 78,
                     "cliche_risk": 22,
@@ -88,10 +88,10 @@ def _generated_idea_payload(index: int, genre: str, duration: int) -> dict:
         "title": f"A escolha {index}",
         "genre": genre,
         "primary_emotion": f"Coragem {index}",
-        "theme": f"tema especifico {index}",
-        "hook": f"Uma decisao impossivel muda a primeira cena {index}.",
+        "theme": f"tema específico {index}",
+        "hook": f"Uma decisão impossível muda a primeira cena {index}.",
         "premise": f"Uma protagonista diferente enfrenta uma crise concreta {index}.",
-        "protagonist": f"Protagonista {index}, profissao unica {index}",
+        "protagonist": f"Protagonista {index}, profissão única {index}",
         "conflict": f"Conflito principal exclusivo {index}",
         "obstacles": [f"obstaculo fisico {index}", f"obstaculo emocional {index}"],
         "stakes": f"Risco irreversivel {index}",
@@ -139,7 +139,7 @@ async def test_generate_freeform_ideas_returns_ten_ai_suggested_ideas(
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(
-        "uma memoria de infancia", count=10, target_duration_minutes=6
+        "uma memória de infancia", count=10, target_duration_minutes=6
     )
 
     assert len(ideas) == 10
@@ -207,7 +207,7 @@ async def test_generate_freeform_ideas_reports_openrouter_failure(
     )
     monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", FailingOpenRouterProvider)
 
-    with pytest.raises(RuntimeError, match="Nao foi possivel gerar ideias"):
+    with pytest.raises(RuntimeError, match="Não foi possível gerar ideias"):
         await generate_freeform_ideas(count=3, genre="Suspense")
 
 
@@ -255,7 +255,7 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
                             "primary_emotion": "Curiosidade",
                             "hook": "Uma porta aparece onde antes havia uma parede.",
                             "premise": (
-                                "Uma zeladora encontra uma sala apagada da memoria do predio."
+                                "Uma zeladora encontra uma sala apagada da memória do predio."
                             ),
                             "protagonist": "Nina, uma zeladora observadora",
                             "duration_minutes": 5,
@@ -272,10 +272,10 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
                             "title": "A porta verde",
                             "genre": "Suspense",
                             "primary_emotion": "Curiosidade",
-                            "theme": "memoria coletiva",
+                            "theme": "memória coletiva",
                             "hook": "Uma porta aparece onde antes havia uma parede.",
                             "premise": (
-                                "Uma zeladora encontra uma sala apagada da memoria do predio."
+                                "Uma zeladora encontra uma sala apagada da memória do predio."
                             ),
                             "protagonist": "Nina, uma zeladora observadora",
                             "conflict": "Abrir a sala pode devolver uma tragedia ao predio.",
@@ -283,7 +283,7 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
                             "stakes": "O predio inteiro pode perder sua historia.",
                             "twist": "Nina foi quem pediu para apagar a sala.",
                             "climax": "Ela abre a porta durante uma reuniao dos moradores.",
-                            "payoff": "A memoria volta como cuidado, nao como culpa.",
+                            "payoff": "A memória volta como cuidado, não como culpa.",
                             "resolution": "Os moradores transformam a sala em arquivo vivo.",
                             "duration_minutes": 5,
                             "retention_potential": 82,
@@ -305,9 +305,9 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     ideas = await generate_freeform_ideas(count=1, genre="Suspense")
 
     assert len(ideas) == 1
-    assert ideas[0]["payoff"] == "A memoria volta como cuidado, nao como culpa."
+    assert ideas[0]["payoff"] == "A memória volta como cuidado, não como culpa."
     assert len(provider.prompts) == 2
-    assert "campo obrigatorio vazio: conflict" in provider.prompts[1]
+    assert "campo obrigatório vazio: conflict" in provider.prompts[1]
 
 
 @pytest.mark.asyncio
@@ -333,12 +333,12 @@ async def test_generate_freeform_ideas_keeps_partial_valid_openrouter_response(
                             ),
                             "protagonist": "Lia, uma faroleira teimosa",
                             "conflict": "A cidade quer desligar o farol para sempre.",
-                            "obstacles": ["tempestade", "pressão dos moradores"],
+                            "obstacles": ["tempéstade", "pressão dos moradores"],
                             "stakes": "A memória do pai pode virar apenas ruína.",
                             "twist": "O barco era um pedido antigo de socorro registrado errado.",
-                            "climax": "Lia sobe ao farol durante a maior tempestade do ano.",
+                            "climax": "Lia sobe ao farol durante a maior tempéstade do ano.",
                             "payoff": "Ela entende que manter a luz acesa também salva os vivos.",
-                            "resolution": "O farol vira estação de resgate comunitária.",
+                            "resolution": "O farol vira estáção de resgate comunitária.",
                             "duration_minutes": 5,
                             "retention_potential": 80,
                             "cliche_risk": 20,

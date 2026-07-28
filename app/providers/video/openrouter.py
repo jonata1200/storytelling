@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import hashlib
 import json
 import time
@@ -50,7 +50,7 @@ class OpenRouterVideoProvider:
         return await asyncio.to_thread(self._generate, request, True)
 
     async def get_status(self, external_job_id: str) -> GenerationJobStatus:
-        response = await asyncio.to_thread(self._get_json, f"/videos/{external_job_id}")
+        response = await asyncio.to_thread(self._get_json, f"/vídeos/{external_job_id}")
         return self._map_status(str(response.get("status") or ""))
 
     async def cancel(self, external_job_id: str) -> None:
@@ -60,7 +60,7 @@ class OpenRouterVideoProvider:
     def _generate(self, request: VideoRequest, image_to_video: bool) -> VideoResult:
         settings = get_settings()
         if not settings.openrouter_api_key:
-            raise RuntimeError("OPENROUTER_API_KEY nao configurada")
+            raise RuntimeError("OPENROUTER_API_KEY não configurada")
         duration_seconds = validate_video_clip_duration(request.duration_seconds)
 
         body: dict[str, Any] = {
@@ -95,10 +95,10 @@ class OpenRouterVideoProvider:
                 for reference in request.reference_uris
             ]
 
-        submitted = self._post_json("/videos", body)
+        submitted = self._post_json("/vídeos", body)
         external_job_id = str(submitted.get("id") or "")
         if not external_job_id:
-            raise RuntimeError("OpenRouter Videos nao retornou id do job")
+            raise RuntimeError("OpenRouter Videos não retornou id do job")
         completed = self._wait_until_complete(external_job_id, submitted)
         output_url = self._first_content_url(external_job_id, completed)
         video_bytes = self._download(output_url)
@@ -136,14 +136,14 @@ class OpenRouterVideoProvider:
             if status in {"failed", "cancelled", "expired"}:
                 raise RuntimeError(f"OpenRouter Videos job {status}: {response.get('error')}")
             time.sleep(8)
-            response = self._get_json(f"/videos/{external_job_id}")
+            response = self._get_json(f"/vídeos/{external_job_id}")
         raise RuntimeError("OpenRouter Videos excedeu o tempo limite de polling")
 
     def _first_content_url(self, external_job_id: str, response: dict[str, Any]) -> str:
         urls = response.get("unsigned_urls")
         if isinstance(urls, list) and urls and isinstance(urls[0], str):
             return urls[0]
-        return f"/videos/{external_job_id}/content?index=0"
+        return f"/vídeos/{external_job_id}/content?index=0"
 
     def _url(self, path_or_url: str) -> str:
         if path_or_url.startswith("http://") or path_or_url.startswith("https://"):

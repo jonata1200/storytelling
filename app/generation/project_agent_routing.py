@@ -37,7 +37,7 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "desenvolver",
         "faca",
         "fazer",
-        "faÃ§a",
+        "faça",
         "monte",
         "montar",
         "parta",
@@ -59,7 +59,7 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "execute",
         "executar",
     )
-    script_terms = ("roteiro", "historia", "histÃ³ria", "cena", "cenas", "dialogo", "diÃ¡logo")
+    script_terms = ("roteiro", "historia", "história", "cena", "cenas", "dialogo", "diálogo")
     idea_terms = (
         "ideia",
         "ideias",
@@ -67,14 +67,14 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "premissas",
         "opcao",
         "opcoes",
-        "opÃ§Ã£o",
-        "opÃ§Ãµes",
+        "opção",
+        "opções",
     )
     bible_terms = (
         "story bible",
         "bible",
         "biblia",
-        "bÃ­blia",
+        "bíblia",
         "universo",
         "mundo",
     )
@@ -89,8 +89,8 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "objeto",
         "objetos",
         "props",
-        "referencia",
-        "referÃªncia",
+        "referência",
+        "referência",
     )
     storyboard_terms = (
         "storyboard",
@@ -101,11 +101,11 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "enquadramento",
         "animatic",
     )
-    video_terms = ("video", "vÃ­deo", "clipe", "clipes", "montagem")
+    video_terms = ("video", "vídeo", "clipe", "clipes", "montagem")
 
     finalization_terms = (
         "finalizacao",
-        "finalizaÃ§Ã£o",
+        "finalização",
         "finalizar",
         "export",
         "exportar",
@@ -117,8 +117,8 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "controle",
         "continuidade",
         "validar",
-        "validacao",
-        "validaÃ§Ã£o",
+        "válidacao",
+        "válidação",
     )
 
     wants_generation = any(term in normalized for term in generation_terms)
@@ -190,8 +190,8 @@ def _workflow_progression_requested(message: str) -> bool:
         "etapa seguinte",
         "partir",
         "pode seguir",
-        "proxima etapa",
-        "proximo passo",
+        "próxima etapa",
+        "próximo passo",
         "prosseguir",
         "prossiga",
         "seguir",
@@ -270,7 +270,7 @@ async def _infer_project_chat_intent_with_ai(
     provider, model = await llm_provider_for_task(session, project_id, "generate_script")
     prompt = (
         "Interprete a intencao operacional do usuario dentro de um software de criacao "
-        "audiovisual. Retorne somente JSON valido, sem markdown. Acoes possiveis: "
+        "audiovisual. Retorne somente JSON válido, sem markdown. Acoes possíveis: "
         "chat, generate_ideas, generate_script, revise_script, generate_assets, "
         "approve_visual_prompt, generate_storyboard, generate_video, generate_finalization, "
         "run_quality. Use o estado real do projeto para decidir se o usuario quer executar "

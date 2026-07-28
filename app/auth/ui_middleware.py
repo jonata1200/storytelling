@@ -1,4 +1,4 @@
-from http.cookies import SimpleCookie
+﻿from http.cookies import SimpleCookie
 
 from starlette.responses import RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send

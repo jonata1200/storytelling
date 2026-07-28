@@ -14,12 +14,12 @@ from app.visual_bible.profiles import (
 
 def _character_gender(raw_gender: object, name: str, role: object) -> str:
     explicit = _ascii_lower(raw_gender).strip()
-    if explicit and explicit not in {"pessoa", "personagem", "indefinido", "indefinida"}:
+    if explicit and explicit not in {"péssoa", "personagem", "indefinido", "indefinida"}:
         if any(term in explicit for term in ("fem", "mulher", "female", "woman")):
             return "personagem feminino"
         if any(term in explicit for term in ("masc", "homem", "male", "man")):
             return "personagem masculino"
-        return f"genero visual definido: {_prompt_text(raw_gender)}"
+        return f"gênero visual definido: {_prompt_text(raw_gender)}"
 
     combined = f"{_ascii_lower(name)} {_ascii_lower(role)}"
     female_terms = {
@@ -105,27 +105,27 @@ def _character_gender(raw_gender: object, name: str, role: object) -> str:
 def _character_gender_guardrail(gender: object) -> str:
     normalized = _ascii_lower(gender)
     if "fem" in normalized or "mulher" in normalized:
-        return "Genero visual obrigatorio: feminino; nao masculinizar."
+        return "Gênero visual obrigatório: feminino; não masculinizar."
     if "masc" in normalized or "homem" in normalized:
-        return "Genero visual obrigatorio: masculino; nao feminilizar."
-    return f"Genero visual obrigatorio: {_prompt_text(gender)}."
+        return "Gênero visual obrigatório: masculino; não feminilizar."
+    return f"Gênero visual obrigatório: {_prompt_text(gender)}."
 
 
 TEMPORAL_VARIANT_NOTES = {
-    "futuro": "versao futura mais velha; preservar tracos faciais familiares",
-    "futura": "versao futura mais velha; preservar tracos faciais familiares",
-    "passado": "versao do passado mais jovem; preservar tracos faciais familiares",
-    "passada": "versao do passado mais jovem; preservar tracos faciais familiares",
-    "jovem": "versao jovem; preservar tracos faciais familiares",
-    "velho": "versao idosa; preservar tracos faciais familiares",
-    "velha": "versao idosa; preservar tracos faciais familiares",
-    "idoso": "versao idosa; preservar tracos faciais familiares",
-    "idosa": "versao idosa; preservar tracos faciais familiares",
-    "crianca": "versao crianca; preservar tracos faciais familiares",
-    "criança": "versao crianca; preservar tracos faciais familiares",
-    "menino": "versao crianca; preservar tracos faciais familiares",
-    "menina": "versao crianca; preservar tracos faciais familiares",
-    "adolescente": "versao adolescente; preservar tracos faciais familiares",
+    "futuro": "versão futura mais velha; preservar tracos faciais familiares",
+    "futura": "versão futura mais velha; preservar tracos faciais familiares",
+    "passado": "versão do passado mais jovem; preservar tracos faciais familiares",
+    "passada": "versão do passado mais jovem; preservar tracos faciais familiares",
+    "jovem": "versão jovem; preservar tracos faciais familiares",
+    "velho": "versão idosa; preservar tracos faciais familiares",
+    "velha": "versão idosa; preservar tracos faciais familiares",
+    "idoso": "versão idosa; preservar tracos faciais familiares",
+    "idosa": "versão idosa; preservar tracos faciais familiares",
+    "crianca": "versão crianca; preservar tracos faciais familiares",
+    "criança": "versão crianca; preservar tracos faciais familiares",
+    "menino": "versão crianca; preservar tracos faciais familiares",
+    "menina": "versão crianca; preservar tracos faciais familiares",
+    "adolescente": "versão adolescente; preservar tracos faciais familiares",
 }
 
 
@@ -177,7 +177,7 @@ def _character_visual_defaults(name: str) -> dict[str, object]:
     ]
     eye_details = [
         "olhos cansados com olhar atento e sobrancelhas marcantes",
-        "olhos pequenos e intensos, expressao desconfiada",
+        "olhos pequenos e intensos, expressão desconfiada",
         "olhos grandes e melancolicos, brilho contido",
         "olhos claros, postura emocional reservada",
         "olhos escuros, olhar caloroso mas firme",
@@ -224,7 +224,7 @@ def _character_profile(raw: object) -> dict:
     defaults = _character_visual_defaults(identity_base_name)
     role = _short_text(_first_value(raw, "role", "funcao", "função"), "personagem", 120)
     gender = _character_gender(
-        _first_value(raw, "gender", "genero", "sexo", fallback=""),
+        _first_value(raw, "gender", "gênero", "sexo", fallback=""),
         name,
         role,
     )
@@ -316,11 +316,11 @@ def _character_profile(raw: object) -> dict:
             "manter idade aparente",
             "manter cabelo",
             "manter figurino base exclusivo deste personagem",
-            "nao reutilizar roupa de outro personagem",
-            "preservar identidade visual base em versoes temporais do mesmo personagem",
+            "não reutilizar roupa de outro personagem",
+            "preservar identidade visual base em versões temporais do mesmo personagem",
         ],
         "canonical_prompt": (
-            "Fotorrealista, referencia de elenco, identidade consistente do personagem. "
+            "Fotorrealista, referência de elenco, identidade consistente do personagem. "
             f"Identidade visual base: {identity_base_name}. "
             f"{f'Variante temporal: {identity_variant_note}. ' if identity_variant_note else ''}"
             f"{_character_gender_guardrail(gender)} "

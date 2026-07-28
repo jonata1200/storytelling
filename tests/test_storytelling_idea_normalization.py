@@ -1,4 +1,4 @@
-import _storytelling_normalization_cases as cases
+﻿import _storytelling_normalization_cases as cases
 
 test_idea_lab_duration_and_count_options_match_generation_controls = (
     cases.test_idea_lab_duration_and_count_options_match_generation_controls

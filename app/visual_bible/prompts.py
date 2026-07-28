@@ -5,29 +5,29 @@ LOCATION_VIEWS = ["establishing"]
 PROP_VIEWS = ["front"]
 VIEW_PROMPT_DETAILS = {
     "character_reference_sheet": (
-        "folha unica de referencia em fundo branco: close frontal grande do rosto a esquerda, "
+        "folha única de referência em fundo branco: close frontal grande do rosto a esquerda, "
         "corpo inteiro frontal, corpo inteiro em perfil lateral e corpo inteiro de costas; "
-        "mesmo rosto, cabelo, figurino, proporcoes e paleta; composicao horizontal limpa; "
+        "mesmo rosto, cabelo, figurino, proporções e paleta; composicao horizontal limpa; "
         "sem texto, sem labels e sem bordas"
     ),
     "front_portrait": (
         "imagem inicial do personagem em pe, corpo inteiro, vista frontal, pose neutra, "
-        "bracos relaxados, corpo dos pes ao topo da cabeca totalmente visivel"
+        "bracos relaxados, corpo dos pés ao topo da cabeça totalmente visivel"
     ),
     "left_profile": (
         "vista lateral esquerda de corpo inteiro, personagem em pe, mesmo rosto, cabelo, "
-        "figurino e proporcoes"
+        "figurino e proporções"
     ),
     "right_profile": (
         "vista lateral direita de corpo inteiro, personagem em pe, mesmo rosto, cabelo, "
-        "figurino e proporcoes"
+        "figurino e proporções"
     ),
     "back_view": (
         "vista de costas de corpo inteiro, personagem em pe, mesmo figurino, cabelo "
-        "e proporcoes corporais visiveis"
+        "e proporções corporais visiveis"
     ),
     "full_body": (
-        "vista frontal de corpo inteiro em pe, da cabeca aos pes, postura neutra "
+        "vista frontal de corpo inteiro em pe, da cabeça aos pés, postura neutra "
         "e figurino base visiveis"
     ),
     "expression_sheet": (
@@ -37,34 +37,34 @@ VIEW_PROMPT_DETAILS = {
         "folha de poses com 3 poses praticas de corpo inteiro, anatomia e figurino consistentes"
     ),
     "scale_reference": (
-        "referencia de escala de corpo inteiro, postura neutra, proporcoes claras"
+        "referência de escala de corpo inteiro, postura neutra, proporções claras"
     ),
     "establishing": (
-        "plano geral cinematografico do ambiente vazio, perspectiva natural de camera, "
+        "plano geral cinematográfico do ambiente vazio, perspectiva natural de camera, "
         "layout espacial, luz, entradas e objetos principais visiveis"
     ),
     "floor_plan": (
         "planta baixa limpa vista de cima, sem perspectiva, paredes, portas, janelas, moveis "
-        "principais e circulacao legiveis"
+        "principais e circulacao legíveis"
     ),
     "camera_points": (
-        "painel de 3 enquadramentos cinematograficos verticais do mesmo local, mostrando "
+        "painel de 3 enquadramentos cinematográficos verticais do mesmo local, mostrando "
         "angulos filmaveis consistentes"
     ),
     "prop_reference_sheet": (
-        "folha unica de referencia do objeto em fundo branco: vista frontal, vista lateral, "
+        "folha única de referência do objeto em fundo branco: vista frontal, vista lateral, "
         "vista superior e detalhe ampliado de textura; mesmo material, cor, estado e escala; "
         "composicao limpa de fotografia de produto, sem texto, sem labels e sem bordas"
     ),
     "front": (
-        "vista frontal, objeto totalmente em destaque, centralizado, material, "
+        "vista frontal, objeto totalmente em destáque, centralizado, material, "
         "cor e detalhes reconheciveis visiveis"
     ),
     "side": (
-        "vista lateral, objeto totalmente em destaque, espessura, silhueta e construcao visiveis"
+        "vista lateral, objeto totalmente em destáque, espessura, silhueta e construcao visiveis"
     ),
     "top": (
-        "vista superior, objeto totalmente em destaque, forma, textura e detalhes legiveis visiveis"
+        "vista superior, objeto totalmente em destáque, forma, textura e detalhes legíveis visiveis"
     ),
 }
 
@@ -85,7 +85,7 @@ def validated_visual_reference_views(target_kind: str, view_types: list[str] | N
     invalid = [view for view in view_types if view not in allowed]
     if invalid:
         raise ValueError(
-            f"View type invalido para {target_kind}: {', '.join(invalid)}. "
+            f"View type inválido para {target_kind}: {', '.join(invalid)}. "
             f"Use: {', '.join(allowed)}"
         )
     return view_types
@@ -107,20 +107,20 @@ COMMON_NEGATIVE_GUARDRAIL = (
 def _character_view_guardrail(view_type: str) -> str:
     if view_type == "character_reference_sheet":
         return (
-            "uma unica imagem, nao separar em arquivos; fundo branco puro de estudio; "
+            "uma única imagem, não separar em arquivos; fundo branco puro de estudio; "
             "mesmo personagem nas perspectivas solicitadas; rosto, anatomia e figurino "
-            "consistentes; iluminacao uniforme; alinhar altura das poses; nao cortar cabeca, "
-            "pes ou maos"
+            "consistentes; iluminação uniforme; alinhar altura das poses; não cortar cabeça, "
+            "pés ou mãos"
         )
     if view_type == "front_portrait":
         return (
             "personagem em pe, corpo inteiro, vista frontal, pose neutra, olhando para a camera, "
-            "fundo cinza neutro de estudio, uma unica pessoa, sem cenario, sem objetos extras, "
-            "nao cortar cabeca, pes ou maos"
+            "fundo cinza neutro de estudio, uma única péssoa, sem cenario, sem objetos extras, "
+            "não cortar cabeça, pés ou mãos"
         )
     return (
         "fundo branco puro de estudio, corpo inteiro, angulo solicitado, manter mesmo rosto, "
-        "cabelo, corpo, figurino, sapatos, proporcoes e paleta"
+        "cabelo, corpo, figurino, sapatos, proporções e paleta"
     )
 
 
@@ -144,17 +144,17 @@ def _location_view_guardrail(view_type: str) -> str:
 def _prop_view_guardrail(view_type: str) -> str:
     if view_type == "prop_reference_sheet":
         return (
-            "uma unica imagem, nao separar em arquivos; objeto isolado em fundo branco puro; "
-            "mesmo objeto em varias vistas, sem pessoas, sem maos ou ambiente; permitir detalhe "
+            "uma única imagem, não separar em arquivos; objeto isolado em fundo branco puro; "
+            "mesmo objeto em varias vistas, sem pessoas, sem mãos ou ambiente; permitir detalhe "
             "ampliado e escala discreta"
         )
     if view_type == "scale_reference":
         return (
             "objeto isolado em fundo branco puro; permitir regua, grade simples ou silhueta "
-            "neutra apenas para escala; sem pessoas reais, sem maos, sem cenario"
+            "neutra apenas para escala; sem pessoas reais, sem mãos, sem cenario"
         )
     return (
-        "objeto isolado, fundo branco puro, inteiro e centralizado, sem pessoas, sem maos, "
+        "objeto isolado, fundo branco puro, inteiro e centralizado, sem pessoas, sem mãos, "
         "sem ambiente, sem outros objetos"
     )
 
@@ -188,13 +188,13 @@ def _compact_visual_base_prompt(profile: dict) -> str:
         identity_base_name = _prompt_text(profile.get("identity_base_name"))
         identity_variant_note = _prompt_text(profile.get("identity_variant_note"))
         parts = [
-            "Fotorrealista, referencia de elenco",
+            "Fotorrealista, referência de elenco",
             name,
             f"identidade base {identity_base_name}" if identity_base_name else "",
             f"variante {identity_variant_note}" if identity_variant_note else "",
             _clean_prompt_fragment(
                 profile.get("gender"),
-                ("personagem", "genero visual", "gênero visual"),
+                ("personagem", "gênero visual", "gênero visual"),
             ),
             _prompt_text(profile.get("apparent_age")),
             _prompt_text(profile.get("body_type")),
@@ -246,5 +246,5 @@ def visual_reference_prompt(profile: dict, view_type: str) -> str:
     return (
         f"{base_prompt}. Vista: {view_detail}. Regras: {guardrail}. "
         f"Evitar: {COMMON_NEGATIVE_GUARDRAIL}. Proporcao: {aspect_ratio}. "
-        "Referencia de continuidade; detalhes legiveis."
+        "Referência de continuidade; detalhes legíveis."
     )

@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
@@ -29,7 +29,7 @@ def test_prepare_reference_upload_defaults_to_auto_reference() -> None:
 
     assert prepared["filename"] == "moodboard.jpg"
     assert prepared["category"] == "auto"
-    assert prepared["category_label"] == "Referencia visual"
+    assert prepared["category_label"] == "Referência visual"
     assert prepared["content_type"] == "image/jpeg"
 
 
@@ -96,7 +96,7 @@ async def test_persist_reference_upload_accepts_auto_reference_category(
     )
     session = _FakeAssetSession()
     project_id = uuid4()
-    prepared = prepare_reference_upload("referencia.png", b"image-bytes")
+    prepared = prepare_reference_upload("referência.png", b"image-bytes")
 
     asset = await persist_reference_upload(
         cast(AsyncSession, session),
@@ -106,6 +106,6 @@ async def test_persist_reference_upload_accepts_auto_reference_category(
     )
 
     assert _path_is_file(asset.storage_uri)
-    assert asset.name == "Referencia visual"
+    assert asset.name == "Referência visual"
     assert asset.metadata_json["reference_category"] == "auto"
-    assert asset.metadata_json["reference_category_label"] == "Referencia visual"
+    assert asset.metadata_json["reference_category_label"] == "Referência visual"

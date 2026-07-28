@@ -1,4 +1,4 @@
-from decimal import Decimal
+﻿from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -113,7 +113,7 @@ async def dashboard_metrics() -> dict[str, str]:
             )
             exports = await scalar_count(session, Export)
     except Exception as exc:
-        return {"Banco": "indisponivel", "Detalhe": type(exc).__name__}
+        return {"Banco": "indisponível", "Detalhe": type(exc).__name__}
     return {
         "Projetos": str(project_count),
         "Artefatos": str(artifact_count),

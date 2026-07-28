@@ -1,4 +1,4 @@
-from decimal import Decimal
+﻿from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -203,7 +203,7 @@ async def generate_storyboard_frames(
         if needs_image:
             image = plan.image
             if image is None:
-                raise RuntimeError("A geracao do storyboard nao retornou imagem.")
+                raise RuntimeError("A geração do storyboard não retornou imagem.")
             duration_ms = plan.duration_ms or 1
             generation_metadata = {
                 "resolution": image_resolution,

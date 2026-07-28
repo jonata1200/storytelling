@@ -1,4 +1,4 @@
-from decimal import Decimal
+﻿from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import Enum, ForeignKey, Numeric, String

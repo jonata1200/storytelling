@@ -1,4 +1,4 @@
-import re
+﻿import re
 
 from app.visual_bible.script_profiles import (
     _append_metadata as _append_metadata,
@@ -67,13 +67,13 @@ SCRIPT_PROP_KEYWORDS = (
 def _clean_script_prop_name(value: str) -> str:
     text = _clean_script_entity_name(value)
     text = re.split(
-        r"(?i)\s+(?:e|ou|que|eh|é|esta|está|fica|parece|ve|vê|olha|pega|segura|sai|entra)\b",
+        r"(?i)\s+(?:e|ou|que|eh|é|está|está|fica|parece|ve|vê|olha|pega|segura|sai|entra)\b",
         text,
         maxsplit=1,
     )[0]
     text = re.split(
         r"(?i)\s+(?:no|na|nos|nas)\s+"
-        r"(?:chao|chão|mesa|parede|bolso|mao|mão|maos|mãos|ar|torre)\b",
+        r"(?:chao|chão|mesa|parede|bolso|mao|mão|mãos|mãos|ar|torre)\b",
         text,
         maxsplit=1,
     )[0]

@@ -1,4 +1,4 @@
-from typing import Any
+﻿from typing import Any
 from uuid import UUID
 
 from nicegui import ui
@@ -75,11 +75,11 @@ async def _run_step(
                 if not visual_report["complete"]:
                     raise ValueError(visual_reference_completion_message(visual_report))
             await enqueue_project_step(session, project_id, step_key)
-        ui.notify("Etapa enfileirada para execucao pelo worker.", color="positive")
+        ui.notify("Etapa enfileirada para execução pelo worker.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
         message = friendly_ai_error(exc)
-        _append_assistant_message_to_chat(project_id, f"Nao consegui concluir a etapa: {message}")
+        _append_assistant_message_to_chat(project_id, f"Não consegui concluir a etapa: {message}")
         if loading_dialog is not None:
             loading_dialog.close()
         show_ai_error_popup(message, details=str(exc))

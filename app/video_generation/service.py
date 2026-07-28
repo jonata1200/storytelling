@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+﻿from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -168,7 +168,7 @@ async def _video_provider_for_project(
             OpenRouterVideoProvider(),
             "openrouter",
             requested_model,
-            "openrouter_videos",
+            "openrouter_vídeos",
             production_settings.aspect_ratio,
             production_settings.video_resolution,
         )
@@ -178,7 +178,7 @@ async def _video_provider_for_project(
             OpenRouterVideoProvider(),
             "openrouter",
             requested_model,
-            "openrouter_videos",
+            "openrouter_vídeos",
             production_settings.aspect_ratio,
             production_settings.video_resolution,
         )
@@ -366,7 +366,7 @@ async def generate_video_clips(
                         model=resolved_model,
                         operation="image_to_video",
                         estimated_cost=video_cost_estimate.estimated,
-                        message="Geracao de video iniciada",
+                        message="Geração de video iniciada",
                         details={
                             "frame_id": str(frame.id),
                             "variant_index": variant_index,
@@ -556,7 +556,7 @@ async def generate_video_clips(
                     model=result.model,
                     operation="image_to_video",
                     estimated_cost=total_cost,
-                    message="Geracao de video concluida",
+                    message="Geração de video concluida",
                     details={
                         "clip_id": str(clip.id),
                         "asset_id": str(asset.id),

@@ -119,7 +119,7 @@ PROFILE_DETAIL_KEYS = frozenset(
         "roupa",
         "figurino",
         "gender",
-        "genero",
+        "gênero",
         "sexo",
         "origin",
         "origem",
@@ -136,7 +136,6 @@ PROFILE_DETAIL_KEYS = frozenset(
         "materials",
         "materiais",
         "lighting",
-        "iluminacao",
         "iluminação",
         "luz",
         "props_in_scene",
@@ -376,10 +375,10 @@ def _location_profile(raw: object) -> dict:
     lighting = _first_value(
         raw,
         "lighting",
-        "iluminacao",
+        "iluminação",
         "iluminação",
         "luz",
-        fallback="luz natural suave com contraste cinematografico",
+        fallback="luz natural suave com contraste cinematográfico",
     )
     narrative_profile = {
         "name": name,
@@ -412,8 +411,8 @@ def _location_profile(raw: object) -> dict:
             f"Materiais: {_prompt_text(materials)}. Paleta: {_prompt_text(palette)}. "
             f"Luz: {_prompt_text(lighting)}. "
             "Mostrar entradas, portas, janelas, moveis principais e circulacao. "
-            "Objetos em posicoes consistentes. Nenhuma pessoa, sem multidao, sem silhuetas. "
-            "Local especifico, filmavel, com textura realista."
+            "Objetos em posicoes consistentes. Nenhuma péssoa, sem multidao, sem silhuetas. "
+            "Local específico, filmavel, com textura realista."
         ),
     }
 
@@ -473,13 +472,13 @@ def _prop_profile(raw: object) -> dict:
         "visual_profile": visual_profile,
         "asset_kind": "prop",
         "canonical_prompt": (
-            f"Fotorrealista, fotografia de produto. Um unico {name}, inteiro e centralizado. "
+            f"Fotorrealista, fotografia de produto. Um único {name}, inteiro e centralizado. "
             f"Importancia: {_prompt_text(narrative_importance)}. "
             f"Dimensoes: {_prompt_text(dimensions)}. Material: {_prompt_text(material)}. "
             f"Cor: {_prompt_text(color)}. Estado: {_prompt_text(state)}. "
             f"Relacao narrativa: {_prompt_text(owner)}. "
-            "Silhueta clara, textura realista, detalhes legiveis. "
-            "Sem maos, sem pessoas, sem cenario, sem outros objetos."
+            "Silhueta clara, textura realista, detalhes legíveis. "
+            "Sem mãos, sem pessoas, sem cenario, sem outros objetos."
         ),
     }
 
@@ -509,7 +508,7 @@ def visual_profile_validation_errors(target_kind: str, profile: dict) -> list[st
             if profile.get(key) in (None, "", [], {}):
                 errors.append(f"{key} vazio")
         if _ascii_lower(profile.get("gender")) in {
-            "pessoa",
+            "péssoa",
             "personagem",
             "indefinido",
             "indefinida",
@@ -524,7 +523,7 @@ def visual_profile_validation_errors(target_kind: str, profile: dict) -> list[st
             if profile.get(key) in (None, "", [], {}):
                 errors.append(f"{key} vazio")
     else:
-        errors.append(f"target_kind invalido: {target_kind}")
+        errors.append(f"target_kind inválido: {target_kind}")
     return errors
 
 

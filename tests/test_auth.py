@@ -1,4 +1,4 @@
-from typing import cast
+﻿from typing import cast
 
 import pytest
 from fastapi import FastAPI
@@ -149,7 +149,7 @@ def test_docs_are_not_public_outside_local(monkeypatch: pytest.MonkeyPatch) -> N
 def test_normalize_email_requires_valid_email() -> None:
     assert normalize_email("  USER@Example.COM ") == "user@example.com"
 
-    with pytest.raises(ValueError, match="e-mail valido"):
+    with pytest.raises(ValueError, match="e-mail válido"):
         normalize_email("sem-email")
 
 
@@ -158,7 +158,7 @@ def test_strong_password_validation() -> None:
 
     with pytest.raises(ValueError, match="pelo menos 6"):
         validate_strong_password("S1!a")
-    with pytest.raises(ValueError, match="maiuscula"):
+    with pytest.raises(ValueError, match="maiúscula"):
         validate_strong_password("senhaforte123!")
     with pytest.raises(ValueError, match="partes do e-mail"):
         validate_strong_password("UserSenhaForte123!", "user@example.com")
@@ -213,7 +213,7 @@ async def test_register_user_rejects_duplicate_email(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(auth_service, "get_user_by_email", found_user)
     fake_session = _FakeAuthSession()
 
-    with pytest.raises(ValueError, match="ja esta cadastrado"):
+    with pytest.raises(ValueError, match="ja está cadastrado"):
         await auth_service.register_user(
             cast(AsyncSession, fake_session),
             "user@example.com",

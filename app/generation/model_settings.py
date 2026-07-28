@@ -1,4 +1,4 @@
-from uuid import UUID
+﻿from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,7 +43,7 @@ async def set_model_setting(
     model: str,
 ) -> ProjectModelSetting:
     if provider != "openrouter":
-        raise ValueError("Use OpenRouter com um modelo real. Providers mock estao bloqueados.")
+        raise ValueError("Use OpenRouter com um modelo real. Providers mock estão bloqueados.")
     model = validate_openrouter_model_name(model)
     result = await session.execute(
         select(ProjectModelSetting).where(

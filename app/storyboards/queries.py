@@ -1,4 +1,4 @@
-from uuid import UUID
+﻿from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,12 +26,12 @@ def storyboard_coverage_errors(
     actual_duration = sum(frame.duration_seconds for frame in frames)
     if expected_duration != actual_duration:
         errors.append(
-            f"duracao dos frames ({actual_duration}s) difere dos planos ({expected_duration}s)"
+            f"duração dos frames ({actual_duration}s) difere dos planos ({expected_duration}s)"
         )
     expected_order = expected_shot_ids
     actual_order = [frame.shot_id for frame in sorted(frames, key=lambda item: item.frame_number)]
     if actual_order != expected_order:
-        errors.append("ordem dos frames nao segue cena/plano")
+        errors.append("ordem dos frames não segue cena/plano")
     for frame in frames:
         if frame.asset_id is None:
             errors.append(f"frame {frame.frame_number} sem asset")

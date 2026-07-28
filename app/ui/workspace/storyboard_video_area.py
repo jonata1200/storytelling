@@ -1,4 +1,4 @@
-# ruff: noqa: E501
+﻿# ruff: noqa: E501
 
 from collections.abc import Callable
 from pathlib import Path
@@ -74,7 +74,7 @@ async def _approve_storyboard_prompts_from_ui(
             (
                 f"{approved_count} prompt(s) de storyboard aprovado(s)."
                 if approved_count
-                else "Os prompts de storyboard já estavam aprovados."
+                else "Os prompts de storyboard já estávam aprovados."
             ),
             color="positive",
         )
@@ -114,7 +114,7 @@ async def _approve_storyboard_prompt_from_ui(
             (
                 "Prompt de storyboard aprovado."
                 if approved
-                else "Este prompt de storyboard ja estava aprovado."
+                else "Este prompt de storyboard ja estáva aprovado."
             ),
             color="positive",
         )
@@ -145,7 +145,7 @@ async def _save_storyboard_prompt_from_ui(
             (
                 "Prompt de storyboard atualizado."
                 if updated
-                else "Nao encontrei o prompt de storyboard selecionado."
+                else "Não encontrei o prompt de storyboard selecionado."
             ),
             color="positive" if updated else "warning",
         )
@@ -959,7 +959,7 @@ def render_video_area(
         with ui.element("div").classes("entity-card rounded-2xl p-6 w-full mt-4"):
             ui.label("Nenhum clipe para gerar ainda").classes("brand-type text-2xl font-bold")
             ui.label(
-                "Quando o storyboard estiver pronto, esta tela mostrar\u00e1 os planos "
+                "Quando o storyboard estiver pronto, está tela mostrar\u00e1 os planos "
                 "que podem virar clipes."
             ).classes("text-sm text-[#8d938e] leading-6")
 

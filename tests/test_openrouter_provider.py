@@ -1,4 +1,4 @@
-import urllib.error
+﻿import urllib.error
 
 import pytest
 
@@ -22,7 +22,7 @@ def test_openrouter_provider_rejects_non_json_content() -> None:
     provider = OpenRouterLLMProvider()
 
     with pytest.raises(RuntimeError):
-        provider._parse_json_content("nao e json")
+        provider._parse_json_content("não é json")
 
 
 def test_openrouter_provider_reports_api_error_without_choices() -> None:
@@ -74,7 +74,7 @@ def test_openrouter_provider_rejects_invalid_api_key_before_request(
 
     monkeypatch.setattr("app.providers.llm.openrouter.get_settings", lambda: Settings())
 
-    with pytest.raises(RuntimeError, match="ausente ou invalida"):
+    with pytest.raises(RuntimeError, match="ausente ou inválida"):
         provider._send_request(
             LLMRequest(task="generate_story_ideas", prompt="{}", model="model"),
             use_response_format=True,

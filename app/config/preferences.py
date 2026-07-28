@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 import urllib.request
 
@@ -18,7 +18,7 @@ async def openrouter_models(api_key: str, kind: str) -> list[dict[str, str]]:
 
 def _fetch_models(api_key: str, kind: str) -> list[dict[str, str]]:
     settings = get_settings()
-    endpoint = "videos/models" if kind == "video" else "models"
+    endpoint = "vídeos/models" if kind == "video" else "models"
     url = f"{settings.openrouter_base_url.rstrip('/')}/{endpoint}"
     if kind == "image":
         url += "?output_modalities=image"

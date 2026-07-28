@@ -1,4 +1,4 @@
-import math
+﻿import math
 
 VIDEO_CLIP_MIN_SECONDS = 4
 VIDEO_CLIP_MAX_SECONDS = 15
@@ -25,7 +25,7 @@ def video_clip_durations(
     total = int(total_duration_seconds)
     if total < VIDEO_CLIP_MIN_SECONDS:
         raise ValueError(
-            f"A duracao total precisa ter pelo menos {VIDEO_CLIP_MIN_SECONDS}s."
+            f"A duração total precisa ter pelo menos {VIDEO_CLIP_MIN_SECONDS}s."
         )
 
     max_duration = min(max_duration_seconds, VIDEO_CLIP_MAX_SECONDS)

@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -116,7 +116,7 @@ def test_storyboard_prompt_includes_visual_bible_context() -> None:
     assert "Carta azul" in prompt
     assert "primeiro frame util para image-to-video" in prompt
     assert "nenhum texto, legenda, marca d'agua" in prompt
-    assert "nao criar montagem, colagem, split screen" in prompt
+    assert "não criar montagem, colagem, split screen" in prompt
 
 
 def test_storyboard_coverage_errors_detect_missing_and_duration_mismatch() -> None:
@@ -137,7 +137,7 @@ def test_storyboard_coverage_errors_detect_missing_and_duration_mismatch() -> No
     errors = storyboard_coverage_errors([(first_shot, scene), (second_shot, scene)], [frame])
 
     assert "1 plano(s) sem frame de storyboard" in errors
-    assert "duracao dos frames (4s) difere dos planos (12s)" in errors
+    assert "duração dos frames (4s) difere dos planos (12s)" in errors
 
 
 def test_storyboard_prompt_approval_requires_matching_hash() -> None:
@@ -404,7 +404,7 @@ async def test_generate_storyboard_frames_requires_complete_visual_references(
         }
 
     async def fail_ordered_shots(*args: Any, **kwargs: Any) -> list[tuple[Shot, Scene]]:
-        raise AssertionError("planos nao devem ser consultados antes da biblioteca visual")
+        raise AssertionError("planos não devem ser consultados antes da biblioteca visual")
 
     monkeypatch.setattr(storyboard_service, "ProjectRepository", FakeProjectRepository)
     monkeypatch.setattr(

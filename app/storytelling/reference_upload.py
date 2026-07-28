@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -10,7 +10,7 @@ from app.config.settings import get_settings
 from app.core.enums import AssetKind
 
 REFERENCE_CATEGORIES = {
-    "auto": "Referencia visual",
+    "auto": "Referência visual",
     "character": "Personagem",
     "location": "Local",
     "prop": "Objeto",
@@ -40,7 +40,7 @@ def prepare_reference_upload(
     if len(content) > MAX_REFERENCE_IMAGE_BYTES:
         raise ReferenceUploadError("A imagem deve ter no maximo 10 MB.")
     if not content:
-        raise ReferenceUploadError("A imagem enviada esta vazia.")
+        raise ReferenceUploadError("A imagem enviada está vazia.")
     return {
         "filename": Path(filename).name,
         "category": normalized_category,
@@ -58,7 +58,7 @@ def normalize_reference_category(category: str | None) -> str:
     if not normalized:
         return "auto"
     if normalized not in REFERENCE_CATEGORIES:
-        raise ReferenceUploadError("A categoria da imagem de referencia e invalida.")
+        raise ReferenceUploadError("A categoria da imagem de referência e inválida.")
     return normalized
 
 
@@ -66,7 +66,7 @@ def reference_asset_name(category: str) -> str:
     label = REFERENCE_CATEGORIES[category]
     if category == "auto":
         return label
-    return f"Referencia de {label}"
+    return f"Referência de {label}"
 
 
 async def persist_reference_uploads(
@@ -91,10 +91,10 @@ async def persist_reference_upload(
     category = normalize_reference_category(str(upload.get("category") or ""))
     extension = str(upload.get("extension") or _image_extension(str(upload.get("filename") or "")))
     if extension not in IMAGE_EXTENSIONS:
-        raise ReferenceUploadError("Imagem de referencia sem extensao valida.")
+        raise ReferenceUploadError("Imagem de referência sem extensão válida.")
     content = upload.get("content")
     if not isinstance(content, bytes) or not content:
-        raise ReferenceUploadError("Imagem de referencia sem conteudo.")
+        raise ReferenceUploadError("Imagem de referência sem conteúdo.")
     settings = get_settings()
     target_dir = settings.local_storage_path / "uploaded_references" / str(project_id)
     target_dir.mkdir(parents=True, exist_ok=True)

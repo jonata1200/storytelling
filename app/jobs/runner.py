@@ -1,4 +1,4 @@
-from typing import Any
+﻿from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -51,18 +51,18 @@ async def _run_initial_script(
     if isinstance(source_idea, dict):
         idea = await create_story_idea_from_payload(session, project_id, source_idea)
         if idea is None:
-            raise ValueError("nao foi possivel registrar a ideia selecionada")
+            raise ValueError("não foi possível registrar a ideia selecionada")
     else:
         ideas = await generate_story_ideas(session, project_id)
         if not ideas:
-            raise ValueError("nao foi possivel gerar ideias iniciais")
+            raise ValueError("não foi possível gerar ideias iniciais")
         idea = ideas[0]
     script = await generate_script(session, project_id, idea.id)
     if script is None:
-        raise ValueError("nao foi possivel gerar roteiro")
+        raise ValueError("não foi possível gerar roteiro")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
-        raise ValueError("nao foi possivel gerar cenas e planos")
+        raise ValueError("não foi possível gerar cenas e planos")
     return {"script_id": str(script.id), "scene_count": len(scenes)}
 
 
@@ -71,14 +71,14 @@ async def _run_script(session: AsyncSession, project_id: UUID) -> dict[str, Any]
     if idea is None:
         ideas = await generate_story_ideas(session, project_id)
         if not ideas:
-            raise ValueError("nao foi possivel gerar uma ideia base")
+            raise ValueError("não foi possível gerar uma ideia base")
         idea = ideas[0]
     script = await generate_script(session, project_id, idea.id)
     if script is None:
-        raise ValueError("nao foi possivel gerar roteiro")
+        raise ValueError("não foi possível gerar roteiro")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
-        raise ValueError("nao foi possivel gerar cenas e planos")
+        raise ValueError("não foi possível gerar cenas e planos")
     return {"script_id": str(script.id), "scene_count": len(scenes)}
 
 
@@ -88,7 +88,7 @@ async def _run_visual(session: AsyncSession, project_id: UUID) -> dict[str, Any]
         raise ValueError("gere o roteiro primeiro")
     visual = await generate_visual_bible(session, project_id, script.id)
     if visual is None:
-        raise ValueError("nao foi possivel criar a Biblioteca visual")
+        raise ValueError("não foi possível criar a Biblioteca visual")
     characters, locations, props = visual
     return {
         "characters": len(characters),
@@ -106,7 +106,7 @@ async def _run_storyboard(session: AsyncSession, project_id: UUID) -> dict[str, 
         raise ValueError(visual_reference_completion_message(visual_report))
     frames = await generate_storyboard_frames(session, project_id, script.id)
     if frames is None:
-        raise ValueError("nao foi possivel gerar storyboard")
+        raise ValueError("não foi possível gerar storyboard")
     animatic_bundle = await generate_animatic_bundle(session, project_id, script.id)
     animatic = animatic_bundle[0] if animatic_bundle is not None else None
     return {
@@ -128,7 +128,7 @@ async def _run_video(
     )
     result = await generate_video_clips(session, project_id, frame_ids=frame_ids)
     if result is None:
-        raise ValueError("nao encontrei o projeto para gerar os clipes")
+        raise ValueError("não encontrei o projeto para gerar os clipes")
     jobs, clips = result
     return {"job_count": len(jobs), "clip_count": len(clips)}
 
@@ -158,7 +158,7 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
     async with AsyncSessionLocal() as session:
         job = await get_job(session, job_id)
         if job is None:
-            raise ValueError("Job nao encontrado.")
+            raise ValueError("Job não encontrado.")
         step = str(job.request_payload.get("step") or "")
         payload = job.request_payload.get("payload")
         payload = payload if isinstance(payload, dict) else {}
@@ -190,7 +190,7 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
             elif step == "quality":
                 response = await _run_quality(session, job.project_id)
             else:
-                raise ValueError(f"Etapa de job invalida: {step}")
+                raise ValueError(f"Etapa de job inválida: {step}")
             await mark_job_succeeded(
                 session,
                 job,

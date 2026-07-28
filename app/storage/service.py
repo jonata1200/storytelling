@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+﻿from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID

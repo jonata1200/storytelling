@@ -1,4 +1,4 @@
-import re
+﻿import re
 
 from app.storytelling.normalization_common import (
     GenerationOutputError,
@@ -59,11 +59,11 @@ def story_idea_validation_errors(payload: dict) -> list[str]:
     errors: list[str] = []
     for field in STORY_IDEA_REQUIRED_TEXT_FIELDS:
         if not str(payload.get(field) or "").strip():
-            errors.append(f"campo obrigatorio vazio: {field}")
+            errors.append(f"campo obrigatório vazio: {field}")
 
     protagonist = str(payload.get("protagonist") or "").strip().casefold()
     if protagonist in {"protagonista", "protagonista a definir", "personagem a definir"}:
-        errors.append("protagonist precisa ser especifico, nao placeholder")
+        errors.append("protagonist precisa ser específico, não placeholder")
 
     duration = coerce_duration_minutes(payload.get("duration_minutes"))
     if not 5 <= duration <= 25:
@@ -78,7 +78,7 @@ def story_idea_validation_errors(payload: dict) -> list[str]:
     if obstacles is not None and (
         not isinstance(obstacles, list) or not any(str(item).strip() for item in obstacles)
     ):
-        errors.append("obstacles deve ser uma lista nao vazia quando informado")
+        errors.append("obstacles deve ser uma lista não vazia quando informado")
 
     if payload.get("hook") == payload.get("premise"):
         errors.append("hook e premise precisam ter funcoes narrativas diferentes")
@@ -161,7 +161,7 @@ def story_idea_diversity_errors(items: list[dict]) -> list[str]:
     generic_patterns = (
         "mensagem que muda tudo",
         "verdade chega tarde demais",
-        "pessoa comum precisa encarar uma revelacao",
+        "péssoa comum precisa encarar uma revelacao",
         "segredo do passado",
         "heranca misteriosa",
         "carta azul",
@@ -177,7 +177,7 @@ def story_idea_diversity_errors(items: list[dict]) -> list[str]:
 
 def _story_idea_retry_guidance(errors: list[str]) -> str:
     return (
-        "A resposta anterior nao serve para o pipeline. Corrija estes pontos e retorne "
+        "A resposta anterior não serve para o pipeline. Corrija estes pontos e retorne "
         "novamente somente JSON, mantendo exatamente a chave ideas: "
         f"{'; '.join(errors)}. "
     )
@@ -203,7 +203,7 @@ def _normalize_generated_story_ideas(content: dict, default_duration_minutes: fl
             continue
         items.append(item)
     if not items:
-        errors.append("generate_story_ideas: esperado pelo menos 1 ideia valida")
+        errors.append("generate_story_ideas: esperado pelo menos 1 ideia válida")
     if not errors and len(items) > 1:
         errors.extend(story_idea_diversity_errors(items))
     if errors:

@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 import shutil
 from collections import Counter
@@ -146,7 +146,7 @@ async def readiness_dashboard(
         ReadinessComponentRead(
             name="ffmpeg",
             status="ready" if ffmpeg_path else "degraded",
-            message="FFmpeg encontrado" if ffmpeg_path else "FFmpeg nao encontrado no PATH",
+            message="FFmpeg encontrado" if ffmpeg_path else "FFmpeg não encontrado no PATH",
             details={"path": ffmpeg_path},
         )
     )

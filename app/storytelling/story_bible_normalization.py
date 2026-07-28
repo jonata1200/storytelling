@@ -1,4 +1,4 @@
-import re
+﻿import re
 from typing import cast
 
 from app.storytelling.models import Briefing
@@ -145,7 +145,7 @@ def _normalize_story_bible_characters(payload: dict, idea_payload: dict | None) 
                     item.get("apparent_age") or item.get("idade_aparente") or item.get("idade"),
                     "idade aparente definida",
                 ),
-                "gender": _story_bible_text(item.get("gender") or item.get("genero"), "pessoa"),
+                "gender": _story_bible_text(item.get("gender") or item.get("gênero"), "péssoa"),
                 "origin": _story_bible_text(item.get("origin") or item.get("origem"), "brasileira"),
                 "height_cm": _story_bible_text(item.get("height_cm") or item.get("altura"), "165"),
                 "body_type": _story_bible_text(
@@ -222,11 +222,11 @@ def _normalize_story_bible_locations(payload: dict) -> list[dict]:
                 ),
                 "palette": _story_bible_string_list(
                     item.get("palette") or item.get("paleta"),
-                    ["neutros", "cor de destaque", "sombra suave"],
+                    ["neutros", "cor de destáque", "sombra suave"],
                 ),
                 "lighting": _story_bible_text(
-                    item.get("lighting") or item.get("iluminacao") or item.get("luz"),
-                    "iluminacao cinematografica coerente",
+                    item.get("lighting") or item.get("iluminação") or item.get("luz"),
+                    "iluminação cinematografica coerente",
                 ),
                 "props_in_scene": _story_bible_string_list(item.get("props_in_scene"), []),
                 "spatial_rules": _story_bible_string_list(
@@ -292,7 +292,7 @@ STORY_BIBLE_DEFAULT_MARKERS = {
     "local importante para a historia",
     "ambiente central da historia",
     "layout definido",
-    "iluminacao cinematografica coerente",
+    "iluminação cinematografica coerente",
     "objeto com funcao narrativa clara",
     "Objeto de revelacao",
     "Qual escolha emocional define a historia?",
@@ -389,7 +389,7 @@ def story_bible_quality_report(payload: dict) -> dict:
 
     score = int(round((sum(1 for check in checks if check) / len(checks)) * 100))
     if score < 80:
-        risk_flags.append("Story Bible incompleta para roteiro e producao visual")
+        risk_flags.append("Story Bible incompleta para roteiro e produção visual")
     return {
         "completeness_score": score,
         "missing_fields": missing_fields,
@@ -427,7 +427,7 @@ def normalize_story_bible_payload(
         "logline": logline,
         "theme": _story_bible_text(payload.get("theme"), getattr(briefing, "theme", "")),
         "genre": _story_bible_text(payload.get("genre"), getattr(briefing, "genre", "")),
-        "tone": _story_bible_text(payload.get("tone"), "cinematografico e emocional"),
+        "tone": _story_bible_text(payload.get("tone"), "cinematográfico e emocional"),
         "target_emotion": _story_bible_text(
             payload.get("target_emotion"), getattr(briefing, "primary_emotion", "")
         ),

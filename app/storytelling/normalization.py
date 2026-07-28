@@ -1,4 +1,4 @@
-# ruff: noqa: F401
+﻿# ruff: noqa: F401
 
 from app.storytelling.normalization_common import (
     GenerationOutputError,

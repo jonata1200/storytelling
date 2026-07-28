@@ -1,4 +1,4 @@
-# ruff: noqa: F401
+﻿# ruff: noqa: F401
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path

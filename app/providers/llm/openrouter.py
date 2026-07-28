@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 import urllib.error
 import urllib.request
@@ -19,7 +19,7 @@ class OpenRouterLLMProvider:
     async def generate_structured(self, request: LLMRequest) -> LLMResult:
         settings = get_settings()
         if not normalize_openrouter_api_key(settings.openrouter_api_key):
-            raise RuntimeError("OPENROUTER_API_KEY ausente ou invalida")
+            raise RuntimeError("OPENROUTER_API_KEY ausente ou inválida")
         request = request.model_copy(
             update={"model": validate_openrouter_model_name(request.model)}
         )
@@ -41,7 +41,7 @@ class OpenRouterLLMProvider:
         settings = get_settings()
         api_key = normalize_openrouter_api_key(settings.openrouter_api_key)
         if not api_key:
-            raise RuntimeError("OPENROUTER_API_KEY ausente ou invalida")
+            raise RuntimeError("OPENROUTER_API_KEY ausente ou inválida")
         url = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
         body = {
             "model": request.model,
@@ -49,8 +49,8 @@ class OpenRouterLLMProvider:
                 {
                     "role": "system",
                     "content": (
-                        "Voce e um motor de producao audiovisual. "
-                        "Responda somente com JSON valido, sem markdown."
+                        "Você é um motor de produção audiovisual. "
+                        "Responda somente com JSON válido, sem markdown."
                     ),
                 },
                 {"role": "user", "content": request.prompt},
@@ -93,7 +93,7 @@ class OpenRouterLLMProvider:
         except OSError as exc:
             raise RuntimeError(f"OpenRouter connection error: {redact_secrets(exc)}") from exc
         except json.JSONDecodeError as exc:
-            raise RuntimeError("OpenRouter retornou resposta HTTP que nao e JSON valido") from exc
+            raise RuntimeError("OpenRouter retornou resposta HTTP que não é JSON válido") from exc
         if not isinstance(parsed, dict):
             raise RuntimeError("OpenRouter retornou resposta fora do formato esperado")
         return parsed
@@ -135,7 +135,7 @@ class OpenRouterLLMProvider:
         try:
             parsed = json.loads(stripped)
         except json.JSONDecodeError as exc:
-            raise RuntimeError("OpenRouter retornou conteudo que nao e JSON valido") from exc
+            raise RuntimeError("OpenRouter retornou conteúdo que não é JSON válido") from exc
         if not isinstance(parsed, dict):
             raise RuntimeError("OpenRouter retornou JSON fora do formato esperado")
         return parsed

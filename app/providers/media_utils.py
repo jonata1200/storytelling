@@ -1,4 +1,4 @@
-import base64
+﻿import base64
 import mimetypes
 from pathlib import Path
 from urllib.parse import unquote, urlparse

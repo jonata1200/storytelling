@@ -1,4 +1,4 @@
-# ruff: noqa: F401
+﻿# ruff: noqa: F401
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -76,7 +76,7 @@ def test_story_idea_payload_coerces_non_integer_scores() -> None:
     payload = normalize_story_idea_payload(
         {
             "title": "A promessa",
-            "premise": "Uma promessa esquecida volta no pior dia possivel.",
+            "premise": "Uma promessa esquecida volta no pior dia possível.",
             "retention_potential": "alto",
             "cliche_risk": "15%",
             "production_complexity": "8/10",
@@ -121,10 +121,10 @@ def test_story_idea_validation_requires_narrative_engine_fields() -> None:
 
     errors = story_idea_validation_errors(payload)
 
-    assert "campo obrigatorio vazio: conflict" in errors
-    assert "campo obrigatorio vazio: twist" in errors
-    assert "campo obrigatorio vazio: payoff" in errors
-    assert "campo obrigatorio vazio: resolution" in errors
+    assert "campo obrigatório vazio: conflict" in errors
+    assert "campo obrigatório vazio: twist" in errors
+    assert "campo obrigatório vazio: payoff" in errors
+    assert "campo obrigatório vazio: resolution" in errors
 
 
 def test_story_idea_validation_accepts_complete_payload() -> None:
@@ -141,7 +141,7 @@ def test_story_idea_validation_accepts_complete_payload() -> None:
             "stakes": "Perder a ultima chance de entender a propria historia.",
             "twist": "A carta foi escrita pela filha quando crianca.",
             "climax": "Lia le a carta diante da familia reunida.",
-            "payoff": "Ela entende que a despedida era tambem uma permissao para viver.",
+            "payoff": "Ela entende que a despedida era tambem uma permissão para viver.",
             "resolution": "Lia guarda a carta em um album aberto.",
             "retention_potential": 82,
             "cliche_risk": 18,
@@ -175,7 +175,7 @@ def test_story_bible_payload_is_normalized_to_structured_model() -> None:
         cast(
             Any,
             SimpleNamespace(
-                theme="memoria familiar",
+                theme="memória familiar",
                 genre="drama",
                 audience="adultos",
                 primary_emotion="saudade",
@@ -183,7 +183,7 @@ def test_story_bible_payload_is_normalized_to_structured_model() -> None:
         ),
     )
 
-    assert payload["theme"] == "memoria familiar"
+    assert payload["theme"] == "memória familiar"
     assert payload["export_profile"] == {
         "aspect_ratio": "9:16",
         "resolution": "1080x1920",
@@ -320,7 +320,7 @@ FADE OUT.
     assert "FADE IN: CENA 1" not in payload["content"]
 
 
-def test_screenplay_validator_rejects_technical_planning_document() -> None:
+def test_screenplay_válidator_rejects_technical_planning_document() -> None:
     errors = screenplay_validation_errors(
         """
 ROTEIRO DE PRODUCAO
@@ -334,10 +334,10 @@ Indicacao para video: push-in lento.
 
     assert "faltou FADE IN" in errors
     assert "faltou slugline INT./EXT." in errors
-    assert "conteudo contem rotulos tecnicos" in errors
+    assert "conteúdo contem rotulos tecnicos" in errors
 
 
-def test_screenplay_validator_rejects_scene_and_slugline_on_same_line() -> None:
+def test_screenplay_válidator_rejects_scene_and_slugline_on_same_line() -> None:
     errors = screenplay_validation_errors(
         """
 FADE IN:
@@ -358,21 +358,21 @@ FADE OUT.
     assert "cenas e sluglines precisam ficar em linhas separadas" in errors
 
 
-def test_screenplay_validator_rejects_compacted_inline_numbered_sluglines() -> None:
+def test_screenplay_válidator_rejects_compacted_inline_numbered_sluglines() -> None:
     errors = screenplay_validation_errors(
         """
 CENA 01
 INT. CENA 1 - DIA
 
 FADE IN: 1. INT. MERCADO NOTURNO - NOITE Um labirinto de barracas.
-OMERO vende memorias. 2. INT. BARRACA DE OMERO - MAIS TARDE Omero abre um caderno.
+OMERO vende memórias. 2. INT. BARRACA DE OMERO - MAIS TARDE Omero abre um caderno.
 
 FADE OUT.
 """
     )
 
     assert "FADE IN precisa ficar em linha propria" in errors
-    assert "sluglines numeradas nao podem ficar dentro de paragrafos" in errors
+    assert "sluglines numeradas não podem ficar dentro de parágrafos" in errors
     assert "slugline generica INT. CENA precisa ser substituida por local real" in errors
 
 
@@ -386,7 +386,7 @@ CENA 01
 INT. CENA 1 - DIA
 
 FADE IN: 1. INT. MERCADO NOTURNO - NOITE Um labirinto de barracas.
-OMERO vende memorias. 2. INT. BARRACA DE OMERO - MAIS TARDE Omero abre um caderno.
+OMERO vende memórias. 2. INT. BARRACA DE OMERO - MAIS TARDE Omero abre um caderno.
 
 FADE OUT.
 """,
@@ -401,9 +401,9 @@ def test_story_idea_db_text_truncates_long_protagonist_for_varchar_column() -> N
     payload = {
         "protagonist": (
             "Tadeu, 38 anos, mergulhador de resgate, ex-fuzileiro naval, solteiro, "
-            "com pesadelos recorrentes de um naufragio que nao conseguiu evitar. "
-            "Seu desejo e provar que e capaz de salvar vidas sob pressao extrema, "
-            "mesmo quando a plataforma inteira esta prestes a explodir e todos duvidam dele."
+            "com pésadelos recorrentes de um naufragio que não conseguiu evitar. "
+            "Seu desejo e provar que e capaz de salvar vidas sob pressão extrema, "
+            "mesmo quando a plataforma inteira está prestes a explodir e todos duvidam dele."
         )
     }
 
@@ -512,7 +512,7 @@ OBJETIVO: Revelar o segredo.
             "scenes": [
                 {
                     "scene_number": 1,
-                    "title": "Cena unica",
+                    "title": "Cena única",
                     "summary": "Resumo geral.",
                     "duration_seconds": 120,
                     "shots": [
@@ -522,7 +522,7 @@ OBJETIVO: Revelar o segredo.
                             "narration_text": "Resumo geral.",
                             "dialogue_text": "",
                             "action": "Resumo geral.",
-                            "emotion": "tensao",
+                            "emotion": "tensão",
                             "visual_composition": "Plano vertical.",
                             "camera_movement": "push-in",
                             "generation_type": "IMAGE_TO_VIDEO",

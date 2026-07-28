@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 import json
 from datetime import UTC, datetime
 from uuid import UUID
@@ -33,7 +33,7 @@ def normalize_step(value: str) -> str:
     step = str(value or "").strip().lower().replace("-", "_")
     if step not in PROJECT_STEP_JOB_TYPES:
         allowed = ", ".join(sorted(PROJECT_STEP_JOB_TYPES))
-        raise ValueError(f"Etapa de job invalida: {step or '<vazia>'}. Use: {allowed}.")
+        raise ValueError(f"Etapa de job inválida: {step or '<vazia>'}. Use: {allowed}.")
     return step
 
 
@@ -105,7 +105,7 @@ async def create_or_resume_project_job(
 ) -> GenerationJob:
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
-        raise ValueError("Projeto nao encontrado.")
+        raise ValueError("Projeto não encontrado.")
     normalized_step = normalize_step(step)
     clean_payload = dict(payload or {})
     request_payload = {"step": normalized_step, "payload": clean_payload}
@@ -145,7 +145,7 @@ async def create_or_resume_project_job(
         action_message = "Etapa falhou e atingiu o limite de tentativas."
     else:
         action_status = "queued"
-        action_message = "Etapa enfileirada para execucao pelo worker."
+        action_message = "Etapa enfileirada para execução pelo worker."
     await _set_project_job_action(
         session,
         job,
@@ -235,7 +235,7 @@ def dispatch_project_job(job_id: UUID) -> None:
     try:
         run_project_step.delay(str(job_id))
     except CeleryError as exc:
-        raise RuntimeError(f"Nao foi possivel enfileirar job no Celery: {exc}") from exc
+        raise RuntimeError(f"Não foi possível enfileirar job no Celery: {exc}") from exc
 
 
 async def enqueue_project_step(

@@ -1,4 +1,4 @@
-from sqlalchemy import select
+﻿from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +32,7 @@ async def register_user(
     normalized_email = normalize_email(email)
     validate_strong_password(password, normalized_email)
     if await get_user_by_email(session, normalized_email) is not None:
-        raise ValueError("Este e-mail ja esta cadastrado.")
+        raise ValueError("Este e-mail ja está cadastrado.")
     cleaned_display_name = str(display_name or "").strip() or display_name_from_email(
         normalized_email
     )
@@ -46,7 +46,7 @@ async def register_user(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise ValueError("Este e-mail ja esta cadastrado.") from exc
+        raise ValueError("Este e-mail ja está cadastrado.") from exc
     await session.refresh(user)
     return user
 

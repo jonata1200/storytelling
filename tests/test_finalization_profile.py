@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -63,7 +63,7 @@ def test_clip_compatibility_errors_reports_missing_and_empty_files(tmp_path: Pat
     errors = clip_compatibility_errors([empty, missing])
 
     assert "Clipe vazio: empty.mp4" in errors
-    assert "Clipe nao encontrado: missing.mp4" in errors
+    assert "Clipe não encontrado: missing.mp4" in errors
 
 
 def test_final_timeline_coverage_requires_selected_clip_for_each_frame() -> None:

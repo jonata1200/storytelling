@@ -1,4 +1,4 @@
-import _storytelling_normalization_cases as cases
+﻿import _storytelling_normalization_cases as cases
 
 test_script_payload_accepts_common_ai_field_names = (
     cases.test_script_payload_accepts_common_ai_field_names
@@ -12,14 +12,14 @@ test_script_payload_adds_scene_markers_to_screenplay_without_cena_labels = (
 test_script_payload_normalizes_inline_scene_heading_from_model_response = (
     cases.test_script_payload_normalizes_inline_scene_heading_from_model_response
 )
-test_screenplay_validator_rejects_technical_planning_document = (
-    cases.test_screenplay_validator_rejects_technical_planning_document
+test_screenplay_válidator_rejects_technical_planning_document = (
+    cases.test_screenplay_válidator_rejects_technical_planning_document
 )
-test_screenplay_validator_rejects_scene_and_slugline_on_same_line = (
-    cases.test_screenplay_validator_rejects_scene_and_slugline_on_same_line
+test_screenplay_válidator_rejects_scene_and_slugline_on_same_line = (
+    cases.test_screenplay_válidator_rejects_scene_and_slugline_on_same_line
 )
-test_screenplay_validator_rejects_compacted_inline_numbered_sluglines = (
-    cases.test_screenplay_validator_rejects_compacted_inline_numbered_sluglines
+test_screenplay_válidator_rejects_compacted_inline_numbered_sluglines = (
+    cases.test_screenplay_válidator_rejects_compacted_inline_numbered_sluglines
 )
 test_script_payload_retries_compacted_inline_numbered_sluglines = (
     cases.test_script_payload_retries_compacted_inline_numbered_sluglines

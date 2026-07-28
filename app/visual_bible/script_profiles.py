@@ -1,4 +1,4 @@
-import re
+﻿import re
 import unicodedata
 from dataclasses import dataclass
 

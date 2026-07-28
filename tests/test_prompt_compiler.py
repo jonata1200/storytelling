@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 from types import SimpleNamespace
 from typing import NoReturn
 from uuid import uuid4
@@ -26,7 +26,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         "target_duration_minutes": 5,
         "theme": "perdao",
         "genre": "drama",
-        "audience": "publico geral",
+        "audience": "público geral",
         "primary_emotion": "esperanca",
         "diversity_memory": "nenhuma ideia anterior",
         "idea_title": "A carta",
@@ -54,20 +54,20 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
 
     assert '"content":"ROTEIRO CINEMATOGRAFICO COMPLETO AQUI"' in compiled["generate_script"]
     assert '"production_plan"' not in compiled["generate_script"]
-    assert "Escreva somente o roteiro cinematografico" in compiled["generate_script"]
+    assert "Escreva somente o roteiro cinematográfico" in compiled["generate_script"]
     assert "FADE IN:" in compiled["generate_script"]
     assert "slugline" in compiled["generate_script"]
-    assert "Nao use listas tecnicas" in compiled["generate_script"]
+    assert "Não use listas técnicas" in compiled["generate_script"]
     assert "exatamente 5 cenas" in compiled["generate_script"]
-    assert "roteirista cinematografico senior" in compiled["generate_script"]
+    assert "roteirista cinematográfico senior" in compiled["generate_script"]
     assert "protagonista ativo" in compiled["generate_script"]
     assert "Nenhuma cena deve parecer preenchimento" in compiled["generate_script"]
-    assert "Responda somente JSON valido" in compiled["generate_script"]
+    assert "Responda somente JSON válido" in compiled["generate_script"]
     assert "entre 4s e 15s" in compiled["generate_scenes_and_shots"]
     assert "ROTEIRO CINEMATOGRAFICO REVISADO COMPLETO AQUI" in compiled["revise_script"]
     assert '"scenes"' in compiled["generate_scenes_and_shots"]
     assert '"ideas"' in compiled["generate_story_ideas"]
-    assert "Genero preferido: drama" in compiled["generate_story_ideas"]
+    assert "Gênero preferido: drama" in compiled["generate_story_ideas"]
     assert '"payoff"' in compiled["generate_story_ideas"]
     assert "radicalmente diferentes entre si" in compiled["generate_story_ideas"]
     assert "nenhuma ideia anterior" in compiled["generate_story_ideas"]
@@ -84,7 +84,7 @@ def test_generation_fallback_detects_openrouter_resource_exhaustion() -> None:
 
 
 def test_generation_fallback_detects_openrouter_malformed_model_response() -> None:
-    error = RuntimeError("OpenRouter retornou conteudo que nao e JSON valido")
+    error = RuntimeError("OpenRouter retornou conteúdo que não é JSON válido")
 
     assert should_fallback_to_mock(error) is True
 
@@ -109,7 +109,7 @@ async def test_director_generation_reports_openrouter_runtime_error_without_mock
         provider_name = "openrouter"
 
         async def generate_structured(self, request: LLMRequest) -> NoReturn:
-            raise RuntimeError("OpenRouter retornou conteudo que nao e JSON valido")
+            raise RuntimeError("OpenRouter retornou conteúdo que não é JSON válido")
 
     class FakeSession:
         def __init__(self) -> None:
@@ -129,7 +129,7 @@ async def test_director_generation_reports_openrouter_runtime_error_without_mock
     session = FakeSession()
     monkeypatch.setattr(generation_service, "get_or_create_prompt_template", fake_template)
 
-    with pytest.raises(RuntimeError, match="nao e JSON valido"):
+    with pytest.raises(RuntimeError, match="não é JSON válido"):
         await run_structured_generation(
             session,  # type: ignore[arg-type]
             FailingProvider(),

@@ -1,4 +1,4 @@
-from app.storytelling.models import Briefing, StoryIdea
+﻿from app.storytelling.models import Briefing, StoryIdea
 
 
 def _compact_named_items(items: object, keys: tuple[str, ...]) -> list[dict]:
@@ -107,7 +107,7 @@ def _idea_script_contract(idea: StoryIdea, briefing: Briefing) -> dict:
         "logline": payload.get("premise") or idea.premise,
         "theme": payload.get("theme") or briefing.theme,
         "genre": payload.get("genre") or briefing.genre,
-        "tone": payload.get("tone") or "cinematografico e emocional",
+        "tone": payload.get("tone") or "cinematográfico e emocional",
         "target_emotion": payload.get("primary_emotion") or briefing.primary_emotion,
         "audience": briefing.audience,
         "story_engine": {

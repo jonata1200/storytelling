@@ -1,4 +1,4 @@
-import os
+﻿import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -140,7 +140,7 @@ def test_initial_visual_reference_is_single_canonical_view() -> None:
 def test_visual_reference_views_reject_invalid_values() -> None:
     assert validated_visual_reference_views("prop", ["front"]) == ["front"]
 
-    with pytest.raises(ValueError, match="View type invalido"):
+    with pytest.raises(ValueError, match="View type inválido"):
         validated_visual_reference_views("prop", ["prop_reference_sheet"])
 
 
@@ -153,12 +153,12 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
     prompt = visual_reference_prompt(profile, "character_reference_sheet")
 
     assert prompt.startswith(
-        "Helena, 35, expressive detective, rainy noir lighting. Vista: folha unica"
+        "Helena, 35, expressive detective, rainy noir lighting. Vista: folha única"
     )
     assert "perspectivas solicitadas" in prompt
     assert "Proporcao: 16:9" in prompt
     assert "sem texto" in prompt
-    assert "Referencia de continuidade" in prompt
+    assert "Referência de continuidade" in prompt
     assert len(prompt) < 900
 
 
@@ -196,19 +196,19 @@ def test_visual_profiles_generate_professional_canonical_prompts() -> None:
     location = _location_profile({"name": "Casa da familia", "lighting": "luz fria da janela"})
     prop = _prop_profile({"name": "Carta azul", "material": "papel amassado"})
 
-    assert "Fotorrealista, referencia de elenco" in character["canonical_prompt"]
+    assert "Fotorrealista, referência de elenco" in character["canonical_prompt"]
     assert "Manter mesmo rosto" in character["canonical_prompt"]
     assert character["narrative_profile"]["name"] == "Clara"
     assert character["gender"] == "personagem feminino"
-    assert "Genero visual obrigatorio: feminino" in character["canonical_prompt"]
+    assert "Gênero visual obrigatório: feminino" in character["canonical_prompt"]
     assert "identidade consistente do personagem" in character["canonical_prompt"]
-    assert "uma unica pessoa" not in character["canonical_prompt"]
+    assert "uma única péssoa" not in character["canonical_prompt"]
     assert character["visual_profile"]["hair"] == "cabelo castanho curto"
     assert "cabelo castanho curto" in character["canonical_prompt"]
     assert "Figurino base exclusivo" in character["canonical_prompt"]
     assert "Fotorrealista, fotografia de arquitetura" in location["canonical_prompt"]
     assert "ambiente vazio" in location["canonical_prompt"]
-    assert "Nenhuma pessoa" in location["canonical_prompt"]
+    assert "Nenhuma péssoa" in location["canonical_prompt"]
     assert "Fotorrealista, fotografia de produto" in prop["canonical_prompt"]
     assert "papel amassado" in prop["canonical_prompt"]
     assert location["narrative_profile"]["name"] == "Casa da familia"
@@ -312,8 +312,8 @@ def test_character_profile_infers_masculine_visual_gender() -> None:
     character = _character_profile({"name": "Lucas", "role": "filho"})
 
     assert character["gender"] == "personagem masculino"
-    assert "Genero visual obrigatorio: masculino" in character["canonical_prompt"]
-    assert "nao feminilizar" in character["canonical_prompt"]
+    assert "Gênero visual obrigatório: masculino" in character["canonical_prompt"]
+    assert "não feminilizar" in character["canonical_prompt"]
 
 
 def test_character_defaults_are_distinct_by_name() -> None:
@@ -322,7 +322,7 @@ def test_character_defaults_are_distinct_by_name() -> None:
 
     assert clara["base_outfit"] != lucas["base_outfit"]
     assert clara["hair"] != lucas["hair"]
-    assert "nao reutilizar roupa" in " ".join(clara["visual_constraints"])
+    assert "não reutilizar roupa" in " ".join(clara["visual_constraints"])
 
 
 def test_temporal_character_versions_share_visual_identity_defaults() -> None:
@@ -334,7 +334,7 @@ def test_temporal_character_versions_share_visual_identity_defaults() -> None:
     assert omero["permanent_id"] != future_omero["permanent_id"]
     assert omero["identity_base_name"] == "Omero"
     assert future_omero["identity_base_name"] == "Omero"
-    assert "versao futura" in future_omero["identity_variant_note"]
+    assert "versão futura" in future_omero["identity_variant_note"]
     for key in ("origin", "height_cm", "hair", "eyes", "body_type", "base_outfit", "palette"):
         assert future_omero[key] == omero[key]
     assert "Identidade visual base: Omero" in future_omero["canonical_prompt"]
@@ -351,10 +351,10 @@ def test_character_initial_reference_uses_single_turnaround_sheet() -> None:
     assert "vista frontal" in prompt
     assert "pose neutra" in prompt
     assert "fundo cinza neutro de estudio" in prompt
-    assert "uma unica pessoa" in prompt
-    assert "nao cortar cabeca, pes ou maos" in prompt
+    assert "uma única péssoa" in prompt
+    assert "não cortar cabeça, pés ou mãos" in prompt
     assert "Proporcao: 9:16" in prompt
-    assert "Referencia de continuidade" in prompt
+    assert "Referência de continuidade" in prompt
     assert len(prompt) < 900
 
 
@@ -363,16 +363,16 @@ def test_character_approved_reference_sheet_uses_multiple_perspectives() -> None
 
     prompt = visual_reference_prompt(character, "character_reference_sheet")
 
-    assert "folha unica de referencia" in prompt
+    assert "folha única de referência" in prompt
     assert "close frontal grande do rosto" in prompt
     assert "corpo inteiro frontal" in prompt
     assert "perfil lateral" in prompt
     assert "corpo inteiro de costas" in prompt
-    assert "uma unica imagem" in prompt
+    assert "uma única imagem" in prompt
     assert "fundo branco puro de estudio" in prompt
-    assert "nao cortar cabeca, pes ou maos" in prompt
+    assert "não cortar cabeça, pés ou mãos" in prompt
     assert "Proporcao: 16:9" in prompt
-    assert "Referencia de continuidade" in prompt
+    assert "Referência de continuidade" in prompt
     assert len(prompt) < 1100
 
 
@@ -479,10 +479,10 @@ def test_prop_reference_prompt_requires_white_background_and_object_focus() -> N
     assert "vista frontal" in prompt
     assert "fundo branco puro" in prompt
     assert "sem pessoas" in prompt
-    assert "sem maos" in prompt
+    assert "sem mãos" in prompt
     assert "sem texto" in prompt
     assert "Proporcao: 1:1" in prompt
-    assert "detalhes legiveis" in prompt
+    assert "detalhes legíveis" in prompt
     assert len(prompt) < 700
 
 
@@ -526,7 +526,7 @@ def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:
 def test_profile_items_do_not_turn_internal_fields_into_cards() -> None:
     items = _profile_items(
         {
-            "arc_aceita_que_o_legado_nao_e_perfeito": "arco emocional interno",
+            "arc_aceita_que_o_legado_não_e_perfeito": "arco emocional interno",
             "personality_teimosa_afetuosa": "personalidade interna",
             "palette_caracteristicas_visuais": ["azul", "branco"],
         }
@@ -534,7 +534,7 @@ def test_profile_items_do_not_turn_internal_fields_into_cards() -> None:
 
     assert len(items) == 1
     assert items[0]["name"] == "Item"
-    assert "arc_aceita_que_o_legado_nao_e_perfeito" in items[0]
+    assert "arc_aceita_que_o_legado_não_e_perfeito" in items[0]
 
 
 def test_profile_items_skip_internal_field_strings_inside_lists() -> None:
@@ -543,7 +543,7 @@ def test_profile_items_skip_internal_field_strings_inside_lists() -> None:
             {"name": "Dona Lourdes", "role": "protagonista"},
             "palette_characteristicais_visuals_para_o_personagem",
             "personality_teimosa_afetuosa",
-            "arc_aceita_que_o_legado_nao_e_controle",
+            "arc_aceita_que_o_legado_não_e_controle",
         ]
     )
 

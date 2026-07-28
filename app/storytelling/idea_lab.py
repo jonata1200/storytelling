@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 import os
 import tempfile
@@ -34,15 +34,15 @@ def build_idea_lab_prompt(
 ) -> str:
     duration = f"{duration_minutes:g}"
     genre_instruction = (
-        f"Genero obrigatorio: todas as ideias devem ser de {genre}."
+        f"Gênero obrigatório: todas as ideias devem ser de {genre}."
         if genre
-        else "Genero livre: escolha generos variados e adequados a cada ideia."
+        else "Gênero livre: escolha gêneros variados e adequados a cada ideia."
     )
     theme_instruction = (
         f"Contexto criativo informado pelo usuario: {theme.strip()}."
         if theme.strip()
         else (
-            "Contexto criativo informado pelo usuario: nenhum. Crie temas especificos, "
+            "Contexto criativo informado pelo usuario: nenhum. Crie temas específicos, "
             "concretos e diferentes entre si."
         )
     )
@@ -53,7 +53,7 @@ def build_idea_lab_prompt(
     )
 
     return (
-        "Voce e um diretor de desenvolvimento narrativo especializado em historias "
+        "Você é um diretor de desenvolvimento narrativo especializado em histórias "
         "curtas para video. Gere ideias originais, cinematograficas e prontas para "
         "virar roteiro.\n\n"
         f"Tarefa: gere exatamente {count} ideias em portugues do Brasil.\n"
@@ -62,30 +62,30 @@ def build_idea_lab_prompt(
         f"{genre_instruction}\n"
         f"{theme_instruction}\n\n"
         "Regras de qualidade:\n"
-        "- Nao numere os titulos e nao use prefixos como 'Ideia 01'.\n"
+        "- Não numere os títulos e não use prefixos como 'Ideia 01'.\n"
         "- Cada titulo deve funcionar sozinho em um card: curto, claro e intrigante.\n"
         "- Cada ideia deve ter protagonista, desejo, conflito, obstaculos, risco, "
         "virada, climax e payoff emocional bem definidos.\n"
         "- As ideias precisam ser realmente diferentes entre si em tema, mundo, "
-        "tipo de protagonista, profissao, faixa de vida, local principal, objeto "
+        "tipo de protagonista, profissão, faixa de vida, local principal, objeto "
         "dramatico, antagonismo, dilema central, emocao principal e revelacao final.\n"
-        "- Nao reutilize a mesma personagem com nome diferente; cada protagonista "
+        "- Não reutilize a mesma personagem com nome diferente; cada protagonista "
         "deve ter identidade, desejo, medo e contexto social proprios.\n"
         "- Evite modelos genericos como segredo do passado, heranca misteriosa ou "
         "mensagem que muda tudo, carta atrasada, casa de familia ou reconciliacao "
         "familiar, a menos que haja uma abordagem muito especifica.\n"
         "- O hook deve prender nos primeiros segundos; a premise deve explicar a "
         "historia em 2 ou 3 frases objetivas.\n"
-        "- Para duracoes maiores, aumente a escalada, o numero de obstaculos e a "
+        "- Para duracoes maiores, aumente a escalada, o número de obstaculos e a "
         "profundidade emocional, sem transformar a ideia em serie.\n\n"
-        "Retorne somente JSON valido, sem markdown, sem comentarios e sem texto fora "
+        "Retorne somente JSON válido, sem markdown, sem comentarios e sem texto fora "
         "do objeto. O objeto raiz deve ter a chave \"ideas\". Cada item em \"ideas\" "
         "deve conter exatamente estes campos: title, genre, primary_emotion, theme, "
         "hook, premise, protagonist, duration_minutes, conflict, obstacles, stakes, "
         "twist, climax, payoff, resolution, retention_potential, cliche_risk e "
         "production_complexity.\n"
         f"Use duration_minutes igual a {duration} em todas as ideias. "
-        "retention_potential, cliche_risk e production_complexity devem ser numeros "
+        "retention_potential, cliche_risk e production_complexity devem ser números "
         "de 0 a 100. obstacles deve ser uma lista com 2 a 4 obstaculos concretos."
         f"{retry_instruction}"
     )
@@ -110,10 +110,10 @@ async def generate_freeform_ideas(
         variables={
             "theme": theme or "tema livre criado pela IA",
             "count": count,
-            "genre": genre or "genero livre criado pela IA",
+            "genre": genre or "gênero livre criado pela IA",
             "duration_range_minutes": f"{duration:g}",
             "target_duration_minutes": duration,
-            "audience": "publico geral",
+            "audience": "público geral",
             "retry_guidance": retry_guidance,
         },
         output_schema={"type": "object", "properties": {"ideas": {"type": "array"}}},
@@ -142,11 +142,11 @@ async def _generate_with_runtime_fallback(
     except TimeoutError as exc:
         raise RuntimeError(
             f"OpenRouter demorou mais de {IDEA_PROVIDER_TIMEOUT_SECONDS}s ao gerar ideias. "
-            "Tente novamente ou escolha um modelo de texto mais estavel."
+            "Tente novamente ou escolha um modelo de texto mais estável."
         ) from exc
     except RuntimeError as exc:
         raise RuntimeError(
-            "Nao foi possivel gerar ideias com o modelo configurado. "
+            "Não foi possível gerar ideias com o modelo configurado. "
             f"Detalhe do provedor: {exc}"
         ) from exc
 
@@ -176,7 +176,7 @@ def _normalize_generated_ideas(
             continue
         normalized.append(idea)
     if not normalized:
-        errors.append(f"generate_story_ideas: esperado ao menos 1 ideia valida de {count}")
+        errors.append(f"generate_story_ideas: esperado ao menos 1 ideia válida de {count}")
     if not errors and len(normalized) > 1:
         errors.extend(story_idea_diversity_errors(normalized))
     if errors:

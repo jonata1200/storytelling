@@ -1,4 +1,4 @@
-import re
+﻿import re
 
 from app.generation.project_agent_visual import _normalize_match_text
 
@@ -9,11 +9,11 @@ def _is_ai_generation_failure_message(message: str) -> bool:
         marker in normalized
         for marker in (
             "não consegui",
-            "nao consegui",
+            "não consegui",
             "não foi gerado",
-            "nao foi gerado",
+            "não foi gerado",
             "não foram gerados",
-            "nao foram gerados",
+            "não foram gerados",
         )
     )
 
@@ -33,7 +33,7 @@ def _requests_specific_script_scenes(message: str) -> bool:
 def _requested_storyboard_scene_number(message: str) -> int | None:
     normalized = _normalize_match_text(message)
     match = re.search(
-        r"\b(?:cena|scene)\s*(?:numero|n|no)?\s*0*([1-9]\d*)\b",
+        r"\b(?:cena|scene)\s*(?:número|n|no)?\s*0*([1-9]\d*)\b",
         normalized,
     )
     if match is None:
@@ -60,7 +60,7 @@ def _requests_full_script_regeneration(message: str) -> bool:
         "do zero",
         "novo roteiro",
         "roteiro novo",
-        "nova versao",
+        "nova versão",
         "nova versão",
         "gerar novamente",
         "gere novamente",

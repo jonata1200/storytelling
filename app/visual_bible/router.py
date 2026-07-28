@@ -1,4 +1,4 @@
-from typing import Annotated
+﻿from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -110,7 +110,7 @@ async def post_generate_visual_references(
     except (OSError, RuntimeError, TimeoutError) as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Nao foi possivel gerar referencia visual: {exc}",
+            detail=f"Não foi possível gerar referência visual: {exc}",
         ) from exc
     if references is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visual target not found")

@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import base64
 import binascii
 import hashlib
@@ -45,7 +45,7 @@ class OpenRouterImageProvider:
     def _generate(self, request: ImageGenerationRequest) -> ImageResult:
         settings = get_settings()
         if not settings.openrouter_api_key:
-            raise RuntimeError("OPENROUTER_API_KEY nao configurada")
+            raise RuntimeError("OPENROUTER_API_KEY não configurada")
 
         prompt = request.prompt
         if request.negative_prompt:
@@ -77,7 +77,7 @@ class OpenRouterImageProvider:
             raise RuntimeError("OpenRouter Images retornou item fora do formato esperado")
         encoded_image = first_image.get("b64_json")
         if not isinstance(encoded_image, str) or not encoded_image:
-            raise RuntimeError("OpenRouter Images nao retornou b64_json")
+            raise RuntimeError("OpenRouter Images não retornou b64_json")
 
         requested_format = str(submitted_body.get("output_format") or "png").lower()
         fallback_media_type = "image/jpeg" if requested_format in {"jpg", "jpeg"} else "image/png"
@@ -85,7 +85,7 @@ class OpenRouterImageProvider:
         try:
             image_bytes = base64.b64decode(encoded_image.encode("ascii"), validate=True)
         except (binascii.Error, ValueError) as exc:
-            raise RuntimeError("OpenRouter Images retornou b64_json invalido") from exc
+            raise RuntimeError("OpenRouter Images retornou b64_json inválido") from exc
         request.output_dir.mkdir(parents=True, exist_ok=True)
         extension = extension_from_media_type(media_type)
         safe_view = request.view_type.replace("/", "_").replace("\\", "_")
@@ -260,7 +260,7 @@ class OpenRouterImageProvider:
         except TimeoutError as exc:
             raise RuntimeError(
                 "OpenRouter Images timeout ao aguardar resposta "
-                f"apos {timeout_seconds}s"
+                f"após {timeout_seconds}s"
             ) from exc
         except OSError as exc:
             raise RuntimeError(
@@ -268,7 +268,7 @@ class OpenRouterImageProvider:
             ) from exc
         except json.JSONDecodeError as exc:
             raise RuntimeError(
-                "OpenRouter Images retornou resposta HTTP que nao e JSON valido"
+                "OpenRouter Images retornou resposta HTTP que não é JSON válido"
             ) from exc
         if not isinstance(parsed, dict):
             raise RuntimeError("OpenRouter Images retornou resposta fora do formato esperado")

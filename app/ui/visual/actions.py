@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 from typing import Any
 from uuid import UUID
@@ -48,7 +48,7 @@ async def _approve_visual_target_from_ui(
                 )
         else:
             _notify_visual_action(
-                "Ativo aprovado. Todas as vistas já estavam criadas.", color="positive"
+                "Ativo aprovado. Todas as vistas já estávam criadas.", color="positive"
             )
         ui.navigate.reload()
     except Exception as exc:
@@ -196,7 +196,7 @@ async def _approve_all_visual_targets_from_ui(
         current_requests = requests or await _current_visual_batch_requests(project_id)
         if not current_requests:
             _notify_visual_action(
-                "Todas as imagens iniciais já estavam criadas.", color="positive"
+                "Todas as imagens iniciais já estávam criadas.", color="positive"
             )
             ui.navigate.reload()
             return
@@ -277,7 +277,7 @@ async def _approve_all_visual_targets_from_ui(
                 )
         else:
             _notify_visual_action(
-                "Todas as imagens iniciais já estavam criadas.", color="positive"
+                "Todas as imagens iniciais já estávam criadas.", color="positive"
             )
         ui.navigate.reload()
     except Exception as exc:
@@ -317,7 +317,7 @@ async def _approve_video_prompts_from_ui(
                 color="warning",
             )
         else:
-            ui.notify("Todos os clipes selecionados já estavam criados.", color="positive")
+            ui.notify("Todos os clipes selecionados já estávam criados.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))

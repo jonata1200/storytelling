@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -167,7 +167,7 @@ async def test_manual_script_save_refreshes_scene_plan_and_visual_bible(
         project_id=project_id,
         artifact_id=artifact_id,
         title="Roteiro antigo",
-        content="Conteudo antigo",
+        content="Conteúdo antigo",
         language="pt-BR",
         target_duration_seconds=60,
         word_count=2,
@@ -261,7 +261,7 @@ def test_expected_ai_timeout_logs_warning_without_traceback(
 
     with caplog.at_level(logging.WARNING):
         pages._log_ai_background_failure(
-            "Nao foi possivel gerar roteiro inicial do projeto",
+            "Não foi possível gerar roteiro inicial do projeto",
             project_id,
             RuntimeError("Provider demorou mais de 150s"),
         )
@@ -297,7 +297,7 @@ def test_ai_failure_notification_is_shown_once(monkeypatch: pytest.MonkeyPatch) 
                 "ai_action": {
                     "action": "create_initial_script",
                     "status": "failed",
-                    "message": "A IA nao conseguiu criar o roteiro inicial.",
+                    "message": "A IA não conseguiu criar o roteiro inicial.",
                     "error": "O modelo de IA demorou demais para responder.",
                     "updated_at": "2026-07-22T10:00:00+00:00",
                 }
@@ -341,7 +341,7 @@ def test_ai_action_sync_adds_only_one_chat_message_per_action(
                             "id": "create_initial_script:2",
                             "action": "create_initial_script",
                             "status": "running",
-                            "message": "A IA esta criando o roteiro inicial com base na ideia.",
+                            "message": "A IA está criando o roteiro inicial com base na ideia.",
                         },
                     ]
                 }
@@ -466,7 +466,7 @@ def test_legacy_assistant_greeting_is_removed_from_chat_history() -> None:
     assert (
         pages._is_legacy_assistant_greeting(
             "assistant",
-            "Estou acompanhando esta etapa. Posso revisar, propor variações.",
+            "Estou acompanhando está etapa. Posso revisar, propor variações.",
         )
         is True
     )

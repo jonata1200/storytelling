@@ -512,6 +512,6 @@ def render_assets_area(
                             ui.icon(icon).classes("text-4xl acid")
                             ui.label("Nada criado ainda").classes("text-lg font-semibold")
                             ui.label(
-                                "O Diretor IA pode criar esta coleção a partir do roteiro."
+                                "O Diretor IA pode criar está coleção a partir do roteiro."
                             ).classes("text-sm text-[#888e89]")
 
