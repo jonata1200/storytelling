@@ -493,7 +493,7 @@ def test_openrouter_video_provider_downloads_completed_video(
         image_to_video=True,
     )
 
-    assert posted["path"] == "/vídeos"
+    assert posted["path"] == "/videos"
     assert posted["body"]["model"] == "bytedance/seedance-2.0-fast"
     assert posted["body"]["size"] == "1080x1920"
     assert result.status == GenerationJobStatus.SUCCEEDED

@@ -168,7 +168,7 @@ async def _video_provider_for_project(
             OpenRouterVideoProvider(),
             "openrouter",
             requested_model,
-            "openrouter_vídeos",
+            "openrouter_videos",
             production_settings.aspect_ratio,
             production_settings.video_resolution,
         )
@@ -178,7 +178,7 @@ async def _video_provider_for_project(
             OpenRouterVideoProvider(),
             "openrouter",
             requested_model,
-            "openrouter_vídeos",
+            "openrouter_videos",
             production_settings.aspect_ratio,
             production_settings.video_resolution,
         )
