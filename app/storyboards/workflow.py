@@ -7,6 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.config.model_policy import ensure_openrouter_api_key
+from app.config.provider_policy import (
+    effective_provider_for_channel,
+    provider_model,
+    unavailable_provider_error,
+)
 from app.config.settings import get_settings
 from app.core.enums import ArtifactStatus, ArtifactType, DependencyKind
 from app.production.service import get_or_create_production_settings, resolve_image_model
@@ -28,9 +33,12 @@ async def _image_provider_for_project(
 ) -> tuple[ImageProvider, str, str]:
     app_settings = get_settings()
     production_settings = await get_or_create_production_settings(session, project_id)
+    provider = effective_provider_for_channel(app_settings, "image")
+    if provider == "omniroute":
+        raise unavailable_provider_error("omniroute", "fase 5")
     model = resolve_image_model(
         production_settings.image_model,
-        app_settings.openrouter_image_model,
+        provider_model(app_settings, provider, "image"),
     )
     ensure_openrouter_api_key(app_settings.openrouter_api_key)
     return OpenRouterImageProvider(), model, "openrouter_storyboards"

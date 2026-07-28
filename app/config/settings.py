@@ -5,14 +5,15 @@ from typing import Any, cast
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.config.provider_policy import normalize_api_key, normalize_provider_name
+
 
 def normalize_openrouter_api_key(value: str | None) -> str | None:
-    if not value:
-        return None
-    key = value.strip()
-    if not key.startswith("sk-or-"):
-        return None
-    return key
+    return normalize_api_key(value, "openrouter")
+
+
+def normalize_omniroute_api_key(value: str | None) -> str | None:
+    return normalize_api_key(value, "omniroute")
 
 
 class Settings(BaseSettings):
@@ -41,6 +42,16 @@ class Settings(BaseSettings):
     openrouter_image_model: str = "sourceful/riverflow-v2-fast"
     openrouter_video_model: str = "bytedance/seedance-2.0-fast"
     openrouter_image_timeout_seconds: int = 360
+    omniroute_api_key: str | None = Field(default=None, repr=False)
+    omniroute_base_url: str = "https://omnirouters.com/v1"
+    omniroute_default_model: str = "deepseek/deepseek-v4-flash"
+    omniroute_image_model: str = "sourceful/riverflow-v2-fast"
+    omniroute_video_model: str = "bytedance/seedance-2.0-fast"
+    omniroute_image_timeout_seconds: int = 360
+    ai_provider: str = "openrouter"
+    text_provider: str | None = None
+    image_provider: str | None = None
+    video_provider: str | None = None
     storyboard_image_concurrency: int = 3
     speech_provider: str = "openai_compatible"
     speech_base_url: str = "https://api.openai.com/v1"
@@ -58,12 +69,23 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def reject_insecure_non_local_defaults(self) -> "Settings":
         self.openrouter_api_key = normalize_openrouter_api_key(self.openrouter_api_key)
+        self.omniroute_api_key = normalize_omniroute_api_key(self.omniroute_api_key)
+        self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
+        self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")
+        self.image_provider = self._optional_provider(self.image_provider, "IMAGE_PROVIDER")
+        self.video_provider = self._optional_provider(self.video_provider, "VIDEO_PROVIDER")
         if self.app_env.lower() not in {"local", "development", "test"}:
             if self.app_secret_key == "change-me-in-development":
                 raise ValueError("APP_SECRET_KEY must be changed outside local environments")
             if self.app_debug:
                 raise ValueError("APP_DEBUG must be false outside local environments")
         return self
+
+    @staticmethod
+    def _optional_provider(value: str | None, field_name: str) -> str | None:
+        if not str(value or "").strip():
+            return None
+        return normalize_provider_name(value, field_name)
 
 
 @lru_cache

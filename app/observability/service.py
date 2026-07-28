@@ -9,6 +9,12 @@ from redis.asyncio import Redis
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.provider_policy import (
+    SUPPORTED_AI_PROVIDERS,
+    effective_provider_for_channel,
+    provider_api_key,
+    provider_display_name,
+)
 from app.config.settings import Settings, get_settings
 from app.observability.middleware import current_correlation_id
 from app.observability.models import OperationalEvent
@@ -150,15 +156,24 @@ async def readiness_dashboard(
             details={"path": ffmpeg_path},
         )
     )
+    configured_text_provider = effective_provider_for_channel(app_settings, "text")
     components.append(
         ReadinessComponentRead(
-            name="openrouter",
-            status="ready" if app_settings.openrouter_api_key else "degraded",
-            message=(
-                "Chave OpenRouter configurada"
-                if app_settings.openrouter_api_key
-                else "OPENROUTER_API_KEY ausente"
+            name="ai_provider",
+            status=(
+                "ready"
+                if provider_api_key(app_settings, configured_text_provider)
+                else "degraded"
             ),
+            message=(
+                f"{provider_display_name(configured_text_provider)} configurado"
+                if provider_api_key(app_settings, configured_text_provider)
+                else f"{configured_text_provider.upper()}_API_KEY ausente"
+            ),
+            details={
+                "provider": configured_text_provider,
+                "supported_providers": list(SUPPORTED_AI_PROVIDERS),
+            },
         )
     )
     speech_ready = bool(app_settings.speech_api_key and app_settings.speech_model)

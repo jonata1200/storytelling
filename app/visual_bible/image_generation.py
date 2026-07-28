@@ -5,6 +5,11 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.model_policy import ensure_openrouter_api_key
+from app.config.provider_policy import (
+    effective_provider_for_channel,
+    provider_model,
+    unavailable_provider_error,
+)
 from app.config.settings import get_settings
 from app.production.service import get_or_create_production_settings, resolve_image_model
 from app.providers.image.openrouter import OpenRouterImageProvider
@@ -26,9 +31,12 @@ async def _image_provider_for_project(
     )
     app_settings = settings_factory()
     production_settings = await production_settings_factory(session, project_id)
+    provider = effective_provider_for_channel(app_settings, "image")
+    if provider == "omniroute":
+        raise unavailable_provider_error("omniroute", "fase 4")
     model = resolve_image_model(
         production_settings.image_model,
-        app_settings.openrouter_image_model,
+        provider_model(app_settings, provider, "image"),
     )
     ensure_openrouter_api_key(app_settings.openrouter_api_key)
     return OpenRouterImageProvider(), model, "openrouter_images"

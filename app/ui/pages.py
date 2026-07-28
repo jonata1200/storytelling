@@ -10,6 +10,11 @@ from nicegui import app as nicegui_app  # noqa: F401
 from nicegui import ui
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.provider_policy import (
+    ProviderChannel,
+    effective_provider_for_channel,
+    provider_model,
+)
 from app.config.settings import get_settings
 from app.database.session import AsyncSessionLocal
 from app.generation.model_settings import (
@@ -250,6 +255,12 @@ from app.ui.workspace.rules import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _default_media_model(channel: ProviderChannel) -> str:
+    settings = get_settings()
+    provider = effective_provider_for_channel(settings, channel)
+    return provider_model(settings, provider, channel)
 PRODUCTION_STEPS = PAGE_PRODUCTION_STEPS
 WORKSPACE_TABS = PAGE_WORKSPACE_TABS
 _is_legacy_assistant_greeting = assistant_state.is_legacy_assistant_greeting
@@ -461,8 +472,8 @@ async def _create_project_from_chat_prompt(
         "image_resolution": "1080x1920",
         "video_resolution": "1080x1920",
         "motion_intensity": 5,
-        "image_model": get_settings().openrouter_image_model,
-        "video_model": get_settings().openrouter_video_model,
+        "image_model": _default_media_model("image"),
+        "video_model": _default_media_model("video"),
         "reference_uploads": reference_uploads or [],
     }
     await _create_project_from_form(form, generate_initial_script=True)
@@ -501,8 +512,8 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
         "image_resolution": "1080x1920",
         "video_resolution": "1080x1920",
         "motion_intensity": 5,
-        "image_model": get_settings().openrouter_image_model,
-        "video_model": get_settings().openrouter_video_model,
+        "image_model": _default_media_model("image"),
+        "video_model": _default_media_model("video"),
     }
     await _create_project_from_form(
         form,

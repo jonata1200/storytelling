@@ -7,6 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetVersion
 from app.config.model_policy import ensure_openrouter_api_key
+from app.config.provider_policy import (
+    effective_provider_for_channel,
+    provider_model,
+    unavailable_provider_error,
+)
 from app.config.settings import get_settings
 from app.core.enums import (
     ArtifactStatus,
@@ -158,11 +163,16 @@ async def _video_provider_for_project(
     app_settings = get_settings()
     production_settings = await get_or_create_production_settings(session, project_id)
     requested_provider = provider_name or "auto"
+    resolved_provider = (
+        effective_provider_for_channel(app_settings, "video")
+        if requested_provider == "auto"
+        else requested_provider.strip().casefold()
+    )
     requested_model = resolve_video_model(
         model or production_settings.video_model,
-        app_settings.openrouter_video_model,
+        provider_model(app_settings, resolved_provider, "video"),
     )
-    if requested_provider == "auto":
+    if resolved_provider == "openrouter":
         ensure_openrouter_api_key(app_settings.openrouter_api_key)
         return (
             OpenRouterVideoProvider(),
@@ -172,18 +182,10 @@ async def _video_provider_for_project(
             production_settings.aspect_ratio,
             production_settings.video_resolution,
         )
-    if requested_provider == "openrouter":
-        ensure_openrouter_api_key(app_settings.openrouter_api_key)
-        return (
-            OpenRouterVideoProvider(),
-            "openrouter",
-            requested_model,
-            "openrouter_videos",
-            production_settings.aspect_ratio,
-            production_settings.video_resolution,
-        )
-    if requested_provider == "mock":
-        raise ValueError("Provider mock bloqueado. Use OpenRouter com um modelo real de video.")
+    if resolved_provider == "omniroute":
+        raise unavailable_provider_error("omniroute", "fase 5")
+    if resolved_provider == "mock":
+        raise ValueError("Provider mock bloqueado. Use um provider real de vídeo.")
     raise ValueError(f"Unsupported video provider: {provider_name}")
 
 

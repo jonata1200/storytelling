@@ -4,6 +4,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.model_policy import ensure_openrouter_api_key, validate_openrouter_model_name
+from app.config.provider_policy import (
+    SUPPORTED_MODEL_PROVIDERS,
+    effective_provider_for_channel,
+    provider_model,
+    unavailable_provider_error,
+    validate_model_name,
+)
 from app.config.settings import get_settings
 from app.generation.models import ProjectModelSetting
 from app.providers.llm.openrouter import OpenRouterLLMProvider
@@ -42,9 +49,10 @@ async def set_model_setting(
     provider: str,
     model: str,
 ) -> ProjectModelSetting:
-    if provider != "openrouter":
-        raise ValueError("Use OpenRouter com um modelo real. Providers mock estão bloqueados.")
-    model = validate_openrouter_model_name(model)
+    provider = provider.strip().casefold()
+    if provider not in SUPPORTED_MODEL_PROVIDERS:
+        raise ValueError("Use um provider de IA real. Providers mock estão bloqueados.")
+    model = validate_model_name(model, provider=provider)
     result = await session.execute(
         select(ProjectModelSetting).where(
             ProjectModelSetting.project_id == project_id,
@@ -76,9 +84,9 @@ async def ensure_default_model_settings(
 ) -> list[ProjectModelSetting]:
     settings = get_settings()
     created: list[ProjectModelSetting] = []
-    provider = "openrouter"
+    provider = effective_provider_for_channel(settings, "text")
     try:
-        model = validate_openrouter_model_name(settings.openrouter_default_model)
+        model = validate_model_name(provider_model(settings, provider, "text"), provider=provider)
     except ValueError:
         return created
     for task in NARRATIVE_TASKS:
@@ -93,11 +101,18 @@ async def llm_provider_for_task(
 ) -> tuple[LLMProvider, str]:
     setting = await get_model_setting(session, project_id, task)
     settings = get_settings()
-    ensure_openrouter_api_key(settings.openrouter_api_key)
     if setting is not None and setting.provider == "openrouter":
+        ensure_openrouter_api_key(settings.openrouter_api_key)
         return OpenRouterLLMProvider(), validate_openrouter_model_name(setting.model)
+    if setting is not None and setting.provider == "omniroute":
+        raise unavailable_provider_error("omniroute", "fase 3")
     if setting is not None and setting.provider == "mock":
-        raise ValueError("Provider mock bloqueado. Configure um modelo real da OpenRouter.")
-    return OpenRouterLLMProvider(), validate_openrouter_model_name(
-        settings.openrouter_default_model
+        raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")
+    provider = effective_provider_for_channel(settings, "text")
+    if provider == "omniroute":
+        raise unavailable_provider_error("omniroute", "fase 3")
+    ensure_openrouter_api_key(settings.openrouter_api_key)
+    return OpenRouterLLMProvider(), validate_model_name(
+        provider_model(settings, provider, "text"),
+        provider=provider,
     )

@@ -3,7 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config.model_policy import is_mock_model, validate_openrouter_model_name
+from app.config.provider_policy import is_mock_model, validate_model_name
 from app.production.models import ProjectProductionSettings
 from app.projects.repository import ProjectRepository
 
@@ -29,7 +29,7 @@ LEGACY_DEFAULT_IMAGE_MODELS = {"sourceful/riverflow-v2.5-pro"}
 
 
 def _validate_model_name(value: object, field_name: str) -> str:
-    return validate_openrouter_model_name(value, field_name)
+    return validate_model_name(value, field_name)
 
 
 def _validated_production_payload(payload: dict) -> dict:
@@ -72,20 +72,20 @@ def resolve_image_model(project_image_model: str | None, default_image_model: st
         and not is_mock_model(project_model)
         and project_model not in LEGACY_DEFAULT_IMAGE_MODELS
     ):
-        return validate_openrouter_model_name(project_model, "image_model")
+        return validate_model_name(project_model, "image_model")
     if default_model and not is_mock_model(default_model):
-        return validate_openrouter_model_name(default_model, "OPENROUTER_IMAGE_MODEL")
-    raise ValueError("Configure um modelo real de imagem da OpenRouter antes de gerar imagens.")
+        return validate_model_name(default_model, "IMAGE_MODEL")
+    raise ValueError("Configure um modelo real de imagem antes de gerar imagens.")
 
 
 def resolve_video_model(project_video_model: str | None, default_video_model: str | None) -> str:
     project_model = str(project_video_model or "").strip()
     default_model = str(default_video_model or "").strip()
     if project_model and not is_mock_model(project_model):
-        return validate_openrouter_model_name(project_model, "video_model")
+        return validate_model_name(project_model, "video_model")
     if default_model and not is_mock_model(default_model):
-        return validate_openrouter_model_name(default_model, "OPENROUTER_VIDEO_MODEL")
-    raise ValueError("Configure um modelo real de video da OpenRouter antes de gerar clipes.")
+        return validate_model_name(default_model, "VIDEO_MODEL")
+    raise ValueError("Configure um modelo real de vídeo antes de gerar clipes.")
 
 
 async def get_or_create_production_settings(

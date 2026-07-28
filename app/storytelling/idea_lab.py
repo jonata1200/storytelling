@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from app.config.model_policy import ensure_openrouter_api_key, validate_openrouter_model_name
+from app.config.provider_policy import (
+    effective_provider_for_channel,
+    provider_model,
+    unavailable_provider_error,
+)
 from app.config.settings import get_settings
 from app.providers.llm.openrouter import OpenRouterLLMProvider
 from app.providers.llm.types import LLMRequest, LLMResult
@@ -98,6 +103,9 @@ async def generate_freeform_ideas(
     target_duration_minutes: float = 5.0,
 ) -> list[dict[str, Any]]:
     settings = get_settings()
+    configured_provider = effective_provider_for_channel(settings, "text")
+    if configured_provider == "omniroute":
+        raise unavailable_provider_error("omniroute", "fase 3")
     ensure_openrouter_api_key(settings.openrouter_api_key)
     provider = OpenRouterLLMProvider()
     count = max(1, min(10, int(count)))
@@ -105,7 +113,9 @@ async def generate_freeform_ideas(
     retry_guidance = ""
     request = LLMRequest(
         task="generate_story_ideas",
-        model=validate_openrouter_model_name(settings.openrouter_default_model),
+        model=validate_openrouter_model_name(
+            provider_model(settings, configured_provider, "text")
+        ),
         prompt=build_idea_lab_prompt(theme, count, genre, duration, retry_guidance),
         variables={
             "theme": theme or "tema livre criado pela IA",

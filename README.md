@@ -68,25 +68,40 @@ powershell -ExecutionPolicy Bypass -File .\scripts\app.ps1 start
 Os atalhos `.\scripts\executar.ps1` e `.\scripts\finalizar.ps1` continuam
 existindo por compatibilidade e chamam o script unificado.
 
-## OpenRouter
+## Provedores de IA
 
-A aplicação usa modelos reais via OpenRouter no fluxo normal. Sem chave válida,
-as etapas de IA retornam erro para a interface, em vez de gerar conteúdo mock.
+OpenRouter segue como provider padrão durante a migração para OmniRoute. Sem
+chave válida do provider ativo, as etapas de IA retornam erro para a interface,
+em vez de gerar conteúdo mock.
 Configure no `.env`:
 
 ```env
 OPENROUTER_API_KEY=sua_chave_aqui
+AI_PROVIDER=openrouter
+TEXT_PROVIDER=
+IMAGE_PROVIDER=
+VIDEO_PROVIDER=
 OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash
 OPENROUTER_IMAGE_MODEL=sourceful/riverflow-v2-fast
 OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0-fast
+OMNIROUTE_API_KEY=
+OMNIROUTE_BASE_URL=https://omnirouters.com/v1
+OMNIROUTE_DEFAULT_MODEL=deepseek/deepseek-v4-flash
+OMNIROUTE_IMAGE_MODEL=sourceful/riverflow-v2-fast
+OMNIROUTE_VIDEO_MODEL=bytedance/seedance-2.0-fast
 ALLOW_USER_REGISTRATION=true
 SINGLE_USER_MODE=true
 ```
 
 No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para
-definir modelos OpenRouter diferentes para ideias, roteiro e cenas/planos.
+definir provider e modelos diferentes para ideias, roteiro e cenas/planos.
 Modelos com sufixo `:free` e modelos `mock-*` são bloqueados porque tendem a
 falhar ou confundir o fluxo de produção.
+
+OmniRoute já pode ser configurado por `AI_PROVIDER=omniroute` ou pelos campos
+por mídia (`TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VIDEO_PROVIDER`), mas chamadas
+reais para OmniRoute ainda ficam bloqueadas até as fases específicas do plano em
+`docs/omniroute-migration`.
 
 Preferências alteradas pela interface são gravadas em `.runtime/preferences.json`.
 O arquivo `.env` permanece somente para configuração de inicialização e não é
@@ -196,7 +211,7 @@ GET /api/v1/observability/projects/{project_id}/summary
 GET /api/v1/observability/readiness
 ```
 
-O readiness separa API, banco, Redis, broker do worker, FFmpeg, OpenRouter e
+O readiness separa API, banco, Redis, broker do worker, FFmpeg, provider de IA e
 vozes de personagens.
 Correlation ID é propagado por `X-Correlation-ID` nas chamadas externas relevantes.
 

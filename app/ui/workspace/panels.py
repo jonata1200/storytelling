@@ -4,6 +4,13 @@ from uuid import UUID
 from nicegui import ui
 
 from app.config.model_policy import is_mock_model
+from app.config.provider_policy import (
+    SUPPORTED_AI_PROVIDERS,
+    effective_provider_for_channel,
+    provider_api_key,
+    provider_display_name,
+    provider_model,
+)
 from app.config.settings import get_settings
 from app.generation.model_settings import NARRATIVE_TASKS, TASK_LABELS
 from app.generation.models import ProjectModelSetting
@@ -32,35 +39,41 @@ def _render_model_settings(project_id: UUID, settings_list: list[ProjectModelSet
         with ui.row().classes("items-center gap-2"):
             ui.icon("hub").classes("text-cyan-300")
             ui.label("Modelos de IA por etapa").classes("text-lg font-semibold")
-        if app_settings.openrouter_api_key:
-            ui.label("OpenRouter configurado").classes(
+        configured_text_provider = effective_provider_for_channel(app_settings, "text")
+        if provider_api_key(app_settings, configured_text_provider):
+            ui.label(f"{provider_display_name(configured_text_provider)} configurado").classes(
                 "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 "
                 "border border-emerald-800"
             )
         else:
             ui.label(
-                "OPENROUTER_API_KEY ausente ou inválida: modelos reais não serão chamados"
+                f"{configured_text_provider.upper()}_API_KEY ausente ou inválida: "
+                "modelos reais não serão chamados"
             ).classes(
                 "text-xs px-2 py-1 rounded-md bg-amber-950 text-amber-200 "
                 "border border-amber-800"
             )
         _muted(
-            "Use apenas modelos reais da OpenRouter. Modelos :free e mock ficam bloqueados "
+            "Use apenas modelos reais do provider escolhido. Modelos :free e mock ficam bloqueados "
             "para evitar travamentos e respostas falsas."
         )
         for task in NARRATIVE_TASKS:
             setting = settings_by_task.get(task)
-            provider_value = "openrouter"
+            provider_value = (
+                setting.provider
+                if setting and setting.provider in SUPPORTED_AI_PROVIDERS
+                else configured_text_provider
+            )
             model_value = (
                 setting.model
                 if setting and not is_mock_model(setting.model)
-                else app_settings.openrouter_default_model
+                else provider_model(app_settings, provider_value, "text")
             )
             with ui.row().classes("w-full items-end gap-2"):
                 ui.label(TASK_LABELS[task]).classes("w-28 text-sm text-slate-300")
                 provider_select = ui.select(
-                    ["openrouter"],
-                    label="Provider",
+                    list(SUPPORTED_AI_PROVIDERS),
+                    label="Provedor",
                     value=provider_value,
                 ).classes("w-36")
                 model_input = ui.input("Modelo", value=model_value).classes("flex-1")
@@ -116,9 +129,14 @@ def _render_director_cockpit(settings: ProjectProductionSettings, counts: dict[s
 
 def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) -> None:
     app_settings = get_settings()
+    configured_image_provider = effective_provider_for_channel(app_settings, "image")
+    configured_video_provider = effective_provider_for_channel(app_settings, "video")
     effective_image_model = resolve_image_model(
         settings.image_model,
-        app_settings.openrouter_image_model,
+        provider_model(app_settings, configured_image_provider, "image"),
+    )
+    effective_video_model = settings.video_model or provider_model(
+        app_settings, configured_video_provider, "video"
     )
     with ui.card().classes(_card_classes("w-full")):
         with ui.row().classes("items-center gap-2"):
@@ -158,7 +176,7 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
                 max=10,
             )
             image_model = ui.input("Modelo de imagem", value=effective_image_model)
-            video_model = ui.input("Modelo de vídeo", value=settings.video_model)
+            video_model = ui.input("Modelo de vídeo", value=effective_video_model)
 
         async def save() -> None:
             await _save_production_setup(

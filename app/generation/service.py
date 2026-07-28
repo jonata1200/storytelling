@@ -5,7 +5,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config.model_policy import validate_openrouter_model_name
+from app.config.provider_policy import (
+    effective_provider_for_channel,
+    provider_model,
+    validate_model_name,
+)
 from app.config.settings import get_settings
 from app.generation.models import PromptExecution, PromptTemplate
 from app.generation.prompt_compiler import compile_prompt
@@ -247,13 +251,20 @@ async def run_structured_generation(
         prompt=prompt,
         variables=variables,
         output_schema=template.output_schema,
-        model=validate_openrouter_model_name(model or get_settings().openrouter_default_model),
+        model=validate_model_name(
+            model
+            or provider_model(
+                get_settings(),
+                effective_provider_for_channel(get_settings(), "text"),
+                "text",
+            )
+        ),
     )
     fallback_error: str | None = None
     try:
         if getattr(provider, "provider_name", "") == "mock":
             raise ValueError(
-                "Provider mock bloqueado. Configure um modelo real da OpenRouter."
+                "Provider mock bloqueado. Configure um modelo real de IA."
             )
         provider_call = provider.generate_structured(request)
         result = await asyncio.wait_for(
