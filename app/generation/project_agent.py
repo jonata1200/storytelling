@@ -366,7 +366,7 @@ async def _ensure_finalization_pipeline(
 
     timeline = await _latest(session, Timeline, project_id)
     if timeline is None:
-        await _emit_progress(progress, "Vou montar a timeline final sem narracao.")
+        await _emit_progress(progress, "Vou montar a timeline final com dialogos dos personagens.")
         animatic = await _latest(session, Animatic, project_id)
         try:
             timeline = await create_final_timeline(
@@ -384,7 +384,7 @@ async def _ensure_finalization_pipeline(
             )
         changed = True
 
-    await _emit_progress(progress, "Vou exportar a timeline sem narracao.")
+    await _emit_progress(progress, "Vou exportar a timeline com as vozes dos personagens.")
     exported = await export_timeline(
         session,
         project_id,

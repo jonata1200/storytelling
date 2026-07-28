@@ -93,7 +93,9 @@ modificado pela aplicacao em execucao.
 
 Os providers reais atualmente implementados usam OpenRouter para texto, imagem e
 video. Os clipes sao gerados sem narracao nativa; o roteiro e a decupagem priorizam
-interacao e dialogo entre personagens.
+interacao e dialogo entre personagens. Na finalizacao, falas presentes em
+`dialogue_text` podem ser sintetizadas como vozes de personagens quando
+`SPEECH_API_KEY` e `SPEECH_MODEL` estao configurados.
 
 ## Experiencia de producao
 
@@ -192,7 +194,8 @@ GET /api/v1/observability/projects/{project_id}/summary
 GET /api/v1/observability/readiness
 ```
 
-O readiness separa API, banco, Redis, broker do worker, FFmpeg e OpenRouter.
+O readiness separa API, banco, Redis, broker do worker, FFmpeg, OpenRouter e
+vozes de personagens.
 Correlation ID e propagado por `X-Correlation-ID` nas chamadas externas relevantes.
 
 ## Testes
@@ -220,7 +223,7 @@ Fases 1 a 8 estao implementadas em base funcional:
 - Personagens, locais, objetos e referencias visuais reais via OpenRouter Images.
 - Storyboards, animatic visual e timeline preliminar.
 - Jobs de video via OpenRouter, clipes e revisao humana.
-- Timeline final e export MP4/manifest sem narracao.
+- Timeline final e export MP4/manifest sem narracao, com mix de vozes por personagem.
 - Continuity Ledger, quality gate, varredura inicial de seguranca e correlation
   ID por requisicao.
 - Testes de health, maquina de estados, dependencias, custos e mock LLM.
@@ -295,8 +298,9 @@ POST /api/v1/finalization/projects/{project_id}/timeline/final
 POST /api/v1/finalization/projects/{project_id}/exports
 ```
 
-A finalizacao monta a timeline final e grava um manifesto JSON quando `ffmpeg`
-nao esta disponivel no PATH ou quando a renderizacao falha.
+A finalizacao monta a timeline final, sintetiza dialogos com voz consistente por
+personagem quando o provider de speech esta configurado, e grava um manifesto JSON
+quando `ffmpeg` nao esta disponivel no PATH ou quando a renderizacao falha.
 
 ## Fluxo de qualidade inicial
 

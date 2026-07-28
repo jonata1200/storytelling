@@ -1,12 +1,21 @@
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
+from pytest import MonkeyPatch
+
+from app.finalization import service as finalization_service
 from app.finalization.service import (
+    TimelineAudioAsset,
     _concat_file_line,
+    _render_timeline_video_with_audio,
+    _voice_for_speaker,
+    _voice_profile_for_key,
     clip_compatibility_errors,
     export_profile,
     export_profile_from_payload,
     final_timeline_coverage_errors,
+    parse_dialogue_lines,
 )
 from app.storyboards.models import StoryboardFrame
 from app.video_generation.models import VideoClip
@@ -89,3 +98,60 @@ def test_final_timeline_coverage_rejects_duplicate_selected_clips() -> None:
     assert "1 frame(s) com mais de um clipe selecionado" in final_timeline_coverage_errors(
         frames, clips
     )
+
+
+def test_parse_dialogue_lines_accepts_colon_and_screenplay_blocks() -> None:
+    lines = parse_dialogue_lines("CLARA: Oi, Lucas.\nLUCAS\nTudo bem por aqui.")
+
+    assert [line.speaker for line in lines] == ["CLARA", "Lucas"]
+    assert [line.text for line in lines] == ["Oi, Lucas.", "Tudo bem por aqui."]
+
+
+def test_voice_for_speaker_uses_character_map_or_stable_fallback() -> None:
+    assert _voice_for_speaker("Clara jovem", {"clara": "nova"}) == "nova"
+    assert _voice_for_speaker("Outro", {}) == _voice_profile_for_key("outro")
+
+
+def test_render_timeline_video_with_audio_delays_and_mixes(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    output_path = tmp_path / "final.mp4"
+    audio_path = tmp_path / "clara.wav"
+    audio_path.write_bytes(b"audio")
+    commands: list[list[str]] = []
+
+    def fake_render(
+        ffmpeg_path: str,
+        clip_paths: list[Path],
+        output_path: Path,
+        profile: dict,
+    ) -> str:
+        output_path.write_bytes(b"video")
+        return "video log"
+
+    def fake_run(
+        command: list[str],
+        check: bool,
+        capture_output: bool,
+        text: bool,
+    ) -> SimpleNamespace:
+        commands.append(command)
+        output_path.write_bytes(b"mp4")
+        return SimpleNamespace(stderr="audio log")
+
+    monkeypatch.setattr(finalization_service, "_render_timeline_video", fake_render)
+    monkeypatch.setattr(finalization_service.subprocess, "run", fake_run)
+
+    log = _render_timeline_video_with_audio(
+        "ffmpeg",
+        [tmp_path / "clip.mp4"],
+        [TimelineAudioAsset(path=audio_path, start_ms=1200)],
+        output_path,
+        {"audio_codec": "aac"},
+    )
+
+    command_text = " ".join(commands[0])
+    assert "adelay=1200:all=1" in command_text
+    assert "amix=inputs=1" in command_text
+    assert "-map [mix]" in command_text
+    assert "character dialogue audio" in log

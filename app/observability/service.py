@@ -161,6 +161,18 @@ async def readiness_dashboard(
             ),
         )
     )
+    speech_ready = bool(app_settings.speech_api_key and app_settings.speech_model)
+    components.append(
+        ReadinessComponentRead(
+            name="character_speech",
+            status="ready" if speech_ready else "degraded",
+            message=(
+                "Provider de vozes dos personagens configurado"
+                if speech_ready
+                else "SPEECH_API_KEY ou SPEECH_MODEL ausente"
+            ),
+        )
+    )
     overall = "ready" if all(item.status == "ready" for item in components) else "degraded"
     if any(item.status == "down" for item in components):
         overall = "down"
