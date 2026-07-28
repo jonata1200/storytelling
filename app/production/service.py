@@ -22,7 +22,7 @@ CONTENT_TYPES = {
 
 ASPECT_RATIOS = ["9:16", "16:9", "1:1", "3:4", "4:3"]
 RESOLUTIONS = ["720x1280", "1080x1920", "1920x1080", "3840x2160"]
-AUDIO_MODES = {"narration_subtitles"}
+AUDIO_MODES = {"dialogue_only"}
 MOCK_IMAGE_MODEL = "mock-image"
 MOCK_VIDEO_MODEL = "mock-video"
 LEGACY_DEFAULT_IMAGE_MODELS = {"sourceful/riverflow-v2.5-pro"}

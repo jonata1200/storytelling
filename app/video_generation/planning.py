@@ -80,14 +80,15 @@ def _video_motion_prompt(
         str(getattr(shot, "visual_composition", "") or "").strip()
         or "preservar a composicao do primeiro frame"
     )
-    narration = str(getattr(shot, "narration_text", "") or frame.narration_text or "").strip()
     dialogue = str(getattr(shot, "dialogue_text", "") or frame.dialogue_text or "").strip()
-    spoken_text = " ".join(part for part in (narration, dialogue) if part)
     audio_guidance = (
-        "Texto narrativo/de dialogo como referencia de ritmo, sem gerar legendas "
-        f"visuais: {spoken_text}."
-        if spoken_text
-        else "Sem texto visual na imagem; nao criar legendas, cartelas ou palavras na cena."
+        "Dialogo dos personagens como referencia de atuacao, ritmo e leitura labial; "
+        f"nao gerar narracao, legendas visuais ou cartelas: {dialogue}."
+        if dialogue
+        else (
+            "Cena sem fala neste plano; nao criar narracao, legendas, "
+            "cartelas ou palavras na cena."
+        )
     )
     return (
         "Gere um clipe image-to-video vertical 9:16 a partir do primeiro frame fornecido.\n"

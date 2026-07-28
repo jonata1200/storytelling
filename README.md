@@ -92,8 +92,8 @@ O arquivo `.env` permanece somente para configuracao de inicializacao e nao e
 modificado pela aplicacao em execucao.
 
 Os providers reais atualmente implementados usam OpenRouter para texto, imagem e
-video. A narracao final usa provider de fala OpenAI-compativel quando `SPEECH_API_KEY`
-e `SPEECH_MODEL` estao configurados; provider mock de voz permanece bloqueado no fluxo.
+video. Os clipes sao gerados sem narracao nativa; o roteiro e a decupagem priorizam
+interacao e dialogo entre personagens.
 
 ## Experiencia de producao
 
@@ -180,16 +180,6 @@ GET   /api/v1/costs/projects/{project_id}/summary
 
 ## Finalizacao e observabilidade
 
-A narracao final usa provider de fala real OpenAI-compativel. Configure no `.env`:
-
-```env
-SPEECH_PROVIDER=openai_compatible
-SPEECH_BASE_URL=https://api.openai.com/v1
-SPEECH_API_KEY=sua_chave_aqui
-SPEECH_MODEL=seu_modelo_de_voz
-SPEECH_VOICE=alloy
-```
-
 A exportacao final aceita perfil configuravel e tenta normalizar clipes via FFmpeg quando o
 concat direto falha. Quando FFmpeg nao esta disponivel ou a renderizacao falha, o fluxo grava
 um manifest estruturado com mensagem redigida.
@@ -202,7 +192,7 @@ GET /api/v1/observability/projects/{project_id}/summary
 GET /api/v1/observability/readiness
 ```
 
-O readiness separa API, banco, Redis, broker do worker, FFmpeg, OpenRouter e provider de voz.
+O readiness separa API, banco, Redis, broker do worker, FFmpeg e OpenRouter.
 Correlation ID e propagado por `X-Correlation-ID` nas chamadas externas relevantes.
 
 ## Testes
@@ -228,10 +218,9 @@ Fases 1 a 8 estao implementadas em base funcional:
 - Briefing, ideias, Story Bible, roteiro, cenas e planos com OpenRouter.
 - Templates e execucoes de prompt auditaveis.
 - Personagens, locais, objetos e referencias visuais reais via OpenRouter Images.
-- Storyboards, narracao provisoria, animatic e timeline preliminar.
+- Storyboards, animatic visual e timeline preliminar.
 - Jobs de video via OpenRouter, clipes e revisao humana.
-- Narracao final por provider de voz configuravel, legendas SRT, timeline final
-  e export MP4/manifest.
+- Timeline final e export MP4/manifest sem narracao.
 - Continuity Ledger, quality gate, varredura inicial de seguranca e correlation
   ID por requisicao.
 - Testes de health, maquina de estados, dependencias, custos e mock LLM.
@@ -279,9 +268,8 @@ GET  /api/v1/storyboards/projects/{project_id}/frames
 POST /api/v1/storyboards/projects/{project_id}/animatic/generate
 ```
 
-O animatic da Fase 5 e um manifesto JSON com quadros, duracoes, narracao
-provisoria e timeline preliminar. Renderizacao em video fica para a fase de
-FFmpeg.
+O animatic da Fase 5 e um manifesto JSON com quadros, duracoes, dialogos de
+referencia e timeline preliminar. Renderizacao em video fica para a fase de FFmpeg.
 
 ## Fluxo de video inicial
 
@@ -303,15 +291,12 @@ recusados no fluxo da aplicacao.
 Endpoints principais da Fase 7:
 
 ```text
-POST /api/v1/finalization/projects/{project_id}/narration/generate
-POST /api/v1/finalization/projects/{project_id}/subtitles/generate
 POST /api/v1/finalization/projects/{project_id}/timeline/final
 POST /api/v1/finalization/projects/{project_id}/exports
 ```
 
-A geracao de narracao final usa provider de voz real configuravel. As legendas
-sao geradas em SRT e a exportacao grava um manifesto JSON quando `ffmpeg` nao
-esta disponivel no PATH ou quando a renderizacao falha.
+A finalizacao monta a timeline final e grava um manifesto JSON quando `ffmpeg`
+nao esta disponivel no PATH ou quando a renderizacao falha.
 
 ## Fluxo de qualidade inicial
 

@@ -8,8 +8,6 @@ from app.database.session import AsyncSessionLocal
 from app.finalization.service import (
     create_final_timeline,
     export_timeline,
-    generate_subtitles,
-    synthesize_narration,
 )
 from app.jobs.service import (
     get_job,
@@ -20,7 +18,7 @@ from app.jobs.service import (
     project_job_can_run,
 )
 from app.quality.service import run_quality_check
-from app.storyboards.models import Animatic, AudioTrack
+from app.storyboards.models import Animatic
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
 from app.storytelling.models import Script, StoryIdea
 from app.storytelling.service import (
@@ -110,7 +108,7 @@ async def _run_storyboard(session: AsyncSession, project_id: UUID) -> dict[str, 
     if frames is None:
         raise ValueError("nao foi possivel gerar storyboard")
     animatic_bundle = await generate_animatic_bundle(session, project_id, script.id)
-    animatic = animatic_bundle[1] if animatic_bundle is not None else None
+    animatic = animatic_bundle[0] if animatic_bundle is not None else None
     return {
         "frame_count": len(frames),
         "animatic_id": str(animatic.id) if animatic is not None else None,
@@ -136,15 +134,6 @@ async def _run_video(
 
 
 async def _run_finalization(session: AsyncSession, project_id: UUID) -> dict[str, Any]:
-    source_audio = await _latest(session, AudioTrack, project_id)
-    if source_audio is None:
-        raise ValueError("gere o animatic primeiro")
-    final_audio = await synthesize_narration(
-        session, project_id, source_audio.id, "pt-br-warm-narrator"
-    )
-    if final_audio is None:
-        raise ValueError("nao foi possivel gerar narracao")
-    subtitle = await generate_subtitles(session, project_id, final_audio.id)
     animatic = await _latest(session, Animatic, project_id)
     timeline = await create_final_timeline(session, project_id, animatic.id if animatic else None)
     if timeline is None:
@@ -153,11 +142,8 @@ async def _run_finalization(session: AsyncSession, project_id: UUID) -> dict[str
         session,
         project_id,
         timeline.id,
-        subtitle.id if subtitle else None,
     )
     return {
-        "audio_track_id": str(final_audio.id),
-        "subtitle_id": str(subtitle.id) if subtitle is not None else None,
         "timeline_id": str(timeline.id),
         "export_id": str(export.id) if export is not None else None,
     }

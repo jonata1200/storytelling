@@ -1,1 +1,1 @@
-"""Audio, subtitles, final timeline, and export workflows."""
+"""Final timeline and export workflows."""

@@ -31,19 +31,6 @@ class GenerateAnimaticRequest(BaseModel):
     script_id: UUID
 
 
-class AudioTrackRead(BaseModel):
-    id: UUID
-    project_id: UUID
-    artifact_id: UUID
-    name: str
-    track_type: str
-    duration_seconds: int
-    transcript: str
-    alignment: dict
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class AnimaticRead(BaseModel):
     id: UUID
     project_id: UUID
@@ -86,6 +73,5 @@ class TimelineRead(BaseModel):
 
 
 class AnimaticBundleRead(BaseModel):
-    audio_track: AudioTrackRead
     animatic: AnimaticRead
     timeline: TimelineRead

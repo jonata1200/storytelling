@@ -1,4 +1,4 @@
-import re
+﻿import re
 from dataclasses import dataclass
 
 from nicegui import ui
@@ -10,16 +10,16 @@ IDEA_COUNT_OPTIONS = list(range(1, 11))
 BLOCKING_DIALOG_PROPS = "persistent no-esc-dismiss no-backdrop-dismiss"
 UI_GENERATION_TIMEOUT_SECONDS = 300
 SETTINGS_DATA_URL = "/settings?tab=data"
-IDEA_TITLE_PREFIX_RE = re.compile(r"^\s*ideia\s+\d+\s*[:\-–]\s*", re.IGNORECASE)
+IDEA_TITLE_PREFIX_RE = re.compile(r"^\s*ideia\s+\d+\s*[:\-â€“]\s*", re.IGNORECASE)
 
 IDEA_GENRES = [
-    "Ação",
-    "Animação",
+    "AÃ§Ã£o",
+    "AnimaÃ§Ã£o",
     "Aventura",
-    "Comédia",
+    "ComÃ©dia",
     "Drama",
     "Fantasia",
-    "Ficção Científica",
+    "FicÃ§Ã£o CientÃ­fica",
     "Romance",
     "Suspense (Thriller)",
     "Terror (ou Horror)",
@@ -39,7 +39,7 @@ PRODUCTION_STEPS = [
     ProductionStep(
         "briefing",
         "Briefing",
-        "Defina tema, público, emoção, duração e objetivo do vídeo.",
+        "Defina tema, pÃºblico, emoÃ§Ã£o, duraÃ§Ã£o e objetivo do vÃ­deo.",
         "Criar novo projeto",
         "edit_note",
     ),
@@ -53,14 +53,14 @@ PRODUCTION_STEPS = [
     ProductionStep(
         "script",
         "Roteiro",
-        "Crie o texto base, duração alvo, cenas e planos estruturados.",
+        "Crie o texto base, duraÃ§Ã£o alvo, cenas e planos estruturados.",
         "Gerar roteiro",
         "description",
     ),
     ProductionStep(
         "visual",
         "Visual",
-        "Crie fichas canônicas e referências visuais aprováveis.",
+        "Crie fichas canÃ´nicas e referÃªncias visuais aprovÃ¡veis.",
         "Gerar visual",
         "palette",
     ),
@@ -80,8 +80,8 @@ PRODUCTION_STEPS = [
     ),
     ProductionStep(
         "finalization",
-        "Finalização",
-        "Crie narração final, legendas, timeline final e exportação.",
+        "FinalizaÃ§Ã£o",
+        "Monte a timeline final e exporte os clipes selecionados.",
         "Finalizar",
         "auto_awesome_motion",
     ),
@@ -98,20 +98,20 @@ WORKSPACE_TABS = [
     ("Roteiro", "script"),
     ("Personagens", "assets"),
     ("Storyboard", "storyboard"),
-    ("Vídeo", "video"),
+    ("VÃ­deo", "video"),
 ]
 
 STEP_LOADING_COPY = {
-    "ideas": ("Gerando ideias", "A IA está criando temas, gêneros e emoções."),
-    "script": ("Gerando roteiro", "A IA está escrevendo o roteiro e separando cenas."),
+    "ideas": ("Gerando ideias", "A IA estÃ¡ criando temas, gÃªneros e emoÃ§Ãµes."),
+    "script": ("Gerando roteiro", "A IA estÃ¡ escrevendo o roteiro e separando cenas."),
     "visual": (
         "Gerando prompts visuais",
-        "A IA está criando personagens, locais e objetos para revisão.",
+        "A IA estÃ¡ criando personagens, locais e objetos para revisÃ£o.",
     ),
-    "storyboard": ("Gerando storyboard", "A IA está criando quadros, planos e animatic."),
-    "video": ("Preparando vídeo", "A IA está verificando prompts e deixando os clipes prontos."),
-    "finalization": ("Finalizando projeto", "A IA está montando narração, legendas e export."),
-    "quality": ("Revisando qualidade", "A IA está checando continuidade e riscos."),
+    "storyboard": ("Gerando storyboard", "A IA estÃ¡ criando quadros, planos e animatic."),
+    "video": ("Preparando vÃ­deo", "A IA estÃ¡ verificando prompts e deixando os clipes prontos."),
+    "finalization": ("Finalizando projeto", "A IA esta montando timeline final e export."),
+    "quality": ("Revisando qualidade", "A IA estÃ¡ checando continuidade e riscos."),
 }
 
 
@@ -124,7 +124,7 @@ def settings_tab_key(value: object) -> str:
     return "profile"
 
 
-def clean_idea_title(value: object, fallback: str = "História sem título") -> str:
+def clean_idea_title(value: object, fallback: str = "HistÃ³ria sem tÃ­tulo") -> str:
     title = str(value or "").strip()
     title = IDEA_TITLE_PREFIX_RE.sub("", title).strip()
     return title or fallback
@@ -136,7 +136,7 @@ def friendly_ai_error(exc: BaseException) -> str:
     if isinstance(exc, TimeoutError) or "demorou mais" in normalized or "timed out" in normalized:
         return (
             "O modelo de IA demorou demais para responder. Tente novamente ou escolha "
-            "um modelo de texto mais estável nas configurações."
+            "um modelo de texto mais estÃ¡vel nas configuraÃ§Ãµes."
         )
     if "rate limit" in normalized or "429" in normalized or "resourceexhausted" in normalized:
         return (
@@ -150,19 +150,19 @@ def friendly_ai_error(exc: BaseException) -> str:
         or "temporarily unavailable" in normalized
     ):
         return (
-            "Não foi possível conectar ao provedor de IA. Verifique a internet, a chave "
+            "NÃ£o foi possÃ­vel conectar ao provedor de IA. Verifique a internet, a chave "
             "do OpenRouter e tente novamente."
         )
     if "json" in normalized:
         return (
-            "O modelo respondeu fora do formato esperado pela aplicação. Tente novamente "
+            "O modelo respondeu fora do formato esperado pela aplicaÃ§Ã£o. Tente novamente "
             "ou use um modelo com melhor suporte a JSON estruturado."
         )
     if "api_key" in normalized or "api key" in normalized or "chave" in normalized:
-        return "A chave da IA parece ausente ou inválida. Confira as configurações de IA."
+        return "A chave da IA parece ausente ou invÃ¡lida. Confira as configuraÃ§Ãµes de IA."
     if text:
         return text[:500]
-    return "A IA não respondeu ou retornou um erro inesperado. Tente novamente."
+    return "A IA nÃ£o respondeu ou retornou um erro inesperado. Tente novamente."
 
 
 def show_ai_error_popup(
@@ -172,7 +172,7 @@ def show_ai_error_popup(
     details: str | None = None,
 ) -> None:
     safe_message = (
-        message or "A IA não retornou nenhuma resposta. Tente novamente ou escolha outro modelo."
+        message or "A IA nÃ£o retornou nenhuma resposta. Tente novamente ou escolha outro modelo."
     )
     try:
         with ui.dialog() as dialog, ui.card().classes(
@@ -184,7 +184,7 @@ def show_ai_error_popup(
                     ui.label(title).classes("brand-type text-2xl font-bold text-red-100")
                     ui.label(safe_message).classes("text-sm text-[#d8dbd8] leading-6")
             if details and details.strip() and details.strip() != safe_message:
-                with ui.expansion("Detalhes técnicos").classes("w-full text-sm text-[#9aa19b]"):
+                with ui.expansion("Detalhes tÃ©cnicos").classes("w-full text-sm text-[#9aa19b]"):
                     ui.label(details.strip()[:1200]).classes("whitespace-pre-wrap")
             with ui.row().classes("w-full justify-end"):
                 ui.button("Entendi", on_click=dialog.close).props("unelevated no-caps").classes(

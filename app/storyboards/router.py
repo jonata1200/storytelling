@@ -8,7 +8,6 @@ from app.database.session import get_session
 from app.storyboards.schemas import (
     AnimaticBundleRead,
     AnimaticRead,
-    AudioTrackRead,
     GenerateAnimaticRequest,
     GenerateStoryboardsRequest,
     StoryboardFrameRead,
@@ -76,11 +75,10 @@ async def post_generate_animatic(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project, script, shots, or storyboard frames not found",
         )
-    audio_track, animatic, timeline, items = bundle
+    animatic, timeline, items = bundle
     timeline_read = TimelineRead.model_validate(timeline)
     timeline_read.items = [TimelineItemRead.model_validate(item) for item in items]
     return AnimaticBundleRead(
-        audio_track=AudioTrackRead.model_validate(audio_track),
         animatic=AnimaticRead.model_validate(animatic),
         timeline=timeline_read,
     )

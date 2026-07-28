@@ -5,12 +5,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ArtifactStatus
-from app.finalization.models import Export, SubtitleTrack
+from app.finalization.models import Export
 from app.projects.models import Artifact
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import INACTIVE_DERIVED_STATUSES
 from app.quality.models import ContinuityIssue, QualityCheck
-from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
+from app.storyboards.models import Animatic, StoryboardFrame, Timeline
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
 from app.video_generation.models import VideoClip
 from app.visual_bible.models import Character, Location, Prop, VisualReference
@@ -130,8 +130,6 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
             "animatics": await _count(session, Animatic, project_id),
             "clips": await _count(session, VideoClip, project_id),
             "timelines": await _count(session, Timeline, project_id),
-            "audio_tracks": await _count(session, AudioTrack, project_id),
-            "subtitles": await _count(session, SubtitleTrack, project_id),
             "exports": await _count(session, Export, project_id),
             "quality_checks": await _count(session, QualityCheck, project_id),
             "qa_issues": await _count(session, ContinuityIssue, project_id),

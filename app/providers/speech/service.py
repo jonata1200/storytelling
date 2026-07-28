@@ -8,5 +8,5 @@ def speech_provider_from_settings() -> SpeechProvider:
     if provider_name in {"openai_compatible", "openai-compatible"}:
         return OpenAICompatibleSpeechProvider()
     if provider_name == "mock":
-        raise ValueError("Provider mock de voz esta bloqueado no fluxo de narracao final.")
+        raise ValueError("Provider mock de voz esta bloqueado no fluxo de audio real.")
     raise ValueError(f"Provider de voz nao suportado: {provider_name}")

@@ -9,7 +9,7 @@ from app.assets.models import Asset
 from app.core.enums import ArtifactStatus
 from app.costs.models import CostEntry
 from app.database.session import AsyncSessionLocal
-from app.finalization.models import Export, SubtitleTrack
+from app.finalization.models import Export
 from app.generation.model_settings import ensure_default_model_settings
 from app.generation.models import ProjectModelSetting
 from app.production.service import get_or_create_production_settings
@@ -18,7 +18,7 @@ from app.projects.repository import ProjectRepository
 from app.projects.service import list_projects
 from app.projects.versioning import INACTIVE_DERIVED_STATUSES
 from app.quality.models import ContinuityIssue, QualityCheck
-from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
+from app.storyboards.models import Animatic, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.service import list_storyboard_prompt_previews
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
 from app.video_generation.models import GenerationJob, VideoClip
@@ -247,8 +247,6 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
                 "frames": await active_count(session, StoryboardFrame, project_id),
                 "animatics": await scalar_count(session, Animatic, project_id),
                 "clips": await scalar_count(session, VideoClip, project_id),
-                "audio": await scalar_count(session, AudioTrack, project_id),
-                "subtitles": await scalar_count(session, SubtitleTrack, project_id),
                 "exports": await scalar_count(session, Export, project_id),
                 "qa_issues": await scalar_count(session, ContinuityIssue, project_id),
                 "stale_artifacts": int(

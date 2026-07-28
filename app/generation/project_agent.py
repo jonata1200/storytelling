@@ -1,12 +1,10 @@
-from uuid import UUID
+﻿from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.finalization.service import (
     create_final_timeline,
     export_timeline,
-    generate_subtitles,
-    synthesize_narration,
 )
 from app.generation.director_agent import ask_director_agent
 from app.generation.project_agent_context import (
@@ -61,7 +59,7 @@ from app.projects.versioning import (
     resolve_stale_artifacts_after_regeneration,
 )
 from app.quality.service import run_quality_check
-from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
+from app.storyboards.models import Animatic, StoryboardFrame, Timeline
 from app.storyboards.service import (
     generate_animatic_bundle,
     generate_storyboard_frames,
@@ -105,7 +103,7 @@ async def _ensure_script_pipeline(
             await _emit_progress(progress, "O roteiro ja existe. Vou dividir em cenas e planos.")
             scenes = await generate_scenes_and_shots(session, project_id, script.id)
             if scenes is None:
-                return script, "O roteiro existe, mas não consegui criar cenas e planos.", True
+                return script, "O roteiro existe, mas nÃ£o consegui criar cenas e planos.", True
             return script, "O roteiro ja existia; criei cenas e planos para ele.", True
         return script, "O projeto ja tem roteiro e cenas.", False
 
@@ -114,7 +112,7 @@ async def _ensure_script_pipeline(
         await _emit_progress(progress, "Vou criar uma ideia base para orientar o roteiro.")
         ideas = await generate_story_ideas(session, project_id)
         if not ideas:
-            return None, "Não consegui gerar uma ideia base para este projeto.", False
+            return None, "NÃ£o consegui gerar uma ideia base para este projeto.", False
         idea = ideas[0]
 
     if script is not None and force:
@@ -131,11 +129,11 @@ async def _ensure_script_pipeline(
 
     script = await generate_script(session, project_id, idea.id)
     if script is None:
-        return None, "Não consegui gerar o roteiro para este projeto.", False
+        return None, "NÃ£o consegui gerar o roteiro para este projeto.", False
     await _emit_progress(progress, "Roteiro criado. Agora vou separar em cenas e planos.")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
-        return script, "Roteiro criado, mas as cenas e planos não foram gerados.", True
+        return script, "Roteiro criado, mas as cenas e planos nÃ£o foram gerados.", True
     if force:
         visual_updated = await _refresh_visual_bible_after_script_regeneration(
             session,
@@ -185,7 +183,7 @@ async def _ensure_visual_pipeline(
         visual = await generate_visual_bible(session, project_id, script.id)
         if visual is None:
             return ProjectChatResult(
-                "Não consegui criar personagens, locais e objetos.",
+                "NÃ£o consegui criar personagens, locais e objetos.",
                 "generate_assets",
                 failed=True,
             )
@@ -248,7 +246,7 @@ async def _ensure_storyboard_pipeline(
             scene_copy = f" da cena {scene_number}" if scene_number is not None else ""
             return ProjectChatResult(
                 "Os prompts de storyboard"
-                f"{scene_copy} precisam ser aprovados antes da geração das imagens. "
+                f"{scene_copy} precisam ser aprovados antes da geraÃ§Ã£o das imagens. "
                 "Abra a aba Storyboard, revise os cards de prompt e clique em aprovar.",
                 "generate_storyboard",
                 changed,
@@ -269,7 +267,7 @@ async def _ensure_storyboard_pipeline(
         )
         if generated_frames is None:
             return ProjectChatResult(
-                "Não consegui gerar o storyboard.",
+                "NÃ£o consegui gerar o storyboard.",
                 "generate_storyboard",
                 changed,
                 True,
@@ -292,7 +290,7 @@ async def _ensure_storyboard_pipeline(
         bundle = await generate_animatic_bundle(session, project_id, script.id)
         if bundle is None:
             return ProjectChatResult(
-                "Storyboard criado, mas o animatic não foi gerado.",
+                "Storyboard criado, mas o animatic nÃ£o foi gerado.",
                 "generate_storyboard",
                 True,
                 True,
@@ -303,7 +301,7 @@ async def _ensure_storyboard_pipeline(
     if scene_number is not None:
         message = (
             f"Storyboard da cena {scene_number} criado/atualizado. "
-            "O storyboard completo já está coberto e o animatic foi validado."
+            "O storyboard completo jÃ¡ estÃ¡ coberto e o animatic foi validado."
         )
     return ProjectChatResult(
         message,
@@ -366,41 +364,9 @@ async def _ensure_finalization_pipeline(
             storyboard_result.failed,
         )
 
-    source_audio = await _latest(session, AudioTrack, project_id)
-    if source_audio is None:
-        return ProjectChatResult(
-            "Nao encontrei audio do animatic para criar a narracao final.",
-            "generate_finalization",
-            changed,
-        )
-
-    await _emit_progress(progress, "Vou sintetizar a narracao final.")
-    try:
-        final_audio = await synthesize_narration(
-            session,
-            project_id,
-            source_audio.id,
-            "pt-br-warm-narrator",
-        )
-    except ValueError as exc:
-        return ProjectChatResult(str(exc), "generate_finalization", changed, True)
-    if final_audio is None:
-        return ProjectChatResult(
-            "Não consegui gerar a narração final.",
-            "generate_finalization",
-            changed,
-            True,
-        )
-    changed = True
-
-    await _emit_progress(progress, "Vou gerar as legendas.")
-    subtitle = await generate_subtitles(session, project_id, final_audio.id)
-    if subtitle is not None:
-        changed = True
-
     timeline = await _latest(session, Timeline, project_id)
     if timeline is None:
-        await _emit_progress(progress, "Vou montar a timeline final.")
+        await _emit_progress(progress, "Vou montar a timeline final sem narracao.")
         animatic = await _latest(session, Animatic, project_id)
         try:
             timeline = await create_final_timeline(
@@ -412,22 +378,21 @@ async def _ensure_finalization_pipeline(
             return ProjectChatResult(str(exc), "generate_finalization", changed)
         if timeline is None:
             return ProjectChatResult(
-                "Finalização preparada, mas ainda faltam clipes selecionados para a timeline.",
+                "Finalizacao preparada, mas ainda faltam clipes selecionados para a timeline.",
                 "generate_finalization",
                 changed,
             )
         changed = True
 
-    await _emit_progress(progress, "Vou exportar a timeline.")
+    await _emit_progress(progress, "Vou exportar a timeline sem narracao.")
     exported = await export_timeline(
         session,
         project_id,
         timeline.id,
-        subtitle.id if subtitle else None,
     )
     if exported is None:
         return ProjectChatResult(
-            "Timeline criada, mas não consegui exportar o projeto.",
+            "Timeline criada, mas nao consegui exportar o projeto.",
             "generate_finalization",
             changed,
             True,
@@ -443,7 +408,7 @@ async def _ensure_quality_pipeline(session: AsyncSession, project_id: UUID) -> P
     check = await run_quality_check(session, project_id)
     if check is None:
         return ProjectChatResult(
-            "Não consegui rodar o controle de qualidade.",
+            "NÃ£o consegui rodar o controle de qualidade.",
             "run_quality",
             failed=True,
         )
@@ -505,7 +470,7 @@ async def handle_project_chat(
         revised = await revise_script(session, project_id, script.id, message, project_context)
         if revised is None:
             return ProjectChatResult(
-                "Não consegui aplicar a revisão no roteiro.",
+                "NÃ£o consegui aplicar a revisÃ£o no roteiro.",
                 action,
                 changed,
                 True,
@@ -514,7 +479,7 @@ async def handle_project_chat(
         scenes = await regenerate_scenes_and_shots(session, project_id, revised.id)
         if scenes is None:
             return ProjectChatResult(
-                "Roteiro revisado, mas não consegui recriar cenas e planos.",
+                "Roteiro revisado, mas nÃ£o consegui recriar cenas e planos.",
                 action,
                 True,
                 True,

@@ -10,57 +10,15 @@ from app.finalization.schemas import (
     ExportRead,
     ExportRequest,
     FinalTimelineRequest,
-    GenerateNarrationRequest,
-    SubtitleRequest,
-    SubtitleTrackRead,
 )
 from app.finalization.service import (
     create_final_timeline,
     export_timeline,
-    generate_subtitles,
-    synthesize_narration,
 )
 from app.storyboards.models import TimelineItem
-from app.storyboards.schemas import AudioTrackRead, TimelineItemRead, TimelineRead
+from app.storyboards.schemas import TimelineItemRead, TimelineRead
 
 router = APIRouter(prefix="/finalization/projects", tags=["finalization"])
-
-
-@router.post("/{project_id}/narration/generate", response_model=AudioTrackRead)
-async def post_generate_narration(
-    project_id: UUID,
-    payload: GenerateNarrationRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> AudioTrackRead:
-    try:
-        track = await synthesize_narration(
-            session, project_id, payload.audio_track_id, payload.voice_profile_id
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if track is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project or audio track not found",
-        )
-    return AudioTrackRead.model_validate(track)
-
-
-@router.post("/{project_id}/subtitles/generate", response_model=SubtitleTrackRead)
-async def post_generate_subtitles(
-    project_id: UUID,
-    payload: SubtitleRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> SubtitleTrackRead:
-    subtitle = await generate_subtitles(
-        session, project_id, payload.audio_track_id, payload.language
-    )
-    if subtitle is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project or audio track not found",
-        )
-    return SubtitleTrackRead.model_validate(subtitle)
 
 
 @router.post("/{project_id}/timeline/final", response_model=TimelineRead)

@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.database.session import AsyncSessionLocal
 from app.jobs.service import enqueue_project_step
-from app.storyboards.models import AudioTrack, StoryboardFrame
+from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Script
 from app.ui.project.data import latest as _latest
 from app.ui.shared.assistant_state import (
@@ -74,11 +74,6 @@ async def _run_step(
                 visual_report = await visual_reference_completion_report(session, project_id)
                 if not visual_report["complete"]:
                     raise ValueError(visual_reference_completion_message(visual_report))
-            if step_key == "finalization":
-                source_audio = await _latest(session, AudioTrack, project_id)
-                if source_audio is None:
-                    raise ValueError("gere o animatic primeiro")
-
             await enqueue_project_step(session, project_id, step_key)
         ui.notify("Etapa enfileirada para execucao pelo worker.", color="positive")
         ui.navigate.reload()

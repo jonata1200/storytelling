@@ -34,7 +34,7 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
     )
     audio_mode: Mapped[str] = mapped_column(
-        String(80), default="narration_subtitles", nullable=False
+        String(80), default="dialogue_only", nullable=False
     )
     motion_intensity: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)

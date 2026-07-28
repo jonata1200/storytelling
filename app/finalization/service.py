@@ -1,10 +1,8 @@
-import asyncio
-import hashlib
+﻿import asyncio
 import json
 import shutil
 import subprocess
 import tempfile
-from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -17,23 +15,17 @@ from app.core.enums import (
     ArtifactStatus,
     ArtifactType,
     AssetKind,
-    CostEntryType,
     DependencyKind,
     ProjectStatus,
 )
-from app.costs.models import CostEntry
-from app.costs.service import estimate_operation_cost
 from app.finalization.models import Export, SubtitleTrack
-from app.finalization.subtitles import build_srt_from_alignment, safe_area_profile
+from app.finalization.subtitles import safe_area_profile
 from app.observability.redaction import redact_secrets
 from app.observability.schemas import OperationalEventCreate
 from app.observability.service import emit_project_event
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
-from app.providers.speech.service import speech_provider_from_settings
-from app.providers.speech.types import SpeechRequest
-from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
-from app.storyboards.timeline import build_word_alignment
+from app.storyboards.models import Animatic, StoryboardFrame, Timeline, TimelineItem
 from app.video_generation.models import VideoClip
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
@@ -295,199 +287,6 @@ async def _add_dependency(session: AsyncSession, upstream: UUID, downstream: UUI
             dependency_kind=DependencyKind.DERIVED_FROM,
         )
     )
-
-
-async def synthesize_narration(
-    session: AsyncSession,
-    project_id: UUID,
-    audio_track_id: UUID,
-    voice_profile_id: str,
-) -> AudioTrack | None:
-    project = await ProjectRepository(session).get_project(project_id)
-    source_track = await session.get(AudioTrack, audio_track_id)
-    if project is None or source_track is None or source_track.project_id != project_id:
-        return None
-
-    settings = get_settings()
-    provider = speech_provider_from_settings()
-    output_dir = settings.local_storage_path / "speech" / str(project_id)
-    speech_result = await provider.synthesize(
-        SpeechRequest(
-            text=source_track.transcript,
-            voice_profile_id=voice_profile_id,
-            output_dir=output_dir,
-            model=settings.speech_model,
-        )
-    )
-    alignment = speech_result.alignment or build_word_alignment(
-        source_track.transcript,
-        speech_result.duration_seconds,
-    )
-    artifact = await _create_artifact(
-        session,
-        project_id,
-        ArtifactType.AUDIO_TRACK,
-        "Narracao final",
-        {
-            "source_audio_track_id": str(source_track.id),
-            "voice_profile_id": voice_profile_id,
-            "provider": speech_result.provider,
-            "model": speech_result.model,
-            "duration_seconds": speech_result.duration_seconds,
-        },
-    )
-    await _add_dependency(session, source_track.artifact_id, artifact.id)
-    file_bytes = speech_result.file_path.read_bytes()
-    asset = Asset(
-        project_id=project_id,
-        artifact_id=artifact.id,
-        kind=AssetKind.AUDIO,
-        name="Narracao final",
-        storage_uri=speech_result.storage_uri,
-        content_type=speech_result.content_type,
-        sha256=speech_result.sha256 or hashlib.sha256(file_bytes).hexdigest(),
-        metadata_json={
-            "provider": speech_result.provider,
-            "model": speech_result.model,
-            "voice_profile_id": voice_profile_id,
-        },
-    )
-    session.add(asset)
-    await session.flush()
-    session.add(
-        AssetVersion(
-            asset_id=asset.id,
-            version_number=1,
-            storage_uri=asset.storage_uri,
-            sha256=asset.sha256,
-            metadata_json=asset.metadata_json,
-        )
-    )
-    narration = AudioTrack(
-        project_id=project_id,
-        artifact_id=artifact.id,
-        name="Narracao final",
-        track_type="final_narration",
-        duration_seconds=speech_result.duration_seconds,
-        transcript=source_track.transcript,
-        alignment=alignment,
-    )
-    session.add(narration)
-    cost_estimate = estimate_operation_cost(
-        "speech_generation",
-        Decimal(max(1, len(source_track.transcript))) / Decimal("1000"),
-        provider=speech_result.provider,
-        model=speech_result.model,
-    )
-    session.add(
-        CostEntry(
-            project_id=project_id,
-            artifact_id=artifact.id,
-            entry_type=CostEntryType.ESTIMATE,
-            provider=speech_result.provider,
-            model=speech_result.model,
-            operation="speech_generation",
-            quantity=cost_estimate.quantity,
-            unit=cost_estimate.unit,
-            unit_cost=cost_estimate.unit_cost,
-            total_cost=cost_estimate.estimated,
-            currency=cost_estimate.currency,
-            metadata_json={"stage": "audio", "asset_id": str(asset.id)},
-        )
-    )
-    await emit_project_event(
-        session,
-        OperationalEventCreate(
-            project_id=project_id,
-            artifact_id=artifact.id,
-            event_type="narration",
-            status="succeeded",
-            provider=speech_result.provider,
-            model=speech_result.model,
-            operation="speech_generation",
-            estimated_cost=cost_estimate.estimated,
-            message="Narracao final gerada",
-            details={"asset_id": str(asset.id), "voice_profile_id": voice_profile_id},
-        ),
-    )
-    advance_project_status(project, ProjectStatus.AUDIO_GENERATION)
-    await session.commit()
-    await session.refresh(narration)
-    return narration
-
-
-async def generate_subtitles(
-    session: AsyncSession,
-    project_id: UUID,
-    audio_track_id: UUID,
-    language: str = "pt-BR",
-) -> SubtitleTrack | None:
-    project = await ProjectRepository(session).get_project(project_id)
-    audio_track = await session.get(AudioTrack, audio_track_id)
-    if project is None or audio_track is None or audio_track.project_id != project_id:
-        return None
-
-    content = build_srt_from_alignment(audio_track.alignment)
-    settings = get_settings()
-    subtitle_dir = settings.local_storage_path / "subtitles" / str(project_id)
-    subtitle_dir.mkdir(parents=True, exist_ok=True)
-    subtitle_path = subtitle_dir / f"subtitles_{uuid4().hex[:8]}.srt"
-    subtitle_path.write_text(content, encoding="utf-8")
-    artifact = await _create_artifact(
-        session,
-        project_id,
-        ArtifactType.EXPORT,
-        "Legenda SRT",
-        {"language": language, "format": "srt", "content": content},
-    )
-    await _add_dependency(session, audio_track.artifact_id, artifact.id)
-    asset = Asset(
-        project_id=project_id,
-        artifact_id=artifact.id,
-        kind=AssetKind.SUBTITLE,
-        name="Legenda SRT",
-        storage_uri=subtitle_path.as_posix(),
-        content_type="application/x-subrip",
-        sha256=None,
-        metadata_json={"language": language},
-    )
-    session.add(asset)
-    await session.flush()
-    session.add(
-        AssetVersion(
-            asset_id=asset.id,
-            version_number=1,
-            storage_uri=asset.storage_uri,
-            sha256=asset.sha256,
-            metadata_json=asset.metadata_json,
-        )
-    )
-    subtitle = SubtitleTrack(
-        project_id=project_id,
-        artifact_id=artifact.id,
-        audio_track_id=audio_track.id,
-        asset_id=asset.id,
-        language=language,
-        format="srt",
-        content=content,
-        safe_area=safe_area_profile(),
-    )
-    session.add(subtitle)
-    await emit_project_event(
-        session,
-        OperationalEventCreate(
-            project_id=project_id,
-            artifact_id=artifact.id,
-            event_type="subtitles",
-            status="succeeded",
-            operation="subtitle_generation",
-            message="Legenda SRT gerada",
-            details={"asset_id": str(asset.id), "language": language},
-        ),
-    )
-    await session.commit()
-    await session.refresh(subtitle)
-    return subtitle
 
 
 async def create_final_timeline(

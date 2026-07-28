@@ -1,4 +1,4 @@
-from typing import Any, cast
+﻿from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +37,7 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "desenvolver",
         "faca",
         "fazer",
-        "faça",
+        "faÃ§a",
         "monte",
         "montar",
         "parta",
@@ -59,7 +59,7 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "execute",
         "executar",
     )
-    script_terms = ("roteiro", "historia", "história", "cena", "cenas", "dialogo", "diálogo")
+    script_terms = ("roteiro", "historia", "histÃ³ria", "cena", "cenas", "dialogo", "diÃ¡logo")
     idea_terms = (
         "ideia",
         "ideias",
@@ -67,14 +67,14 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "premissas",
         "opcao",
         "opcoes",
-        "opção",
-        "opções",
+        "opÃ§Ã£o",
+        "opÃ§Ãµes",
     )
     bible_terms = (
         "story bible",
         "bible",
         "biblia",
-        "bíblia",
+        "bÃ­blia",
         "universo",
         "mundo",
     )
@@ -90,7 +90,7 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "objetos",
         "props",
         "referencia",
-        "referência",
+        "referÃªncia",
     )
     storyboard_terms = (
         "storyboard",
@@ -101,19 +101,15 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "enquadramento",
         "animatic",
     )
-    video_terms = ("video", "vídeo", "clipe", "clipes", "montagem")
+    video_terms = ("video", "vÃ­deo", "clipe", "clipes", "montagem")
 
     finalization_terms = (
         "finalizacao",
-        "finalização",
+        "finalizaÃ§Ã£o",
         "finalizar",
         "export",
         "exportar",
         "timeline",
-        "legenda",
-        "legendas",
-        "narracao",
-        "narração",
     )
     quality_terms = (
         "qualidade",
@@ -122,7 +118,7 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "continuidade",
         "validar",
         "validacao",
-        "validação",
+        "validaÃ§Ã£o",
     )
 
     wants_generation = any(term in normalized for term in generation_terms)
