@@ -7,12 +7,13 @@ from app.config.model_policy import ensure_openrouter_api_key, validate_openrout
 from app.config.provider_policy import (
     SUPPORTED_MODEL_PROVIDERS,
     effective_provider_for_channel,
+    ensure_provider_api_key,
     provider_model,
-    unavailable_provider_error,
     validate_model_name,
 )
 from app.config.settings import get_settings
 from app.generation.models import ProjectModelSetting
+from app.providers.llm.omniroute import OmniRouteLLMProvider
 from app.providers.llm.openrouter import OpenRouterLLMProvider
 from app.providers.llm.types import LLMProvider
 
@@ -105,12 +106,17 @@ async def llm_provider_for_task(
         ensure_openrouter_api_key(settings.openrouter_api_key)
         return OpenRouterLLMProvider(), validate_openrouter_model_name(setting.model)
     if setting is not None and setting.provider == "omniroute":
-        raise unavailable_provider_error("omniroute", "fase 3")
+        ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
+        return OmniRouteLLMProvider(), validate_model_name(setting.model, provider="omniroute")
     if setting is not None and setting.provider == "mock":
         raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")
     provider = effective_provider_for_channel(settings, "text")
     if provider == "omniroute":
-        raise unavailable_provider_error("omniroute", "fase 3")
+        ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
+        return OmniRouteLLMProvider(), validate_model_name(
+            provider_model(settings, provider, "text"),
+            provider=provider,
+        )
     ensure_openrouter_api_key(settings.openrouter_api_key)
     return OpenRouterLLMProvider(), validate_model_name(
         provider_model(settings, provider, "text"),

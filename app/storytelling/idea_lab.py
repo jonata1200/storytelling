@@ -10,12 +10,14 @@ from typing import Any
 from app.config.model_policy import ensure_openrouter_api_key, validate_openrouter_model_name
 from app.config.provider_policy import (
     effective_provider_for_channel,
+    ensure_provider_api_key,
     provider_model,
-    unavailable_provider_error,
+    validate_model_name,
 )
 from app.config.settings import get_settings
+from app.providers.llm.omniroute import OmniRouteLLMProvider
 from app.providers.llm.openrouter import OpenRouterLLMProvider
-from app.providers.llm.types import LLMRequest, LLMResult
+from app.providers.llm.types import LLMProvider, LLMRequest, LLMResult
 from app.storytelling.service import (
     GenerationOutputError,
     _story_idea_retry_guidance,
@@ -105,17 +107,24 @@ async def generate_freeform_ideas(
     settings = get_settings()
     configured_provider = effective_provider_for_channel(settings, "text")
     if configured_provider == "omniroute":
-        raise unavailable_provider_error("omniroute", "fase 3")
-    ensure_openrouter_api_key(settings.openrouter_api_key)
-    provider = OpenRouterLLMProvider()
+        ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
+        provider: LLMProvider = OmniRouteLLMProvider()
+        model = validate_model_name(
+            provider_model(settings, configured_provider, "text"),
+            provider=configured_provider,
+        )
+    else:
+        ensure_openrouter_api_key(settings.openrouter_api_key)
+        provider = OpenRouterLLMProvider()
+        model = validate_openrouter_model_name(
+            provider_model(settings, configured_provider, "text")
+        )
     count = max(1, min(10, int(count)))
     duration = coerce_duration_minutes(target_duration_minutes)
     retry_guidance = ""
     request = LLMRequest(
         task="generate_story_ideas",
-        model=validate_openrouter_model_name(
-            provider_model(settings, configured_provider, "text")
-        ),
+        model=model,
         prompt=build_idea_lab_prompt(theme, count, genre, duration, retry_guidance),
         variables={
             "theme": theme or "tema livre criado pela IA",
@@ -144,14 +153,15 @@ async def generate_freeform_ideas(
 
 
 async def _generate_with_runtime_fallback(
-    provider: OpenRouterLLMProvider, request: LLMRequest
+    provider: LLMProvider, request: LLMRequest
 ) -> LLMResult:
     try:
         provider_call = provider.generate_structured(request)
         return await asyncio.wait_for(provider_call, timeout=IDEA_PROVIDER_TIMEOUT_SECONDS)
     except TimeoutError as exc:
+        provider_name = getattr(provider, "provider_name", "Provider")
         raise RuntimeError(
-            f"OpenRouter demorou mais de {IDEA_PROVIDER_TIMEOUT_SECONDS}s ao gerar ideias. "
+            f"{provider_name} demorou mais de {IDEA_PROVIDER_TIMEOUT_SECONDS}s ao gerar ideias. "
             "Tente novamente ou escolha um modelo de texto mais estável."
         ) from exc
     except RuntimeError as exc:

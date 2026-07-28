@@ -18,6 +18,8 @@ PROVIDER_TEST_FILES = {
     "test_mock_llm_provider.py",
     "test_mock_speech_provider.py",
     "test_mock_video_provider.py",
+    "test_omniroute_provider.py",
+    "test_omniroute_smoke.py",
     "test_openrouter_media_providers.py",
     "test_openrouter_provider.py",
     "test_prompt_compiler.py",

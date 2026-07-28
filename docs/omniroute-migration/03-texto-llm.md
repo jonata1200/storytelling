@@ -5,24 +5,24 @@ OmniRoute usando endpoint compatível com OpenAI Chat Completions.
 
 ## Checklist
 
-- [ ] Criar `app/providers/llm/omniroute.py`.
-- [ ] Implementar provider com `provider_name = "omniroute"`.
-- [ ] Usar `POST {OMNIROUTE_BASE_URL}/chat/completions`.
-- [ ] Enviar `Authorization: Bearer <OMNIROUTE_API_KEY>`.
-- [ ] Enviar `Content-Type: application/json`.
-- [ ] Manter `response_format={"type":"json_object"}` quando suportado.
-- [ ] Implementar fallback sem `response_format` para erros 400/422, se
+- [x] Criar `app/providers/llm/omniroute.py`.
+- [x] Implementar provider com `provider_name = "omniroute"`.
+- [x] Usar `POST {OMNIROUTE_BASE_URL}/chat/completions`.
+- [x] Enviar `Authorization: Bearer <OMNIROUTE_API_KEY>`.
+- [x] Enviar `Content-Type: application/json`.
+- [x] Manter `response_format={"type":"json_object"}` quando suportado.
+- [x] Implementar fallback sem `response_format` para erros 400/422, se
       necessário.
-- [ ] Reaproveitar parser de `choices[0].message.content`.
-- [ ] Redigir erros com `redact_secrets`.
-- [ ] Propagar `X-Correlation-ID`.
-- [ ] Atualizar `llm_provider_for_task` para escolher OmniRoute.
-- [ ] Atualizar preferências/modelos por etapa para permitir provider
+- [x] Reaproveitar parser de `choices[0].message.content`.
+- [x] Redigir erros com `redact_secrets`.
+- [x] Propagar `X-Correlation-ID`.
+- [x] Atualizar `llm_provider_for_task` para escolher OmniRoute.
+- [x] Atualizar preferências/modelos por etapa para permitir provider
       `omniroute`.
-- [ ] Criar testes unitários de request, headers, fallback e parsing.
-- [ ] Criar teste de erro quando `OMNIROUTE_API_KEY` está ausente.
+- [x] Criar testes unitários de request, headers, fallback e parsing.
+- [x] Criar teste de erro quando `OMNIROUTE_API_KEY` está ausente.
 
-## Fluxos impactados
+## Fluxos Impactados
 
 - Ideias iniciais.
 - Story Bible.
@@ -31,10 +31,17 @@ OmniRoute usando endpoint compatível com OpenAI Chat Completions.
 - Revisão de roteiro.
 - Agente diretor.
 
-## Critérios de aceite
+## Critérios De Aceite
 
-- [ ] Todos os fluxos de texto funcionam com `AI_PROVIDER=omniroute`.
-- [ ] OpenRouter ainda funciona quando selecionado.
-- [ ] JSON inválido continua sendo recusado.
-- [ ] `ruff`, `mypy` e testes de geração passam.
+- [x] Todos os fluxos de texto usam o provider OmniRoute quando
+      `AI_PROVIDER=omniroute`.
+- [x] OpenRouter ainda funciona quando selecionado.
+- [x] JSON inválido continua sendo recusado.
+- [x] `ruff`, `mypy` e testes de geração passam.
 
+## Resultado
+
+- Provider `OmniRouteLLMProvider` criado com endpoint OpenAI-compatible.
+- Seleção de provider por tarefa agora instancia OmniRoute ou OpenRouter.
+- Laboratório de ideias livres respeita `AI_PROVIDER=omniroute`.
+- Testes adicionados em `tests/test_omniroute_provider.py`.

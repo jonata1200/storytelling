@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.config.settings import Settings
 from app.providers.image.types import ImageGenerationRequest
 from app.visual_bible import service as visual_bible_service
 from app.visual_bible.service import (
@@ -98,6 +99,41 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
     assert getattr(provider, "provider_name", None) == "openrouter"
     assert model == "krea/krea-2-medium-turbo"
     assert directory == "openrouter_images"
+
+
+@pytest.mark.asyncio
+async def test_image_provider_uses_omniroute_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+
+    async def fake_settings(*args: object, **kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(image_model="mock-image")
+
+    monkeypatch.setattr(
+        visual_bible_service,
+        "get_settings",
+        lambda: Settings(
+            ai_provider="omniroute",
+            image_provider="omniroute",
+            omniroute_api_key="omni-secret",
+            omniroute_image_model="openai/gpt-image-2",
+        ),
+    )
+    monkeypatch.setattr(
+        visual_bible_service,
+        "get_or_create_production_settings",
+        fake_settings,
+    )
+
+    provider, model, directory = await _image_provider_for_project(
+        object(),  # type: ignore[arg-type]
+        project_id,
+    )
+
+    assert getattr(provider, "provider_name", None) == "omniroute"
+    assert model == "openai/gpt-image-2"
+    assert directory == "omniroute_images"
 
 
 @pytest.mark.asyncio

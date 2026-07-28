@@ -99,16 +99,17 @@ Modelos com sufixo `:free` e modelos `mock-*` são bloqueados porque tendem a
 falhar ou confundir o fluxo de produção.
 
 OmniRoute já pode ser configurado por `AI_PROVIDER=omniroute` ou pelos campos
-por mídia (`TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VIDEO_PROVIDER`), mas chamadas
-reais para OmniRoute ainda ficam bloqueadas até as fases específicas do plano em
-`docs/omniroute-migration`.
+por mídia (`TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VIDEO_PROVIDER`). Texto e imagem
+já usam providers OmniRoute reais; vídeo continua em OpenRouter até a fase
+específica do plano em `docs/omniroute-migration`.
 
 Preferências alteradas pela interface são gravadas em `.runtime/preferences.json`.
 O arquivo `.env` permanece somente para configuração de inicialização e não é
 modificado pela aplicação em execução.
 
-Os providers reais atualmente implementados usam OpenRouter para texto, imagem e
-vídeo. Os clipes são gerados sem narração nativa; o roteiro e a decupagem priorizam
+Os providers reais atualmente implementados usam OpenRouter ou OmniRoute para
+texto e imagem, e OpenRouter para vídeo. Os clipes são gerados sem narração
+nativa; o roteiro e a decupagem priorizam
 interação e diálogo entre personagens. Na finalização, falas presentes em
 `dialogue_text` podem ser sintetizadas como vozes de personagens quando
 `SPEECH_API_KEY` e `SPEECH_MODEL` estão configurados.

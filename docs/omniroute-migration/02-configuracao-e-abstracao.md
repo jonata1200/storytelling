@@ -45,6 +45,6 @@ imediatamente.
 - Política genérica criada em `app/config/provider_policy.py`.
 - Aliases antigos de `app/config/model_policy.py` preservados para compatibilidade.
 - OpenRouter segue como provider real padrão.
-- OmniRoute já pode ser configurado e salvo, mas chamadas reais ficam bloqueadas
-  até as fases específicas de texto, imagem e vídeo.
+- OmniRoute já pode ser configurado e salvo. Texto e imagem foram ativados nas
+  fases 3 e 4; vídeo permanece para a fase específica.
 - Testes de settings, preferências e política genérica adicionados.

@@ -7,11 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config.model_policy import ensure_openrouter_api_key
 from app.config.provider_policy import (
     effective_provider_for_channel,
+    ensure_provider_api_key,
     provider_model,
-    unavailable_provider_error,
 )
 from app.config.settings import get_settings
 from app.production.service import get_or_create_production_settings, resolve_image_model
+from app.providers.image.omniroute import OmniRouteImageProvider
 from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider, ImageResult
 
@@ -32,12 +33,13 @@ async def _image_provider_for_project(
     app_settings = settings_factory()
     production_settings = await production_settings_factory(session, project_id)
     provider = effective_provider_for_channel(app_settings, "image")
-    if provider == "omniroute":
-        raise unavailable_provider_error("omniroute", "fase 4")
     model = resolve_image_model(
         production_settings.image_model,
         provider_model(app_settings, provider, "image"),
     )
+    if provider == "omniroute":
+        ensure_provider_api_key(app_settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
+        return OmniRouteImageProvider(), model, "omniroute_images"
     ensure_openrouter_api_key(app_settings.openrouter_api_key)
     return OpenRouterImageProvider(), model, "openrouter_images"
 
@@ -69,9 +71,12 @@ async def _generate_image_with_provider_fallback(
     except RuntimeError as exc:
         if getattr(
             provider, "provider_name", ""
-        ) != "openrouter" or not _transient_image_provider_error(exc):
+        ) not in {"openrouter", "omniroute"} or not _transient_image_provider_error(exc):
             raise
+        provider_label = "OmniRoute Images"
+        if getattr(provider, "provider_name", "") == "openrouter":
+            provider_label = "OpenRouter Images"
         raise RuntimeError(
-            "OpenRouter Images falhou ao gerar a imagem real. Nenhuma imagem mock foi criada "
+            f"{provider_label} falhou ao gerar a imagem real. Nenhuma imagem mock foi criada "
             f"automaticamente. Detalhes: {exc}"
         ) from exc
