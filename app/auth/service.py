@@ -1,4 +1,4 @@
-﻿from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +8,7 @@ from app.auth.passwords import (
     validate_strong_password,
     verify_password,
 )
+from app.config.settings import get_settings
 from app.projects.models import User
 
 
@@ -23,6 +24,20 @@ async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
     return result.scalars().first()
 
 
+async def count_users(session: AsyncSession) -> int:
+    value = await session.scalar(select(func.count()).select_from(User))
+    return int(value or 0)
+
+
+async def user_registration_available(session: AsyncSession) -> bool:
+    settings = get_settings()
+    if not settings.allow_user_registration:
+        return False
+    if not settings.single_user_mode:
+        return True
+    return await count_users(session) == 0
+
+
 async def register_user(
     session: AsyncSession,
     email: str,
@@ -32,7 +47,12 @@ async def register_user(
     normalized_email = normalize_email(email)
     validate_strong_password(password, normalized_email)
     if await get_user_by_email(session, normalized_email) is not None:
-        raise ValueError("Este e-mail ja está cadastrado.")
+        raise ValueError("Este e-mail já está cadastrado.")
+    settings = get_settings()
+    if not settings.allow_user_registration:
+        raise ValueError("Cadastro desativado.")
+    if settings.single_user_mode and await count_users(session) > 0:
+        raise ValueError("Esta aplicação já possui um usuário cadastrado.")
     cleaned_display_name = str(display_name or "").strip() or display_name_from_email(
         normalized_email
     )
@@ -46,7 +66,7 @@ async def register_user(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise ValueError("Este e-mail ja está cadastrado.") from exc
+        raise ValueError("Este e-mail já está cadastrado.") from exc
     await session.refresh(user)
     return user
 

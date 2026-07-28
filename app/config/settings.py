@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 25 * 1024 * 1024
     max_generated_asset_bytes: int = 750 * 1024 * 1024
     allow_user_registration: bool = True
+    single_user_mode: bool = True
 
     openrouter_api_key: str | None = Field(default=None, repr=False)
     openrouter_base_url: str = "https://openrouter.ai/api/v1"

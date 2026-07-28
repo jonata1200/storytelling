@@ -21,7 +21,8 @@ from app.projects.models import User
 
 
 class _FakeAuthSession:
-    def __init__(self) -> None:
+    def __init__(self, user_count: int = 0) -> None:
+        self.user_count = user_count
         self.added: list[User] = []
         self.committed = False
         self.refreshed: list[User] = []
@@ -32,6 +33,9 @@ class _FakeAuthSession:
 
     async def commit(self) -> None:
         self.committed = True
+
+    async def scalar(self, _statement: object) -> int:
+        return self.user_count
 
     async def refresh(self, user: object) -> None:
         assert isinstance(user, User)
@@ -177,6 +181,10 @@ def test_password_hash_verification_is_defensive() -> None:
 async def test_register_user_normalizes_email_and_hashes_password(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("ALLOW_USER_REGISTRATION", "true")
+    monkeypatch.setenv("SINGLE_USER_MODE", "true")
+    get_settings.cache_clear()
+
     async def missing_user(_session: AsyncSession, _email: str) -> User | None:
         return None
 
@@ -197,6 +205,7 @@ async def test_register_user_normalizes_email_and_hashes_password(
     assert user.display_name == "Jonata"
     assert user.password_hash != "Se1!ha"
     assert verify_password("Se1!ha", user.password_hash)
+    get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
@@ -213,12 +222,68 @@ async def test_register_user_rejects_duplicate_email(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(auth_service, "get_user_by_email", found_user)
     fake_session = _FakeAuthSession()
 
-    with pytest.raises(ValueError, match="ja está cadastrado"):
+    with pytest.raises(ValueError, match="já está cadastrado"):
         await auth_service.register_user(
             cast(AsyncSession, fake_session),
             "user@example.com",
             "Se1!ha",
         )
+
+    assert fake_session.added == []
+    assert not fake_session.committed
+
+
+@pytest.mark.asyncio
+async def test_register_user_rejects_second_user_in_single_user_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALLOW_USER_REGISTRATION", "true")
+    monkeypatch.setenv("SINGLE_USER_MODE", "true")
+    get_settings.cache_clear()
+
+    async def missing_user(_session: AsyncSession, _email: str) -> User | None:
+        return None
+
+    monkeypatch.setattr(auth_service, "get_user_by_email", missing_user)
+    fake_session = _FakeAuthSession(user_count=1)
+
+    try:
+        with pytest.raises(ValueError, match="já possui um usuário"):
+            await auth_service.register_user(
+                cast(AsyncSession, fake_session),
+                "new@example.com",
+                "Se1!ha",
+            )
+    finally:
+        get_settings.cache_clear()
+
+    assert fake_session.added == []
+    assert not fake_session.committed
+
+
+@pytest.mark.asyncio
+async def test_register_user_rejects_when_registration_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALLOW_USER_REGISTRATION", "false")
+    monkeypatch.setenv("SINGLE_USER_MODE", "true")
+    get_settings.cache_clear()
+
+    async def missing_user(_session: AsyncSession, _email: str) -> User | None:
+        return None
+
+    monkeypatch.setattr(auth_service, "get_user_by_email", missing_user)
+    fake_session = _FakeAuthSession()
+
+    try:
+        with pytest.raises(ValueError, match="Cadastro desativado"):
+            await auth_service.register_user(
+                cast(AsyncSession, fake_session),
+                "new@example.com",
+                "Se1!ha",
+            )
+    finally:
+        get_settings.cache_clear()
 
     assert fake_session.added == []
     assert not fake_session.committed
@@ -246,6 +311,7 @@ async def test_authenticate_user_checks_email_and_password(
 
 def test_login_and_register_pages_use_email_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ALLOW_USER_REGISTRATION", "true")
+    monkeypatch.setenv("SINGLE_USER_MODE", "false")
     get_settings.cache_clear()
     try:
         client = TestClient(create_app(include_ui=False))

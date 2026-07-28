@@ -80,6 +80,7 @@ OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash
 OPENROUTER_IMAGE_MODEL=sourceful/riverflow-v2-fast
 OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0-fast
 ALLOW_USER_REGISTRATION=true
+SINGLE_USER_MODE=true
 ```
 
 No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para
@@ -144,9 +145,10 @@ readiness e as demais rotas exigem autenticação quando a aplicação não est�
 ambiente local/test.
 
 O cadastro usa e-mail como login e exige senha forte: pelo menos 6 caracteres,
-com letra maiúscula, letra minúscula, número e símbolo. Defina
-`ALLOW_USER_REGISTRATION=false` para fechar novos cadastros depois de criar os
-usuários desejados.
+com letra maiúscula, letra minúscula, número e símbolo. Com
+`SINGLE_USER_MODE=true`, apenas o primeiro cadastro é permitido; depois disso a
+tela de cadastro é bloqueada e o link "Criar uma conta" desaparece do login.
+O usuário autenticado pode sair pelo botão **Sair** na navegação da aplicação.
 
 ## Storage e custos
 

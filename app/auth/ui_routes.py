@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.service import authenticate_user, register_user
+from app.auth.service import authenticate_user, register_user, user_registration_available
 from app.auth.session import SESSION_COOKIE_NAME, create_session_token
 from app.config.settings import get_settings
 from app.database.session import get_session
@@ -15,16 +15,21 @@ from app.database.session import get_session
 router = APIRouter(include_in_schema=False)
 
 
-def _auth_page(mode: str, message: str = "", status_code: int = 200) -> HTMLResponse:
+def _auth_page(
+    mode: str,
+    message: str = "",
+    status_code: int = 200,
+    registration_available: bool = False,
+) -> HTMLResponse:
     is_register = mode == "register"
     title = "Criar conta" if is_register else "Entrar"
     action = "/auth/register" if is_register else "/auth/login"
     settings = get_settings()
     alternative_path = ""
     alternative_text = ""
-    if settings.allow_user_registration:
+    if registration_available:
         alternative_path = "/login" if is_register else "/register"
-        alternative_text = "Ja tenho conta" if is_register else "Criar uma conta"
+        alternative_text = "Já tenho conta" if is_register else "Criar uma conta"
     autocomplete = "new-password" if is_register else "current-password"
     display_name_field = (
         """
@@ -97,15 +102,23 @@ def _secure_cookie_enabled() -> bool:
 
 
 @router.get("/login")
-async def login_page() -> HTMLResponse:
-    return _auth_page("login")
+async def login_page(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> HTMLResponse:
+    return _auth_page(
+        "login",
+        registration_available=await user_registration_available(session),
+    )
 
 
 @router.get("/register")
-async def register_page() -> HTMLResponse:
-    if not get_settings().allow_user_registration:
+async def register_page(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> HTMLResponse:
+    registration_available = await user_registration_available(session)
+    if not registration_available:
         return _auth_page("login", "Cadastro desativado.", status_code=403)
-    return _auth_page("register")
+    return _auth_page("register", registration_available=registration_available)
 
 
 @router.post("/auth/login")
@@ -116,7 +129,11 @@ async def login(
 ) -> Response:
     user = await authenticate_user(session, email, password)
     if user is None:
-        return _auth_page("login", "E-mail ou senha inválidos.")
+        return _auth_page(
+            "login",
+            "E-mail ou senha inválidos.",
+            registration_available=await user_registration_available(session),
+        )
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
         SESSION_COOKIE_NAME,
@@ -136,12 +153,13 @@ async def register(
     session: Annotated[AsyncSession, Depends(get_session)],
     display_name: Annotated[str, Form()] = "",
 ) -> Response:
-    if not get_settings().allow_user_registration:
+    registration_available = await user_registration_available(session)
+    if not registration_available:
         return _auth_page("login", "Cadastro desativado.", status_code=403)
     try:
         user = await register_user(session, email, password, display_name)
     except ValueError as exc:
-        return _auth_page("register", str(exc))
+        return _auth_page("register", str(exc), registration_available=registration_available)
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
         SESSION_COOKIE_NAME,

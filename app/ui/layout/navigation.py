@@ -84,6 +84,22 @@ def user_avatar(size: str = "44px", navigate: bool = True) -> Any:
     return avatar
 
 
+def logout_button(*, dense: bool = False, label: bool = True) -> Any:
+    text = "Sair" if label else ""
+    button = ui.button(text, icon="logout").props(
+        "flat dense no-caps" if dense else "flat no-caps"
+    ).classes("text-[#a9aea9] hover:text-white")
+    button.on(
+        "click",
+        lambda: ui.run_javascript(
+            "fetch('/auth/logout', {method: 'POST'}).finally(() => "
+            "window.location.href = '/login')"
+        ),
+    )
+    button.tooltip("Sair da aplicação")
+    return button
+
+
 def home_sidebar(active: str = "") -> None:
     with ui.column().classes(
         "desktop-nav fixed left-0 top-0 bottom-0 w-24 border-r border-[#222622] "
@@ -105,6 +121,7 @@ def home_sidebar(active: str = "") -> None:
         ui.space()
         with ui.element("div").classes("mb-2"):
             user_avatar(size="48px")
+        logout_button(dense=True, label=False)
     with ui.element("nav").classes("mobile-bottom-nav mobile-home-nav"):
         for key, icon, label, target in HOME_NAV_ITEMS:
             item_classes = "mobile-nav-item"
@@ -118,6 +135,20 @@ def home_sidebar(active: str = "") -> None:
             ):
                 ui.icon(icon).classes("mobile-nav-icon")
                 ui.label(label).classes("mobile-nav-label")
+        with (
+            ui.element("button")
+            .classes("mobile-nav-item")
+            .props("type=button")
+            .on(
+                "click",
+                lambda: ui.run_javascript(
+                    "fetch('/auth/logout', {method: 'POST'}).finally(() => "
+                    "window.location.href = '/login')"
+                ),
+            )
+        ):
+            ui.icon("logout").classes("mobile-nav-icon")
+            ui.label("Sair").classes("mobile-nav-label")
 
 
 def workspace_header(project: Project, active: str, counts: dict[str, int]) -> None:
@@ -154,6 +185,7 @@ def workspace_header(project: Project, active: str, counts: dict[str, int]) -> N
         with ui.row().classes("workspace-actions items-center gap-3"):
             ui.label("PT-BR").classes("desktop-nav text-sm text-[#a9aea9] shrink-0")
             theme_toggle()
+            logout_button(dense=True)
             ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
                 "acid-bg workspace-export-button rounded-xl font-semibold shrink-0"
             )
@@ -177,5 +209,19 @@ def workspace_header(project: Project, active: str, counts: dict[str, int]) -> N
                 ui.label(label).classes("mobile-nav-label")
             if not allowed:
                 nav_button.tooltip(reason)
+        with (
+            ui.element("button")
+            .classes("mobile-nav-item")
+            .props("type=button")
+            .on(
+                "click",
+                lambda: ui.run_javascript(
+                    "fetch('/auth/logout', {method: 'POST'}).finally(() => "
+                    "window.location.href = '/login')"
+                ),
+            )
+        ):
+            ui.icon("logout").classes("mobile-nav-icon")
+            ui.label("Sair").classes("mobile-nav-label")
 
 
