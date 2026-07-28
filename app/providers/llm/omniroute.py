@@ -71,7 +71,14 @@ class OmniRouteLLMProvider:
             with urllib.request.urlopen(
                 http_request, timeout=OMNIROUTE_LLM_HTTP_TIMEOUT_SECONDS
             ) as response:
-                parsed = json.loads(response.read().decode("utf-8"))
+                raw_body = response.read()
+                content_type = str(
+                    getattr(response, "headers", {}).get("content-type", "")
+                ).lower()
+                if "text/event-stream" in content_type:
+                    parsed = self._parse_event_stream_response(raw_body)
+                else:
+                    parsed = json.loads(raw_body.decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             if use_response_format and exc.code in {400, 422}:
@@ -92,6 +99,49 @@ class OmniRouteLLMProvider:
         if not isinstance(parsed, dict):
             raise RuntimeError("OmniRoute retornou resposta fora do formato esperado")
         return parsed
+
+    def _parse_event_stream_response(self, raw_body: bytes) -> dict[str, Any]:
+        content_parts: list[str] = []
+        model = ""
+        usage: dict[str, Any] = {}
+        for raw_line in raw_body.decode("utf-8", errors="replace").splitlines():
+            line = raw_line.strip()
+            if not line.startswith("data:"):
+                continue
+            data = line.removeprefix("data:").strip()
+            if not data or data == "[DONE]":
+                continue
+            try:
+                chunk = json.loads(data)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError("OmniRoute retornou stream com JSON inválido") from exc
+            if not isinstance(chunk, dict):
+                continue
+            if error := chunk.get("error"):
+                raise RuntimeError(f"OmniRoute retornou erro: {redact_secrets(error)}")
+            model = model or str(chunk.get("model") or "")
+            if isinstance(chunk.get("usage"), dict):
+                usage = chunk["usage"]
+            choices = chunk.get("choices")
+            if not isinstance(choices, list) or not choices:
+                continue
+            first_choice = choices[0]
+            if not isinstance(first_choice, dict):
+                continue
+            message = first_choice.get("message")
+            if isinstance(message, dict) and isinstance(message.get("content"), str):
+                content_parts.append(message["content"])
+            delta = first_choice.get("delta")
+            if isinstance(delta, dict) and isinstance(delta.get("content"), str):
+                content_parts.append(delta["content"])
+        content = "".join(content_parts).strip()
+        if not content:
+            raise RuntimeError("OmniRoute retornou stream sem conteúdo")
+        return {
+            "model": model,
+            "choices": [{"message": {"content": content}}],
+            "usage": usage,
+        }
 
     def _extract_message_content(self, response: dict[str, Any]) -> str:
         if error := response.get("error"):

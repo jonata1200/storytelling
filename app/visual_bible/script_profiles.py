@@ -116,6 +116,9 @@ FEMININE_LOCATION_PARENTS = {"casa", "cidade", "cozinha", "escola", "sala"}
 
 
 def _clean_script_location_name(value: str) -> str:
+    if "/" in value:
+        value = value.rsplit("/", 1)[-1]
+        value = re.sub(r"(?i)^\s*(?:INT|EXT|INT/EXT|INTERIOR|EXTERIOR)\.?\s+", "", value)
     parts = [
         re.sub(r"\([^)]*\)", "", part).strip(" .:-")
         for part in re.split(r"\s+-\s+", value)

@@ -191,6 +191,15 @@ def register_settings_page(
                                 .props("outlined stack-label")
                                 .classes("w-full mt-4")
                             )
+                            omniroute_base_url = (
+                                ui.input(
+                                    "URL base OmniRoute",
+                                    value=current.omniroute_base_url,
+                                    placeholder="http://localhost:20128/v1",
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
                             omniroute_text_model = (
                                 ui.input(
                                     "Modelo de texto OmniRoute",
@@ -226,6 +235,9 @@ def register_settings_page(
                                 try:
                                     values = {
                                         "AI_PROVIDER": "omniroute",
+                                        "OMNIROUTE_BASE_URL": str(
+                                            omniroute_base_url.value or ""
+                                        ).strip(),
                                         "OMNIROUTE_DEFAULT_MODEL": validate_model_name(
                                             omniroute_text_model.value,
                                             "Modelo de texto OmniRoute",

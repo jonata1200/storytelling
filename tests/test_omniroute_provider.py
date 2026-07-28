@@ -21,6 +21,7 @@ from app.providers.llm.types import LLMRequest
 class _JsonResponse:
     def __init__(self, payload: dict[str, Any]) -> None:
         self.payload = payload
+        self.headers: dict[str, str] = {}
 
     def __enter__(self) -> "_JsonResponse":
         return self
@@ -30,6 +31,21 @@ class _JsonResponse:
 
     def read(self) -> bytes:
         return json.dumps(self.payload).encode("utf-8")
+
+
+class _BytesResponse:
+    def __init__(self, payload: bytes, content_type: str) -> None:
+        self.payload = payload
+        self.headers = {"content-type": content_type}
+
+    def __enter__(self) -> "_BytesResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.payload
 
 
 def _http_error(status: int, payload: str) -> urllib.error.HTTPError:
@@ -119,6 +135,42 @@ def test_omniroute_llm_provider_retries_without_response_format(
 
     assert "response_format" in posted_bodies[0]
     assert "response_format" not in posted_bodies[1]
+    assert response["choices"][0]["message"]["content"] == '{"ok": true}'
+
+
+def test_omniroute_llm_provider_accepts_event_stream_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OmniRouteLLMProvider()
+
+    monkeypatch.setattr(
+        "app.providers.llm.omniroute.get_settings",
+        lambda: Settings(
+            omniroute_api_key="omni-secret",
+            omniroute_base_url="http://localhost:20128/v1",
+        ),
+    )
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _BytesResponse:
+        _ = request, kwargs
+        return _BytesResponse(
+            (
+                b'data: {"model":"deepseek-v4-flash","choices":[{"delta":{"content":"{\\""}}]}\n\n'
+                b'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'
+                b'data: {"choices":[{"delta":{"content":"\\": true}"}}]}\n\n'
+                b"data: [DONE]\n\n"
+            ),
+            "text/event-stream",
+        )
+
+    monkeypatch.setattr("app.providers.llm.omniroute.urllib.request.urlopen", fake_urlopen)
+
+    response = provider._send_request(
+        LLMRequest(task="generate_story_ideas", prompt="{}", model="ds-web/deepseek-v4-flash"),
+        use_response_format=True,
+    )
+
+    assert response["model"] == "deepseek-v4-flash"
     assert response["choices"][0]["message"]["content"] == '{"ok": true}'
 
 

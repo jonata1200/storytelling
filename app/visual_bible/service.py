@@ -16,6 +16,8 @@ from app.core.enums import (
     AssetKind,
 )
 from app.generation.models import PromptExecution
+from app.generation.model_settings import llm_provider_for_task
+from app.generation.service import run_structured_generation
 from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
@@ -109,6 +111,32 @@ class VisualReferenceCompletionReport(TypedDict):
 
 
 
+async def _generate_visual_bible_payload_with_llm(
+    session: AsyncSession,
+    project_id: UUID,
+    latest_script: Script,
+    source_payload: dict,
+) -> dict:
+    try:
+        provider, model = await llm_provider_for_task(session, project_id, "generate_visual_bible")
+        result, _execution = await run_structured_generation(
+            session,
+            provider,
+            project_id,
+            "generate_visual_bible",
+            {
+                "script": latest_script.content,
+                "idea": source_payload,
+            },
+            artifact_id=latest_script.artifact_id,
+            model=model,
+            fallback_on_runtime_error=True,
+        )
+    except Exception:
+        return {}
+    return result.content if isinstance(result.content, dict) else {}
+
+
 async def generate_visual_bible(
     session: AsyncSession, project_id: UUID, script_id: UUID
 ) -> tuple[list[Character], list[Location], list[Prop]] | None:
@@ -120,17 +148,30 @@ async def generate_visual_bible(
     script_content = latest_script.content
     story_idea = await session.get(StoryIdea, latest_script.story_idea_id)
     source_payload = story_idea.payload if story_idea is not None else {}
+    llm_payload = await _generate_visual_bible_payload_with_llm(
+        session,
+        project_id,
+        latest_script,
+        source_payload,
+    )
     protagonist_hint = _story_idea_protagonist_name(
         story_idea.protagonist if story_idea is not None else ""
     )
 
     characters: list[Character] = []
+    llm_character_items = _profile_items(
+        _payload_section(
+            llm_payload,
+            ("characters", "personagens", "cast", "personas"),
+        )
+    )
     character_items = _profile_items(
         _payload_section(
             source_payload,
             ("characters", "personagens", "cast", "personas"),
         )
     )
+    character_items = _merge_profile_items("character", llm_character_items, character_items)
     if not character_items:
         fallback_name = protagonist_hint or (
             _script_character_names(script_content)[0]
@@ -176,12 +217,19 @@ async def generate_visual_bible(
         )
 
     locations: list[Location] = []
+    llm_location_items = _profile_items(
+        _payload_section(
+            llm_payload,
+            ("locations", "locais", "lugares", "settings", "places", "cenarios", "cenários"),
+        )
+    )
     location_items = _profile_items(
         _payload_section(
             source_payload,
             ("locations", "locais", "lugares", "settings", "places", "cenarios", "cenários"),
         )
     )
+    location_items = _merge_profile_items("location", llm_location_items, location_items)
     if script_content:
         location_items = _merge_profile_items(
             "location", location_items, _script_location_profiles(script_content)
@@ -204,6 +252,20 @@ async def generate_visual_bible(
         )
 
     props: list[Prop] = []
+    llm_prop_items = _profile_items(
+        _payload_section(
+            llm_payload,
+            (
+                "props",
+                "objetos",
+                "objects",
+                "items",
+                "itens",
+                "objetos_narrativos",
+                "narrative_props",
+            ),
+        )
+    )
     prop_items = _profile_items(
         _payload_section(
             source_payload,
@@ -218,6 +280,7 @@ async def generate_visual_bible(
             ),
         )
     )
+    prop_items = _merge_profile_items("prop", llm_prop_items, prop_items)
     if script_content:
         prop_items = _merge_profile_items("prop", prop_items, _script_prop_profiles(script_content))
     prop_profiles = [_prop_profile(raw) for raw in prop_items]

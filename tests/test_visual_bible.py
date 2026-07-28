@@ -29,6 +29,7 @@ from app.visual_bible.service import (
     visual_reference_aspect_ratio,
     visual_reference_prompt,
 )
+from app.visual_bible.script_profiles import _script_location_profiles
 
 
 def test_default_character_views_include_required_reference_sheet_items() -> None:
@@ -509,6 +510,16 @@ def test_location_reference_prompt_forbids_people() -> None:
     assert "sem personagens" in prompt
     assert "Proporcao: 16:9" in prompt
     assert len(prompt) < 720
+
+
+def test_script_location_profiles_split_composite_int_ext_sluglines() -> None:
+    profiles = _script_location_profiles(
+        "CENA 1\n"
+        "INT. ATELIÊ DE HELENA / EXT. AEROPORTO - DIA (MONTAGEM)\n"
+        "Helena fecha a porta enquanto Laura espera no embarque."
+    )
+
+    assert [item["name"] for item in profiles] == ["Aeroporto"]
 
 
 def test_prop_reference_prompt_requires_white_background_and_object_focus() -> None:

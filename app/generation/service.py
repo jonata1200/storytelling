@@ -24,6 +24,7 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
     "generate_story_ideas": "Generate Story Ideas",
     "generate_script": "Generate Script",
     "generate_scenes_and_shots": "Generate Scenes And Shots",
+    "generate_visual_bible": "Generate Visual Bible",
     "revise_script": "Revise Script",
     "director_agent_chat": "Director Agent Chat",
 }
@@ -33,6 +34,7 @@ CREATIVE_NARRATIVE_TASKS = {
     "generate_story_ideas",
     "generate_script",
     "generate_scenes_and_shots",
+    "generate_visual_bible",
     "revise_script",
 }
 
@@ -133,6 +135,31 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         '"duration_seconds":45,"shots":[{{"shot_number":1,"duration_seconds":15,'
         '"narration_text":"...","dialogue_text":"","action":"...","emotion":"...",'
         '"visual_composition":"...","camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}}]}}]}}'
+    ),
+    "generate_visual_bible": (
+        "Você é diretor de arte e prompt designer para imagens geradas por IA. "
+        "A partir do roteiro em {script} e da ideia aprovada em {idea}, crie uma "
+        "biblioteca visual objetiva para produção: personagens, locais e objetos. "
+        "Extraia apenas itens que aparecem ou são claramente necessários no roteiro. "
+        "Para cada personagem, descreva identidade visual consistente, idade aparente, "
+        "gênero visual, corpo, rosto, pele, olhos, cabelo, figurino base exclusivo, "
+        "paleta, papel narrativo, personalidade e arco. Para cada local, descreva "
+        "função dramática, layout filmável, materiais, paleta, luz e regras espaciais. "
+        "Para cada objeto, descreva importância narrativa, dimensões, material, cor, "
+        "estado, dono/relação narrativa e cenas relevantes. Não gere imagens. "
+        "Não use nomes genéricos como Personagem, Local ou Objeto. "
+        "Os campos devem ser específicos o bastante para virarem prompts fotorrealistas "
+        "de continuidade. Responda somente JSON válido, sem markdown, neste formato: "
+        '{{"characters":[{{"name":"...","role":"...","gender":"personagem feminino",'
+        '"apparent_age":"...","body_type":"...","face_shape":"...","skin_tone":"...",'
+        '"eyes":"...","hair":"...","base_outfit":"...","palette":["..."],'
+        '"personality":"...","arc":"...","scene_numbers":[1]}}],'
+        '"locations":[{{"name":"...","description":"...","layout":"...",'
+        '"materials":["..."],"palette":["..."],"lighting":"...",'
+        '"scene_numbers":[1]}}],'
+        '"props":[{{"name":"...","narrative_importance":"...","dimensions":"...",'
+        '"material":"...","color":"...","state":"...","owner":"...",'
+        '"scene_numbers":[1]}}]}}'
     ),
     "revise_script": (
         "Revise o roteiro existente atendendo ao pedido do usuario. "

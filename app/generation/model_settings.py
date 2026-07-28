@@ -19,12 +19,14 @@ NARRATIVE_TASKS = [
     "generate_story_ideas",
     "generate_script",
     "generate_scenes_and_shots",
+    "generate_visual_bible",
 ]
 
 TASK_LABELS = {
     "generate_story_ideas": "Ideias",
     "generate_script": "Roteiro",
     "generate_scenes_and_shots": "Cenas e planos",
+    "generate_visual_bible": "Biblioteca visual",
 }
 
 
