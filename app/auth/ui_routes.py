@@ -1,13 +1,16 @@
 # ruff: noqa: E501
 
 from html import escape
+from typing import Annotated
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.service import authenticate_user, register_user
 from app.auth.session import SESSION_COOKIE_NAME, create_session_token
-from app.auth.user_store import create_user, verify_user
 from app.config.settings import get_settings
+from app.database.session import get_session
 
 router = APIRouter(include_in_schema=False)
 
@@ -23,6 +26,19 @@ def _auth_page(mode: str, message: str = "", status_code: int = 200) -> HTMLResp
         alternative_path = "/login" if is_register else "/register"
         alternative_text = "Ja tenho conta" if is_register else "Criar uma conta"
     autocomplete = "new-password" if is_register else "current-password"
+    display_name_field = (
+        """
+              <label for="display_name">Nome</label>
+              <input id="display_name" name="display_name" autocomplete="name">
+        """
+        if is_register
+        else ""
+    )
+    password_hint = (
+        '<p class="hint">Use 6+ caracteres com maiuscula, minuscula, numero e simbolo.</p>'
+        if is_register
+        else ""
+    )
     escaped_message = escape(message)
     app_name = escape(settings.app_name)
     return HTMLResponse(
@@ -48,6 +64,7 @@ def _auth_page(mode: str, message: str = "", status_code: int = 200) -> HTMLResp
             button {{ width:100%; min-height:46px; margin-top:22px; border:1px solid rgba(90,163,240,.7); border-radius:8px; background:linear-gradient(135deg, var(--accent), var(--blue)); color:#031019; font-weight:800; cursor:pointer; box-shadow:0 0 24px rgba(90,163,240,.25); }}
             a {{ color:var(--accent); text-decoration:none; }}
             .message {{ margin:0 0 12px; padding:10px 12px; border-radius:8px; background:#35231f; color:#ffcabd; border:1px solid #6c3a31; }}
+            .hint {{ margin:8px 0 0; font-size:12px; line-height:1.5; color:var(--muted); }}
             .footer {{ margin-top:18px; text-align:center; font-size:14px; }}
           </style>
         </head>
@@ -58,10 +75,12 @@ def _auth_page(mode: str, message: str = "", status_code: int = 200) -> HTMLResp
             <p>Acesse seu estudio de storytelling.</p>
             {f'<div class="message">{escaped_message}</div>' if message else ''}
             <form method="post" action="{action}">
-              <label for="username">Usuario</label>
-              <input id="username" name="username" autocomplete="username" required minlength="3">
+              {display_name_field}
+              <label for="email">E-mail</label>
+              <input id="email" name="email" type="email" autocomplete="email" required>
               <label for="password">Senha</label>
-              <input id="password" name="password" type="password" autocomplete="{autocomplete}" required minlength="8">
+              <input id="password" name="password" type="password" autocomplete="{autocomplete}" required minlength="6">
+              {password_hint}
               <button type="submit">{title}</button>
             </form>
             {f'<div class="footer"><a href="{alternative_path}">{alternative_text}</a></div>' if alternative_path else ''}
@@ -90,13 +109,18 @@ async def register_page() -> HTMLResponse:
 
 
 @router.post("/auth/login")
-async def login(username: str = Form(...), password: str = Form(...)) -> Response:
-    if not verify_user(username, password):
-        return _auth_page("login", "Usuario ou senha invalidos.")
+async def login(
+    email: Annotated[str, Form(...)],
+    password: Annotated[str, Form(...)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    user = await authenticate_user(session, email, password)
+    if user is None:
+        return _auth_page("login", "E-mail ou senha invalidos.")
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
         SESSION_COOKIE_NAME,
-        create_session_token(username.strip().lower()),
+        create_session_token(user.email),
         httponly=True,
         samesite="lax",
         secure=_secure_cookie_enabled(),
@@ -107,18 +131,21 @@ async def login(username: str = Form(...), password: str = Form(...)) -> Respons
 
 @router.post("/auth/register")
 async def register(
-    username: str = Form(...), password: str = Form(...)
+    email: Annotated[str, Form(...)],
+    password: Annotated[str, Form(...)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    display_name: Annotated[str, Form()] = "",
 ) -> Response:
     if not get_settings().allow_user_registration:
         return _auth_page("login", "Cadastro desativado.", status_code=403)
     try:
-        user = create_user(username, password)
+        user = await register_user(session, email, password, display_name)
     except ValueError as exc:
         return _auth_page("register", str(exc))
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
         SESSION_COOKIE_NAME,
-        create_session_token(user.username),
+        create_session_token(user.email),
         httponly=True,
         samesite="lax",
         secure=_secure_cookie_enabled(),

@@ -190,6 +190,50 @@ def apply_body_style() -> None:
             background:#dff0ff!important;
             border-color:#9dccf1!important;
           }
+          .prompt-attachment-chip {
+            display:inline-flex;
+            align-items:center;
+            gap:7px;
+            max-width:100%;
+            min-height:34px;
+            padding:4px 4px 4px 10px;
+            color:#d9ecff;
+            background:rgba(90,163,240,.10);
+            border:1px solid rgba(90,163,240,.24);
+            border-radius:8px;
+            box-shadow:inset 0 0 0 1px rgba(255,255,255,.03);
+          }
+          .prompt-attachment-label {
+            max-width:min(320px, calc(100vw - 130px));
+            overflow:hidden;
+            text-overflow:ellipsis;
+            white-space:nowrap;
+            font-size:13px!important;
+            line-height:18px!important;
+            color:inherit!important;
+          }
+          .prompt-attachment-remove {
+            width:26px!important;
+            height:26px!important;
+            min-height:26px!important;
+            color:#9fd3ff!important;
+          }
+          .prompt-attachment-remove:hover {
+            color:#ffffff!important;
+            background:rgba(255,107,129,.18)!important;
+          }
+          body:not(.body--dark) .prompt-attachment-chip {
+            color:#256fa8;
+            background:#edf6ff;
+            border-color:#c9e2f8;
+          }
+          body:not(.body--dark) .prompt-attachment-remove {
+            color:#397faf!important;
+          }
+          body:not(.body--dark) .prompt-attachment-remove:hover {
+            color:#9b1c34!important;
+            background:#ffe4ea!important;
+          }
           .visual-placeholder {
             background:
               linear-gradient(135deg, rgba(90,163,240,.22), rgba(90,163,240,.08) 42%, rgba(5,10,16,.96) 100%)!important;

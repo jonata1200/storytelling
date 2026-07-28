@@ -79,7 +79,7 @@ OPENROUTER_API_KEY=sua_chave_aqui
 OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash
 OPENROUTER_IMAGE_MODEL=sourceful/riverflow-v2-fast
 OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0-fast
-ALLOW_USER_REGISTRATION=false
+ALLOW_USER_REGISTRATION=true
 ```
 
 No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para
@@ -140,6 +140,11 @@ rotas operacionais em `/api/v1` exigem cookie de sessao ou token bearer gerado
 pelo fluxo de login. O endpoint `/api/v1/health/live` permanece publico; o
 readiness e as demais rotas exigem autenticacao quando a aplicacao nao esta em
 ambiente local/test.
+
+O cadastro usa e-mail como login e exige senha forte: pelo menos 6 caracteres,
+com letra maiuscula, letra minuscula, numero e simbolo. Defina
+`ALLOW_USER_REGISTRATION=false` para fechar novos cadastros depois de criar os
+usuarios desejados.
 
 ## Storage e custos
 

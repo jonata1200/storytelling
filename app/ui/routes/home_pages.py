@@ -70,6 +70,7 @@ def register_home_pages(
                         user_avatar(size="48px")
                 with ui.column().classes("w-full max-w-4xl mx-auto items-center text-center gap-4"):
                     reference_uploads: list[dict[str, Any]] = []
+                    uploaded_script: dict[str, Any] | None = None
                     with ui.element("div").classes(
                         "chat-shell glass rounded-3xl p-4 md:p-5 w-full min-h-[260px] flex flex-col gap-3"
                     ):
@@ -89,6 +90,7 @@ def register_home_pages(
                                 "Um prompt simples ja basta: o agente cria briefing, ideia e roteiro inicial."
                             )
                         async def upload_script(event: Any) -> None:
+                            nonlocal uploaded_script
                             try:
                                 content = await event.file.read()
                                 extracted = extract_script_text(event.file.name, content)
@@ -98,27 +100,47 @@ def register_home_pages(
                             except Exception as exc:
                                 ui.notify(f"Não foi possível ler o arquivo: {exc}", color="negative")
                                 return
+                            previous_text = str(idea.value or "")
+                            uploaded_script = {
+                                "filename": event.file.name,
+                                "content": extracted,
+                                "previous_text": previous_text,
+                            }
                             idea.value = extracted
                             idea.update()
+                            attachment_list.refresh()
                             ui.notify(
                                 f"Roteiro importado de {event.file.name}.",
                                 color="positive",
                             )
 
                         @ui.refreshable
-                        def reference_upload_list() -> None:
-                            if not reference_uploads:
-                                ui.label("Nenhuma imagem de referência anexada.").classes(
-                                    "text-xs text-[#8f9590]"
-                                )
+                        def attachment_list() -> None:
+                            if uploaded_script is None and not reference_uploads:
                                 return
                             with ui.row().classes("w-full gap-2 flex-wrap"):
-                                for item in reference_uploads:
-                                    ui.badge(
-                                        f"Referência visual: {item['filename']}"
-                                    ).classes(
-                                        "rounded-lg px-2 py-1 bg-[#243342] text-[#dcecff]"
-                        )
+                                if uploaded_script is not None:
+                                    with ui.element("div").classes("prompt-attachment-chip"):
+                                        ui.icon("description").classes("text-base")
+                                        ui.label(f"Roteiro: {uploaded_script['filename']}").classes(
+                                            "prompt-attachment-label"
+                                        )
+                                        ui.button(
+                                            icon="close",
+                                            on_click=remove_uploaded_script,
+                                        ).props("flat round dense").classes("prompt-attachment-remove")
+                                for index, item in enumerate(reference_uploads):
+                                    with ui.element("div").classes("prompt-attachment-chip"):
+                                        ui.icon("image").classes("text-base")
+                                        ui.label(f"Imagem: {item['filename']}").classes(
+                                            "prompt-attachment-label"
+                                        )
+                                        ui.button(
+                                            icon="close",
+                                            on_click=lambda item_index=index: remove_reference_upload(
+                                                item_index
+                                            ),
+                                        ).props("flat round dense").classes("prompt-attachment-remove")
 
                         async def upload_reference_image(event: Any) -> None:
                             try:
@@ -134,11 +156,28 @@ def register_home_pages(
                                 ui.notify(f"Não foi possível anexar a imagem: {exc}", color="negative")
                                 return
                             reference_uploads.append(prepared)
-                            reference_upload_list.refresh()
+                            attachment_list.refresh()
                             ui.notify(
                                 "Referência visual anexada.",
                                 color="positive",
                             )
+
+                        def remove_uploaded_script() -> None:
+                            nonlocal uploaded_script
+                            if uploaded_script is None:
+                                return
+                            if str(idea.value or "") == str(uploaded_script.get("content") or ""):
+                                idea.value = str(uploaded_script.get("previous_text") or "")
+                                idea.update()
+                            uploaded_script = None
+                            attachment_list.refresh()
+                            ui.notify("Roteiro removido.", color="warning")
+
+                        def remove_reference_upload(index: int) -> None:
+                            if 0 <= index < len(reference_uploads):
+                                reference_uploads.pop(index)
+                                attachment_list.refresh()
+                                ui.notify("Imagem de referência removida.", color="warning")
 
                         with ui.element("div").classes("prompt-composer w-full relative"):
                             idea = (
@@ -197,7 +236,7 @@ def register_home_pages(
                                     "prompt-send-button acid-bg shadow-lg"
                                 )
                         with ui.column().classes("w-full gap-2 text-left px-1"):
-                            reference_upload_list()
+                            attachment_list()
                 with (
                     ui.column().props("id=projects").classes("w-full max-w-6xl mx-auto gap-4 pt-3")
                 ):
