@@ -85,7 +85,7 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     with pytest.raises(ValueError, match="not allowed"):
         save_runtime_preferences({"DATABASE_URL": "attacker"}, path)
     with pytest.raises(ValueError, match="control character"):
-        save_runtime_preferences({"OPENROUTER_DEFAULT_MODEL": "mock\nAPP_DEBUG=true"}, path)
+        save_runtime_preferences({"OmniRoute_DEFAULT_MODEL": "mock\nAPP_DEBUG=true"}, path)
 
 
 def test_runtime_json_corruption_falls_back_safely(tmp_path: Path) -> None:
@@ -188,3 +188,4 @@ def test_script_regeneration_does_not_move_advanced_project_backwards() -> None:
     _advance_project_status_when_reachable(project, ProjectStatus.SCRIPT_APPROVAL)
 
     assert project.status == ProjectStatus.VISUAL_BIBLE_GENERATION
+

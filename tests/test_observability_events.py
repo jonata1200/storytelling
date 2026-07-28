@@ -64,15 +64,15 @@ def test_provider_channel_readiness_reports_omniroute_media_components() -> None
     assert video.details["api_key_configured"] == "true"
 
 
-def test_provider_channel_readiness_keeps_openrouter_rollback_visible() -> None:
-    settings = Settings(ai_provider="omniroute", image_provider="openrouter")
+def test_provider_channel_readiness_reports_missing_omniroute_configuration() -> None:
+    settings = Settings(ai_provider="omniroute", omniroute_api_key=None)
 
     image = _provider_channel_readiness(settings, "image")
 
     assert image.name == "image_provider"
     assert image.status == "degraded"
-    assert image.details["provider"] == "openrouter"
-    assert "OPENROUTER_API_KEY" in image.message
+    assert image.details["provider"] == "omniroute"
+    assert "OMNIROUTE_API_KEY" in image.message
 
 
 class _FakeEventSession:

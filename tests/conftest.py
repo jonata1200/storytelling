@@ -22,8 +22,6 @@ PROVIDER_TEST_FILES = {
     "test_omniroute_smoke.py",
     "test_omniroute_video_speech_smoke.py",
     "test_omniroute_video_speech.py",
-    "test_openrouter_media_providers.py",
-    "test_openrouter_provider.py",
     "test_prompt_compiler.py",
     "test_speech_provider.py",
     "test_visual_bible.py",

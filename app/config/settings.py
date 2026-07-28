@@ -8,10 +8,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.config.provider_policy import normalize_api_key, normalize_provider_name
 
 
-def normalize_openrouter_api_key(value: str | None) -> str | None:
-    return normalize_api_key(value, "openrouter")
-
-
 def normalize_omniroute_api_key(value: str | None) -> str | None:
     return normalize_api_key(value, "omniroute")
 
@@ -34,14 +30,6 @@ class Settings(BaseSettings):
     allow_user_registration: bool = True
     single_user_mode: bool = True
 
-    openrouter_api_key: str | None = Field(default=None, repr=False)
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_site_url: str = "http://127.0.0.1:8000"
-    openrouter_app_title: str = "Storytelling"
-    openrouter_default_model: str = "deepseek/deepseek-v4-flash"
-    openrouter_image_model: str = "sourceful/riverflow-v2-fast"
-    openrouter_video_model: str = "bytedance/seedance-2.0-fast"
-    openrouter_image_timeout_seconds: int = 360
     omniroute_api_key: str | None = Field(default=None, repr=False)
     omniroute_base_url: str = "https://omnirouters.com/v1"
     omniroute_default_model: str = "deepseek/deepseek-v4-flash"
@@ -69,7 +57,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def reject_insecure_non_local_defaults(self) -> "Settings":
-        self.openrouter_api_key = normalize_openrouter_api_key(self.openrouter_api_key)
         self.omniroute_api_key = normalize_omniroute_api_key(self.omniroute_api_key)
         self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
         self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")

@@ -124,7 +124,7 @@ async def _fake_idea_generation(provider: object, request: LLMRequest) -> LLMRes
             ]
         },
         model=request.model,
-        provider="openrouter",
+        provider="omniroute",
     )
 
 
@@ -135,7 +135,7 @@ async def test_generate_freeform_ideas_returns_ten_ai_suggested_ideas(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(
@@ -155,7 +155,7 @@ async def test_generate_freeform_ideas_respects_selected_genre(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(count=10, genre="Aventura")
@@ -171,7 +171,7 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(count=99, target_duration_minutes=25)
@@ -181,46 +181,46 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_requires_openrouter_key(
+async def test_generate_freeform_ideas_requires_omniroute_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="openrouter", openrouter_api_key=None),
+        lambda: Settings(ai_provider="omniroute", omniroute_api_key=None),
     )
 
-    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+    with pytest.raises(ValueError, match="OMNIROUTE_API_KEY"):
         await generate_freeform_ideas(count=3)
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_reports_openrouter_failure(
+async def test_generate_freeform_ideas_reports_omniroute_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class FailingOpenRouterProvider:
-        provider_name = "openrouter"
+    class FailingOmniRouteProvider:
+        provider_name = "omniroute"
 
         async def generate_structured(self, request: object) -> NoReturn:
-            raise RuntimeError("OpenRouter HTTP 429: rate limit")
+            raise RuntimeError("OmniRoute HTTP 429: rate limit")
 
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
-    monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", FailingOpenRouterProvider)
+    monkeypatch.setattr(idea_lab, "OmniRouteLLMProvider", FailingOmniRouteProvider)
 
     with pytest.raises(RuntimeError, match="Não foi possível gerar ideias"):
         await generate_freeform_ideas(count=3, genre="Suspense")
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_reports_openrouter_timeout(
+async def test_generate_freeform_ideas_reports_omniroute_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class SlowOpenRouterProvider:
-        provider_name = "openrouter"
+    class SlowOmniRouteProvider:
+        provider_name = "omniroute"
 
         async def generate_structured(self, request: LLMRequest) -> LLMResult:
             await asyncio.sleep(0.05)
@@ -229,9 +229,9 @@ async def test_generate_freeform_ideas_reports_openrouter_timeout(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
-    monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", SlowOpenRouterProvider)
+    monkeypatch.setattr(idea_lab, "OmniRouteLLMProvider", SlowOmniRouteProvider)
     monkeypatch.setattr(idea_lab, "IDEA_PROVIDER_TIMEOUT_SECONDS", 0.001)
 
     with pytest.raises(RuntimeError, match="demorou mais"):
@@ -243,7 +243,7 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class InvalidThenValidProvider:
-        provider_name = "openrouter"
+        provider_name = "omniroute"
 
         def __init__(self) -> None:
             self.prompts: list[str] = []
@@ -302,9 +302,9 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
-    monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", lambda: provider)
+    monkeypatch.setattr(idea_lab, "OmniRouteLLMProvider", lambda: provider)
 
     ideas = await generate_freeform_ideas(count=1, genre="Suspense")
 
@@ -315,11 +315,11 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_keeps_partial_valid_openrouter_response(
+async def test_generate_freeform_ideas_keeps_partial_valid_omniroute_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class PartialProvider:
-        provider_name = "openrouter"
+        provider_name = "omniroute"
 
         async def generate_structured(self, request: LLMRequest) -> LLMResult:
             return LLMResult(
@@ -357,9 +357,9 @@ async def test_generate_freeform_ideas_keeps_partial_valid_openrouter_response(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="openrouter", openrouter_api_key="sk-or-v1-test"),
+        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
-    monkeypatch.setattr(idea_lab, "OpenRouterLLMProvider", PartialProvider)
+    monkeypatch.setattr(idea_lab, "OmniRouteLLMProvider", PartialProvider)
 
     ideas = await generate_freeform_ideas(count=3, genre="Drama")
 
@@ -515,3 +515,4 @@ async def test_list_story_ideas_orders_newest_first() -> None:
 
     assert ideas == []
     assert "story_ideas.created_at DESC" in session.executed_sql
+

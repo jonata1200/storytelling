@@ -56,8 +56,8 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
         pages,
         "get_settings",
         lambda: SimpleNamespace(
-            openrouter_image_model="sourceful/riverflow-v2-fast",
-            openrouter_video_model="bytedance/seedance-2.0-fast",
+            OmniRoute_image_model="sourceful/riverflow-v2-fast",
+            OmniRoute_video_model="bytedance/seedance-2.0-fast",
         ),
     )
     idea = {
@@ -160,7 +160,7 @@ async def test_generate_script_does_not_save_mock_when_provider_fails_before_jso
         return object(), "unstable-model"
 
     async def fake_run_structured_generation(*args: object, **kwargs: object) -> NoReturn:
-        raise RuntimeError("OpenRouter retornou conteúdo que não é JSON válido")
+        raise RuntimeError("OmniRoute retornou conteúdo que não é JSON válido")
 
     async def fake_create_artifact(*args: object, **kwargs: object) -> object:
         raise AssertionError("roteiro mock/local não deve ser salvo como geração real")
@@ -180,7 +180,7 @@ async def test_generate_script_does_not_save_mock_when_provider_fails_before_jso
     monkeypatch.setattr(storytelling_service, "_add_dependency", fake_add_dependency)
     monkeypatch.setattr(storytelling_service, "advance_project_status", lambda *args: None)
 
-    with pytest.raises(RuntimeError, match="OpenRouter retornou"):
+    with pytest.raises(RuntimeError, match="OmniRoute retornou"):
         await storytelling_service.generate_script(
             cast(AsyncSession, FakeSession()),
             project_id,
@@ -277,3 +277,4 @@ async def test_project_chat_can_trigger_script_generation(
     assert message == "Roteiro criado e dividido em cenas e planos."
     assert should_reload is True
     assert calls == ["ideas", "script", "scenes"]
+

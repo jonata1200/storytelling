@@ -7,18 +7,6 @@ def test_settings_defaults_to_omniroute_provider() -> None:
     assert settings.ai_provider == "omniroute"
 
 
-def test_settings_rejects_invalid_openrouter_api_key() -> None:
-    settings = Settings(openrouter_api_key="JKl1464&*")
-
-    assert settings.openrouter_api_key is None
-
-
-def test_settings_strips_valid_openrouter_api_key() -> None:
-    settings = Settings(openrouter_api_key="  sk-or-v1-test  ")
-
-    assert settings.openrouter_api_key == "sk-or-v1-test"
-
-
 def test_settings_reads_omniroute_configuration() -> None:
     settings = Settings(
         ai_provider="omniroute",

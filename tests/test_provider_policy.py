@@ -18,9 +18,9 @@ def test_validate_model_name_blocks_free_and_mock_models() -> None:
 
 
 def test_effective_provider_for_channel_uses_media_override() -> None:
-    settings = Settings(ai_provider="openrouter", image_provider="omniroute")
+    settings = Settings(ai_provider="omniroute", image_provider="omniroute")
 
-    assert effective_provider_for_channel(settings, "text") == "openrouter"
+    assert effective_provider_for_channel(settings, "text") == "omniroute"
     assert effective_provider_for_channel(settings, "image") == "omniroute"
 
 

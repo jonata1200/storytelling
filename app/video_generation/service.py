@@ -6,7 +6,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetVersion
-from app.config.model_policy import ensure_openrouter_api_key
 from app.config.provider_policy import (
     effective_provider_for_channel,
     ensure_provider_api_key,
@@ -37,7 +36,6 @@ from app.production.service import get_or_create_production_settings, resolve_vi
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.providers.video.omniroute import OmniRouteVideoProvider
-from app.providers.video.openrouter import OpenRouterVideoProvider
 from app.providers.video.types import VideoProvider, VideoRequest
 from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
@@ -173,16 +171,6 @@ async def _video_provider_for_project(
         model or production_settings.video_model,
         provider_model(app_settings, resolved_provider, "video"),
     )
-    if resolved_provider == "openrouter":
-        ensure_openrouter_api_key(app_settings.openrouter_api_key)
-        return (
-            OpenRouterVideoProvider(),
-            "openrouter",
-            requested_model,
-            "openrouter_videos",
-            production_settings.aspect_ratio,
-            production_settings.video_resolution,
-        )
     if resolved_provider == "omniroute":
         ensure_provider_api_key(app_settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
         return (
@@ -195,7 +183,7 @@ async def _video_provider_for_project(
         )
     if resolved_provider == "mock":
         raise ValueError("Provider mock bloqueado. Use um provider real de vídeo.")
-    raise ValueError(f"Unsupported video provider: {provider_name}")
+    raise ValueError(f"Provider de vídeo não suportado: {provider_name}. Use OmniRoute.")
 
 
 async def _asset_storage_uri(session: AsyncSession, asset_id: UUID) -> str | None:

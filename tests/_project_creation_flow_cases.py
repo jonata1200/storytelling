@@ -503,8 +503,8 @@ def test_asset_url_maps_storage_prefixed_relative_path(
         lambda: SimpleNamespace(local_storage_path=storage_root),
     )
 
-    assert _asset_url("storage/openrouter_images/project-1/front view.png") == (
-        "/storage/openrouter_images/project-1/front%20view.png"
+    assert _asset_url("storage/OmniRoute_images/project-1/front view.png") == (
+        "/storage/OmniRoute_images/project-1/front%20view.png"
     )
 
 
@@ -1109,3 +1109,4 @@ def test_workspace_tabs_start_with_script() -> None:
     tab_keys = [key for _, key in pages.WORKSPACE_TABS]
 
     assert tab_keys[:2] == ["script", "assets"]
+

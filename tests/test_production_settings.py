@@ -33,7 +33,7 @@ def test_production_payload_normalizes_model_and_intensity() -> None:
     assert payload["motion_intensity"] == 7
 
 
-def test_production_payload_rejects_mock_and_openrouter_free_models() -> None:
+def test_production_payload_rejects_mock_and_OmniRoute_free_models() -> None:
     with pytest.raises(ValueError, match="mock"):
         _validated_production_payload({"image_model": "mock-image"})
 
@@ -65,3 +65,4 @@ def test_resolve_image_model_uses_global_default_for_legacy_project_default() ->
 def test_resolve_image_model_requires_real_model_when_no_default_exists() -> None:
     with pytest.raises(ValueError, match="modelo real"):
         resolve_image_model("mock-image", "")
+

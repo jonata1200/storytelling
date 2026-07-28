@@ -70,10 +70,8 @@ existindo por compatibilidade e chamam o script unificado.
 
 ## Provedores de IA
 
-OmniRoute é o provider padrão para texto, imagem e vídeo. Sem chave válida do
-provider ativo, as etapas de IA retornam erro para a interface, em vez de gerar
-conteúdo mock. OpenRouter permanece disponível como rollback temporário via
-configuração.
+OmniRoute é o provider único para texto, imagem e vídeo. Sem chave válida, as
+etapas de IA retornam erro para a interface, em vez de gerar conteúdo mock.
 Configure no `.env`:
 
 ```env
@@ -87,10 +85,6 @@ OMNIROUTE_DEFAULT_MODEL=deepseek/deepseek-v4-flash
 OMNIROUTE_IMAGE_MODEL=sourceful/riverflow-v2-fast
 OMNIROUTE_VIDEO_MODEL=bytedance/seedance-2.0-fast
 OMNIROUTE_SPEECH_MODEL=
-OPENROUTER_API_KEY=
-OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash
-OPENROUTER_IMAGE_MODEL=sourceful/riverflow-v2-fast
-OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0-fast
 SPEECH_PROVIDER=openai_compatible
 SPEECH_MODEL=
 ALLOW_USER_REGISTRATION=true
@@ -103,8 +97,7 @@ Modelos com sufixo `:free` e modelos `mock-*` são bloqueados porque tendem a
 falhar ou confundir o fluxo de produção.
 
 OmniRoute pode ser configurado globalmente por `AI_PROVIDER=omniroute` ou por
-mídia (`TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VIDEO_PROVIDER`). Para rollback,
-use `AI_PROVIDER=openrouter` ou selecione OpenRouter apenas no canal desejado.
+mídia (`TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VIDEO_PROVIDER`).
 Para vozes dos personagens, use
 `SPEECH_PROVIDER=omniroute` com `OMNIROUTE_API_KEY` e `OMNIROUTE_SPEECH_MODEL`
 ou mantenha `SPEECH_PROVIDER=openai_compatible`.
@@ -113,8 +106,8 @@ Preferências alteradas pela interface são gravadas em `.runtime/preferences.js
 O arquivo `.env` permanece somente para configuração de inicialização e não é
 modificado pela aplicação em execução.
 
-Os providers reais atualmente implementados usam OpenRouter ou OmniRoute para
-texto, imagem e vídeo. Os clipes são gerados sem narração
+Os providers reais atualmente implementados usam OmniRoute para texto, imagem e
+vídeo. Os clipes são gerados sem narração
 nativa; o roteiro e a decupagem priorizam
 interação e diálogo entre personagens. Na finalização, falas presentes em
 `dialogue_text` podem ser sintetizadas como vozes de personagens quando

@@ -38,24 +38,24 @@ def test_default_character_views_include_required_reference_sheet_items() -> Non
 
 
 def test_sourceful_502_is_treated_as_transient_image_provider_error() -> None:
-    error = RuntimeError("OpenRouter Images HTTP 502: Sourceful returned an internal error")
+    error = RuntimeError("OmniRoute Images HTTP 502: provider returned an internal error")
 
     assert _transient_image_provider_error(error) is True
 
 
 @pytest.mark.asyncio
-async def test_openrouter_image_transient_error_is_reported_without_mock_fallback(
+async def test_omniroute_image_transient_error_is_reported_without_mock_fallback(
     tmp_path: Path,
 ) -> None:
-    class FailingOpenRouterProvider:
-        provider_name = "openrouter"
+    class FailingOmniRouteProvider:
+        provider_name = "omniroute"
 
         async def generate(self, request: ImageGenerationRequest) -> object:
-            raise RuntimeError("OpenRouter Images HTTP 502: Sourceful returned an internal error")
+            raise RuntimeError("OmniRoute Images HTTP 502: provider returned an internal error")
 
     with pytest.raises(RuntimeError, match="Nenhuma imagem mock foi criada"):
         await _generate_image_with_provider_fallback(
-            FailingOpenRouterProvider(),  # type: ignore[arg-type]
+            FailingOmniRouteProvider(),  # type: ignore[arg-type]
             ImageGenerationRequest(
                 prompt="Personagem em pe, vista frontal",
                 target_id="character-1",
@@ -81,10 +81,10 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         visual_bible_service,
         "get_settings",
         lambda: SimpleNamespace(
-            ai_provider="openrouter",
-            image_provider="openrouter",
-            openrouter_api_key="sk-or-v1-test",
-            openrouter_image_model="krea/krea-2-medium-turbo",
+            ai_provider="omniroute",
+            image_provider="omniroute",
+            omniroute_api_key="omni-secret",
+            omniroute_image_model="openai/gpt-image-2",
         ),
     )
     monkeypatch.setattr(
@@ -98,9 +98,9 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         project_id,
     )
 
-    assert getattr(provider, "provider_name", None) == "openrouter"
-    assert model == "krea/krea-2-medium-turbo"
-    assert directory == "openrouter_images"
+    assert getattr(provider, "provider_name", None) == "omniroute"
+    assert model == "openai/gpt-image-2"
+    assert directory == "omniroute_images"
 
 
 @pytest.mark.asyncio
@@ -149,10 +149,10 @@ async def test_image_provider_reports_missing_key_for_real_image_model(
         visual_bible_service,
         "get_settings",
         lambda: SimpleNamespace(
-            ai_provider="openrouter",
-            image_provider="openrouter",
-            openrouter_api_key=None,
-            openrouter_image_model="krea/krea-2-medium-turbo",
+            ai_provider="omniroute",
+            image_provider="omniroute",
+            omniroute_api_key=None,
+            omniroute_image_model="openai/gpt-image-2",
         ),
     )
     monkeypatch.setattr(
@@ -161,7 +161,7 @@ async def test_image_provider_reports_missing_key_for_real_image_model(
         fake_settings,
     )
 
-    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+    with pytest.raises(ValueError, match="OMNIROUTE_API_KEY"):
         await _image_provider_for_project(
             object(),  # type: ignore[arg-type]
             uuid4(),

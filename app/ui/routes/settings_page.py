@@ -9,12 +9,11 @@ from fastapi import Request
 from nicegui import ui
 
 from app.config.preferences import save_preferences
-from app.config.provider_policy import normalize_provider_name, validate_model_name
+from app.config.provider_policy import validate_model_name
 from app.config.runtime_preferences import load_runtime_preferences
 from app.config.settings import (
     get_settings,
     normalize_omniroute_api_key,
-    normalize_openrouter_api_key,
 )
 from app.storytelling.idea_lab import load_generated_ideas, load_saved_ideas
 
@@ -157,38 +156,15 @@ def register_settings_page(
                                 "Conecte sua conta e escolha modelos diferentes para cada mídia."
                             ).classes("text-sm text-[#858b86] mb-4")
                             saved_preferences = load_runtime_preferences()
-                            saved_api_key = saved_preferences.get(
-                                "openrouter_api_key", ""
-                            ).strip()
                             saved_omniroute_api_key = saved_preferences.get(
                                 "omniroute_api_key", ""
                             ).strip()
-                            saved_api_key_invalid = bool(
-                                saved_api_key
-                                and normalize_openrouter_api_key(saved_api_key) is None
-                            )
                             saved_omniroute_api_key_invalid = bool(
                                 saved_omniroute_api_key
                                 and normalize_omniroute_api_key(saved_omniroute_api_key) is None
                             )
-                            if current.openrouter_api_key:
-                                ui.label("Fallback OpenRouter configurado.").classes(
-                                    "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 border border-emerald-800"
-                                )
-                            elif saved_api_key_invalid:
-                                ui.label(
-                                    "A chave OpenRouter salva é inválida. Cole uma chave iniciada por sk-or-."
-                                ).classes(
-                                    "text-xs px-2 py-1 rounded-md bg-red-950 text-red-200 border border-red-800"
-                                )
-                            else:
-                                ui.label(
-                                    "Sem chave OpenRouter válida: o rollback manual para OpenRouter ficará indisponível."
-                                ).classes(
-                                    "text-xs px-2 py-1 rounded-md bg-amber-950 text-amber-200 border border-amber-800"
-                                )
                             if current.omniroute_api_key:
-                                ui.label("Chave OmniRoute configurada para o fluxo principal.").classes(
+                                ui.label("Chave OmniRoute configurada.").classes(
                                     "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 border border-emerald-800 mt-2"
                                 )
                             elif saved_omniroute_api_key_invalid:
@@ -197,33 +173,10 @@ def register_settings_page(
                                 )
                             else:
                                 ui.label(
-                                    "OmniRoute é o provider padrão; configure a chave para executar gerações reais."
+                                    "Configure a chave OmniRoute para executar gerações reais."
                                 ).classes(
                                     "text-xs px-2 py-1 rounded-md bg-slate-900 text-slate-300 border border-slate-800 mt-2"
                                 )
-                            ai_provider = (
-                                ui.select(
-                                    ["omniroute", "openrouter"],
-                                    label="Provider principal",
-                                    value=current.ai_provider,
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-4")
-                            )
-                            api_key = (
-                                ui.input(
-                                    "Chave OpenRouter",
-                                    placeholder=(
-                                        "Chave configurada — digite apenas para substituir"
-                                        if current.openrouter_api_key
-                                        else "sk-or-v1-..."
-                                    ),
-                                    password=True,
-                                    password_toggle_button=True,
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full")
-                            )
                             omniroute_api_key = (
                                 ui.input(
                                     "Chave OmniRoute",
@@ -236,34 +189,7 @@ def register_settings_page(
                                     password_toggle_button=True,
                                 )
                                 .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            text_model = (
-                                ui.input(
-                                    "Modelo de texto OpenRouter",
-                                    value=current.openrouter_default_model,
-                                    placeholder="deepseek/deepseek-v4-flash",
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            image_model = (
-                                ui.input(
-                                    "Modelo de imagem OpenRouter",
-                                    value=current.openrouter_image_model,
-                                    placeholder="sourceful/riverflow-v2-fast",
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            video_model = (
-                                ui.input(
-                                    "Modelo de vídeo OpenRouter",
-                                    value=current.openrouter_video_model,
-                                    placeholder="bytedance/seedance-2.0-fast",
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
+                                .classes("w-full mt-4")
                             )
                             omniroute_text_model = (
                                 ui.input(
@@ -294,31 +220,12 @@ def register_settings_page(
                             )
 
                             def save_ai() -> None:
-                                typed_api_key = str(api_key.value or "").strip()
                                 typed_omniroute_api_key = str(
                                     omniroute_api_key.value or ""
                                 ).strip()
                                 try:
                                     values = {
-                                        "AI_PROVIDER": normalize_provider_name(
-                                            ai_provider.value,
-                                            "Provider principal",
-                                        ),
-                                        "OPENROUTER_DEFAULT_MODEL": validate_model_name(
-                                            text_model.value,
-                                            "Modelo de texto",
-                                            provider="openrouter",
-                                        ),
-                                        "OPENROUTER_IMAGE_MODEL": validate_model_name(
-                                            image_model.value,
-                                            "Modelo de imagem",
-                                            provider="openrouter",
-                                        ),
-                                        "OPENROUTER_VIDEO_MODEL": validate_model_name(
-                                            video_model.value,
-                                            "Modelo de vídeo",
-                                            provider="openrouter",
-                                        ),
+                                        "AI_PROVIDER": "omniroute",
                                         "OMNIROUTE_DEFAULT_MODEL": validate_model_name(
                                             omniroute_text_model.value,
                                             "Modelo de texto OmniRoute",
@@ -338,17 +245,6 @@ def register_settings_page(
                                 except ValueError as exc:
                                     ui.notify(str(exc), color="negative")
                                     return
-                                if typed_api_key:
-                                    normalized_key = normalize_openrouter_api_key(typed_api_key)
-                                    if normalized_key is None:
-                                        ui.notify(
-                                            "Chave OpenRouter inválida. Ela deve começar com sk-or-.",
-                                            color="negative",
-                                        )
-                                        return
-                                    values["OPENROUTER_API_KEY"] = normalized_key
-                                elif saved_api_key_invalid:
-                                    values["OPENROUTER_API_KEY"] = ""
                                 if typed_omniroute_api_key:
                                     normalized_omniroute_key = normalize_omniroute_api_key(
                                         typed_omniroute_api_key

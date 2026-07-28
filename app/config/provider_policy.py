@@ -4,7 +4,7 @@ from typing import Any, Literal
 ProviderChannel = Literal["text", "image", "video", "speech"]
 
 DEFAULT_PROVIDER = "omniroute"
-SUPPORTED_AI_PROVIDERS = ("openrouter", "omniroute")
+SUPPORTED_AI_PROVIDERS = ("omniroute",)
 SUPPORTED_MODEL_PROVIDERS = frozenset(SUPPORTED_AI_PROVIDERS)
 MOCK_MODEL_IDS = {
     "mock",
@@ -20,8 +20,6 @@ def normalize_api_key(value: str | None, provider: str) -> str | None:
         return None
     key = value.strip()
     if not key:
-        return None
-    if provider == "openrouter" and not key.startswith("sk-or-"):
         return None
     return key
 
@@ -47,7 +45,6 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
 
 def provider_display_name(provider: str) -> str:
     names = {
-        "openrouter": "OpenRouter",
         "omniroute": "OmniRoute",
     }
     return names.get(provider, provider)
@@ -124,10 +121,3 @@ def ensure_provider_api_key(
         )
     return key
 
-
-def unavailable_provider_error(provider: str, phase: str) -> ValueError:
-    display_name = provider_display_name(provider)
-    return ValueError(
-        f"{display_name} já pode ser configurado, mas as chamadas reais ainda serão "
-        f"ativadas na {phase}. Use OpenRouter como fallback temporário."
-    )

@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.config.model_policy import ensure_openrouter_api_key, validate_openrouter_model_name
 from app.config.provider_policy import (
     effective_provider_for_channel,
     ensure_provider_api_key,
@@ -16,7 +15,6 @@ from app.config.provider_policy import (
 )
 from app.config.settings import get_settings
 from app.providers.llm.omniroute import OmniRouteLLMProvider
-from app.providers.llm.openrouter import OpenRouterLLMProvider
 from app.providers.llm.types import LLMProvider, LLMRequest, LLMResult
 from app.storytelling.service import (
     GenerationOutputError,
@@ -106,19 +104,12 @@ async def generate_freeform_ideas(
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     configured_provider = effective_provider_for_channel(settings, "text")
-    if configured_provider == "omniroute":
-        ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
-        provider: LLMProvider = OmniRouteLLMProvider()
-        model = validate_model_name(
-            provider_model(settings, configured_provider, "text"),
-            provider=configured_provider,
-        )
-    else:
-        ensure_openrouter_api_key(settings.openrouter_api_key)
-        provider = OpenRouterLLMProvider()
-        model = validate_openrouter_model_name(
-            provider_model(settings, configured_provider, "text")
-        )
+    ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
+    provider: LLMProvider = OmniRouteLLMProvider()
+    model = validate_model_name(
+        provider_model(settings, configured_provider, "text"),
+        provider=configured_provider,
+    )
     count = max(1, min(10, int(count)))
     duration = coerce_duration_minutes(target_duration_minutes)
     retry_guidance = ""

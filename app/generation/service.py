@@ -187,13 +187,13 @@ def should_fallback_to_mock(exc: Exception) -> bool:
         "dns",
         "temporary failure",
         "remote end closed",
-        "openrouter retornou resposta fora",
-        "openrouter retornou resposta sem choices",
-        "openrouter retornou choices fora",
-        "openrouter retornou message fora",
-        "openrouter retornou content vazio",
-        "openrouter retornou conteúdo que não é json válido",
-        "openrouter retornou json fora",
+        "omniroute retornou resposta fora",
+        "omniroute retornou resposta sem choices",
+        "omniroute retornou choices fora",
+        "omniroute retornou message fora",
+        "omniroute retornou content vazio",
+        "omniroute retornou conteúdo que não é json válido",
+        "omniroute retornou json fora",
     )
     return any(term in message for term in transient_terms)
 

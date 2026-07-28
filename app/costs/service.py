@@ -63,7 +63,7 @@ def estimate_batch_cost(
     }
 
 
-def operation_cost_policies(provider: str = "openrouter") -> list[OperationCostPolicyRead]:
+def operation_cost_policies(provider: str = "omniroute") -> list[OperationCostPolicyRead]:
     return [
         OperationCostPolicyRead(
             provider=provider,
@@ -78,7 +78,7 @@ def operation_cost_policies(provider: str = "openrouter") -> list[OperationCostP
 def estimate_operation_cost(
     operation: str,
     quantity: Decimal,
-    provider: str = "openrouter",
+    provider: str = "omniroute",
     model: str | None = None,
     uncertainty_ratio: Decimal = Decimal("0.15"),
 ) -> OperationCostEstimateRead:

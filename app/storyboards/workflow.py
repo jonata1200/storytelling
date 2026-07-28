@@ -6,7 +6,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.config.model_policy import ensure_openrouter_api_key
 from app.config.provider_policy import (
     effective_provider_for_channel,
     ensure_provider_api_key,
@@ -18,7 +17,6 @@ from app.production.service import get_or_create_production_settings, resolve_im
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.versioning import INACTIVE_DERIVED_STATUSES
 from app.providers.image.omniroute import OmniRouteImageProvider
-from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageProvider
 from app.storytelling.models import Scene, Shot
 from app.workflows.models import ArtifactDependency
@@ -42,8 +40,7 @@ async def _image_provider_for_project(
     if provider == "omniroute":
         ensure_provider_api_key(app_settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
         return OmniRouteImageProvider(), model, "omniroute_storyboards"
-    ensure_openrouter_api_key(app_settings.openrouter_api_key)
-    return OpenRouterImageProvider(), model, "openrouter_storyboards"
+    raise ValueError("Provider de storyboard não suportado. Use OmniRoute.")
 
 
 async def _create_artifact(

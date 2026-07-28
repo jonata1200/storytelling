@@ -4,7 +4,6 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config.model_policy import ensure_openrouter_api_key
 from app.config.provider_policy import (
     effective_provider_for_channel,
     ensure_provider_api_key,
@@ -13,7 +12,6 @@ from app.config.provider_policy import (
 from app.config.settings import get_settings
 from app.production.service import get_or_create_production_settings, resolve_image_model
 from app.providers.image.omniroute import OmniRouteImageProvider
-from app.providers.image.openrouter import OpenRouterImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider, ImageResult
 
 
@@ -40,8 +38,7 @@ async def _image_provider_for_project(
     if provider == "omniroute":
         ensure_provider_api_key(app_settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
         return OmniRouteImageProvider(), model, "omniroute_images"
-    ensure_openrouter_api_key(app_settings.openrouter_api_key)
-    return OpenRouterImageProvider(), model, "openrouter_images"
+    raise ValueError("Provider de imagem não suportado. Use OmniRoute.")
 
 
 def _transient_image_provider_error(exc: Exception) -> bool:
@@ -69,13 +66,11 @@ async def _generate_image_with_provider_fallback(
     try:
         return await provider.generate(request), {}
     except RuntimeError as exc:
-        if getattr(
-            provider, "provider_name", ""
-        ) not in {"openrouter", "omniroute"} or not _transient_image_provider_error(exc):
+        if getattr(provider, "provider_name", "") != "omniroute" or not (
+            _transient_image_provider_error(exc)
+        ):
             raise
         provider_label = "OmniRoute Images"
-        if getattr(provider, "provider_name", "") == "openrouter":
-            provider_label = "OpenRouter Images"
         raise RuntimeError(
             f"{provider_label} falhou ao gerar a imagem real. Nenhuma imagem mock foi criada "
             f"automaticamente. Detalhes: {exc}"
