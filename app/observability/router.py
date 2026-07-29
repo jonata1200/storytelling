@@ -8,11 +8,13 @@ from app.config.settings import Settings, get_settings
 from app.database.session import get_session
 from app.observability.schemas import (
     OperationalEventRead,
+    ProjectExecutionSummaryRead,
     ProjectOperationalSummaryRead,
     ReadinessDashboardRead,
 )
 from app.observability.service import (
     list_project_events,
+    project_execution_summary,
     project_operational_summary,
     readiness_dashboard,
 )
@@ -36,6 +38,21 @@ async def get_project_operational_summary(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ProjectOperationalSummaryRead:
     return await project_operational_summary(session, project_id)
+
+
+@router.get("/projects/{project_id}/executions", response_model=ProjectExecutionSummaryRead)
+async def get_project_execution_summary(
+    project_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    prompt_limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    job_limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> ProjectExecutionSummaryRead:
+    return await project_execution_summary(
+        session,
+        project_id,
+        prompt_limit=prompt_limit,
+        job_limit=job_limit,
+    )
 
 
 @router.get("/readiness", response_model=ReadinessDashboardRead)

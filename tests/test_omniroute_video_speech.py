@@ -84,6 +84,52 @@ def test_omniroute_video_provider_downloads_completed_image_to_video(
     assert result.estimated_cost == "2.50"
 
 
+@pytest.mark.asyncio
+async def test_omniroute_video_provider_submits_image_job_without_polling(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    provider = OmniRouteVideoProvider()
+    storage_root = tmp_path / "storage"
+    frame_dir = storage_root / "frames"
+    frame_dir.mkdir(parents=True)
+    frame = frame_dir / "frame.png"
+    frame.write_bytes(b"fake-frame")
+    posted: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        "app.providers.video.omniroute.get_settings",
+        lambda: Settings(
+            omniroute_api_key="omni-secret",
+            local_storage_path=storage_root,
+        ),
+    )
+    monkeypatch.setattr(
+        "app.providers.media_utils.get_settings",
+        lambda: Settings(local_storage_path=storage_root),
+    )
+
+    def fake_post(path: str, body: dict[str, Any]) -> dict[str, Any]:
+        posted.update({"path": path, "body": body})
+        return {"task_id": "task-submitted", "status": "queued"}
+
+    monkeypatch.setattr(provider, "_post_json", fake_post)
+
+    external_job_id = await provider.submit_from_image(
+        VideoRequest(
+            prompt="camera pushes in",
+            duration_seconds=5,
+            source_image_uri=frame.as_posix(),
+            output_dir=tmp_path,
+            model="veo-free/veo",
+        )
+    )
+
+    assert external_job_id == "task-submitted"
+    assert posted["path"] == "/videos"
+    assert posted["body"]["firstframe"].startswith("data:image/png;base64,")
+
+
 def test_omniroute_video_provider_reports_failed_task(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = OmniRouteVideoProvider()
     monkeypatch.setattr(

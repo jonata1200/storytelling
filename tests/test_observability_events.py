@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
 from uuid import uuid4
@@ -6,10 +7,17 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import Settings
+from app.core.enums import GenerationJobStatus, GenerationJobType
+from app.generation.models import PromptExecution
 from app.observability.middleware import correlation_id_var
 from app.observability.redaction import redact_mapping, redact_secrets
 from app.observability.schemas import OperationalEventCreate
-from app.observability.service import _provider_channel_readiness, emit_project_event
+from app.observability.service import (
+    _provider_channel_readiness,
+    emit_project_event,
+    project_execution_summary,
+)
+from app.video_generation.models import GenerationJob
 
 
 def test_redact_secrets_masks_keys_and_bearer_tokens() -> None:
@@ -83,6 +91,34 @@ class _FakeEventSession:
         self.added.append(value)
 
 
+class _FakePromptResult:
+    def __init__(self, rows: list[tuple[PromptExecution, str | None]]) -> None:
+        self.rows = rows
+
+    def all(self) -> list[tuple[PromptExecution, str | None]]:
+        return self.rows
+
+
+class _FakeJobResult:
+    def __init__(self, jobs: list[GenerationJob]) -> None:
+        self.jobs = jobs
+
+    def scalars(self) -> list[GenerationJob]:
+        return self.jobs
+
+
+class _FakeExecutionSummarySession:
+    def __init__(
+        self,
+        prompt_rows: list[tuple[PromptExecution, str | None]],
+        jobs: list[GenerationJob],
+    ) -> None:
+        self.results: list[Any] = [_FakePromptResult(prompt_rows), _FakeJobResult(jobs)]
+
+    async def execute(self, _statement: Any) -> Any:
+        return self.results.pop(0)
+
+
 @pytest.mark.asyncio
 async def test_emit_project_event_persists_redacted_correlation_context(
     caplog: pytest.LogCaptureFixture,
@@ -120,3 +156,64 @@ async def test_emit_project_event_persists_redacted_correlation_context(
     assert record.__dict__["provider"] == "omniroute"
     assert record.__dict__["model"] == "vendor/model"
     assert record.__dict__["operation"] == "text_generation"
+
+
+@pytest.mark.asyncio
+async def test_project_execution_summary_groups_prompts_and_redacts_jobs() -> None:
+    project_id = uuid4()
+    now = datetime.now(UTC)
+    first = PromptExecution(
+        id=uuid4(),
+        project_id=project_id,
+        provider="omniroute",
+        model="writer/model",
+        prompt="prompt",
+        variables={},
+        response={},
+        parameters={},
+        estimated_cost=Decimal("0.100000"),
+        duration_ms=1000,
+    )
+    first.created_at = now
+    second = PromptExecution(
+        id=uuid4(),
+        project_id=project_id,
+        provider="omniroute",
+        model="writer/model",
+        prompt="prompt",
+        variables={},
+        response={},
+        parameters={},
+        estimated_cost=Decimal("0.200000"),
+        duration_ms=3000,
+    )
+    second.created_at = now
+    job = GenerationJob(
+        id=uuid4(),
+        project_id=project_id,
+        job_type=GenerationJobType.ANALYSIS,
+        status=GenerationJobStatus.FAILED,
+        progress=100,
+        attempts=1,
+        max_attempts=3,
+        provider="omniroute",
+        model="writer/model",
+        idempotency_key="job-key",
+        request_payload={"step": "script", "payload": {"api_key": "secret-token"}},
+        response_payload={},
+        cost_estimate=Decimal("0.300000"),
+        error="Authorization: Bearer sk-secret",
+    )
+    job.created_at = now
+    session = _FakeExecutionSummarySession([(first, "script"), (second, "script")], [job])
+
+    summary = await project_execution_summary(cast(AsyncSession, session), project_id)
+
+    metric = summary.prompt_metrics[0]
+    assert metric.task == "script"
+    assert metric.count == 2
+    assert metric.average_duration_ms == 2000
+    assert metric.max_duration_ms == 3000
+    assert metric.estimated_cost == Decimal("0.300000")
+    assert summary.recent_jobs[0].step == "script"
+    assert "sk-secret" not in str(summary.recent_jobs[0].error)

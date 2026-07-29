@@ -12,6 +12,7 @@ from app.ui.routes.settings_page import register_settings_page
 from app.ui.shared import assistant_state
 from app.ui.visual.helpers import asset_url as _visual_asset_url
 from app.ui.workspace.assets_area import render_assets_area
+from app.ui.workspace.panels import _render_execution_summary
 from app.ui.workspace.script_area import render_script_area, save_script_from_ui
 from app.ui.workspace.storyboard_video_area import render_storyboard_area, render_video_area
 
@@ -128,6 +129,7 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
         retry_initial_script_from_ui=_page_attr("_retry_initial_script_from_ui"),
         section_title=_section_title,
     )
+    _render_execution_summary(summary.get("execution_summary"))
 
 
 def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
@@ -137,6 +139,7 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
         section_title=_section_title,
         loading_dialog_factory=_page_attr("_generation_loading_dialog"),
     )
+    _render_execution_summary(summary.get("execution_summary"))
 
 
 def _render_storyboard_area(project_id: UUID, summary: dict[str, Any]) -> None:
@@ -146,6 +149,7 @@ def _render_storyboard_area(project_id: UUID, summary: dict[str, Any]) -> None:
         section_title=_section_title,
         loading_dialog_factory=_page_attr("_generation_loading_dialog"),
     )
+    _render_execution_summary(summary.get("execution_summary"))
 
 
 def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
@@ -155,6 +159,7 @@ def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
         section_title=_section_title,
         loading_dialog_factory=_page_attr("_generation_loading_dialog"),
     )
+    _render_execution_summary(summary.get("execution_summary"))
 
 
 def register_ui_pages() -> None:

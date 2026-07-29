@@ -265,4 +265,78 @@ def _render_timeline_strip(timeline: Timeline | None, items: list[TimelineItem])
                 ).style(f"width: {width}px")
 
 
+def _format_duration_ms(value: int | None) -> str:
+    if value is None:
+        return "-"
+    if value >= 1000:
+        return f"{value / 1000:.1f}s"
+    return f"{value}ms"
+
+
+def _render_execution_summary(execution_summary: Any | None) -> None:
+    if execution_summary is None:
+        return
+    metrics = list(getattr(execution_summary, "prompt_metrics", []) or [])
+    recent_jobs = list(getattr(execution_summary, "recent_jobs", []) or [])[:8]
+    recent_prompts = list(getattr(execution_summary, "prompt_executions", []) or [])[:8]
+    with ui.card().classes(_card_classes("w-full")):
+        with ui.row().classes("items-center justify-between w-full gap-3"):
+            with ui.row().classes("items-center gap-2"):
+                ui.icon("query_stats").classes("text-cyan-300")
+                ui.label("Execuções IA").classes("text-lg font-semibold")
+            ui.badge(f"{len(recent_jobs)} job(s) recentes").classes(
+                "bg-slate-800 text-slate-200"
+            )
+        if not metrics and not recent_jobs and not recent_prompts:
+            ui.label("Sem execuções registradas para este projeto.").classes(
+                "text-sm text-slate-500"
+            )
+            return
+        if metrics:
+            with ui.grid(columns=3).classes("w-full gap-3"):
+                for metric in metrics[:6]:
+                    with ui.column().classes(
+                        "gap-1 rounded-md border border-slate-800 bg-slate-950 p-3"
+                    ):
+                        ui.label(str(metric.task)).classes("text-sm font-semibold")
+                        ui.label(f"{metric.count} chamada(s)").classes("text-xs text-slate-400")
+                        ui.label(_format_duration_ms(metric.average_duration_ms)).classes(
+                            "text-xs text-cyan-200"
+                        )
+        if recent_jobs:
+            ui.label("Jobs recentes").classes("text-sm font-semibold text-slate-200")
+            with ui.column().classes("w-full gap-2"):
+                for job in recent_jobs:
+                    status = str(job.status).lower()
+                    color = "text-emerald-300" if status == "succeeded" else "text-amber-300"
+                    if status == "failed":
+                        color = "text-rose-300"
+                    label = job.step or job.job_type
+                    with ui.row().classes(
+                        "w-full items-center justify-between gap-3 rounded-md "
+                        "border border-slate-800 px-3 py-2"
+                    ):
+                        with ui.column().classes("gap-0 min-w-0"):
+                            ui.label(str(label)).classes("text-sm font-semibold")
+                            ui.label(f"{job.provider} · {job.model}").classes(
+                                "text-xs text-slate-500"
+                            )
+                            if job.error:
+                                ui.label(str(job.error)[:180]).classes("text-xs text-rose-300")
+                        with ui.column().classes("items-end gap-0 shrink-0"):
+                            ui.label(status).classes(f"text-xs font-semibold {color}")
+                            ui.label(f"{job.progress}%").classes("text-xs text-slate-500")
+        elif recent_prompts:
+            ui.label("Prompts recentes").classes("text-sm font-semibold text-slate-200")
+            with ui.column().classes("w-full gap-2"):
+                for prompt in recent_prompts:
+                    with ui.row().classes(
+                        "w-full items-center justify-between gap-3 rounded-md "
+                        "border border-slate-800 px-3 py-2"
+                    ):
+                        ui.label(str(prompt.task)).classes("text-sm font-semibold")
+                        ui.label(
+                            f"{prompt.provider} · {prompt.model} · "
+                            f"{_format_duration_ms(prompt.duration_ms)}"
+                        ).classes("text-xs text-slate-500")
 

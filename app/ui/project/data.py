@@ -12,6 +12,7 @@ from app.database.session import AsyncSessionLocal
 from app.finalization.models import Export
 from app.generation.model_settings import ensure_default_model_settings
 from app.generation.models import ProjectModelSetting
+from app.observability.service import project_execution_summary
 from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, Project
 from app.projects.repository import ProjectRepository
@@ -143,6 +144,7 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
         latest_quality = await latest(session, QualityCheck, project_id)
         latest_export = await latest(session, Export, project_id)
         latest_timeline = await latest(session, Timeline, project_id)
+        execution_summary = await project_execution_summary(session, project_id)
         timeline_items: list[TimelineItem] = []
         if latest_timeline is not None:
             item_result = await session.execute(
@@ -279,4 +281,5 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             "clips": clips,
             "timeline": latest_timeline,
             "timeline_items": timeline_items,
+            "execution_summary": execution_summary,
         }

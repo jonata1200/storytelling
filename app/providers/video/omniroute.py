@@ -50,6 +50,28 @@ class OmniRouteVideoProvider:
         )
         return await asyncio.to_thread(self._generate, request, True)
 
+    async def submit_from_image(self, request: VideoRequest) -> str:
+        request = request.model_copy(
+            update={"model": validate_model_name(request.model, provider=self.provider_name)}
+        )
+        return await asyncio.to_thread(self._submit_job, request, True)
+
+    async def poll_submitted_from_image(
+        self,
+        request: VideoRequest,
+        external_job_id: str,
+    ) -> VideoResult:
+        request = request.model_copy(
+            update={"model": validate_model_name(request.model, provider=self.provider_name)}
+        )
+        return await asyncio.to_thread(
+            self._poll_and_download,
+            request,
+            external_job_id,
+            {"task_id": external_job_id},
+            True,
+        )
+
     async def get_status(self, external_job_id: str) -> GenerationJobStatus:
         response = await asyncio.to_thread(self._get_json, f"/videos/{external_job_id}")
         return self._map_status(str(response.get("status") or ""))
@@ -59,6 +81,20 @@ class OmniRouteVideoProvider:
         return None
 
     def _generate(self, request: VideoRequest, image_to_video: bool) -> VideoResult:
+        submitted = self._submit(request, image_to_video)
+        external_job_id = self._task_id(submitted)
+        if not external_job_id:
+            raise RuntimeError("OmniRoute Videos nao retornou id do job")
+        return self._poll_and_download(request, external_job_id, submitted, image_to_video)
+
+    def _submit_job(self, request: VideoRequest, image_to_video: bool) -> str:
+        submitted = self._submit(request, image_to_video)
+        external_job_id = self._task_id(submitted)
+        if not external_job_id:
+            raise RuntimeError("OmniRoute Videos nao retornou id do job")
+        return external_job_id
+
+    def _submit(self, request: VideoRequest, image_to_video: bool) -> dict[str, Any]:
         settings = get_settings()
         ensure_provider_api_key(
             settings.omniroute_api_key,
@@ -87,11 +123,15 @@ class OmniRouteVideoProvider:
         references.extend(local_uri_to_data_url(reference) for reference in request.reference_uris)
         if references:
             body["images"] = references[: self.capabilities.max_reference_images]
+        return self._post_json("/videos", body)
 
-        submitted = self._post_json("/videos", body)
-        external_job_id = self._task_id(submitted)
-        if not external_job_id:
-            raise RuntimeError("OmniRoute Videos não retornou id do job")
+    def _poll_and_download(
+        self,
+        request: VideoRequest,
+        external_job_id: str,
+        submitted: dict[str, Any],
+        image_to_video: bool,
+    ) -> VideoResult:
         completed = self._wait_until_complete(external_job_id, submitted)
         output_url = self._first_content_url(completed)
         video_bytes = self._download(output_url)
@@ -121,7 +161,9 @@ class OmniRouteVideoProvider:
         )
 
     def _wait_until_complete(self, external_job_id: str, initial: dict[str, Any]) -> dict[str, Any]:
-        deadline = time.monotonic() + 900
+        settings = get_settings()
+        deadline = time.monotonic() + max(1, settings.omniroute_video_poll_timeout_seconds)
+        poll_interval = max(1, settings.omniroute_video_poll_interval_seconds)
         response = initial
         while time.monotonic() < deadline:
             status = str(response.get("status") or "").casefold()
@@ -131,7 +173,7 @@ class OmniRouteVideoProvider:
             if mapped == GenerationJobStatus.FAILED:
                 error = response.get("error") or response.get("message")
                 raise RuntimeError(f"OmniRoute Videos job {status}: {redact_secrets(error)}")
-            time.sleep(8)
+            time.sleep(poll_interval)
             response = self._get_json(f"/videos/{external_job_id}")
         raise RuntimeError("OmniRoute Videos excedeu o tempo limite de polling")
 
@@ -165,7 +207,8 @@ class OmniRouteVideoProvider:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=180) as response:
+            timeout = max(1, get_settings().omniroute_video_submit_timeout_seconds)
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 parsed = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -184,14 +227,15 @@ class OmniRouteVideoProvider:
             ) from exc
         except json.JSONDecodeError as exc:
             raise RuntimeError(
-                "OmniRoute Videos retornou resposta HTTP que não é JSON válido"
+                "OmniRoute Videos retornou resposta HTTP que nao e JSON valido"
             ) from exc
         return self._checked_json(parsed)
 
     def _get_json(self, path: str) -> dict[str, Any]:
         request = urllib.request.Request(self._url(path), headers=self._headers(), method="GET")
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
+            timeout = max(1, get_settings().omniroute_video_submit_timeout_seconds)
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 parsed = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
@@ -210,7 +254,7 @@ class OmniRouteVideoProvider:
             ) from exc
         except json.JSONDecodeError as exc:
             raise RuntimeError(
-                "OmniRoute Videos retornou status HTTP que não é JSON válido"
+                "OmniRoute Videos retornou status HTTP que nao e JSON valido"
             ) from exc
         return self._checked_json(parsed)
 
@@ -221,7 +265,8 @@ class OmniRouteVideoProvider:
             method="GET",
         )
         try:
-            with urllib.request.urlopen(request, timeout=300) as response:
+            timeout = max(1, get_settings().omniroute_video_download_timeout_seconds)
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 content: bytes = response.read()
                 return content
         except urllib.error.HTTPError as exc:
@@ -234,7 +279,7 @@ class OmniRouteVideoProvider:
                 f"OmniRoute Videos download network error: {redact_secrets(exc.reason)}"
             ) from exc
         except TimeoutError as exc:
-            raise RuntimeError("OmniRoute Videos timeout ao baixar vídeo final") from exc
+            raise RuntimeError("OmniRoute Videos timeout ao baixar video final") from exc
         except OSError as exc:
             raise RuntimeError(
                 f"OmniRoute Videos download connection error: {redact_secrets(exc)}"
@@ -287,7 +332,7 @@ class OmniRouteVideoProvider:
         for value in self._walk_values(response):
             if isinstance(value, str) and value.startswith(("http://", "https://", "/")):
                 return value
-        raise RuntimeError("OmniRoute Videos não retornou URL do vídeo final")
+        raise RuntimeError("OmniRoute Videos nao retornou URL do video final")
 
     def _walk_values(self, value: Any) -> Iterable[Any]:
         if isinstance(value, Mapping):

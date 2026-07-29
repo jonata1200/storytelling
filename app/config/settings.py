@@ -37,11 +37,16 @@ class Settings(BaseSettings):
     omniroute_video_model: str = "veo-free/veo"
     omniroute_speech_model: str = ""
     omniroute_image_timeout_seconds: int = 360
+    omniroute_video_submit_timeout_seconds: int = 180
+    omniroute_video_poll_interval_seconds: int = 8
+    omniroute_video_poll_timeout_seconds: int = 900
+    omniroute_video_download_timeout_seconds: int = 300
     ai_provider: str = "omniroute"
     text_provider: str | None = None
     image_provider: str | None = None
     video_provider: str | None = None
     storyboard_image_concurrency: int = 3
+    video_generation_concurrency: int = Field(default=2, ge=1, le=4)
     speech_provider: str = "openai_compatible"
     speech_base_url: str = "https://api.openai.com/v1"
     speech_api_key: str | None = Field(default=None, repr=False)

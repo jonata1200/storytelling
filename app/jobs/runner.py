@@ -17,6 +17,8 @@ from app.jobs.service import (
     mark_job_succeeded,
     project_job_can_run,
 )
+from app.observability.schemas import OperationalEventCreate
+from app.observability.service import emit_project_event
 from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
@@ -27,6 +29,7 @@ from app.storytelling.service import (
     generate_script,
     generate_story_ideas,
 )
+from app.video_generation.models import GenerationJob
 from app.video_generation.service import generate_video_clips
 from app.visual_bible.service import (
     generate_visual_bible,
@@ -40,6 +43,32 @@ async def _latest(session: AsyncSession, model: type[Any], project_id: UUID) -> 
         select(model).where(model.project_id == project_id).order_by(model.created_at.desc())
     )
     return result.scalars().first()
+
+
+async def _emit_step_event(
+    session: AsyncSession,
+    job: GenerationJob,
+    *,
+    step: str,
+    status: str,
+    message: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    await emit_project_event(
+        session,
+        OperationalEventCreate(
+            project_id=job.project_id,
+            job_id=job.id,
+            event_type="project_step",
+            status=status,
+            provider=job.provider,
+            model=job.model,
+            operation=step,
+            message=message,
+            details=details or {},
+        ),
+    )
+    await session.commit()
 
 
 async def _run_initial_script(
@@ -174,6 +203,14 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
             job,
             message=f"Worker iniciou a etapa {step}.",
         )
+        await _emit_step_event(
+            session,
+            job,
+            step=step,
+            status="started",
+            message=f"Worker iniciou a etapa {step}.",
+            details={"attempt": job.attempts},
+        )
         try:
             await mark_job_progress(session, job, progress=20, message=f"Executando {step}.")
             if step == "initial_script":
@@ -227,6 +264,14 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
                 response_payload=response,
                 message=f"Etapa {step} concluida.",
             )
+            await _emit_step_event(
+                session,
+                job,
+                step=step,
+                status="succeeded",
+                message=f"Etapa {step} concluida.",
+                details=response,
+            )
             return response
         except Exception as exc:
             await mark_job_failed(
@@ -234,5 +279,13 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
                 job,
                 error=str(exc),
                 message=f"Etapa {step} falhou.",
+            )
+            await _emit_step_event(
+                session,
+                job,
+                step=step,
+                status="failed",
+                message=f"Etapa {step} falhou.",
+                details={"error": str(exc), "attempt": job.attempts},
             )
             raise

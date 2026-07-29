@@ -12,12 +12,25 @@ from app.video_generation.planning import (
     video_idempotency_key,
 )
 from app.video_generation.retry import exponential_backoff_seconds
+from app.video_generation.service import _is_transient_video_error, video_generation_concurrency
 
 
 def test_exponential_backoff_caps_delay() -> None:
     assert exponential_backoff_seconds(1, base_seconds=2, cap_seconds=10) == 2
     assert exponential_backoff_seconds(3, base_seconds=2, cap_seconds=10) == 8
     assert exponential_backoff_seconds(10, base_seconds=2, cap_seconds=10) == 10
+
+
+def test_video_generation_concurrency_is_clamped_to_operational_bounds() -> None:
+    assert video_generation_concurrency(0) == 1
+    assert video_generation_concurrency(2) == 2
+    assert video_generation_concurrency(99) == 4
+
+
+def test_video_transient_error_detection_identifies_retryable_provider_failures() -> None:
+    assert _is_transient_video_error("OmniRoute Videos timeout ao consultar status")
+    assert _is_transient_video_error("HTTP 503 service unavailable")
+    assert not _is_transient_video_error("quota exceeded for this account")
 
 
 def test_video_idempotency_key_changes_when_frame_fingerprint_changes() -> None:

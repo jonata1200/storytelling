@@ -1,5 +1,9 @@
-﻿from datetime import UTC, datetime
+﻿import asyncio
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -36,7 +40,7 @@ from app.production.service import get_or_create_production_settings, resolve_vi
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.providers.video.omniroute import OmniRouteVideoProvider
-from app.providers.video.types import VideoProvider, VideoRequest
+from app.providers.video.types import VideoProvider, VideoRequest, VideoResult
 from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
 from app.video_generation.models import ClipReview, GenerationJob, VideoClip
@@ -52,10 +56,30 @@ from app.video_generation.planning import (
 from app.video_generation.planning import (
     video_idempotency_key as video_idempotency_key,
 )
+from app.video_generation.retry import exponential_backoff_seconds
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
 
 MOCK_VIDEO_UNIT_COST_PER_SECOND = Decimal("0.000000")
+VIDEO_GENERATION_MIN_CONCURRENCY = 1
+VIDEO_GENERATION_MAX_CONCURRENCY = 4
+
+
+@dataclass(slots=True)
+class _PreparedVideoJob:
+    frame: StoryboardFrame
+    job: GenerationJob
+    request: VideoRequest
+    request_fingerprint: str
+    variant_index: int
+
+
+def video_generation_concurrency(value: int | None = None) -> int:
+    configured = get_settings().video_generation_concurrency if value is None else value
+    return max(
+        VIDEO_GENERATION_MIN_CONCURRENCY,
+        min(VIDEO_GENERATION_MAX_CONCURRENCY, int(configured or 1)),
+    )
 
 
 async def _create_artifact(
@@ -191,7 +215,246 @@ async def _asset_storage_uri(session: AsyncSession, asset_id: UUID) -> str | Non
     return asset.storage_uri if asset is not None else None
 
 
-async def generate_video_clips(
+async def _emit_video_job_event(
+    session: AsyncSession,
+    *,
+    project_id: UUID,
+    frame: StoryboardFrame,
+    job: GenerationJob,
+    status: str,
+    provider: str,
+    model: str,
+    message: str,
+    estimated_cost: Decimal | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    payload = {
+        "frame_id": str(frame.id),
+        "frame_number": frame.frame_number,
+        "variant_index": job.request_payload.get("variant_index"),
+    }
+    if details:
+        payload.update(details)
+    await emit_project_event(
+        session,
+        OperationalEventCreate(
+            project_id=project_id,
+            artifact_id=frame.artifact_id,
+            job_id=job.id,
+            event_type="video_job",
+            status=status,
+            provider=provider,
+            model=model,
+            operation="image_to_video",
+            estimated_cost=estimated_cost,
+            message=message,
+            details=payload,
+        ),
+    )
+
+
+async def _mark_video_job_failed(
+    session: AsyncSession,
+    *,
+    project_id: UUID,
+    item: _PreparedVideoJob,
+    reason: str,
+    provider: str,
+    model: str,
+) -> None:
+    item.job.status = GenerationJobStatus.FAILED
+    item.job.progress = 100
+    item.job.error = reason
+    item.job.response_payload = _failed_job_payload(
+        item.frame,
+        item.variant_index,
+        reason,
+        item.job.attempts,
+    )
+    item.job.completed_at = datetime.now(UTC)
+    await _emit_video_job_event(
+        session,
+        project_id=project_id,
+        frame=item.frame,
+        job=item.job,
+        status="failed",
+        provider=provider,
+        model=model,
+        message=reason,
+    )
+
+
+async def _persist_video_success(
+    session: AsyncSession,
+    *,
+    project_id: UUID,
+    item: _PreparedVideoJob,
+    result: VideoResult,
+) -> VideoClip:
+    frame = item.frame
+    variant_index = item.variant_index
+    asset = Asset(
+        project_id=project_id,
+        artifact_id=frame.artifact_id,
+        kind=AssetKind.VIDEO,
+        name=f"Clip frame {frame.frame_number:03d} v{variant_index}",
+        storage_uri=result.storage_uri or "",
+        content_type=result.content_type,
+        sha256=result.sha256,
+        metadata_json=result.metadata,
+    )
+    session.add(asset)
+    await session.flush()
+    session.add(
+        AssetVersion(
+            asset_id=asset.id,
+            version_number=1,
+            storage_uri=asset.storage_uri,
+            sha256=asset.sha256,
+            metadata_json=asset.metadata_json,
+        )
+    )
+
+    clip_payload = {
+        "storyboard_frame_id": str(frame.id),
+        "asset_id": str(asset.id),
+        "duration_seconds": frame.duration_seconds,
+        "variant_index": variant_index,
+        "external_job_id": result.external_job_id,
+        "request_fingerprint": item.request_fingerprint,
+    }
+    artifact = await _create_artifact(
+        session,
+        project_id,
+        ArtifactType.VIDEO_CLIP,
+        f"Video clip {frame.frame_number:03d} v{variant_index}",
+        clip_payload,
+    )
+    await _add_dependency(session, frame.artifact_id, artifact.id)
+
+    item.job.status = GenerationJobStatus.SUCCEEDED
+    item.job.progress = 100
+    item.job.external_job_id = result.external_job_id
+    item.job.result_artifact_id = artifact.id
+    item.job.response_payload = result.metadata
+    clip_cost_estimate = estimate_operation_cost(
+        "image_to_video",
+        Decimal(frame.duration_seconds),
+        provider=result.provider,
+        model=result.model,
+    )
+    provider_cost = Decimal(str(result.estimated_cost or "0.000000"))
+    total_cost = provider_cost if provider_cost > 0 else clip_cost_estimate.estimated
+    item.job.cost_estimate = total_cost
+    item.job.completed_at = datetime.now(UTC)
+
+    selected = False
+    if variant_index == 1:
+        selected_result = await session.execute(
+            select(VideoClip.id).where(
+                VideoClip.storyboard_frame_id == frame.id,
+                VideoClip.selected.is_(True),
+            )
+        )
+        selected = selected_result.scalar_one_or_none() is None
+
+    clip = VideoClip(
+        project_id=project_id,
+        artifact_id=artifact.id,
+        storyboard_frame_id=frame.id,
+        asset_id=asset.id,
+        generation_job_id=item.job.id,
+        provider=result.provider,
+        model=result.model,
+        duration_seconds=frame.duration_seconds,
+        variant_index=variant_index,
+        selected=selected,
+        metadata_json=clip_payload,
+    )
+    session.add(clip)
+    await session.flush()
+
+    session.add(
+        CostEntry(
+            project_id=project_id,
+            artifact_id=artifact.id,
+            entry_type=CostEntryType.ESTIMATE,
+            provider=result.provider,
+            model=result.model,
+            operation="image_to_video",
+            quantity=Decimal(frame.duration_seconds),
+            unit="second",
+            unit_cost=clip_cost_estimate.unit_cost,
+            total_cost=total_cost,
+            currency="USD",
+            metadata_json={
+                "job_id": str(item.job.id),
+                "provider": result.provider,
+                "external_job_id": result.external_job_id,
+                "provider_reported_cost": str(provider_cost),
+            },
+        )
+    )
+    await _emit_video_job_event(
+        session,
+        project_id=project_id,
+        frame=frame,
+        job=item.job,
+        status="succeeded",
+        provider=result.provider,
+        model=result.model,
+        message="Geracao de video concluida",
+        estimated_cost=total_cost,
+        details={
+            "clip_id": str(clip.id),
+            "asset_id": str(asset.id),
+            "external_job_id": result.external_job_id,
+        },
+    )
+    return clip
+
+
+async def _run_prepared_video_job(
+    provider: VideoProvider,
+    item: _PreparedVideoJob,
+    semaphore: asyncio.Semaphore,
+) -> tuple[_PreparedVideoJob, VideoResult | None, str | None]:
+    async with semaphore:
+        for attempt in range(1, 3):
+            try:
+                poller = getattr(provider, "poll_submitted_from_image", None)
+                if callable(poller) and item.job.external_job_id:
+                    result = await poller(item.request, item.job.external_job_id)
+                else:
+                    result = await provider.generate_from_image(item.request)
+            except Exception as exc:
+                error = str(exc)
+                if attempt == 2 or not _is_transient_video_error(error):
+                    return item, None, error
+                await asyncio.sleep(
+                    exponential_backoff_seconds(attempt, base_seconds=1, cap_seconds=8)
+                )
+                continue
+            return item, result, None
+    return item, None, "Provider nao retornou resultado de video"
+
+
+def _is_transient_video_error(error: str) -> bool:
+    normalized = error.casefold()
+    transient_markers = (
+        "timeout",
+        "network",
+        "connection",
+        "rate limit",
+        "429",
+        "502",
+        "503",
+        "504",
+    )
+    return any(marker in normalized for marker in transient_markers)
+
+
+async def _generate_video_clips_concurrent(
     session: AsyncSession,
     project_id: UUID,
     frame_ids: list[UUID] | None = None,
@@ -245,6 +508,7 @@ async def generate_video_clips(
             ):
                 continue
             billable_seconds += frame.duration_seconds
+
     video_cost_estimate = estimate_operation_cost(
         "image_to_video",
         Decimal(billable_seconds),
@@ -257,9 +521,19 @@ async def generate_video_clips(
         video_cost_estimate.estimated,
         stage="video",
     )
+
     video_dir = get_settings().local_storage_path / video_dir_name / str(project_id)
     jobs: list[GenerationJob] = []
     clips: list[VideoClip] = []
+    prepared_jobs: list[_PreparedVideoJob] = []
+    raw_submitter = getattr(provider, "submit_from_image", None)
+    raw_poller = getattr(provider, "poll_submitted_from_image", None)
+    provider_supports_resume = callable(raw_submitter) and callable(raw_poller)
+    submitter = (
+        cast(Callable[[VideoRequest], Awaitable[str]], raw_submitter)
+        if provider_supports_resume
+        else None
+    )
 
     for frame in frames:
         source_image_uri = await _asset_storage_uri(session, frame.asset_id)
@@ -307,7 +581,25 @@ async def generate_video_clips(
                 existing_job.completed_at = None
                 job = existing_job
             else:
-                job = None
+                job = GenerationJob(
+                    project_id=project_id,
+                    source_artifact_id=frame.artifact_id,
+                    job_type=GenerationJobType.VIDEO,
+                    status=GenerationJobStatus.RUNNING,
+                    progress=5,
+                    attempts=1,
+                    max_attempts=3,
+                    provider=resolved_provider,
+                    model=resolved_model,
+                    idempotency_key=idempotency_key,
+                    response_payload={},
+                    cost_estimate=calculate_total_cost(
+                        Decimal(frame.duration_seconds),
+                        MOCK_VIDEO_UNIT_COST_PER_SECOND,
+                    ),
+                    started_at=datetime.now(UTC),
+                )
+                session.add(job)
 
             request_payload = {
                 "storyboard_frame_id": str(frame.id),
@@ -325,6 +617,38 @@ async def generate_video_clips(
                 "size": video_size,
                 "request_fingerprint": request_fingerprint,
             }
+            job.request_payload = request_payload
+            job.response_payload = job.response_payload or {}
+            await session.flush()
+            await _emit_video_job_event(
+                session,
+                project_id=project_id,
+                frame=frame,
+                job=job,
+                status="started",
+                provider=resolved_provider,
+                model=resolved_model,
+                message="Geracao de video iniciada",
+                estimated_cost=video_cost_estimate.estimated,
+                details={"duration_seconds": frame.duration_seconds},
+            )
+
+            request = VideoRequest(
+                prompt=video_prompt,
+                duration_seconds=frame.duration_seconds,
+                aspect_ratio=aspect_ratio,
+                size=video_size,
+                source_image_uri=source_image_uri,
+                output_dir=video_dir,
+                model=resolved_model,
+            )
+            item = _PreparedVideoJob(
+                frame=frame,
+                job=job,
+                request=request,
+                request_fingerprint=request_fingerprint,
+                variant_index=variant_index,
+            )
             validation_errors = video_generation_validation_errors(
                 frame,
                 source_image_uri,
@@ -332,247 +656,116 @@ async def generate_video_clips(
                 aspect_ratio,
                 video_prompt,
             )
-            if job is None:
-                job = GenerationJob(
+            if validation_errors:
+                await _mark_video_job_failed(
+                    session,
                     project_id=project_id,
-                    source_artifact_id=frame.artifact_id,
-                    job_type=GenerationJobType.VIDEO,
-                    status=GenerationJobStatus.RUNNING,
-                    progress=5,
-                    attempts=1,
-                    max_attempts=3,
+                    item=item,
+                    reason="; ".join(validation_errors),
                     provider=resolved_provider,
                     model=resolved_model,
-                    idempotency_key=idempotency_key,
-                    request_payload=request_payload,
-                    response_payload={},
-                    cost_estimate=calculate_total_cost(
-                        Decimal(frame.duration_seconds), MOCK_VIDEO_UNIT_COST_PER_SECOND
-                    ),
-                    started_at=datetime.now(UTC),
-                )
-                session.add(job)
-                await session.flush()
-                await emit_project_event(
-                    session,
-                    OperationalEventCreate(
-                        project_id=project_id,
-                        artifact_id=frame.artifact_id,
-                        job_id=job.id,
-                        event_type="video_job",
-                        status="started",
-                        provider=resolved_provider,
-                        model=resolved_model,
-                        operation="image_to_video",
-                        estimated_cost=video_cost_estimate.estimated,
-                        message="Geração de video iniciada",
-                        details={
-                            "frame_id": str(frame.id),
-                            "variant_index": variant_index,
-                            "duration_seconds": frame.duration_seconds,
-                        },
-                    ),
-                )
-            else:
-                job.request_payload = request_payload
-                job.response_payload = {}
-            await session.flush()
-            if validation_errors:
-                reason = "; ".join(validation_errors)
-                job.status = GenerationJobStatus.FAILED
-                job.error = reason
-                job.response_payload = _failed_job_payload(
-                    frame, variant_index, reason, job.attempts
-                )
-                job.completed_at = datetime.now(UTC)
-                await emit_project_event(
-                    session,
-                    OperationalEventCreate(
-                        project_id=project_id,
-                        artifact_id=frame.artifact_id,
-                        job_id=job.id,
-                        event_type="video_job",
-                        status="failed",
-                        provider=resolved_provider,
-                        model=resolved_model,
-                        operation="image_to_video",
-                        message=reason,
-                        details={"frame_id": str(frame.id), "variant_index": variant_index},
-                    ),
                 )
                 jobs.append(job)
                 continue
+            prepared_jobs.append(item)
 
-            try:
-                result = await provider.generate_from_image(
-                    VideoRequest(
-                        prompt=video_prompt,
-                        duration_seconds=frame.duration_seconds,
-                        aspect_ratio=aspect_ratio,
-                        size=video_size,
-                        source_image_uri=source_image_uri,
-                        output_dir=video_dir,
-                        model=resolved_model,
-                    )
-                )
-            except Exception as exc:
-                job.status = GenerationJobStatus.FAILED
-                job.error = str(exc)
-                job.response_payload = _failed_job_payload(
-                    frame, variant_index, str(exc), job.attempts
-                )
-                job.completed_at = datetime.now(UTC)
-                await emit_project_event(
-                    session,
-                    OperationalEventCreate(
+    await session.commit()
+
+    submitted_jobs: list[_PreparedVideoJob] = []
+    if submitter is not None:
+        for item in prepared_jobs:
+            if not item.job.external_job_id:
+                try:
+                    external_job_id = await submitter(item.request)
+                except Exception as exc:
+                    await _mark_video_job_failed(
+                        session,
                         project_id=project_id,
-                        artifact_id=frame.artifact_id,
-                        job_id=job.id,
-                        event_type="video_job",
-                        status="failed",
+                        item=item,
+                        reason=str(exc),
                         provider=resolved_provider,
                         model=resolved_model,
-                        operation="image_to_video",
-                        message=str(exc),
-                        details={"frame_id": str(frame.id), "variant_index": variant_index},
-                    ),
-                )
-                jobs.append(job)
-                continue
-
-            asset = Asset(
-                project_id=project_id,
-                artifact_id=frame.artifact_id,
-                kind=AssetKind.VIDEO,
-                name=f"Clip frame {frame.frame_number:03d} v{variant_index}",
-                storage_uri=result.storage_uri or "",
-                content_type=result.content_type,
-                sha256=result.sha256,
-                metadata_json=result.metadata,
-            )
-            session.add(asset)
-            await session.flush()
-            session.add(
-                AssetVersion(
-                    asset_id=asset.id,
-                    version_number=1,
-                    storage_uri=asset.storage_uri,
-                    sha256=asset.sha256,
-                    metadata_json=asset.metadata_json,
-                )
-            )
-
-            clip_payload = {
-                "storyboard_frame_id": str(frame.id),
-                "asset_id": str(asset.id),
-                "duration_seconds": frame.duration_seconds,
-                "variant_index": variant_index,
-                "external_job_id": result.external_job_id,
-                "request_fingerprint": request_fingerprint,
-            }
-            artifact = await _create_artifact(
-                session,
-                project_id,
-                ArtifactType.VIDEO_CLIP,
-                f"Video clip {frame.frame_number:03d} v{variant_index}",
-                clip_payload,
-            )
-            await _add_dependency(session, frame.artifact_id, artifact.id)
-
-            job.status = GenerationJobStatus.SUCCEEDED
-            job.progress = 100
-            job.external_job_id = result.external_job_id
-            job.result_artifact_id = artifact.id
-            job.response_payload = result.metadata
-            clip_cost_estimate = estimate_operation_cost(
-                "image_to_video",
-                Decimal(frame.duration_seconds),
-                provider=result.provider,
-                model=result.model,
-            )
-            provider_cost = Decimal(str(result.estimated_cost or "0.000000"))
-            total_cost = provider_cost if provider_cost > 0 else clip_cost_estimate.estimated
-            job.cost_estimate = total_cost
-            job.completed_at = datetime.now(UTC)
-
-            selected = False
-            if variant_index == 1:
-                selected_result = await session.execute(
-                    select(VideoClip.id).where(
-                        VideoClip.storyboard_frame_id == frame.id,
-                        VideoClip.selected.is_(True),
                     )
-                )
-                selected = selected_result.scalar_one_or_none() is None
-
-            clip = VideoClip(
-                project_id=project_id,
-                artifact_id=artifact.id,
-                storyboard_frame_id=frame.id,
-                asset_id=asset.id,
-                generation_job_id=job.id,
-                provider=result.provider,
-                model=result.model,
-                duration_seconds=frame.duration_seconds,
-                variant_index=variant_index,
-                selected=selected,
-                metadata_json=clip_payload,
-            )
-            session.add(clip)
-            jobs.append(job)
-            clips.append(clip)
-
-            session.add(
-                CostEntry(
+                    jobs.append(item.job)
+                    await session.commit()
+                    continue
+                item.job.external_job_id = external_job_id
+                item.job.progress = 25
+                item.job.response_payload = {"submit_response": {"task_id": external_job_id}}
+                await _emit_video_job_event(
+                    session,
                     project_id=project_id,
-                    artifact_id=artifact.id,
-                    entry_type=CostEntryType.ESTIMATE,
-                    provider=result.provider,
-                    model=result.model,
-                    operation="image_to_video",
-                    quantity=Decimal(frame.duration_seconds),
-                    unit="second",
-                    unit_cost=clip_cost_estimate.unit_cost,
-                    total_cost=total_cost,
-                    currency="USD",
-                    metadata_json={
-                        "job_id": str(job.id),
-                        "provider": result.provider,
-                        "external_job_id": result.external_job_id,
-                        "provider_reported_cost": str(provider_cost),
-                    },
+                    frame=item.frame,
+                    job=item.job,
+                    status="submitted",
+                    provider=resolved_provider,
+                    model=resolved_model,
+                    message="Job de video submetido ao provider",
+                    details={"external_job_id": external_job_id},
                 )
-            )
-            await emit_project_event(
+                await session.commit()
+            submitted_jobs.append(item)
+    else:
+        submitted_jobs = prepared_jobs
+
+    concurrency = video_generation_concurrency()
+    semaphore = asyncio.Semaphore(concurrency)
+    tasks = [
+        asyncio.create_task(_run_prepared_video_job(provider, item, semaphore))
+        for item in submitted_jobs
+        if item.job.status == GenerationJobStatus.RUNNING
+    ]
+    for completed_task in asyncio.as_completed(tasks):
+        item, result, error = await completed_task
+        if error is not None or result is None:
+            await _mark_video_job_failed(
                 session,
-                OperationalEventCreate(
-                    project_id=project_id,
-                    artifact_id=artifact.id,
-                    job_id=job.id,
-                    event_type="video_job",
-                    status="succeeded",
-                    provider=result.provider,
-                    model=result.model,
-                    operation="image_to_video",
-                    estimated_cost=total_cost,
-                    message="Geração de video concluida",
-                    details={
-                        "clip_id": str(clip.id),
-                        "asset_id": str(asset.id),
-                        "external_job_id": result.external_job_id,
-                    },
-                ),
+                project_id=project_id,
+                item=item,
+                reason=error or "Provider nao retornou resultado de video",
+                provider=resolved_provider,
+                model=resolved_model,
             )
+            jobs.append(item.job)
+            await session.commit()
+            continue
+        item.job.progress = 90
+        clip = await _persist_video_success(
+            session,
+            project_id=project_id,
+            item=item,
+            result=result,
+        )
+        jobs.append(item.job)
+        clips.append(clip)
+        await session.commit()
 
     if clips:
         advance_project_status(project, ProjectStatus.VIDEO_REVIEW)
     elif jobs:
         advance_project_status(project, ProjectStatus.VIDEO_GENERATION)
     await session.commit()
-    for item in [*jobs, *clips]:
-        await session.refresh(item)
+    for persisted_item in [*jobs, *clips]:
+        await session.refresh(persisted_item)
     return jobs, clips
 
+
+async def generate_video_clips(
+    session: AsyncSession,
+    project_id: UUID,
+    frame_ids: list[UUID] | None = None,
+    variants_per_frame: int = 1,
+    provider_name: str = "auto",
+    model: str | None = None,
+) -> tuple[list[GenerationJob], list[VideoClip]] | None:
+    return await _generate_video_clips_concurrent(
+        session,
+        project_id,
+        frame_ids=frame_ids,
+        variants_per_frame=variants_per_frame,
+        provider_name=provider_name,
+        model=model,
+    )
 
 async def list_video_clips(session: AsyncSession, project_id: UUID) -> list[VideoClip]:
     project = await ProjectRepository(session).get_project(project_id)
@@ -625,3 +818,4 @@ async def review_clip(
     await session.commit()
     await session.refresh(review)
     return review
+

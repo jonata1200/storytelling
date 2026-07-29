@@ -56,6 +56,53 @@ class ProjectOperationalSummaryRead(BaseModel):
     latest_events: list[OperationalEventRead]
 
 
+class PromptExecutionRead(BaseModel):
+    id: UUID
+    artifact_id: UUID | None
+    task: str
+    provider: str
+    model: str
+    duration_ms: int | None
+    estimated_cost: Decimal
+    status: str = "succeeded"
+    created_at: datetime
+
+
+class PromptExecutionTaskMetricsRead(BaseModel):
+    task: str
+    count: int
+    average_duration_ms: int | None
+    max_duration_ms: int | None
+    estimated_cost: Decimal
+    latest_at: datetime | None
+
+
+class JobExecutionRead(BaseModel):
+    id: UUID
+    job_type: str
+    step: str | None
+    status: str
+    progress: int
+    attempts: int
+    max_attempts: int
+    provider: str
+    model: str
+    external_job_id: str | None
+    estimated_cost: Decimal
+    error: str | None
+    request_payload_summary: dict
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class ProjectExecutionSummaryRead(BaseModel):
+    project_id: UUID
+    prompt_executions: list[PromptExecutionRead]
+    prompt_metrics: list[PromptExecutionTaskMetricsRead]
+    recent_jobs: list[JobExecutionRead]
+
+
 class ReadinessComponentRead(BaseModel):
     name: str
     status: str
