@@ -11,6 +11,7 @@ import pytest
 from app.config.settings import Settings
 from app.providers.image.types import ImageGenerationRequest
 from app.visual_bible import service as visual_bible_service
+from app.visual_bible.script_profiles import _script_location_profiles
 from app.visual_bible.service import (
     _character_profile,
     _generate_image_with_provider_fallback,
@@ -29,7 +30,6 @@ from app.visual_bible.service import (
     visual_reference_aspect_ratio,
     visual_reference_prompt,
 )
-from app.visual_bible.script_profiles import _script_location_profiles
 
 
 def test_default_character_views_include_required_reference_sheet_items() -> None:
@@ -85,7 +85,7 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
             ai_provider="omniroute",
             image_provider="omniroute",
             omniroute_api_key="omni-secret",
-            omniroute_image_model="openai/gpt-image-2",
+            omniroute_image_model="chatgpt-web/gpt-5.5",
         ),
     )
     monkeypatch.setattr(
@@ -100,7 +100,7 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
     )
 
     assert getattr(provider, "provider_name", None) == "omniroute"
-    assert model == "openai/gpt-image-2"
+    assert model == "chatgpt-web/gpt-5.5"
     assert directory == "omniroute_images"
 
 
@@ -120,7 +120,7 @@ async def test_image_provider_uses_omniroute_when_configured(
             ai_provider="omniroute",
             image_provider="omniroute",
             omniroute_api_key="omni-secret",
-            omniroute_image_model="openai/gpt-image-2",
+            omniroute_image_model="chatgpt-web/gpt-5.5",
         ),
     )
     monkeypatch.setattr(
@@ -135,7 +135,7 @@ async def test_image_provider_uses_omniroute_when_configured(
     )
 
     assert getattr(provider, "provider_name", None) == "omniroute"
-    assert model == "openai/gpt-image-2"
+    assert model == "chatgpt-web/gpt-5.5"
     assert directory == "omniroute_images"
 
 
@@ -153,7 +153,7 @@ async def test_image_provider_reports_missing_key_for_real_image_model(
             ai_provider="omniroute",
             image_provider="omniroute",
             omniroute_api_key=None,
-            omniroute_image_model="openai/gpt-image-2",
+            omniroute_image_model="chatgpt-web/gpt-5.5",
         ),
     )
     monkeypatch.setattr(

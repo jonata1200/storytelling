@@ -4,6 +4,7 @@ from app.production.service import (
     WORKFLOW_MODES,
     _validated_production_payload,
     resolve_image_model,
+    resolve_video_model,
     workflow_mode_label,
 )
 
@@ -57,9 +58,13 @@ def test_resolve_image_model_preserves_project_specific_real_model() -> None:
 
 def test_resolve_image_model_uses_global_default_for_legacy_project_default() -> None:
     assert (
-        resolve_image_model("sourceful/riverflow-v2.5-pro", "sourceful/riverflow-v2-fast")
-        == "sourceful/riverflow-v2-fast"
+        resolve_image_model("sourceful/riverflow-v2-fast", "chatgpt-web/gpt-5.5")
+        == "chatgpt-web/gpt-5.5"
     )
+
+
+def test_resolve_video_model_uses_global_default_for_legacy_project_default() -> None:
+    assert resolve_video_model("bytedance/seedance-2.0-fast", "veo-free/veo") == "veo-free/veo"
 
 
 def test_resolve_image_model_requires_real_model_when_no_default_exists() -> None:

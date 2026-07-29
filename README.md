@@ -81,9 +81,9 @@ TEXT_PROVIDER=
 IMAGE_PROVIDER=
 VIDEO_PROVIDER=
 OMNIROUTE_BASE_URL=https://omnirouters.com/v1
-OMNIROUTE_DEFAULT_MODEL=deepseek/deepseek-v4-flash
-OMNIROUTE_IMAGE_MODEL=sourceful/riverflow-v2-fast
-OMNIROUTE_VIDEO_MODEL=bytedance/seedance-2.0-fast
+OMNIROUTE_DEFAULT_MODEL=ds-web/deepseek-v4-flash
+OMNIROUTE_IMAGE_MODEL=chatgpt-web/gpt-5.5
+OMNIROUTE_VIDEO_MODEL=veo-free/veo
 OMNIROUTE_SPEECH_MODEL=
 SPEECH_PROVIDER=openai_compatible
 SPEECH_MODEL=
@@ -92,7 +92,8 @@ SINGLE_USER_MODE=true
 ```
 
 No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para
-definir provider e modelos diferentes para ideias, roteiro e cenas/planos.
+definir provider e modelos diferentes para ideias, roteiro, cenas/planos,
+biblioteca visual e prompts de storyboard.
 Modelos com sufixo `:free` e modelos `mock-*` são bloqueados porque tendem a
 falhar ou confundir o fluxo de produção.
 

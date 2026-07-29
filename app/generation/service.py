@@ -25,6 +25,7 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
     "generate_script": "Generate Script",
     "generate_scenes_and_shots": "Generate Scenes And Shots",
     "generate_visual_bible": "Generate Visual Bible",
+    "generate_storyboard_prompts": "Generate Storyboard Prompts",
     "revise_script": "Revise Script",
     "director_agent_chat": "Director Agent Chat",
 }
@@ -35,6 +36,7 @@ CREATIVE_NARRATIVE_TASKS = {
     "generate_script",
     "generate_scenes_and_shots",
     "generate_visual_bible",
+    "generate_storyboard_prompts",
     "revise_script",
 }
 
@@ -115,7 +117,7 @@ DEFAULT_TEMPLATES: dict[str, str] = {
     "generate_scenes_and_shots": (
         "Divida o roteiro em {script} em cenas e planos prontos para geração de video "
         "vertical 9:16. A duração total obrigatoria e {target_duration_seconds}s. "
-        "A etapa de video usa Seedance 2.0 Fast: cada plano deve ter entre "
+        "A etapa de video usa Veo Free: cada plano deve ter entre "
         "{clip_min_seconds}s e {clip_max_seconds}s. Use exatamente {expected_clip_count} "
         "planos com está distribuicao de duração, na ordem: {clip_durations}. "
         "A soma dos planos precisa ser exatamente {target_duration_seconds}s. "
@@ -160,6 +162,22 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         '"props":[{{"name":"...","narrative_importance":"...","dimensions":"...",'
         '"material":"...","color":"...","state":"...","owner":"...",'
         '"scene_numbers":[1]}}]}}'
+    ),
+    "generate_storyboard_prompts": (
+        "Você é diretor de arte cinematográfico e prompt designer para IA de imagem. "
+        "Crie prompts finais de storyboard para os planos em {shots}, usando o roteiro "
+        "em {script} e a biblioteca visual canonica em {visual_context}. "
+        "Cada prompt será enviado a um modelo de geração de imagens, então escreva "
+        "um prompt único, visual, filmável e específico para o primeiro frame de "
+        "image-to-video vertical 9:16. Use continuidade rigorosa de rosto, idade, "
+        "figurino, local, luz, paleta, objetos e geografia espacial. "
+        "Não invente personagens, locais ou objetos fora do plano. Não inclua texto, "
+        "legendas, marcas d'água, interface, balões, montagem, colagem ou split screen. "
+        "Não explique o prompt e não gere imagens. "
+        "Use os prompts-base em {fallback_prompts} apenas como referência de segurança, "
+        "mas entregue versões mais cinematográficas, coerentes e compactas. "
+        "Responda somente JSON válido, sem markdown, neste formato: "
+        '{{"prompts":[{{"shot_id":"uuid-do-plano","prompt":"prompt final"}}]}}'
     ),
     "revise_script": (
         "Revise o roteiro existente atendendo ao pedido do usuario. "

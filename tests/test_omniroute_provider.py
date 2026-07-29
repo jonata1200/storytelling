@@ -224,7 +224,7 @@ def test_omniroute_image_provider_writes_generated_image(
             output_dir=tmp_path,
             aspect_ratio="1:1",
             resolution="1080x1920",
-            model="openai/gpt-image-2",
+            model="chatgpt-web/gpt-5.5",
         )
     )
 
@@ -265,7 +265,7 @@ def test_omniroute_image_provider_retries_without_response_format(
             target_id="char",
             view_type="front",
             output_dir=tmp_path,
-            model="openai/gpt-image-2",
+            model="chatgpt-web/gpt-5.5",
         )
     )
 
@@ -309,7 +309,7 @@ def test_omniroute_image_provider_keeps_visual_references_in_request(
             view_type="sheet",
             output_dir=tmp_path,
             references=["http://127.0.0.1:8000/storage/omniroute_images/character.webp"],
-            model="openai/gpt-image-2",
+            model="chatgpt-web/gpt-5.5",
         )
     )
 

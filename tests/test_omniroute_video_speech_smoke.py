@@ -33,7 +33,7 @@ async def test_omniroute_video_smoke_image_to_video_9_16(
 
     first_frame = tmp_path / "first_frame.png"
     _write_reference_png(first_frame)
-    model = os.getenv("OMNIROUTE_VIDEO_MODEL", "Kling-3.0-omni")
+    model = os.getenv("OMNIROUTE_VIDEO_MODEL", "veo-free/veo")
     monkeypatch.setattr(
         "app.providers.video.omniroute.get_settings",
         lambda: Settings(

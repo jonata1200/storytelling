@@ -33,7 +33,7 @@ async def test_omniroute_image_smoke_with_real_reference(
         lambda: Settings(
             omniroute_api_key=api_key,
             omniroute_base_url=os.getenv("OMNIROUTE_BASE_URL", "https://omnirouters.com/v1"),
-            omniroute_image_model=os.getenv("OMNIROUTE_IMAGE_MODEL", "openai/gpt-image-2"),
+            omniroute_image_model=os.getenv("OMNIROUTE_IMAGE_MODEL", "chatgpt-web/gpt-5.5"),
             local_storage_path=tmp_path,
         ),
     )
@@ -48,7 +48,7 @@ async def test_omniroute_image_smoke_with_real_reference(
             view_type="front_portrait",
             output_dir=output_dir,
             references=[reference.as_posix()],
-            model=os.getenv("OMNIROUTE_IMAGE_MODEL", "openai/gpt-image-2"),
+            model=os.getenv("OMNIROUTE_IMAGE_MODEL", "chatgpt-web/gpt-5.5"),
             aspect_ratio="1:1",
             resolution="1024x1024",
         )

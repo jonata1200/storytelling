@@ -21,6 +21,7 @@ from app.production.service import (
     RESOLUTIONS,
     WORKFLOW_MODES,
     resolve_image_model,
+    resolve_video_model,
 )
 from app.storyboards.models import StoryboardFrame, Timeline, TimelineItem
 from app.ui.layout.components import button_classes as _button_classes
@@ -135,8 +136,9 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
         settings.image_model,
         provider_model(app_settings, configured_image_provider, "image"),
     )
-    effective_video_model = settings.video_model or provider_model(
-        app_settings, configured_video_provider, "video"
+    effective_video_model = resolve_video_model(
+        settings.video_model,
+        provider_model(app_settings, configured_video_provider, "video"),
     )
     with ui.card().classes(_card_classes("w-full")):
         with ui.row().classes("items-center gap-2"):

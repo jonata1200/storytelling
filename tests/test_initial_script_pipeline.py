@@ -56,8 +56,8 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
         pages,
         "get_settings",
         lambda: SimpleNamespace(
-            OmniRoute_image_model="sourceful/riverflow-v2-fast",
-            OmniRoute_video_model="bytedance/seedance-2.0-fast",
+            OmniRoute_image_model="chatgpt-web/gpt-5.5",
+            OmniRoute_video_model="veo-free/veo",
         ),
     )
     idea = {

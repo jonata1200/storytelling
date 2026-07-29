@@ -5,6 +5,9 @@ def test_settings_defaults_to_omniroute_provider() -> None:
     settings = Settings()
 
     assert settings.ai_provider == "omniroute"
+    assert settings.omniroute_default_model == "ds-web/deepseek-v4-flash"
+    assert settings.omniroute_image_model == "chatgpt-web/gpt-5.5"
+    assert settings.omniroute_video_model == "veo-free/veo"
 
 
 def test_settings_reads_omniroute_configuration() -> None:

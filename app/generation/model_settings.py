@@ -20,6 +20,7 @@ NARRATIVE_TASKS = [
     "generate_script",
     "generate_scenes_and_shots",
     "generate_visual_bible",
+    "generate_storyboard_prompts",
 ]
 
 TASK_LABELS = {
@@ -27,6 +28,7 @@ TASK_LABELS = {
     "generate_script": "Roteiro",
     "generate_scenes_and_shots": "Cenas e planos",
     "generate_visual_bible": "Biblioteca visual",
+    "generate_storyboard_prompts": "Prompts de storyboard",
 }
 
 

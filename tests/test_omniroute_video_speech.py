@@ -62,7 +62,7 @@ def test_omniroute_video_provider_downloads_completed_image_to_video(
             duration_seconds=5,
             source_image_uri=frame.as_posix(),
             output_dir=tmp_path,
-            model="Kling-3.0-omni",
+            model="veo-free/veo",
             size="1080x1920",
         ),
         image_to_video=True,
@@ -121,7 +121,7 @@ async def test_video_provider_for_project_uses_omniroute(
             ai_provider="omniroute",
             video_provider="omniroute",
             omniroute_api_key="omni-secret",
-            omniroute_video_model="Kling-3.0-omni",
+            omniroute_video_model="veo-free/veo",
         ),
     )
 
@@ -136,7 +136,7 @@ async def test_video_provider_for_project_uses_omniroute(
 
     assert getattr(provider, "provider_name", None) == "omniroute"
     assert provider_name == "omniroute"
-    assert model == "Kling-3.0-omni"
+    assert model == "veo-free/veo"
     assert directory == "omniroute_videos"
     assert aspect_ratio == "9:16"
     assert resolution == "1080x1920"

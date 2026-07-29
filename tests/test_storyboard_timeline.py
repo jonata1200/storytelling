@@ -16,6 +16,7 @@ from app.storyboards.frame_generation import (
 )
 from app.storyboards.models import StoryboardFrame
 from app.storyboards.prompts import (
+    _store_storyboard_generated_prompt,
     _store_storyboard_prompt_approval,
     _store_storyboard_prompt_override,
     _storyboard_effective_prompt,
@@ -165,6 +166,44 @@ def test_storyboard_prompt_override_invalidates_previous_approval() -> None:
         "Prompt editado para este plano."
     )
     assert not _storyboard_prompt_is_approved(metadata, script_id, shot_id, "hash-a")
+
+
+def test_storyboard_effective_prompt_uses_deepseek_generated_prompt() -> None:
+    script_id = uuid4()
+    shot_id = uuid4()
+    metadata = _store_storyboard_generated_prompt(
+        {},
+        script_id,
+        shot_id,
+        "Prompt cinematografico gerado pelo DeepSeek.",
+        "source-hash",
+    )
+
+    assert _storyboard_effective_prompt(metadata, script_id, shot_id, "Prompt local") == (
+        "Prompt cinematografico gerado pelo DeepSeek."
+    )
+
+
+def test_storyboard_manual_prompt_overrides_deepseek_generated_prompt() -> None:
+    script_id = uuid4()
+    shot_id = uuid4()
+    metadata = _store_storyboard_generated_prompt(
+        {},
+        script_id,
+        shot_id,
+        "Prompt cinematografico gerado pelo DeepSeek.",
+        "source-hash",
+    )
+    metadata = _store_storyboard_prompt_override(
+        metadata,
+        script_id,
+        shot_id,
+        "Prompt manual aprovado pelo usuario.",
+    )
+
+    assert _storyboard_effective_prompt(metadata, script_id, shot_id, "Prompt local") == (
+        "Prompt manual aprovado pelo usuario."
+    )
 
 
 def test_storyboard_image_concurrency_is_bounded() -> None:

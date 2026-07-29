@@ -204,7 +204,7 @@ def register_settings_page(
                                 ui.input(
                                     "Modelo de texto OmniRoute",
                                     value=current.omniroute_default_model,
-                                    placeholder="deepseek/deepseek-v4-flash",
+                                    placeholder="ds-web/deepseek-v4-flash",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
@@ -213,7 +213,7 @@ def register_settings_page(
                                 ui.input(
                                     "Modelo de imagem OmniRoute",
                                     value=current.omniroute_image_model,
-                                    placeholder="sourceful/riverflow-v2-fast",
+                                    placeholder="chatgpt-web/gpt-5.5",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
@@ -222,7 +222,7 @@ def register_settings_page(
                                 ui.input(
                                     "Modelo de vídeo OmniRoute",
                                     value=current.omniroute_video_model,
-                                    placeholder="bytedance/seedance-2.0-fast",
+                                    placeholder="veo-free/veo",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")

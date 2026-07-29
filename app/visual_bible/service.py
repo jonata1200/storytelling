@@ -15,8 +15,8 @@ from app.core.enums import (
     ArtifactType,
     AssetKind,
 )
-from app.generation.models import PromptExecution
 from app.generation.model_settings import llm_provider_for_task
+from app.generation.models import PromptExecution
 from app.generation.service import run_structured_generation
 from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, ArtifactVersion
@@ -117,24 +117,23 @@ async def _generate_visual_bible_payload_with_llm(
     latest_script: Script,
     source_payload: dict,
 ) -> dict:
-    try:
-        provider, model = await llm_provider_for_task(session, project_id, "generate_visual_bible")
-        result, _execution = await run_structured_generation(
-            session,
-            provider,
-            project_id,
-            "generate_visual_bible",
-            {
-                "script": latest_script.content,
-                "idea": source_payload,
-            },
-            artifact_id=latest_script.artifact_id,
-            model=model,
-            fallback_on_runtime_error=True,
-        )
-    except Exception:
-        return {}
-    return result.content if isinstance(result.content, dict) else {}
+    provider, model = await llm_provider_for_task(session, project_id, "generate_visual_bible")
+    result, _execution = await run_structured_generation(
+        session,
+        provider,
+        project_id,
+        "generate_visual_bible",
+        {
+            "script": latest_script.content,
+            "idea": source_payload,
+        },
+        artifact_id=latest_script.artifact_id,
+        model=model,
+        fallback_on_runtime_error=True,
+    )
+    if not isinstance(result.content, dict):
+        raise RuntimeError("DeepSeek retornou biblioteca visual fora do formato esperado.")
+    return result.content
 
 
 async def generate_visual_bible(

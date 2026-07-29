@@ -25,7 +25,16 @@ RESOLUTIONS = ["720x1280", "1080x1920", "1920x1080", "3840x2160"]
 AUDIO_MODES = {"dialogue_only"}
 MOCK_IMAGE_MODEL = "mock-image"
 MOCK_VIDEO_MODEL = "mock-video"
-LEGACY_DEFAULT_IMAGE_MODELS = {"sourceful/riverflow-v2.5-pro"}
+LEGACY_DEFAULT_IMAGE_MODELS = {
+    ".......",
+    "sourceful/riverflow-v2.5-pro",
+    "sourceful/riverflow-v2-fast",
+}
+LEGACY_DEFAULT_VIDEO_MODELS = {
+    ".......",
+    "bytedance/seedance-2.0-fast",
+    "Kling-3.0-omni",
+}
 
 
 def _validate_model_name(value: object, field_name: str) -> str:
@@ -81,7 +90,11 @@ def resolve_image_model(project_image_model: str | None, default_image_model: st
 def resolve_video_model(project_video_model: str | None, default_video_model: str | None) -> str:
     project_model = str(project_video_model or "").strip()
     default_model = str(default_video_model or "").strip()
-    if project_model and not is_mock_model(project_model):
+    if (
+        project_model
+        and not is_mock_model(project_model)
+        and project_model not in LEGACY_DEFAULT_VIDEO_MODELS
+    ):
         return validate_model_name(project_model, "video_model")
     if default_model and not is_mock_model(default_model):
         return validate_model_name(default_model, "VIDEO_MODEL")

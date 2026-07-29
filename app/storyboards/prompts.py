@@ -198,6 +198,42 @@ def _storyboard_prompt_override_map(metadata: dict, script_id: UUID) -> dict[str
     }
 
 
+def _storyboard_generated_prompt_map(metadata: dict, script_id: UUID) -> dict[str, str]:
+    raw_store = metadata.get("storyboard_generated_prompts")
+    store = raw_store if isinstance(raw_store, dict) else {}
+    raw_script_store = store.get(str(script_id))
+    script_store = raw_script_store if isinstance(raw_script_store, dict) else {}
+    return {
+        str(key): str(value)
+        for key, value in script_store.items()
+        if str(value or "").strip()
+    }
+
+
+def _storyboard_generated_prompt_source_hash_map(
+    metadata: dict, script_id: UUID
+) -> dict[str, str]:
+    raw_store = metadata.get("storyboard_generated_prompt_hashes")
+    store = raw_store if isinstance(raw_store, dict) else {}
+    raw_script_store = store.get(str(script_id))
+    script_store = raw_script_store if isinstance(raw_script_store, dict) else {}
+    return {
+        str(key): str(value)
+        for key, value in script_store.items()
+        if str(value or "").strip()
+    }
+
+
+def _storyboard_generated_prompt(
+    metadata: dict,
+    script_id: UUID,
+    shot_id: UUID,
+) -> str | None:
+    generated = _storyboard_generated_prompt_map(metadata, script_id)
+    prompt = generated.get(str(shot_id))
+    return prompt if prompt else None
+
+
 def _storyboard_prompt_override(
     metadata: dict,
     script_id: UUID,
@@ -214,7 +250,11 @@ def _storyboard_effective_prompt(
     shot_id: UUID,
     default_prompt: str,
 ) -> str:
-    return _storyboard_prompt_override(metadata, script_id, shot_id) or default_prompt
+    return (
+        _storyboard_prompt_override(metadata, script_id, shot_id)
+        or _storyboard_generated_prompt(metadata, script_id, shot_id)
+        or default_prompt
+    )
 
 
 def _storyboard_prompt_is_approved(
@@ -280,4 +320,33 @@ def _store_storyboard_prompt_override(
     script_store[str(shot_id)] = prompt.strip()
     store[script_key] = script_store
     updated["storyboard_prompt_overrides"] = store
+    return updated
+
+
+def _store_storyboard_generated_prompt(
+    metadata: dict,
+    script_id: UUID,
+    shot_id: UUID,
+    prompt: str,
+    source_hash: str,
+) -> dict:
+    updated = dict(metadata or {})
+    script_key = str(script_id)
+    shot_key = str(shot_id)
+
+    raw_prompts = updated.get("storyboard_generated_prompts")
+    prompts = dict(raw_prompts) if isinstance(raw_prompts, dict) else {}
+    raw_script_prompts = prompts.get(script_key)
+    script_prompts = dict(raw_script_prompts) if isinstance(raw_script_prompts, dict) else {}
+    script_prompts[shot_key] = prompt.strip()
+    prompts[script_key] = script_prompts
+    updated["storyboard_generated_prompts"] = prompts
+
+    raw_hashes = updated.get("storyboard_generated_prompt_hashes")
+    hashes = dict(raw_hashes) if isinstance(raw_hashes, dict) else {}
+    raw_script_hashes = hashes.get(script_key)
+    script_hashes = dict(raw_script_hashes) if isinstance(raw_script_hashes, dict) else {}
+    script_hashes[shot_key] = source_hash
+    hashes[script_key] = script_hashes
+    updated["storyboard_generated_prompt_hashes"] = hashes
     return updated

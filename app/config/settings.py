@@ -32,9 +32,9 @@ class Settings(BaseSettings):
 
     omniroute_api_key: str | None = Field(default=None, repr=False)
     omniroute_base_url: str = "https://omnirouters.com/v1"
-    omniroute_default_model: str = "deepseek/deepseek-v4-flash"
-    omniroute_image_model: str = "sourceful/riverflow-v2-fast"
-    omniroute_video_model: str = "bytedance/seedance-2.0-fast"
+    omniroute_default_model: str = "ds-web/deepseek-v4-flash"
+    omniroute_image_model: str = "chatgpt-web/gpt-5.5"
+    omniroute_video_model: str = "veo-free/veo"
     omniroute_speech_model: str = ""
     omniroute_image_timeout_seconds: int = 360
     ai_provider: str = "omniroute"
