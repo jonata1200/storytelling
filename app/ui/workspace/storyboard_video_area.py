@@ -9,7 +9,6 @@ from nicegui import ui
 
 from app.config.settings import get_settings
 from app.database.session import AsyncSessionLocal
-from app.production.service import get_or_create_production_settings
 from app.storyboards.service import (
     approve_storyboard_prompt,
     approve_storyboard_prompts,
@@ -19,14 +18,27 @@ from app.storyboards.service import (
     storyboard_prompts_need_approval,
     update_storyboard_prompt,
 )
-from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, friendly_ai_error, show_ai_error_popup
+from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS
 from app.ui.visual.actions import _approve_video_prompts_from_ui
 from app.ui.visual.helpers import asset_url
+from app.ui.workspace import storyboard_handlers as _storyboard_handlers
 from app.ui.workspace.panels import _render_timeline_strip
-from app.video_generation.planning import _store_video_prompt_override
+from app.ui.workspace.storyboard_video_view_model import build_storyboard_video_view_model
+from app.ui.workspace.video_handlers import save_video_prompt_from_ui as _save_video_prompt_from_ui
 
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
 LoadingDialogFactory = Callable[[str, str], Any]
+
+
+def _sync_storyboard_handler_dependencies() -> None:
+    _storyboard_handlers.AsyncSessionLocal = AsyncSessionLocal
+    _storyboard_handlers.approve_storyboard_prompt = approve_storyboard_prompt
+    _storyboard_handlers.approve_storyboard_prompts = approve_storyboard_prompts
+    _storyboard_handlers.generate_animatic_bundle = generate_animatic_bundle
+    _storyboard_handlers.generate_storyboard_frames = generate_storyboard_frames
+    _storyboard_handlers.storyboard_frames_need_generation = storyboard_frames_need_generation
+    _storyboard_handlers.storyboard_prompts_need_approval = storyboard_prompts_need_approval
+    _storyboard_handlers.update_storyboard_prompt = update_storyboard_prompt
 
 
 async def _generate_storyboards_when_prompts_are_ready(
@@ -34,14 +46,12 @@ async def _generate_storyboards_when_prompts_are_ready(
     project_id: UUID,
     script_id: UUID,
 ) -> int | None:
-    if await storyboard_prompts_need_approval(session, project_id, script_id):
-        return None
-    frames = await generate_storyboard_frames(session, project_id, script_id)
-    if frames is None:
-        return None
-    if not await storyboard_frames_need_generation(session, project_id, script_id):
-        await generate_animatic_bundle(session, project_id, script_id)
-    return len(frames)
+    _sync_storyboard_handler_dependencies()
+    return await _storyboard_handlers.generate_storyboards_when_prompts_are_ready(
+        session,
+        project_id,
+        script_id,
+    )
 
 
 async def _approve_storyboard_prompts_from_ui(
@@ -50,40 +60,12 @@ async def _approve_storyboard_prompts_from_ui(
     *,
     loading_dialog: Any | None = None,
 ) -> None:
-    if loading_dialog is not None:
-        loading_dialog.open()
-    try:
-        async with AsyncSessionLocal() as session:
-            approved_count = await approve_storyboard_prompts(session, project_id, script_id)
-            generated_count = await _generate_storyboards_when_prompts_are_ready(
-                session,
-                project_id,
-                script_id,
-            )
-        if generated_count is not None:
-            ui.notify(
-                (
-                    f"{approved_count} prompt(s) aprovado(s). "
-                    f"{generated_count} storyboard(s) gerado(s)."
-                ),
-                color="positive",
-            )
-            ui.navigate.reload()
-            return
-        ui.notify(
-            (
-                f"{approved_count} prompt(s) de storyboard aprovado(s)."
-                if approved_count
-                else "Os prompts de storyboard já estávam aprovados."
-            ),
-            color="positive",
-        )
-        ui.navigate.reload()
-    except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
-    finally:
-        if loading_dialog is not None:
-            loading_dialog.close()
+    _sync_storyboard_handler_dependencies()
+    await _storyboard_handlers.approve_storyboard_prompts_from_ui(
+        project_id,
+        script_id,
+        loading_dialog=loading_dialog,
+    )
 
 
 async def _approve_storyboard_prompt_from_ui(
@@ -93,37 +75,13 @@ async def _approve_storyboard_prompt_from_ui(
     *,
     loading_dialog: Any | None = None,
 ) -> None:
-    if loading_dialog is not None:
-        loading_dialog.open()
-    try:
-        async with AsyncSessionLocal() as session:
-            approved = await approve_storyboard_prompt(session, project_id, script_id, shot_id)
-            generated_count = (
-                await _generate_storyboards_when_prompts_are_ready(session, project_id, script_id)
-                if approved
-                else None
-            )
-        if generated_count is not None:
-            ui.notify(
-                f"Ultimo prompt aprovado. {generated_count} storyboard(s) gerado(s).",
-                color="positive",
-            )
-            ui.navigate.reload()
-            return
-        ui.notify(
-            (
-                "Prompt de storyboard aprovado."
-                if approved
-                else "Este prompt de storyboard ja estáva aprovado."
-            ),
-            color="positive",
-        )
-        ui.navigate.reload()
-    except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
-    finally:
-        if loading_dialog is not None:
-            loading_dialog.close()
+    _sync_storyboard_handler_dependencies()
+    await _storyboard_handlers.approve_storyboard_prompt_from_ui(
+        project_id,
+        script_id,
+        shot_id,
+        loading_dialog=loading_dialog,
+    )
 
 
 async def _save_storyboard_prompt_from_ui(
@@ -132,26 +90,13 @@ async def _save_storyboard_prompt_from_ui(
     shot_id: UUID,
     prompt: str,
 ) -> None:
-    try:
-        async with AsyncSessionLocal() as session:
-            updated = await update_storyboard_prompt(
-                session,
-                project_id,
-                script_id,
-                shot_id,
-                prompt,
-            )
-        ui.notify(
-            (
-                "Prompt de storyboard atualizado."
-                if updated
-                else "Não encontrei o prompt de storyboard selecionado."
-            ),
-            color="positive" if updated else "warning",
-        )
-        ui.navigate.reload()
-    except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    _sync_storyboard_handler_dependencies()
+    await _storyboard_handlers.save_storyboard_prompt_from_ui(
+        project_id,
+        script_id,
+        shot_id,
+        prompt,
+    )
 
 
 async def _generate_storyboards_from_ui(
@@ -163,58 +108,15 @@ async def _generate_storyboards_from_ui(
     force: bool = False,
     loading_dialog: Any | None = None,
 ) -> None:
-    if loading_dialog is not None:
-        loading_dialog.open()
-    try:
-        should_refresh_animatic = shot_id is None
-        async with AsyncSessionLocal() as session:
-            frames = await generate_storyboard_frames(
-                session,
-                project_id,
-                script_id,
-                shot_id=shot_id,
-                force=force,
-                approved_only=approved_only,
-            )
-            if not frames:
-                ui.notify("Não foi possível gerar storyboards.", color="negative")
-                return
-            if should_refresh_animatic and not await storyboard_frames_need_generation(
-                session,
-                project_id,
-                script_id,
-            ):
-                await generate_animatic_bundle(session, project_id, script_id)
-        ui.notify("Storyboards gerados.", color="positive")
-        ui.navigate.reload()
-    except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
-    finally:
-        if loading_dialog is not None:
-            loading_dialog.close()
-
-
-async def _save_video_prompt_from_ui(
-    project_id: UUID,
-    frame_id: UUID,
-    prompt: str,
-    *,
-    reload_page: bool = True,
-) -> None:
-    try:
-        async with AsyncSessionLocal() as session:
-            production_settings = await get_or_create_production_settings(session, project_id)
-            production_settings.metadata_json = _store_video_prompt_override(
-                production_settings.metadata_json or {},
-                frame_id,
-                prompt,
-            )
-            await session.commit()
-        if reload_page:
-            ui.notify("Prompt de vídeo atualizado.", color="positive")
-            ui.navigate.reload()
-    except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    _sync_storyboard_handler_dependencies()
+    await _storyboard_handlers.generate_storyboards_from_ui(
+        project_id,
+        script_id,
+        shot_id=shot_id,
+        approved_only=approved_only,
+        force=force,
+        loading_dialog=loading_dialog,
+    )
 
 
 def _local_asset_file_exists(storage_uri: str) -> bool:
@@ -577,22 +479,14 @@ def render_video_area(
         None,
         None,
     )
-    sorted_frames = sorted(summary["frames"], key=lambda frame: frame.frame_number)
-    clip_frame_ids = {clip.storyboard_frame_id for clip in summary["clips"]}
-    pending_frames = [frame for frame in sorted_frames if frame.id not in clip_frame_ids]
-    video_prompt_previews = list(summary.get("video_prompt_previews", []))
-    video_prompt_by_frame_id = {
-        preview["frame_id"]: preview
-        for preview in video_prompt_previews
-        if preview.get("frame_id") is not None
-    }
-    frame_by_id = {frame.id: frame for frame in sorted_frames}
-    generated_count = len(summary["clips"])
-    total_frames = len(sorted_frames)
+    view_model = build_storyboard_video_view_model(summary)
+    pending_frames = view_model.pending_frames
+    video_prompt_by_frame_id = view_model.video_prompt_by_frame_id
+    frame_by_id = view_model.frame_by_id
+    generated_count = view_model.generated_count
+    total_frames = view_model.total_frames
     timeline = summary["timeline"]
-    total_duration = sum(
-        int(getattr(frame, "duration_seconds", 0) or 0) for frame in sorted_frames
-    )
+    total_duration = view_model.total_duration
     loading_dialog = (
         loading_dialog_factory(
             "Gerando clipes",

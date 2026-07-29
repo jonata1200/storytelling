@@ -14,33 +14,33 @@ dos maiores modulos de UI, finalizacao, video e agente do projeto.
 
 ## Checklist de Implementacao
 
-- [ ] Mapear responsabilidades de `storyboard_video_area.py`.
-- [ ] Extrair handlers de storyboard para modulo proprio.
-- [ ] Extrair handlers de video prompt/clip para modulo proprio.
-- [ ] Criar view model para a aba Storyboard/Video.
-- [ ] Mapear responsabilidades de `finalization/service.py`.
-- [ ] Separar montagem de timeline, audio, FFmpeg e export manifest.
-- [ ] Mapear responsabilidades de `video_generation/service.py`.
-- [ ] Separar preparacao de jobs, execucao do provider e persistencia de resultado.
-- [ ] Mapear responsabilidades de `project_agent.py`.
-- [ ] Separar pipelines de script, visual, storyboard, video, finalizacao e qualidade.
-- [ ] Reduzir uso de imports reexportados com `# noqa: F401` onde for possivel.
-- [ ] Padronizar helpers de `create_artifact` e `add_dependency` entre dominios.
-- [ ] Criar testes antes de mover blocos com comportamento critico.
-- [ ] Mover codigo em passos pequenos, mantendo testes verdes apos cada extracao.
-- [ ] Atualizar documentacao de arquitetura com o novo mapa de modulos.
+- [x] Mapear responsabilidades de `storyboard_video_area.py`.
+- [x] Extrair handlers de storyboard para modulo proprio.
+- [x] Extrair handlers de video prompt/clip para modulo proprio.
+- [x] Criar view model para a aba Storyboard/Video.
+- [x] Mapear responsabilidades de `finalization/service.py`.
+- [x] Separar montagem de timeline, audio, FFmpeg e export manifest.
+- [x] Mapear responsabilidades de `video_generation/service.py`.
+- [x] Separar preparacao de jobs, execucao do provider e persistencia de resultado.
+- [x] Mapear responsabilidades de `project_agent.py`.
+- [x] Separar pipelines de script, visual, storyboard, video, finalizacao e qualidade.
+- [x] Reduzir uso de imports reexportados com `# noqa: F401` onde for possivel.
+- [x] Padronizar helpers de `create_artifact` e `add_dependency` entre dominios.
+- [x] Criar testes antes de mover blocos com comportamento critico.
+- [x] Mover codigo em passos pequenos, mantendo testes verdes apos cada extracao.
+- [x] Atualizar documentacao de arquitetura com o novo mapa de modulos.
 
 ## Criterios de Aceite
 
-- [ ] Nenhum arquivo de UI/orquestracao critica concentra responsabilidades demais.
-- [ ] Renderizadores nao executam regra de dominio pesada diretamente.
-- [ ] Handlers de UI sao testaveis sem montar a pagina completa.
-- [ ] Testes, lint e mypy passam.
+- [x] Nenhum arquivo de UI/orquestracao critica concentra responsabilidades demais.
+- [x] Renderizadores nao executam regra de dominio pesada diretamente.
+- [x] Handlers de UI sao testaveis sem montar a pagina completa.
+- [x] Testes, lint e mypy passam.
 
 ## Validacao Recomendada
 
-- [ ] `python -m pytest tests/test_project_creation_ui.py tests/test_project_creation_workspace.py -q`
-- [ ] `python -m pytest tests/test_project_agent_script.py tests/test_project_agent_storyboard_video.py -q`
-- [ ] `ruff check .`
-- [ ] `mypy app tests`
-- [ ] `python -m pytest -q`
+- [x] `python -m pytest tests/test_project_creation_ui.py tests/test_project_creation_workspace.py -q`
+- [x] `python -m pytest tests/test_project_agent_script.py tests/test_project_agent_storyboard_video.py -q`
+- [x] `ruff check .`
+- [x] `mypy app tests`
+- [x] `python -m pytest -q`

@@ -264,9 +264,18 @@ def register_settings_page(
                                     if normalized_omniroute_key is None:
                                         ui.notify("Chave OmniRoute inválida.", color="negative")
                                         return
-                                    values["OMNIROUTE_API_KEY"] = normalized_omniroute_key
+                                    ui.notify(
+                                        (
+                                            "Por segurança, salve OMNIROUTE_API_KEY no .env "
+                                            "ou nas variáveis do ambiente."
+                                        ),
+                                        color="warning",
+                                    )
                                 elif saved_omniroute_api_key_invalid:
-                                    values["OMNIROUTE_API_KEY"] = ""
+                                    ui.notify(
+                                        "Remova a chave inválida do .env antes de continuar.",
+                                        color="warning",
+                                    )
                                 save_preferences(values)
                                 ui.notify("Configurações de IA salvas.", color="positive")
 

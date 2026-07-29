@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -9,7 +10,6 @@ PREFERENCE_KEYS = {
     "TEXT_PROVIDER",
     "IMAGE_PROVIDER",
     "VIDEO_PROVIDER",
-    "OMNIROUTE_API_KEY",
     "OMNIROUTE_BASE_URL",
     "OMNIROUTE_DEFAULT_MODEL",
     "OMNIROUTE_IMAGE_MODEL",
@@ -25,7 +25,12 @@ PREFERENCE_KEYS = {
     "USER_AVATAR_PATH",
     "USER_THEME",
 }
+SECRET_PREFERENCE_KEYS = {
+    "OMNIROUTE_API_KEY",
+    "SPEECH_API_KEY",
+}
 PREFERENCES_PATH = Path(".runtime/preferences.json")
+logger = logging.getLogger(__name__)
 
 
 def load_runtime_preferences(path: Path = PREFERENCES_PATH) -> dict[str, str]:
@@ -48,6 +53,8 @@ def save_runtime_preferences(values: dict[str, str], path: Path = PREFERENCES_PA
     normalized: dict[str, str] = {}
     for raw_key, raw_value in values.items():
         key = raw_key.upper()
+        if key in SECRET_PREFERENCE_KEYS:
+            raise ValueError(f"Secret preference must be configured via environment: {key}")
         if key not in PREFERENCE_KEYS:
             raise ValueError(f"Preference is not allowed: {key}")
         value = str(raw_value)
@@ -56,6 +63,7 @@ def save_runtime_preferences(values: dict[str, str], path: Path = PREFERENCES_PA
         normalized[key] = value
 
     existing = {key.upper(): value for key, value in load_runtime_preferences(path).items()}
+    existing = {key: value for key, value in existing.items() if key not in SECRET_PREFERENCE_KEYS}
     existing.update(normalized)
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
@@ -69,5 +77,6 @@ def save_runtime_preferences(values: dict[str, str], path: Path = PREFERENCES_PA
             handle.flush()
             os.fsync(handle.fileno())
         temporary_path.replace(path)
+        logger.info("runtime_preferences_updated", extra={"keys": sorted(normalized)})
     finally:
         temporary_path.unlink(missing_ok=True)

@@ -7,13 +7,20 @@ from pytest import approx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.auth.service as auth_service
+from app.auth.csrf import create_csrf_token, verify_csrf_token
 from app.auth.passwords import (
     hash_password,
     normalize_email,
     validate_strong_password,
     verify_password,
 )
-from app.auth.session import SESSION_COOKIE_NAME, create_session_token
+from app.auth.session import (
+    SESSION_COOKIE_NAME,
+    create_persistent_session_token,
+    create_session_token,
+    revoke_persistent_session_token,
+    verify_persistent_session_token,
+)
 from app.auth.ui_middleware import UIBasicAuthMiddleware
 from app.config.settings import get_settings
 from app.factory import create_app
@@ -42,11 +49,67 @@ class _FakeAuthSession:
         self.refreshed.append(user)
 
 
+class _FakeScalarResult:
+    def __init__(self, value: object | None) -> None:
+        self.value = value
+
+    def first(self) -> object | None:
+        return self.value
+
+
+class _FakeExecuteResult:
+    def __init__(self, value: object | None) -> None:
+        self.value = value
+
+    def scalars(self) -> _FakeScalarResult:
+        return _FakeScalarResult(self.value)
+
+
+class _FakeSessionStore:
+    def __init__(self) -> None:
+        self.added: list[object] = []
+        self.persisted: object | None = None
+        self.committed = False
+
+    def add(self, value: object) -> None:
+        self.added.append(value)
+        self.persisted = value
+
+    async def flush(self) -> None:
+        return None
+
+    async def commit(self) -> None:
+        self.committed = True
+
+    async def execute(self, _statement: object) -> _FakeExecuteResult:
+        return _FakeExecuteResult(self.persisted)
+
+
 def test_auth_me_uses_local_user_in_local_environment() -> None:
     client = TestClient(create_app(include_ui=False))
     response = client.get("/api/v1/auth/me")
     assert response.status_code == 200
     assert response.json() == {"username": "local-user"}
+
+
+def test_csrf_tokens_require_cookie_and_form_match() -> None:
+    token = create_csrf_token()
+
+    assert verify_csrf_token(token, token)
+    assert not verify_csrf_token(token, create_csrf_token())
+    assert not verify_csrf_token(None, token)
+
+
+@pytest.mark.asyncio
+async def test_persistent_session_token_can_be_revoked() -> None:
+    user = User(email="user@example.com", display_name="User", password_hash="hash")
+    session = _FakeSessionStore()
+
+    token = await create_persistent_session_token(cast(AsyncSession, session), user)
+
+    assert await verify_persistent_session_token(cast(AsyncSession, session), token) == user.email
+    assert await revoke_persistent_session_token(cast(AsyncSession, session), token)
+    assert await verify_persistent_session_token(cast(AsyncSession, session), token) is None
 
 
 def test_health_live_does_not_require_authentication() -> None:

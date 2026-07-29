@@ -4,7 +4,12 @@ from starlette.responses import RedirectResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.auth.dependencies import authentication_required
-from app.auth.session import SESSION_COOKIE_NAME, verify_session_token
+from app.auth.session import (
+    SESSION_COOKIE_NAME,
+    verify_persistent_session_token,
+    verify_session_token,
+)
+from app.database.session import AsyncSessionLocal
 
 
 class UIBasicAuthMiddleware:
@@ -23,7 +28,7 @@ class UIBasicAuthMiddleware:
             not authentication_required()
             or scope["type"] not in {"http", "websocket"}
             or _is_public_path(str(scope.get("path") or ""))
-            or _session_username(scope) is not None
+            or await _session_username(scope) is not None
         ):
             await self.app(scope, receive, send)
             return
@@ -45,7 +50,7 @@ def _is_public_path(path: str) -> bool:
     )
 
 
-def _session_username(scope: Scope) -> str | None:
+async def _session_username(scope: Scope) -> str | None:
     headers = {
         key.decode("latin-1").lower(): value.decode("latin-1")
         for key, value in scope.get("headers", [])
@@ -53,7 +58,14 @@ def _session_username(scope: Scope) -> str | None:
     token = _cookie_token(headers.get("cookie", ""))
     if token is None:
         token = _bearer_token(headers.get("authorization"))
-    return verify_session_token(token or "")
+    if not token:
+        return None
+    try:
+        async with AsyncSessionLocal() as session:
+            username = await verify_persistent_session_token(session, token)
+    except Exception:
+        username = None
+    return username or verify_session_token(token)
 
 
 def _cookie_token(raw_cookie: str) -> str | None:

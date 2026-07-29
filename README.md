@@ -103,9 +103,10 @@ Para vozes dos personagens, use
 `SPEECH_PROVIDER=omniroute` com `OMNIROUTE_API_KEY` e `OMNIROUTE_SPEECH_MODEL`
 ou mantenha `SPEECH_PROVIDER=openai_compatible`.
 
-Preferências alteradas pela interface são gravadas em `.runtime/preferences.json`.
-O arquivo `.env` permanece somente para configuração de inicialização e não é
-modificado pela aplicação em execução.
+Preferências não sensíveis alteradas pela interface são gravadas em
+`.runtime/preferences.json`. Segredos como `OMNIROUTE_API_KEY` e `SPEECH_API_KEY`
+devem ficar somente no `.env` ou nas variáveis do ambiente; a aplicação não
+persiste esses valores no arquivo runtime.
 
 Os providers reais atualmente implementados usam OmniRoute para texto, imagem e
 vídeo. Os clipes são gerados sem narração
@@ -165,6 +166,20 @@ com letra maiúscula, letra minúscula, número e símbolo. Com
 `SINGLE_USER_MODE=true`, apenas o primeiro cadastro é permitido; depois disso a
 tela de cadastro é bloqueada e o link "Criar uma conta" desaparece do login.
 O usuário autenticado pode sair pelo botão **Sair** na navegação da aplicação.
+Sessões novas são persistidas no banco com expiração e podem ser revogadas no
+logout sem trocar `APP_SECRET_KEY`. Formulários HTML mutantes usam token CSRF
+assinado; em produção, mantenha `APP_SECRET_KEY` forte, `APP_DEBUG=false` e
+execute `alembic upgrade head` antes de expor a aplicação.
+
+Checklist mínimo para produção:
+
+```env
+APP_ENV=production
+APP_DEBUG=false
+APP_SECRET_KEY=gere-um-segredo-longo-e-unico
+ALLOW_USER_REGISTRATION=false
+OMNIROUTE_API_KEY=sua_chave_no_ambiente
+```
 
 ## Storage e custos
 
