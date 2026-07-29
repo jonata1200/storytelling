@@ -1,7 +1,7 @@
 ﻿from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approvals.service import record_approval
@@ -18,9 +18,11 @@ from app.projects.schemas import (
     ArtifactVersionRead,
     ProjectCreate,
     ProjectRead,
+    ProjectSearchRead,
     ProjectStatusUpdate,
     StaleArtifactsRead,
 )
+from app.projects.search import search_projects
 from app.projects.service import (
     add_artifact_dependency,
     add_artifact_version,
@@ -49,6 +51,35 @@ async def get_projects(
 ) -> list[ProjectRead]:
     projects = await list_projects(session)
     return [ProjectRead.model_validate(project) for project in projects]
+
+
+@router.get("/search", response_model=ProjectSearchRead)
+async def get_projects_search(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    status_filter: Annotated[str, Query(max_length=40)] = "all",
+    stage_filter: Annotated[str, Query(max_length=40)] = "all",
+    updated_period: Annotated[str, Query(max_length=20)] = "any",
+    sort: Annotated[str, Query(max_length=40)] = "updated_desc",
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ProjectSearchRead:
+    projects, total = await search_projects(
+        session,
+        query=query,
+        status_filter=status_filter,
+        stage_filter=stage_filter,
+        updated_period=updated_period,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+    return ProjectSearchRead(
+        items=[ProjectRead.model_validate(project) for project in projects],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.patch("/{project_id}/status", response_model=ProjectRead)

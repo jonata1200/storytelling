@@ -14,25 +14,25 @@ resultados sem duplicar logica entre ideias e projetos.
 
 ## Checklist de Implementacao
 
-- [ ] Criar modulo de utilitarios para busca/filtros na camada de UI ou dominio apropriado.
-- [ ] Implementar normalizacao case-insensitive.
-- [ ] Remover acentos na comparacao de busca.
-- [ ] Ignorar espacos repetidos.
-- [ ] Implementar helper para buscar em varios campos de um item.
-- [ ] Implementar helper para comparar datas com fallback seguro.
-- [ ] Implementar helper para ordenacao alfabetica segura.
-- [ ] Criar testes para busca com acentos, caixa alta/baixa e termos parciais.
-- [ ] Criar testes para ordenacao com valores ausentes.
-- [ ] Garantir que os helpers nao dependam de NiceGUI.
+- [x] Criar modulo de utilitarios para busca/filtros na camada de UI ou dominio apropriado.
+- [x] Implementar normalizacao case-insensitive.
+- [x] Remover acentos na comparacao de busca.
+- [x] Ignorar espacos repetidos.
+- [x] Implementar helper para buscar em varios campos de um item.
+- [x] Implementar helper para comparar datas com fallback seguro.
+- [x] Implementar helper para ordenacao alfabetica segura.
+- [x] Criar testes para busca com acentos, caixa alta/baixa e termos parciais.
+- [x] Criar testes para ordenacao com valores ausentes.
+- [x] Garantir que os helpers nao dependam de NiceGUI.
 
 ## Criterios de Aceite
 
-- [ ] A mesma logica de busca pode ser usada por ideias e projetos.
-- [ ] Filtros funcionam com dados incompletos sem quebrar a tela.
-- [ ] Testes unitarios cobrem os casos principais.
+- [x] A mesma logica de busca pode ser usada por ideias e projetos.
+- [x] Filtros funcionam com dados incompletos sem quebrar a tela.
+- [x] Testes unitarios cobrem os casos principais.
 
 ## Validacao Recomendada
 
-- [ ] `python -m pytest tests/test_search_filters.py -q`
-- [ ] `ruff check app tests`
-- [ ] `mypy app tests`
+- [x] `python -m pytest tests/test_search_filters.py -q`
+- [x] `ruff check app tests`
+- [x] `mypy app tests`

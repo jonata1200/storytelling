@@ -29,6 +29,13 @@ class ProjectRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProjectSearchRead(BaseModel):
+    items: list[ProjectRead]
+    total: int
+    limit: int
+    offset: int
+
+
 class ArtifactCreate(BaseModel):
     artifact_type: ArtifactType
     name: str = Field(min_length=1, max_length=220)

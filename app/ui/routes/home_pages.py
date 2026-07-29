@@ -18,6 +18,22 @@ from app.storytelling.reference_upload import (
 )
 from app.storytelling.script_upload import ScriptUploadError, extract_script_text
 from app.storytelling.service import coerce_duration_minutes
+from app.ui.search_filters import (
+    IDEA_COMPLEXITY_FILTER_OPTIONS,
+    IDEA_SORT_OPTIONS,
+    PROJECT_SORT_OPTIONS,
+    PROJECT_STAGE_FILTER_OPTIONS,
+    PROJECT_STATUS_FILTER_OPTIONS,
+    PROJECT_UPDATED_FILTER_OPTIONS,
+    filter_ideas,
+    filter_projects,
+    has_idea_filters,
+    has_project_filters,
+    idea_active_filter_labels,
+    project_active_filter_labels,
+    unique_idea_duration_options,
+    unique_idea_filter_options,
+)
 from app.ui.shared.page_config import (
     DEFAULT_STORY_DURATION_MINUTES,
     IDEA_COUNT_OPTIONS,
@@ -264,20 +280,142 @@ def register_home_pages(
                                 "Sua história, personagens e storyboards aparecerão aqui."
                             ).classes("mt-1 text-sm text-[#747a75]")
                     else:
-                        with ui.grid().classes(
-                            "w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                        ):
-                            for project in projects:
-                                render_project_card(project, "/dashboard")
-                            with (
-                                ui.element("div")
-                                .classes(
-                                    "border border-dashed border-[#363b36] rounded-2xl min-h-52 flex flex-col items-center justify-center cursor-pointer text-[#969c97]"
-                                )
-                                .on("click", lambda: ui.navigate.to("/dashboard"))
+                        def clear_dashboard_project_filters() -> None:
+                            dashboard_project_search.value = ""
+                            dashboard_project_status.value = "all"
+                            dashboard_project_stage.value = "all"
+                            dashboard_project_updated.value = "any"
+                            dashboard_project_sort.value = "updated_desc"
+                            for control in (
+                                dashboard_project_search,
+                                dashboard_project_status,
+                                dashboard_project_stage,
+                                dashboard_project_updated,
+                                dashboard_project_sort,
                             ):
-                                ui.icon("add_circle_outline").classes("text-4xl acid")
-                                ui.label("Criar novo projeto").classes("mt-2 font-semibold")
+                                control.update()
+                            dashboard_project_results.refresh()
+
+                        with ui.row().classes("w-full gap-2 items-end flex-wrap"):
+                            dashboard_project_search = (
+                                ui.input(
+                                    placeholder="Buscar projetos...",
+                                    on_change=lambda _event=None: dashboard_project_results.refresh(),
+                                )
+                                .props(
+                                    "outlined dense clearable debounce=250 prepend-icon=search aria-label='Buscar projetos recentes'"
+                                )
+                                .classes("flex-1 min-w-64")
+                            )
+                            dashboard_project_status = (
+                                ui.select(
+                                    PROJECT_STATUS_FILTER_OPTIONS,
+                                    label="Status",
+                                    value="all",
+                                    on_change=lambda _event=None: dashboard_project_results.refresh(),
+                                )
+                                .props("outlined dense")
+                                .classes("w-40")
+                            )
+                            dashboard_project_stage = (
+                                ui.select(
+                                    PROJECT_STAGE_FILTER_OPTIONS,
+                                    label="Etapa",
+                                    value="all",
+                                    on_change=lambda _event=None: dashboard_project_results.refresh(),
+                                )
+                                .props("outlined dense")
+                                .classes("w-40")
+                            )
+                            dashboard_project_updated = (
+                                ui.select(
+                                    PROJECT_UPDATED_FILTER_OPTIONS,
+                                    label="Atualizacao",
+                                    value="any",
+                                    on_change=lambda _event=None: dashboard_project_results.refresh(),
+                                )
+                                .props("outlined dense")
+                                .classes("w-44")
+                            )
+                            dashboard_project_sort = (
+                                ui.select(
+                                    PROJECT_SORT_OPTIONS,
+                                    label="Ordenar",
+                                    value="updated_desc",
+                                    on_change=lambda _event=None: dashboard_project_results.refresh(),
+                                )
+                                .props("outlined dense")
+                                .classes("w-48")
+                            )
+                            ui.button(
+                                icon="filter_alt_off",
+                                on_click=clear_dashboard_project_filters,
+                            ).props("flat round dense").classes("text-[#aeb3ae]").tooltip(
+                                "Limpar filtros"
+                            )
+
+                        @ui.refreshable
+                        def dashboard_project_results() -> None:
+                            filtered_projects = filter_projects(
+                                projects,
+                                query=dashboard_project_search.value,
+                                status_filter=str(dashboard_project_status.value or "all"),
+                                stage_filter=str(dashboard_project_stage.value or "all"),
+                                updated_period=str(dashboard_project_updated.value or "any"),
+                                sort=str(dashboard_project_sort.value or "updated_desc"),
+                            )
+                            ui.label(
+                                f"{len(filtered_projects)} de {len(projects)} projeto(s)"
+                            ).classes("text-xs text-[#7f8580]")
+                            active_labels = project_active_filter_labels(
+                                dashboard_project_search.value,
+                                str(dashboard_project_status.value or "all"),
+                                str(dashboard_project_stage.value or "all"),
+                                str(dashboard_project_updated.value or "any"),
+                                str(dashboard_project_sort.value or "updated_desc"),
+                            )
+                            if active_labels:
+                                with ui.row().classes("w-full gap-2 flex-wrap"):
+                                    for label in active_labels:
+                                        ui.badge(label).classes(
+                                            "bg-[#263225] text-[#d7f5c4] border border-[#4f6a45]"
+                                        )
+                            if not filtered_projects:
+                                with ui.element("div").classes(
+                                    "w-full border border-dashed border-[#363b36] rounded-2xl min-h-40 flex flex-col items-center justify-center text-[#969c97]"
+                                ):
+                                    ui.icon("search_off").classes("text-3xl")
+                                    ui.label("Nenhum projeto encontrado para esses filtros.").classes(
+                                        "mt-2 text-sm font-semibold"
+                                    )
+                                    if has_project_filters(
+                                        dashboard_project_search.value,
+                                        str(dashboard_project_status.value or "all"),
+                                        str(dashboard_project_stage.value or "all"),
+                                        str(dashboard_project_updated.value or "any"),
+                                        str(dashboard_project_sort.value or "updated_desc"),
+                                    ):
+                                        ui.button(
+                                            "Limpar filtros",
+                                            icon="filter_alt_off",
+                                            on_click=clear_dashboard_project_filters,
+                                        ).props("flat no-caps").classes("acid mt-1")
+                            with ui.grid().classes(
+                                "w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                            ):
+                                for project in filtered_projects:
+                                    render_project_card(project, "/dashboard")
+                                with (
+                                    ui.element("div")
+                                    .classes(
+                                        "border border-dashed border-[#363b36] rounded-2xl min-h-52 flex flex-col items-center justify-center cursor-pointer text-[#969c97]"
+                                    )
+                                    .on("click", lambda: ui.navigate.to("/dashboard"))
+                                ):
+                                    ui.icon("add_circle_outline").classes("text-4xl acid")
+                                    ui.label("Criar novo projeto").classes("mt-2 font-semibold")
+
+                        dashboard_project_results()
 
     @ui.page("/projects", response_timeout=15)
     async def projects_page() -> None:
@@ -319,11 +457,142 @@ def register_home_pages(
                             on_click=lambda: ui.navigate.to("/dashboard"),
                         ).props("flat no-caps").classes("acid mt-2")
                 else:
-                    with ui.grid().classes(
-                        "w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                    ):
-                        for project in projects:
-                            render_project_card(project, "/projects")
+                    def clear_project_filters() -> None:
+                        project_search.value = ""
+                        project_status.value = "all"
+                        project_stage_select.value = "all"
+                        project_updated.value = "any"
+                        project_sort.value = "updated_desc"
+                        for control in (
+                            project_search,
+                            project_status,
+                            project_stage_select,
+                            project_updated,
+                            project_sort,
+                        ):
+                            control.update()
+                        project_results.refresh()
+
+                    with ui.row().classes("w-full gap-2 items-end flex-wrap"):
+                        project_search = (
+                            ui.input(
+                                placeholder="Buscar projetos...",
+                                on_change=lambda _event=None: project_results.refresh(),
+                            )
+                            .props(
+                                "outlined dense clearable debounce=250 prepend-icon=search aria-label='Buscar projetos'"
+                            )
+                            .classes("flex-1 min-w-64")
+                        )
+                        project_status = (
+                            ui.select(
+                                PROJECT_STATUS_FILTER_OPTIONS,
+                                label="Status",
+                                value="all",
+                                on_change=lambda _event=None: project_results.refresh(),
+                            )
+                            .props("outlined dense")
+                            .classes("w-40")
+                        )
+                        project_stage_select = (
+                            ui.select(
+                                PROJECT_STAGE_FILTER_OPTIONS,
+                                label="Etapa",
+                                value="all",
+                                on_change=lambda _event=None: project_results.refresh(),
+                            )
+                            .props("outlined dense")
+                            .classes("w-40")
+                        )
+                        project_updated = (
+                            ui.select(
+                                PROJECT_UPDATED_FILTER_OPTIONS,
+                                label="Atualizacao",
+                                value="any",
+                                on_change=lambda _event=None: project_results.refresh(),
+                            )
+                            .props("outlined dense")
+                            .classes("w-44")
+                        )
+                        project_sort = (
+                            ui.select(
+                                PROJECT_SORT_OPTIONS,
+                                label="Ordenar",
+                                value="updated_desc",
+                                on_change=lambda _event=None: project_results.refresh(),
+                            )
+                            .props("outlined dense")
+                            .classes("w-48")
+                        )
+                        ui.button(
+                            icon="filter_alt_off",
+                            on_click=clear_project_filters,
+                        ).props("flat round dense").classes("text-[#aeb3ae]").tooltip(
+                            "Limpar filtros"
+                        )
+
+                    @ui.refreshable
+                    def project_results() -> None:
+                        filtered_projects = filter_projects(
+                            projects,
+                            query=project_search.value,
+                            status_filter=str(project_status.value or "all"),
+                            stage_filter=str(project_stage_select.value or "all"),
+                            updated_period=str(project_updated.value or "any"),
+                            sort=str(project_sort.value or "updated_desc"),
+                        )
+                        ui.label(f"{len(filtered_projects)} de {len(projects)} projeto(s)").classes(
+                            "text-xs text-[#7f8580]"
+                        )
+                        active_labels = project_active_filter_labels(
+                            project_search.value,
+                            str(project_status.value or "all"),
+                            str(project_stage_select.value or "all"),
+                            str(project_updated.value or "any"),
+                            str(project_sort.value or "updated_desc"),
+                        )
+                        if active_labels:
+                            with ui.row().classes("w-full gap-2 flex-wrap"):
+                                for label in active_labels:
+                                    ui.badge(label).classes(
+                                        "bg-[#263225] text-[#d7f5c4] border border-[#4f6a45]"
+                                    )
+                        if not filtered_projects:
+                            with ui.element("div").classes(
+                                "w-full border border-dashed border-[#363b36] rounded-2xl min-h-48 flex flex-col items-center justify-center text-[#969c97]"
+                            ):
+                                ui.icon("search_off").classes("text-4xl")
+                                ui.label("Nenhum projeto encontrado para esses filtros.").classes(
+                                    "mt-3 text-lg font-semibold"
+                                )
+                                if has_project_filters(
+                                    project_search.value,
+                                    str(project_status.value or "all"),
+                                    str(project_stage_select.value or "all"),
+                                    str(project_updated.value or "any"),
+                                    str(project_sort.value or "updated_desc"),
+                                ):
+                                    ui.button(
+                                        "Limpar filtros",
+                                        icon="filter_alt_off",
+                                        on_click=clear_project_filters,
+                                    ).props("flat no-caps").classes("acid mt-2")
+                        with ui.grid().classes(
+                            "w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                        ):
+                            for project in filtered_projects:
+                                render_project_card(project, "/projects")
+                            with (
+                                ui.element("div")
+                                .classes(
+                                    "border border-dashed border-[#363b36] rounded-2xl min-h-52 flex flex-col items-center justify-center cursor-pointer text-[#969c97]"
+                                )
+                                .on("click", lambda: ui.navigate.to("/dashboard"))
+                            ):
+                                ui.icon("add_circle_outline").classes("text-4xl acid")
+                                ui.label("Criar novo projeto").classes("mt-2 font-semibold")
+
+                    project_results()
 
     @ui.page("/", response_timeout=15)
     @ui.page("/ideas", response_timeout=15)
@@ -468,14 +737,190 @@ def register_home_pages(
                     saved_results.refresh()
                     ui.notify("Ideia apagada definitivamente.", color="warning")
 
+                common_emotions = {
+                    "Esperança",
+                    "Curiosidade",
+                    "Tensão",
+                    "Alegria",
+                    "Melancolia",
+                    "Surpresa",
+                }
+                idea_genre_filter_options = {
+                    "all": "Todos",
+                    **{
+                        genre: genre
+                        for genre in sorted(
+                            {*IDEA_GENRES, *unique_idea_filter_options(saved_ideas, "genre")},
+                            key=str.casefold,
+                        )
+                    },
+                }
+                idea_emotion_filter_options = {
+                    "all": "Todas",
+                    **{
+                        emotion: emotion
+                        for emotion in sorted(
+                            {
+                                *common_emotions,
+                                *unique_idea_filter_options(saved_ideas, "primary_emotion"),
+                            },
+                            key=str.casefold,
+                        )
+                    },
+                }
+                duration_values = {
+                    float(coerce_duration_minutes(value)) for value in STORY_DURATION_OPTIONS
+                }
+                duration_values.update(unique_idea_duration_options(saved_ideas))
+                idea_duration_filter_options = {
+                    "all": "Todas",
+                    **{f"{value:g}": f"{value:g} min" for value in sorted(duration_values)},
+                }
+
+                def clear_idea_filters() -> None:
+                    idea_search.value = ""
+                    idea_genre_filter.value = "all"
+                    idea_emotion_filter.value = "all"
+                    idea_duration_filter.value = "all"
+                    idea_complexity_filter.value = "all"
+                    idea_sort.value = "created_desc"
+                    for control in (
+                        idea_search,
+                        idea_genre_filter,
+                        idea_emotion_filter,
+                        idea_duration_filter,
+                        idea_complexity_filter,
+                        idea_sort,
+                    ):
+                        control.update()
+                    saved_results.refresh()
+
+                with ui.column().classes("w-full gap-3"):
+                    with ui.row().classes("w-full items-center justify-between gap-3"):
+                        ui.label("Ideias salvas").classes("brand-type text-2xl font-bold")
+                        ui.button(
+                            icon="filter_alt_off",
+                            on_click=clear_idea_filters,
+                        ).props("flat round dense").classes("text-[#aeb3ae]").tooltip(
+                            "Limpar filtros"
+                        )
+                    with ui.row().classes("w-full gap-2 items-end flex-wrap"):
+                        idea_search = (
+                            ui.input(
+                                placeholder="Buscar ideias...",
+                                on_change=lambda _event=None: saved_results.refresh(),
+                            )
+                            .props(
+                                "outlined dense clearable debounce=250 prepend-icon=search aria-label='Buscar ideias'"
+                            )
+                            .classes("flex-1 min-w-64")
+                        )
+                        idea_genre_filter = (
+                            ui.select(
+                                idea_genre_filter_options,
+                                label="Gênero",
+                                value="all",
+                                on_change=lambda _event=None: saved_results.refresh(),
+                            )
+                            .props("outlined dense")
+                            .classes("w-44")
+                        )
+                        idea_emotion_filter = (
+                            ui.select(
+                                idea_emotion_filter_options,
+                                label="Emoção",
+                                value="all",
+                                on_change=lambda _event=None: saved_results.refresh(),
+                            )
+                            .props("outlined dense")
+                            .classes("w-44")
+                        )
+                        idea_duration_filter = (
+                            ui.select(
+                                idea_duration_filter_options,
+                                label="Duração",
+                                value="all",
+                                on_change=lambda _event=None: saved_results.refresh(),
+                            )
+                            .props("outlined dense")
+                            .classes("w-36")
+                        )
+                        idea_complexity_filter = (
+                            ui.select(
+                                IDEA_COMPLEXITY_FILTER_OPTIONS,
+                                label="Complexidade",
+                                value="all",
+                                on_change=lambda _event=None: saved_results.refresh(),
+                            )
+                            .props("outlined dense")
+                            .classes("w-44")
+                        )
+                        idea_sort = (
+                            ui.select(
+                                IDEA_SORT_OPTIONS,
+                                label="Ordenar",
+                                value="created_desc",
+                                on_change=lambda _event=None: saved_results.refresh(),
+                            )
+                            .props("outlined dense")
+                            .classes("w-52")
+                        )
+
                 @ui.refreshable
                 def saved_results() -> None:
-                    ui.label("Ideias salvas").classes("brand-type text-2xl font-bold")
                     if not saved_ideas:
                         ui.label("Nenhuma ideia salva ainda.").classes("text-sm text-[#777d78]")
                         return
+                    filtered_ideas = filter_ideas(
+                        saved_ideas,
+                        query=idea_search.value,
+                        genre_filter=str(idea_genre_filter.value or "all"),
+                        emotion_filter=str(idea_emotion_filter.value or "all"),
+                        duration_filter=idea_duration_filter.value,
+                        complexity_filter=str(idea_complexity_filter.value or "all"),
+                        sort=str(idea_sort.value or "created_desc"),
+                    )
+                    ui.label(f"{len(filtered_ideas)} de {len(saved_ideas)} ideia(s)").classes(
+                        "text-xs text-[#7f8580]"
+                    )
+                    active_labels = idea_active_filter_labels(
+                        idea_search.value,
+                        str(idea_genre_filter.value or "all"),
+                        str(idea_emotion_filter.value or "all"),
+                        idea_duration_filter.value,
+                        str(idea_complexity_filter.value or "all"),
+                        str(idea_sort.value or "created_desc"),
+                    )
+                    if active_labels:
+                        with ui.row().classes("w-full gap-2 flex-wrap"):
+                            for label in active_labels:
+                                ui.badge(label).classes(
+                                    "bg-[#263225] text-[#d7f5c4] border border-[#4f6a45]"
+                                )
+                    if not filtered_ideas:
+                        with ui.element("div").classes(
+                            "w-full border border-dashed border-[#363b36] rounded-2xl min-h-48 flex flex-col items-center justify-center text-[#969c97]"
+                        ):
+                            ui.icon("search_off").classes("text-4xl")
+                            ui.label("Nenhuma ideia encontrada para esses filtros.").classes(
+                                "mt-3 text-lg font-semibold"
+                            )
+                            if has_idea_filters(
+                                idea_search.value,
+                                str(idea_genre_filter.value or "all"),
+                                str(idea_emotion_filter.value or "all"),
+                                idea_duration_filter.value,
+                                str(idea_complexity_filter.value or "all"),
+                                str(idea_sort.value or "created_desc"),
+                            ):
+                                ui.button(
+                                    "Limpar filtros",
+                                    icon="filter_alt_off",
+                                    on_click=clear_idea_filters,
+                                ).props("flat no-caps").classes("acid mt-2")
+                        return
                     with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-3 gap-4"):
-                        for idea in saved_ideas:
+                        for idea in filtered_ideas:
                             with ui.element("article").classes(
                                 "entity-card rounded-2xl p-5 flex flex-col min-h-80"
                             ):

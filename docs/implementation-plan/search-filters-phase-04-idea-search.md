@@ -14,33 +14,33 @@ revisao de muitas ideias salvas.
 
 ## Checklist de Implementacao
 
-- [ ] Adicionar barra de pesquisa acima da lista de ideias salvas.
-- [ ] Buscar por titulo, tema, hook, premissa e protagonista.
-- [ ] Adicionar filtro de genero.
-- [ ] Adicionar filtro de emocao principal.
-- [ ] Adicionar filtro de duracao.
-- [ ] Adicionar filtro de complexidade de producao.
-- [ ] Adicionar ordenacao por mais recentes.
-- [ ] Adicionar ordenacao por potencial de retencao.
-- [ ] Adicionar ordenacao por risco de cliche.
-- [ ] Adicionar ordenacao por menor complexidade.
-- [ ] Adicionar ordenacao A-Z.
-- [ ] Mostrar contador de ideias filtradas.
-- [ ] Adicionar botao para limpar filtros.
-- [ ] Adicionar estado vazio quando nenhuma ideia corresponder aos filtros.
-- [ ] Garantir que gerar novas ideias nao perca filtros atuais inesperadamente.
+- [x] Adicionar barra de pesquisa acima da lista de ideias salvas.
+- [x] Buscar por titulo, tema, hook, premissa e protagonista.
+- [x] Adicionar filtro de genero.
+- [x] Adicionar filtro de emocao principal.
+- [x] Adicionar filtro de duracao.
+- [x] Adicionar filtro de complexidade de producao.
+- [x] Adicionar ordenacao por mais recentes.
+- [x] Adicionar ordenacao por potencial de retencao.
+- [x] Adicionar ordenacao por risco de cliche.
+- [x] Adicionar ordenacao por menor complexidade.
+- [x] Adicionar ordenacao A-Z.
+- [x] Mostrar contador de ideias filtradas.
+- [x] Adicionar botao para limpar filtros.
+- [x] Adicionar estado vazio quando nenhuma ideia corresponder aos filtros.
+- [x] Garantir que gerar novas ideias nao perca filtros atuais inesperadamente.
 
 ## Criterios de Aceite
 
-- [ ] O usuario consegue encontrar ideias por termos narrativos.
-- [ ] Filtros e ordenacao funcionam sem recarregar a pagina.
-- [ ] Acoes de descartar e desenvolver continuam funcionando no item filtrado.
-- [ ] Estados vazios diferenciam "sem ideias" de "sem resultado".
+- [x] O usuario consegue encontrar ideias por termos narrativos.
+- [x] Filtros e ordenacao funcionam sem recarregar a pagina.
+- [x] Acoes de descartar e desenvolver continuam funcionando no item filtrado.
+- [x] Estados vazios diferenciam "sem ideias" de "sem resultado".
 
 ## Validacao Recomendada
 
-- [ ] Testar busca por titulo, protagonista e premissa.
-- [ ] Testar combinacao de genero, emocao e duracao.
-- [ ] Testar descarte de item filtrado.
-- [ ] `python -m pytest tests/test_idea_lab.py tests/test_project_creation_ui.py -q`
-- [ ] `ruff check app tests`
+- [x] Testar busca por titulo, protagonista e premissa.
+- [x] Testar combinacao de genero, emocao e duracao.
+- [x] Testar descarte de item filtrado.
+- [x] `python -m pytest tests/test_idea_lab.py tests/test_project_creation_ui.py -q`
+- [x] `ruff check app tests`

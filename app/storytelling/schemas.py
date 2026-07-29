@@ -48,6 +48,13 @@ class StoryIdeaRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class StoryIdeaSearchRead(BaseModel):
+    items: list[StoryIdeaRead]
+    total: int
+    limit: int
+    offset: int
+
+
 class GenerateScriptRequest(BaseModel):
     story_idea_id: UUID
 

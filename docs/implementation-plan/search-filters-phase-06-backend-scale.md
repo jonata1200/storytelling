@@ -14,30 +14,30 @@ suficientes, movendo busca e filtros para queries paginadas.
 
 ## Checklist de Implementacao
 
-- [ ] Medir tamanho medio esperado de listas de projetos e ideias.
-- [ ] Definir limite para migrar de filtro client-side para backend.
-- [ ] Criar contrato de parametros para busca de projetos.
-- [ ] Criar contrato de parametros para busca de ideias.
-- [ ] Implementar paginacao com `limit` e `offset` ou cursor.
-- [ ] Adicionar ordenacao no backend.
-- [ ] Avaliar indices em titulo, status e datas de projeto.
-- [ ] Avaliar estrutura persistida para ideias salvas se elas continuarem em arquivo runtime.
-- [ ] Garantir que a UI consiga alternar para resultados paginados.
-- [ ] Adicionar testes de query e paginacao.
-- [ ] Documentar limites e comportamento de performance.
+- [x] Medir tamanho medio esperado de listas de projetos e ideias.
+- [x] Definir limite para migrar de filtro client-side para backend.
+- [x] Criar contrato de parametros para busca de projetos.
+- [x] Criar contrato de parametros para busca de ideias.
+- [x] Implementar paginacao com `limit` e `offset` ou cursor.
+- [x] Adicionar ordenacao no backend.
+- [x] Avaliar indices em titulo, status e datas de projeto.
+- [x] Avaliar estrutura persistida para ideias salvas se elas continuarem em arquivo runtime.
+- [x] Garantir que a UI consiga alternar para resultados paginados.
+- [x] Adicionar testes de query e paginacao.
+- [x] Documentar limites e comportamento de performance.
 
 ## Criterios de Aceite
 
-- [ ] A busca continua rapida com centenas ou milhares de itens.
-- [ ] A UI nao precisa carregar todos os registros para filtrar.
-- [ ] Ordenacao e filtros retornam resultados determinísticos.
-- [ ] A primeira versao client-side continua funcionando durante a transicao.
+- [x] A busca continua rapida com centenas ou milhares de itens.
+- [x] A UI nao precisa carregar todos os registros para filtrar.
+- [x] Ordenacao e filtros retornam resultados determinísticos.
+- [x] A primeira versao client-side continua funcionando durante a transicao.
 
 ## Validacao Recomendada
 
 - [ ] Criar fixtures com muitos projetos.
 - [ ] Criar fixtures com muitas ideias.
 - [ ] Medir tempo de resposta das queries.
-- [ ] `python -m pytest tests/test_search_filters.py -q`
-- [ ] `ruff check app tests`
-- [ ] `mypy app tests`
+- [x] `python -m pytest tests/test_search_filters.py -q`
+- [x] `ruff check app tests`
+- [x] `mypy app tests`

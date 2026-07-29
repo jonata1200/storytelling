@@ -1,7 +1,7 @@
 ﻿from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,9 @@ from app.storytelling.schemas import (
     ScriptRead,
     ShotRead,
     StoryIdeaRead,
+    StoryIdeaSearchRead,
 )
+from app.storytelling.search import search_story_ideas
 from app.storytelling.service import (
     GenerationOutputError,
     create_briefing,
@@ -77,6 +79,39 @@ async def get_ideas(
 ) -> list[StoryIdeaRead]:
     ideas = await list_story_ideas(session, project_id)
     return [StoryIdeaRead.model_validate(idea) for idea in ideas]
+
+
+@router.get("/{project_id}/ideas/search", response_model=StoryIdeaSearchRead)
+async def get_ideas_search(
+    project_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    genre_filter: Annotated[str, Query(max_length=120)] = "all",
+    emotion_filter: Annotated[str, Query(max_length=120)] = "all",
+    duration_filter: Annotated[str, Query(max_length=20)] = "all",
+    complexity_filter: Annotated[str, Query(max_length=40)] = "all",
+    sort: Annotated[str, Query(max_length=40)] = "created_desc",
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> StoryIdeaSearchRead:
+    ideas, total = await search_story_ideas(
+        session,
+        project_id,
+        query=query,
+        genre_filter=genre_filter,
+        emotion_filter=emotion_filter,
+        duration_filter=duration_filter,
+        complexity_filter=complexity_filter,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+    return StoryIdeaSearchRead(
+        items=[StoryIdeaRead.model_validate(idea) for idea in ideas],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("/{project_id}/script/generate", response_model=ScriptRead)
