@@ -174,6 +174,42 @@ def test_omniroute_llm_provider_accepts_event_stream_response(
     assert response["choices"][0]["message"]["content"] == '{"ok": true}'
 
 
+def test_omniroute_llm_provider_retries_empty_stream_without_response_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OmniRouteLLMProvider()
+    posted_bodies: list[dict[str, Any]] = []
+
+    monkeypatch.setattr(
+        "app.providers.llm.omniroute.get_settings",
+        lambda: Settings(
+            omniroute_api_key="omni-secret",
+            omniroute_base_url="http://localhost:20128/v1",
+        ),
+    )
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _BytesResponse:
+        _ = kwargs
+        posted_bodies.append(_request_json_body(request))
+        if len(posted_bodies) == 1:
+            return _BytesResponse(b"data: [DONE]\n\n", "text/event-stream")
+        return _BytesResponse(
+            b'{"choices":[{"message":{"content":"{\\"ok\\": true}"}}]}',
+            "application/json",
+        )
+
+    monkeypatch.setattr("app.providers.llm.omniroute.urllib.request.urlopen", fake_urlopen)
+
+    response = provider._send_request(
+        LLMRequest(task="generate_story_ideas", prompt="{}", model="ds-web/deepseek-v4-flash"),
+        use_response_format=True,
+    )
+
+    assert posted_bodies[0]["response_format"] == {"type": "json_object"}
+    assert "response_format" not in posted_bodies[1]
+    assert response["choices"][0]["message"]["content"] == '{"ok": true}'
+
+
 def test_omniroute_llm_provider_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = OmniRouteLLMProvider()
     monkeypatch.setattr(

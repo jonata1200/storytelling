@@ -1,5 +1,6 @@
 ﻿# ruff: noqa: E501
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
@@ -20,7 +21,6 @@ from app.database.session import AsyncSessionLocal
 from app.generation.model_settings import (
     ensure_default_model_settings,
 )
-from app.jobs.service import enqueue_project_step
 from app.production.service import (
     update_production_settings,
 )
@@ -162,10 +162,12 @@ from app.ui.project.text import (
     format_idea_payload_for_project as _format_idea_payload_for_project,
 )
 from app.ui.project.workflows import (
-    _log_ai_background_failure as _workflow_log_ai_background_failure,
+    _generate_initial_script_in_background,
+    _reload_project_when_script_ready,
+    _set_project_ai_action_status,
 )
 from app.ui.project.workflows import (
-    _reload_project_when_script_ready,
+    _log_ai_background_failure as _workflow_log_ai_background_failure,
 )
 from app.ui.shared import assistant_state
 from app.ui.shared.assistant_state import (  # noqa: F401
@@ -319,7 +321,14 @@ async def _generate_initial_script(
 async def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -> None:
     loading_dialog.open()
     async with AsyncSessionLocal() as session:
-        await enqueue_project_step(session, project_id, "initial_script")
+        await _set_project_ai_action_status(
+            session,
+            project_id,
+            status="queued",
+            message="A IA vai retomar a criação do roteiro inicial.",
+            action="create_initial_script",
+        )
+    asyncio.create_task(_generate_initial_script_in_background(project_id))
     ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
     ui.notify("Retomando a criação do roteiro.", color="positive")
 
@@ -370,6 +379,7 @@ async def _create_project_from_form(
     try:
         duration = coerce_duration_minutes(form["duration"])
         project_id: UUID
+        background_source_idea: dict[str, Any] | None = None
         async with AsyncSessionLocal() as session:
             project = await create_project(
                 session,
@@ -420,14 +430,19 @@ async def _create_project_from_form(
                     reference_uploads,
                 )
             if generate_initial_script:
-                await enqueue_project_step(
+                await _set_project_ai_action_status(
                     session,
                     project.id,
-                    "initial_script",
-                    {"source_idea": dict(source_idea) if source_idea is not None else None},
+                    status="queued",
+                    message="A IA vai iniciar a criação do roteiro inicial.",
+                    action="create_initial_script",
                 )
+                background_source_idea = dict(source_idea) if source_idea is not None else None
         if generate_initial_script:
-            message = f"Projeto criado. O roteiro de {duration:g} minutos foi enfileirado."
+            asyncio.create_task(
+                _generate_initial_script_in_background(project_id, background_source_idea)
+            )
+            message = f"Projeto criado. A IA iniciou o roteiro de {duration:g} minutos."
         else:
             message = "Projeto criado com briefing inicial."
         ui.notify(message, color="positive")

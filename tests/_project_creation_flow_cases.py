@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -405,7 +405,9 @@ async def test_retry_initial_script_opens_loading_dialog_and_watches_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
-    enqueued_jobs: list[dict[str, Any]] = []
+    status_updates: list[dict[str, Any]] = []
+    background_calls: list[UUID] = []
+    created_tasks: list[object] = []
     timers: list[dict[str, Any]] = []
     notifications: list[str] = []
 
@@ -422,28 +424,42 @@ async def test_retry_initial_script_opens_loading_dialog_and_watches_status(
         async def __aexit__(self, *args: object) -> None:
             return None
 
-    async def fake_enqueue_project_step(
+    async def fake_set_project_ai_action_status(
         session: object,
         requested_project_id: Any,
-        step: str,
-        payload: dict[str, Any] | None = None,
-    ) -> object:
-        enqueued_jobs.append(
+        **kwargs: Any,
+    ) -> None:
+        status_updates.append(
             {
                 "session": session,
                 "project_id": requested_project_id,
-                "step": step,
-                "payload": payload,
+                **kwargs,
             }
         )
-        return object()
+
+    async def fake_generate_initial_script_in_background(requested_project_id: UUID) -> None:
+        background_calls.append(requested_project_id)
 
     def fake_timer(interval: float, callback: object) -> None:
         timers.append({"interval": interval, "callback": callback})
 
+    def fake_create_task(coro: object) -> object:
+        created_tasks.append(coro)
+        return object()
+
     dialog = FakeDialog()
     monkeypatch.setattr(pages, "AsyncSessionLocal", lambda: FakeSessionContext())
-    monkeypatch.setattr(pages, "enqueue_project_step", fake_enqueue_project_step)
+    monkeypatch.setattr(
+        pages,
+        "_set_project_ai_action_status",
+        fake_set_project_ai_action_status,
+    )
+    monkeypatch.setattr(
+        pages,
+        "_generate_initial_script_in_background",
+        fake_generate_initial_script_in_background,
+    )
+    monkeypatch.setattr(pages.asyncio, "create_task", fake_create_task)
     monkeypatch.setattr(pages.ui, "timer", fake_timer)
     monkeypatch.setattr(
         pages.ui,
@@ -454,12 +470,40 @@ async def test_retry_initial_script_opens_loading_dialog_and_watches_status(
     await pages._retry_initial_script_from_ui(project_id, dialog)
 
     assert dialog.opened is True
-    assert enqueued_jobs
-    assert enqueued_jobs[0]["project_id"] == project_id
-    assert enqueued_jobs[0]["step"] == "initial_script"
-    assert enqueued_jobs[0]["payload"] is None
+    assert status_updates
+    assert status_updates[0]["project_id"] == project_id
+    assert status_updates[0]["status"] == "queued"
+    assert created_tasks
+    await created_tasks[0]
+    assert background_calls == [project_id]
     assert timers and timers[0]["interval"] == 5.0
     assert notifications == ["Retomando a criação do roteiro."]
+
+
+def test_script_loading_stops_when_script_and_scenes_exist() -> None:
+    assert (
+        script_area.script_generation_in_progress(
+            script=object(),
+            scenes=[object()],
+            ai_status="running",
+            should_recover_missing_scenes=False,
+            should_resume_stale_script=False,
+        )
+        is False
+    )
+
+
+def test_script_loading_continues_when_scenes_are_missing() -> None:
+    assert (
+        script_area.script_generation_in_progress(
+            script=object(),
+            scenes=[],
+            ai_status="running",
+            should_recover_missing_scenes=False,
+            should_resume_stale_script=False,
+        )
+        is True
+    )
 
 
 def test_legacy_assistant_greeting_is_removed_from_chat_history() -> None:

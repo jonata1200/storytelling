@@ -55,6 +55,7 @@ class OmniRouteLLMProvider:
                 {"role": "user", "content": request.prompt},
             ],
             "temperature": 0.7,
+            "stream": False,
         }
         if use_response_format:
             body["response_format"] = {"type": "json_object"}
@@ -76,7 +77,12 @@ class OmniRouteLLMProvider:
                     getattr(response, "headers", {}).get("content-type", "")
                 ).lower()
                 if "text/event-stream" in content_type:
-                    parsed = self._parse_event_stream_response(raw_body)
+                    try:
+                        parsed = self._parse_event_stream_response(raw_body)
+                    except RuntimeError as exc:
+                        if use_response_format and "stream sem conte" in str(exc).lower():
+                            return self._send_request(request, False)
+                        raise
                 else:
                     parsed = json.loads(raw_body.decode("utf-8"))
         except urllib.error.HTTPError as exc:

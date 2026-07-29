@@ -34,20 +34,25 @@ Depois da primeira configuração, você pode usar o script unificado da pasta `
 .\scripts\app.ps1 start
 ```
 
-Para iniciar a API em segundo plano:
+O comando inicia PostgreSQL, Redis, aplica migrations, sobe a API e inicia o
+worker Celery usado pelas etapas avançadas enfileiradas. O roteiro inicial da
+criação de projeto roda em background na própria aplicação. Se precisar subir
+somente API e infraestrutura, use `-SkipWorker`.
+
+Para iniciar API e worker em segundo plano:
 
 ```powershell
 .\scripts\app.ps1 start -Background
 ```
 
-Para processar jobs longos em paralelo com a API, mantenha Redis ativo pelo
-Docker Compose e inicie um worker Celery em outro terminal:
+Para iniciar apenas o worker manualmente, mantenha Redis ativo pelo Docker
+Compose e rode:
 
 ```powershell
-celery -A app.workers.celery_app.celery_app worker --loglevel=info --pool=solo
+celery -A app.workers.celery_app.celery_app worker --loglevel=info --pool=solo --queues storytelling
 ```
 
-Para finalizar a API e parar os containers:
+Para finalizar API, worker e containers:
 
 ```powershell
 .\scripts\app.ps1 stop

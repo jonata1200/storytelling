@@ -26,6 +26,22 @@ RetryInitialScriptHandler = Callable[[UUID, Any], Awaitable[None]]
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
 
 
+def script_generation_in_progress(
+    *,
+    script: object | None,
+    scenes: list[Any],
+    ai_status: str,
+    should_recover_missing_scenes: bool,
+    should_resume_stale_script: bool,
+) -> bool:
+    script_pipeline_ready = script is not None and bool(scenes)
+    return (
+        (ai_status in {"queued", "running"} and not script_pipeline_ready)
+        or should_recover_missing_scenes
+        or should_resume_stale_script
+    )
+
+
 async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID) -> None:
     async with AsyncSessionLocal() as session:
         scenes = await regenerate_scenes_and_shots(session, project_id, script_id)
@@ -139,10 +155,12 @@ def render_script_area(
         ui.timer(0.1, lambda: _enqueue_script_pipeline_from_ui(project_id, "scenes"), once=True)
     if should_resume_stale_script:
         ui.timer(0.1, lambda: _enqueue_script_pipeline_from_ui(project_id), once=True)
-    generation_in_progress = (
-        ai_status in {"queued", "running"}
-        or should_recover_missing_scenes
-        or should_resume_stale_script
+    generation_in_progress = script_generation_in_progress(
+        script=script,
+        scenes=summary["scenes"],
+        ai_status=ai_status,
+        should_recover_missing_scenes=should_recover_missing_scenes,
+        should_resume_stale_script=should_resume_stale_script,
     )
     if generation_in_progress:
         loading_title = (

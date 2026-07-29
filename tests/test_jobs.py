@@ -1,4 +1,5 @@
-﻿from types import SimpleNamespace
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -35,6 +36,28 @@ def test_project_job_can_run_respects_exhausted_failed_status() -> None:
 def test_scenes_is_a_valid_project_step() -> None:
     assert jobs_service.normalize_step("scenes") == "scenes"
     assert "scenes" in jobs_service.PROJECT_STEP_JOB_TYPES
+
+
+def test_pending_job_is_not_stale_when_recent() -> None:
+    now = datetime.now(UTC)
+    job = SimpleNamespace(
+        status=GenerationJobStatus.PENDING,
+        updated_at=now - timedelta(seconds=15),
+        created_at=now - timedelta(seconds=15),
+    )
+
+    assert jobs_service.pending_job_is_stale(cast(Any, job), now) is False
+
+
+def test_pending_job_is_stale_after_redispatch_window() -> None:
+    now = datetime.now(UTC)
+    job = SimpleNamespace(
+        status=GenerationJobStatus.PENDING,
+        updated_at=now - timedelta(minutes=3),
+        created_at=now - timedelta(minutes=3),
+    )
+
+    assert jobs_service.pending_job_is_stale(cast(Any, job), now) is True
 
 
 @pytest.mark.asyncio

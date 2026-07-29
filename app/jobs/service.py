@@ -1,6 +1,6 @@
 ﻿import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from celery.exceptions import CeleryError
@@ -28,6 +28,7 @@ TERMINAL_JOB_STATUSES = {
     GenerationJobStatus.SUCCEEDED,
     GenerationJobStatus.CANCELLED,
 }
+PENDING_JOB_REDISPATCH_AFTER = timedelta(minutes=2)
 
 
 def normalize_step(value: str) -> str:
@@ -54,6 +55,18 @@ def project_job_can_run(job: GenerationJob) -> bool:
     return not (
         job.status == GenerationJobStatus.FAILED and job.attempts >= job.max_attempts
     )
+
+
+def pending_job_is_stale(job: GenerationJob, now: datetime | None = None) -> bool:
+    if job.status != GenerationJobStatus.PENDING:
+        return False
+    updated_at = job.updated_at or job.created_at
+    if updated_at is None:
+        return True
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    reference_time = now or datetime.now(UTC)
+    return reference_time - updated_at >= PENDING_JOB_REDISPATCH_AFTER
 
 
 async def _set_project_job_action(
@@ -115,6 +128,7 @@ async def create_or_resume_project_job(
         select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
     )
     job = result.scalars().first()
+    should_dispatch = False
     if job is None:
         job = GenerationJob(
             project_id=project_id,
@@ -131,6 +145,7 @@ async def create_or_resume_project_job(
         )
         session.add(job)
         await session.flush()
+        should_dispatch = True
     elif job.status == GenerationJobStatus.FAILED and job.attempts < job.max_attempts:
         job.status = GenerationJobStatus.PENDING
         job.progress = 0
@@ -138,6 +153,9 @@ async def create_or_resume_project_job(
         job.completed_at = None
         job.response_payload = {}
         await session.flush()
+        should_dispatch = True
+    elif pending_job_is_stale(job):
+        should_dispatch = True
     if job.status == GenerationJobStatus.SUCCEEDED:
         action_status = "completed"
         action_message = "Etapa ja concluida anteriormente."
@@ -156,6 +174,7 @@ async def create_or_resume_project_job(
     )
     await session.commit()
     await session.refresh(job)
+    job._should_dispatch_after_enqueue = should_dispatch
     return job
 
 
@@ -248,6 +267,9 @@ async def enqueue_project_step(
     dispatch: bool = True,
 ) -> GenerationJob:
     job = await create_or_resume_project_job(session, project_id, step, payload)
-    if dispatch and project_job_can_run(job):
+    should_dispatch = bool(
+        getattr(job, "_should_dispatch_after_enqueue", project_job_can_run(job))
+    )
+    if dispatch and should_dispatch and project_job_can_run(job):
         dispatch_project_job(job.id)
     return job
