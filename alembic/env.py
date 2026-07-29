@@ -27,9 +27,9 @@ settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Defaults loaded by Settings when runtime preferences/.env do not override them:
-# OPENROUTER_DEFAULT_MODEL=deepseek/deepseek-v4-flash
-# OPENROUTER_IMAGE_MODEL=sourceful/riverflow-v2-fast
-# OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0-fast
+# OMNIROUTE_DEFAULT_MODEL=ds-web/deepseek-v4-flash
+# OMNIROUTE_IMAGE_MODEL=chatgpt-web/gpt-5.5
+# OMNIROUTE_VIDEO_MODEL=veo-free/veo
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

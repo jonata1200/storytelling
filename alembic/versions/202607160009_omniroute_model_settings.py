@@ -1,4 +1,4 @@
-"""openrouter model settings
+"""omniroute model settings
 
 Revision ID: 202607160009
 Revises: 202607160008
