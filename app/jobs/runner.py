@@ -60,10 +60,7 @@ async def _run_initial_script(
     script = await generate_script(session, project_id, idea.id)
     if script is None:
         raise ValueError("não foi possível gerar roteiro")
-    scenes = await generate_scenes_and_shots(session, project_id, script.id)
-    if scenes is None:
-        raise ValueError("não foi possível gerar cenas e planos")
-    return {"script_id": str(script.id), "scene_count": len(scenes)}
+    return {"script_id": str(script.id)}
 
 
 async def _run_script(session: AsyncSession, project_id: UUID) -> dict[str, Any]:
@@ -76,6 +73,13 @@ async def _run_script(session: AsyncSession, project_id: UUID) -> dict[str, Any]
     script = await generate_script(session, project_id, idea.id)
     if script is None:
         raise ValueError("não foi possível gerar roteiro")
+    return {"script_id": str(script.id)}
+
+
+async def _run_scenes(session: AsyncSession, project_id: UUID) -> dict[str, Any]:
+    script = await _latest(session, Script, project_id)
+    if script is None:
+        raise ValueError("gere o roteiro primeiro")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
         raise ValueError("não foi possível gerar cenas e planos")
@@ -173,12 +177,38 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
         try:
             await mark_job_progress(session, job, progress=20, message=f"Executando {step}.")
             if step == "initial_script":
+                await mark_job_progress(
+                    session,
+                    job,
+                    progress=35,
+                    message="Criando roteiro inicial.",
+                )
                 response = await _run_initial_script(session, job.project_id, payload)
             elif step == "ideas":
+                await mark_job_progress(
+                    session,
+                    job,
+                    progress=35,
+                    message="Criando ideias narrativas.",
+                )
                 ideas = await generate_story_ideas(session, job.project_id)
                 response = {"idea_count": len(ideas or [])}
             elif step == "script":
+                await mark_job_progress(
+                    session,
+                    job,
+                    progress=35,
+                    message="Escrevendo roteiro cinematográfico.",
+                )
                 response = await _run_script(session, job.project_id)
+            elif step == "scenes":
+                await mark_job_progress(
+                    session,
+                    job,
+                    progress=35,
+                    message="Separando roteiro em cenas e planos.",
+                )
+                response = await _run_scenes(session, job.project_id)
             elif step == "visual":
                 response = await _run_visual(session, job.project_id)
             elif step == "storyboard":

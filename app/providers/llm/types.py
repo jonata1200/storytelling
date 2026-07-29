@@ -9,6 +9,7 @@ class LLMRequest(BaseModel):
     variables: dict[str, Any] = Field(default_factory=dict)
     output_schema: dict[str, Any] = Field(default_factory=dict)
     model: str = "ds-web/deepseek-v4-flash"
+    timeout_seconds: float | None = None
 
 
 class LLMResult(BaseModel):

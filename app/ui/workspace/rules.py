@@ -30,6 +30,7 @@ def step_ready(step_key: str, counts: dict[str, int]) -> bool:
         "briefing": counts.get("briefings", 0) > 0,
         "ideas": counts.get("ideas", 0) > 0,
         "script": counts.get("scripts", 0) > 0,
+        "scenes": counts.get("scenes", 0) > 0 and counts.get("shots", 0) > 0,
         "visual": visual_assets_ready(counts),
         "storyboard": counts.get("frames", 0) > 0 and counts.get("animatics", 0) > 0,
         "video": counts.get("clips", 0) > 0,
@@ -41,6 +42,7 @@ def step_ready(step_key: str, counts: dict[str, int]) -> bool:
 
 def workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool, str]:
     script_ready = step_ready("script", counts)
+    scenes_ready = step_ready("scenes", counts)
     assets_ready = step_ready("visual", counts)
     storyboard_ready = step_ready("storyboard", counts)
     if section == "script":
@@ -52,6 +54,8 @@ def workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool
     if section == "storyboard":
         if not script_ready:
             return False, "Crie o roteiro antes de acessar o storyboard."
+        if not scenes_ready:
+            return False, "Gere as cenas e planos antes de acessar o storyboard."
         if not assets_ready:
             return (
                 False,

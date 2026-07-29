@@ -194,7 +194,7 @@ async def generate_script(
     provider, model = await llm_provider_for_task(session, project_id, "generate_script")
     payload: dict | None = None
     last_error: GenerationOutputError | None = None
-    for attempt in range(2):
+    for attempt in range(SCRIPT_GENERATION_MAX_ATTEMPTS):
         result, _execution = await run_structured_generation(
             session,
             provider,

@@ -37,9 +37,9 @@ async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID)
         await resolve_stale_artifacts_after_regeneration(session, project_id)
 
 
-async def _enqueue_script_pipeline_from_ui(project_id: UUID) -> None:
+async def _enqueue_script_pipeline_from_ui(project_id: UUID, step: str = "script") -> None:
     async with AsyncSessionLocal() as session:
-        await enqueue_project_step(session, project_id, "script")
+        await enqueue_project_step(session, project_id, step)
 
 
 async def save_script_from_ui(
@@ -124,7 +124,9 @@ def render_script_area(
     ai_status = str(ai_action.get("status") or "")
     ai_action_name = str(ai_action.get("action") or "")
     missing_scenes = script is not None and not summary["scenes"]
-    scene_generation_failed = ai_action_name == "create_script_scenes" and ai_status == "failed"
+    scene_generation_failed = (
+        ai_action_name in {"create_script_scenes", "scenes"} and ai_status == "failed"
+    )
     should_recover_missing_scenes = (
         missing_scenes and ai_status not in {"queued", "running"} and not scene_generation_failed
     )
@@ -134,7 +136,7 @@ def render_script_area(
         and ai_action_is_stale(ai_action)
     )
     if should_recover_missing_scenes:
-        ui.timer(0.1, lambda: _enqueue_script_pipeline_from_ui(project_id), once=True)
+        ui.timer(0.1, lambda: _enqueue_script_pipeline_from_ui(project_id, "scenes"), once=True)
     if should_resume_stale_script:
         ui.timer(0.1, lambda: _enqueue_script_pipeline_from_ui(project_id), once=True)
     generation_in_progress = (

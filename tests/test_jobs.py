@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import GenerationJobStatus
+from app.jobs import runner as jobs_runner
 from app.jobs import service as jobs_service
 
 
@@ -29,6 +30,11 @@ def test_project_job_can_run_respects_exhausted_failed_status() -> None:
     assert not jobs_service.project_job_can_run(cast(Any, exhausted))
     assert jobs_service.project_job_can_run(cast(Any, retryable))
     assert not jobs_service.project_job_can_run(cast(Any, completed))
+
+
+def test_scenes_is_a_valid_project_step() -> None:
+    assert jobs_service.normalize_step("scenes") == "scenes"
+    assert "scenes" in jobs_service.PROJECT_STEP_JOB_TYPES
 
 
 @pytest.mark.asyncio
@@ -66,3 +72,78 @@ async def test_enqueue_project_step_does_not_dispatch_exhausted_failed_job(
 
     assert result is job
     assert dispatched == []
+
+
+@pytest.mark.asyncio
+async def test_script_job_only_generates_script(monkeypatch: pytest.MonkeyPatch) -> None:
+    project_id = uuid4()
+    idea_id = uuid4()
+    script_id = uuid4()
+    calls: list[str] = []
+
+    async def fake_latest(
+        session: AsyncSession, model: type[Any], requested_project_id: UUID
+    ) -> Any:
+        _ = session, model
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=idea_id)
+
+    async def fake_generate_story_ideas(*args: Any, **kwargs: Any) -> list[Any]:
+        calls.append("ideas")
+        return []
+
+    async def fake_generate_script(*args: Any, **kwargs: Any) -> Any:
+        calls.append("script")
+        assert args[1] == project_id
+        assert args[2] == idea_id
+        return SimpleNamespace(id=script_id)
+
+    async def fake_generate_scenes_and_shots(*args: Any, **kwargs: Any) -> list[Any]:
+        calls.append("scenes")
+        return []
+
+    monkeypatch.setattr(jobs_runner, "_latest", fake_latest)
+    monkeypatch.setattr(jobs_runner, "generate_story_ideas", fake_generate_story_ideas)
+    monkeypatch.setattr(jobs_runner, "generate_script", fake_generate_script)
+    monkeypatch.setattr(
+        jobs_runner,
+        "generate_scenes_and_shots",
+        fake_generate_scenes_and_shots,
+    )
+
+    result = await jobs_runner._run_script(cast(AsyncSession, object()), project_id)
+
+    assert result == {"script_id": str(script_id)}
+    assert calls == ["script"]
+
+
+@pytest.mark.asyncio
+async def test_scenes_job_uses_latest_script(monkeypatch: pytest.MonkeyPatch) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    calls: list[str] = []
+
+    async def fake_latest(
+        session: AsyncSession, model: type[Any], requested_project_id: UUID
+    ) -> Any:
+        _ = session, model
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=script_id)
+
+    async def fake_generate_scenes_and_shots(*args: Any, **kwargs: Any) -> list[Any]:
+        calls.append("scenes")
+        assert args[1] == project_id
+        assert args[2] == script_id
+        return [SimpleNamespace(id=uuid4()), SimpleNamespace(id=uuid4())]
+
+    monkeypatch.setattr(jobs_runner, "_latest", fake_latest)
+    monkeypatch.setattr(
+        jobs_runner,
+        "generate_scenes_and_shots",
+        fake_generate_scenes_and_shots,
+    )
+
+    result = await jobs_runner._run_scenes(cast(AsyncSession, object()), project_id)
+
+    assert result == {"script_id": str(script_id), "scene_count": 2}
+    assert calls == ["scenes"]

@@ -31,6 +31,14 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
 }
 
 LLM_PROVIDER_TIMEOUT_SECONDS = 300
+TASK_TIMEOUT_SECONDS: dict[str, int] = {
+    "generate_story_ideas": 120,
+    "generate_script": 120,
+    "generate_scenes_and_shots": 120,
+    "generate_visual_bible": 180,
+    "generate_storyboard_prompts": 180,
+    "revise_script": 120,
+}
 CREATIVE_NARRATIVE_TASKS = {
     "generate_story_ideas",
     "generate_script",
@@ -291,6 +299,10 @@ async def run_structured_generation(
     variables = DEFAULT_TEMPLATE_VARIABLES | variables
     prompt = compile_prompt(template.template_text, variables)
     started = perf_counter()
+    timeout_seconds = min(
+        TASK_TIMEOUT_SECONDS.get(task, LLM_PROVIDER_TIMEOUT_SECONDS),
+        LLM_PROVIDER_TIMEOUT_SECONDS,
+    )
     request = LLMRequest(
         task=task,
         prompt=prompt,
@@ -304,6 +316,7 @@ async def run_structured_generation(
                 "text",
             )
         ),
+        timeout_seconds=timeout_seconds,
     )
     fallback_error: str | None = None
     try:
@@ -314,12 +327,12 @@ async def run_structured_generation(
         provider_call = provider.generate_structured(request)
         result = await asyncio.wait_for(
             provider_call,
-            timeout=LLM_PROVIDER_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
     except (RuntimeError, TimeoutError, ValueError) as exc:
         if isinstance(exc, TimeoutError):
             exc = RuntimeError(
-                f"Provider demorou mais de {LLM_PROVIDER_TIMEOUT_SECONDS}s"
+                f"Provider demorou mais de {timeout_seconds}s na tarefa {task}"
             )
         _ = fallback_on_runtime_error, should_fallback_to_mock(exc)
         raise exc

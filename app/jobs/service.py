@@ -16,6 +16,7 @@ PROJECT_STEP_JOB_TYPES = {
     "initial_script": GenerationJobType.ANALYSIS,
     "ideas": GenerationJobType.ANALYSIS,
     "script": GenerationJobType.ANALYSIS,
+    "scenes": GenerationJobType.ANALYSIS,
     "visual": GenerationJobType.IMAGE,
     "storyboard": GenerationJobType.IMAGE,
     "video": GenerationJobType.VIDEO,

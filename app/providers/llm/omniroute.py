@@ -11,6 +11,7 @@ from app.observability.redaction import redact_secrets
 from app.providers.llm.types import LLMRequest, LLMResult
 
 OMNIROUTE_LLM_HTTP_TIMEOUT_SECONDS = 300
+OMNIROUTE_LLM_MIN_HTTP_TIMEOUT_SECONDS = 15
 
 
 class OmniRouteLLMProvider:
@@ -68,9 +69,8 @@ class OmniRouteLLMProvider:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(
-                http_request, timeout=OMNIROUTE_LLM_HTTP_TIMEOUT_SECONDS
-            ) as response:
+            timeout_seconds = self._request_timeout_seconds(request)
+            with urllib.request.urlopen(http_request, timeout=timeout_seconds) as response:
                 raw_body = response.read()
                 content_type = str(
                     getattr(response, "headers", {}).get("content-type", "")
@@ -99,6 +99,14 @@ class OmniRouteLLMProvider:
         if not isinstance(parsed, dict):
             raise RuntimeError("OmniRoute retornou resposta fora do formato esperado")
         return parsed
+
+    def _request_timeout_seconds(self, request: LLMRequest) -> float:
+        if request.timeout_seconds is None:
+            return OMNIROUTE_LLM_HTTP_TIMEOUT_SECONDS
+        return max(
+            OMNIROUTE_LLM_MIN_HTTP_TIMEOUT_SECONDS,
+            min(OMNIROUTE_LLM_HTTP_TIMEOUT_SECONDS, float(request.timeout_seconds)),
+        )
 
     def _parse_event_stream_response(self, raw_body: bytes) -> dict[str, Any]:
         content_parts: list[str] = []

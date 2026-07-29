@@ -99,6 +99,7 @@ def _render_model_settings(project_id: UUID, settings_list: list[ProjectModelSet
 def _render_director_cockpit(settings: ProjectProductionSettings, counts: dict[str, int]) -> None:
     flow = [
         ("Script", counts["scripts"]),
+        ("Cenas", counts["scenes"] + counts["shots"]),
         ("Assets", counts["characters"] + counts["visual_refs"]),
         ("Storyboard", counts["frames"]),
         ("Video", counts["clips"]),

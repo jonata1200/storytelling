@@ -27,6 +27,7 @@ async def _run_step(
     step_messages = {
         "ideas": "Criando ideias.",
         "script": "Criando roteiro.",
+        "scenes": "Criando cenas e planos.",
         "visual": "Criando prompts visuais.",
         "storyboard": "Criando storyboard.",
         "video": "Preparando video.",
@@ -60,6 +61,7 @@ async def _run_step(
             if step_key not in {
                 "ideas",
                 "script",
+                "scenes",
                 "visual",
                 "storyboard",
                 "finalization",
@@ -68,7 +70,7 @@ async def _run_step(
                 raise ValueError("etapa sem acao automatica")
 
             script = await _latest(session, Script, project_id)
-            if step_key in {"visual", "storyboard"} and script is None:
+            if step_key in {"scenes", "visual", "storyboard"} and script is None:
                 raise ValueError("gere o roteiro primeiro")
             if step_key == "storyboard":
                 visual_report = await visual_reference_completion_report(session, project_id)

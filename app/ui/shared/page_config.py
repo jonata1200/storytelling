@@ -53,9 +53,16 @@ PRODUCTION_STEPS = [
     ProductionStep(
         "script",
         "Roteiro",
-        "Crie o texto base, duração alvo, cenas e planos estruturados.",
+        "Crie o texto base e a duração alvo do filme.",
         "Gerar roteiro",
         "description",
+    ),
+    ProductionStep(
+        "scenes",
+        "Cenas",
+        "Separe o roteiro em cenas e planos prontos para vídeo.",
+        "Gerar cenas",
+        "splitscreen",
     ),
     ProductionStep(
         "visual",
@@ -103,7 +110,8 @@ WORKSPACE_TABS = [
 
 STEP_LOADING_COPY = {
     "ideas": ("Gerando ideias", "A IA está criando temas, gêneros e emoções."),
-    "script": ("Gerando roteiro", "A IA está escrevendo o roteiro e separando cenas."),
+    "script": ("Gerando roteiro", "A IA está escrevendo o roteiro cinematográfico."),
+    "scenes": ("Gerando cenas", "A IA está separando o roteiro em cenas e planos."),
     "visual": (
         "Gerando prompts visuais",
         "A IA está criando personagens, locais e objetos para revisão.",

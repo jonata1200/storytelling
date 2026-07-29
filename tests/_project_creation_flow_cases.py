@@ -1073,6 +1073,31 @@ def test_storyboard_section_waits_for_all_visual_references() -> None:
     assert "Gere todas as imagens" in reason
 
 
+def test_storyboard_section_waits_for_scenes_and_shots() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "scripts": 1,
+        "scenes": 0,
+        "shots": 0,
+        "characters": 2,
+        "locations": 1,
+        "props": 1,
+        "visual_refs": 6,
+        "frames": 0,
+        "animatics": 0,
+        "clips": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    allowed, reason = pages._workspace_section_access("storyboard", counts)
+
+    assert pages._step_ready("scenes", counts) is False
+    assert allowed is False
+    assert reason == "Gere as cenas e planos antes de acessar o storyboard."
+
+
 def test_storyboard_section_unlocks_after_visual_references_are_complete() -> None:
     counts = {
         "briefings": 1,
@@ -1102,6 +1127,7 @@ def test_production_steps_do_not_include_story_bible() -> None:
     step_keys = [step.key for step in pages.PRODUCTION_STEPS]
 
     assert "script" in step_keys
+    assert "scenes" in step_keys
     assert "bible" not in step_keys
 
 
