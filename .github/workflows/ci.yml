@@ -41,6 +41,7 @@ jobs:
       CELERY_BROKER_URL: redis://localhost:6379/1
       CELERY_RESULT_BACKEND: redis://localhost:6379/2
       OPENROUTER_API_KEY: ""
+      RUN_PROVIDER_SMOKE_TESTS: "0"
 
     steps:
       - uses: actions/checkout@v4
@@ -74,4 +75,4 @@ jobs:
         run: pytest --collect-only -q -m "unit or integration or provider or ui or security"
 
       - name: Test
-        run: pytest
+        run: pytest -m "not smoke"

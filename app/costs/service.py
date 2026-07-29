@@ -16,6 +16,8 @@ from app.costs.schemas import (
     OperationCostPolicyRead,
     ProjectCostSummaryRead,
 )
+from app.observability.schemas import OperationalEventCreate
+from app.observability.service import emit_project_event
 from app.production.service import get_or_create_production_settings
 from app.projects.repository import ProjectRepository
 
@@ -38,6 +40,15 @@ DEFAULT_OPERATION_COSTS_USD: dict[str, tuple[str, Decimal]] = {
     "text_to_video": ("second", Decimal("0.080000")),
     "speech_generation": ("1k_characters", Decimal("0.015000")),
 }
+
+PROVIDER_OPERATION_COST_OVERRIDES_USD: dict[str, dict[str, tuple[str, Decimal]]] = {
+    "mock": {
+        operation: (unit, Decimal("0.000000"))
+        for operation, (unit, _unit_cost) in DEFAULT_OPERATION_COSTS_USD.items()
+    },
+}
+
+MODEL_OPERATION_COST_OVERRIDES_USD: dict[tuple[str, str, str], tuple[str, Decimal]] = {}
 
 
 def _money(value: Decimal) -> Decimal:
@@ -71,8 +82,62 @@ def operation_cost_policies(provider: str = "omniroute") -> list[OperationCostPo
             unit=unit,
             unit_cost=unit_cost,
         )
-        for operation, (unit, unit_cost) in sorted(DEFAULT_OPERATION_COSTS_USD.items())
+        for operation in sorted(DEFAULT_OPERATION_COSTS_USD)
+        for unit, unit_cost in [_operation_cost_policy(operation, provider, None)]
     ]
+
+
+def _operation_cost_policy(
+    operation: str,
+    provider: str,
+    model: str | None,
+) -> tuple[str, Decimal]:
+    normalized_operation = operation.strip().lower()
+    normalized_provider = provider.strip().lower()
+    normalized_model = str(model or "").strip().lower()
+    if normalized_model:
+        override = MODEL_OPERATION_COST_OVERRIDES_USD.get(
+            (normalized_provider, normalized_model, normalized_operation)
+        )
+        if override is not None:
+            return override
+    provider_policy = PROVIDER_OPERATION_COST_OVERRIDES_USD.get(normalized_provider)
+    if provider_policy is not None and normalized_operation in provider_policy:
+        return provider_policy[normalized_operation]
+    if normalized_operation not in DEFAULT_OPERATION_COSTS_USD:
+        allowed = ", ".join(sorted(DEFAULT_OPERATION_COSTS_USD))
+        raise ValueError(f"Operacao de custo desconhecida: {operation}. Use: {allowed}")
+    return DEFAULT_OPERATION_COSTS_USD[normalized_operation]
+
+
+def cost_audit_metadata(
+    *,
+    estimated_cost: Decimal,
+    provider_reported_cost: Decimal | None = None,
+    final_budget_cost: Decimal | None = None,
+    stage: str | None = None,
+    extra: dict | None = None,
+) -> dict:
+    metadata = dict(extra or {})
+    metadata["estimated_cost"] = str(_money(estimated_cost))
+    metadata["provider_reported_cost"] = (
+        str(_money(provider_reported_cost)) if provider_reported_cost is not None else None
+    )
+    metadata["final_budget_cost"] = str(
+        _money(final_budget_cost if final_budget_cost is not None else estimated_cost)
+    )
+    if stage:
+        metadata["stage"] = stage.strip().lower()
+    return metadata
+
+
+def final_budget_cost(
+    estimated_cost: Decimal,
+    provider_reported_cost: Decimal | None = None,
+) -> Decimal:
+    if provider_reported_cost is not None and provider_reported_cost > 0:
+        return _money(provider_reported_cost)
+    return _money(estimated_cost)
 
 
 def estimate_operation_cost(
@@ -83,10 +148,7 @@ def estimate_operation_cost(
     uncertainty_ratio: Decimal = Decimal("0.15"),
 ) -> OperationCostEstimateRead:
     normalized_operation = operation.strip().lower()
-    if normalized_operation not in DEFAULT_OPERATION_COSTS_USD:
-        allowed = ", ".join(sorted(DEFAULT_OPERATION_COSTS_USD))
-        raise ValueError(f"Operacao de custo desconhecida: {operation}. Use: {allowed}")
-    unit, unit_cost = DEFAULT_OPERATION_COSTS_USD[normalized_operation]
+    unit, unit_cost = _operation_cost_policy(normalized_operation, provider, model)
     estimate = estimate_batch_cost(1, quantity, unit_cost, uncertainty_ratio)
     return OperationCostEstimateRead(
         provider=provider,
@@ -263,6 +325,24 @@ async def assert_project_budget_allows(
 ) -> None:
     check = await check_project_budget(session, project_id, estimated_cost, stage)
     if not check.allowed:
+        await emit_project_event(
+            session,
+            OperationalEventCreate(
+                project_id=project_id,
+                event_type="budget",
+                status="blocked",
+                operation=stage or "project_budget",
+                estimated_cost=estimated_cost,
+                message="Budget bloqueou a operacao antes da chamada ao provider.",
+                details={
+                    "stage": check.stage,
+                    "current_cost": str(check.current_cost),
+                    "estimated_cost": str(check.estimated_cost),
+                    "projected_cost": str(check.projected_cost),
+                    "limit": str(check.limit) if check.limit is not None else None,
+                },
+            ),
+        )
         raise CostBudgetExceededError(check)
 
 

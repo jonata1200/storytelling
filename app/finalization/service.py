@@ -25,7 +25,7 @@ from app.core.enums import (
     ProjectStatus,
 )
 from app.costs.models import CostEntry
-from app.costs.service import estimate_operation_cost
+from app.costs.service import cost_audit_metadata, estimate_operation_cost
 from app.finalization import ffmpeg_exporter
 from app.finalization.models import Export, SubtitleTrack
 from app.finalization.subtitles import safe_area_profile
@@ -40,6 +40,7 @@ from app.providers.speech.service import (
     speech_provider_from_settings,
 )
 from app.providers.speech.types import SpeechRequest
+from app.storage.service import apply_asset_storage_metadata
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.timeline import build_word_alignment
 from app.video_generation.models import VideoClip
@@ -470,6 +471,7 @@ async def _add_dialogue_audio_items(
                     "storyboard_frame_id": str(frame.id),
                 },
             )
+            apply_asset_storage_metadata(asset)
             session.add(asset)
             await session.flush()
             session.add(
@@ -528,12 +530,16 @@ async def _add_dialogue_audio_items(
                     unit_cost=cost_estimate.unit_cost,
                     total_cost=cost_estimate.estimated,
                     currency=cost_estimate.currency,
-                    metadata_json={
-                        "stage": "dialogue",
-                        "asset_id": str(asset.id),
-                        "speaker": dialogue.speaker,
-                        "voice_profile_id": voice_profile_id,
-                    },
+                    metadata_json=cost_audit_metadata(
+                        estimated_cost=cost_estimate.estimated,
+                        final_budget_cost=cost_estimate.estimated,
+                        stage="dialogue",
+                        extra={
+                            "asset_id": str(asset.id),
+                            "speaker": dialogue.speaker,
+                            "voice_profile_id": voice_profile_id,
+                        },
+                    ),
                 )
             )
             await emit_project_event(
@@ -775,6 +781,7 @@ async def export_timeline(
         sha256=None,
         metadata_json={"status": status, "ffmpeg_available": ffmpeg_path is not None},
     )
+    apply_asset_storage_metadata(asset)
     session.add(asset)
     await session.flush()
     session.add(

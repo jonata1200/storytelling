@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.assets.models import Asset, AssetVersion
 from app.core.enums import ArtifactType, AssetKind, ProjectStatus
 from app.projects.repository import ProjectRepository
+from app.storage.service import apply_asset_storage_metadata
 from app.storyboards.models import Animatic, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.prompts import _prompt_hash
 from app.storyboards.timeline import build_visual_timeline_items
@@ -159,6 +160,7 @@ async def generate_animatic_bundle(
         sha256=None,
         metadata_json={"kind": "animatic_manifest"},
     )
+    apply_asset_storage_metadata(manifest_asset)
     session.add(manifest_asset)
     await session.flush()
     session.add(

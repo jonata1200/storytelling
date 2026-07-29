@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset
 from app.core.enums import ArtifactStatus
-from app.costs.models import CostEntry
+from app.costs.service import project_cost_summary
 from app.database.session import AsyncSessionLocal
 from app.finalization.models import Export
 from app.generation.model_settings import ensure_default_model_settings
@@ -136,11 +136,7 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             .where(ProjectModelSetting.project_id == project_id)
             .order_by(ProjectModelSetting.task)
         )
-        cost_total = await session.scalar(
-            select(func.coalesce(func.sum(CostEntry.total_cost), Decimal("0.000000"))).where(
-                CostEntry.project_id == project_id
-            )
-        )
+        cost_summary = await project_cost_summary(session, project_id)
         latest_quality = await latest(session, QualityCheck, project_id)
         latest_export = await latest(session, Export, project_id)
         latest_timeline = await latest(session, Timeline, project_id)
@@ -263,7 +259,8 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
                     or 0
                 ),
             },
-            "cost_total": str(cost_total or Decimal("0.000000")),
+            "cost_total": str(cost_summary.total_cost or Decimal("0.000000")),
+            "cost_summary": cost_summary,
             "quality": latest_quality,
             "export": latest_export,
             "model_settings": list(model_result.scalars()),

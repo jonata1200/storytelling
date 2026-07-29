@@ -47,8 +47,12 @@ markers = [
     "unit: fast deterministic tests for isolated functions and value objects",
     "integration: tests that cross service, workflow, persistence, or async boundaries",
     "provider: provider contract tests for LLM, image, speech, video, or provider fallback behavior",
+    "smoke: opt-in tests that call real external providers or paid APIs",
     "ui: NiceGUI page, workspace, routing facade, or UI helper tests",
     "security: authentication, authorization, path traversal, model policy, upload validation, or safety regression tests",
+]
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette\\.testclient` is deprecated.*:starlette.exceptions.StarletteDeprecationWarning",
 ]
 
 [tool.ruff]

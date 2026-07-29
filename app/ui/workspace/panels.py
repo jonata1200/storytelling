@@ -340,3 +340,46 @@ def _render_execution_summary(execution_summary: Any | None) -> None:
                             f"{_format_duration_ms(prompt.duration_ms)}"
                         ).classes("text-xs text-slate-500")
 
+
+def _format_usd(value: Any) -> str:
+    try:
+        return f"US$ {float(value):.4f}"
+    except (TypeError, ValueError):
+        return "US$ 0.0000"
+
+
+def _render_cost_summary(cost_summary: Any | None) -> None:
+    if cost_summary is None:
+        return
+    stages = list(getattr(cost_summary, "by_stage", []) or [])
+    providers = list(getattr(cost_summary, "by_provider", []) or [])
+    with ui.card().classes(_card_classes("w-full")):
+        with ui.row().classes("items-center justify-between w-full gap-3"):
+            with ui.row().classes("items-center gap-2"):
+                ui.icon("paid").classes("text-cyan-300")
+                ui.label("Custos por etapa").classes("text-lg font-semibold")
+            ui.badge(_format_usd(getattr(cost_summary, "total_cost", 0))).classes(
+                "bg-slate-800 text-slate-200"
+            )
+        if not stages and not providers:
+            ui.label("Sem custos registrados para este projeto.").classes("text-sm text-slate-500")
+            return
+        if stages:
+            with ui.grid(columns=3).classes("w-full gap-3"):
+                for item in stages[:6]:
+                    with ui.column().classes(
+                        "gap-1 rounded-md border border-slate-800 bg-slate-950 p-3"
+                    ):
+                        ui.label(str(item.key)).classes("text-sm font-semibold")
+                        ui.label(_format_usd(item.total_cost)).classes("text-xs text-cyan-200")
+                        ui.label(f"real { _format_usd(item.actual_cost) }").classes(
+                            "text-xs text-slate-500"
+                        )
+        if providers:
+            ui.label("Providers").classes("text-sm font-semibold text-slate-200")
+            with ui.row().classes("w-full gap-2"):
+                for item in providers[:6]:
+                    ui.badge(f"{item.key}: {_format_usd(item.total_cost)}").classes(
+                        "bg-slate-900 text-slate-200 border border-slate-800"
+                    )
+

@@ -3,7 +3,7 @@
 from app.assets.models import Asset, AssetVersion
 from app.assets.schemas import AssetCreate
 from app.projects.repository import ProjectRepository
-from app.storage.service import validate_asset_uri_size
+from app.storage.service import apply_asset_storage_metadata, validate_asset_uri_size
 
 
 async def create_asset(session: AsyncSession, data: AssetCreate) -> Asset | None:
@@ -24,8 +24,11 @@ async def create_asset(session: AsyncSession, data: AssetCreate) -> Asset | None
         storage_uri=data.storage_uri,
         content_type=data.content_type,
         sha256=data.sha256,
+        size_bytes=data.size_bytes,
         metadata_json=data.metadata_json,
     )
+    if asset.size_bytes is None:
+        apply_asset_storage_metadata(asset)
     session.add(asset)
     await session.flush()
     session.add(

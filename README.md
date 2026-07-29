@@ -121,7 +121,7 @@ A interface principal funciona como um cockpit de produção:
 
 - Ideia inicial em linguagem natural.
 - Core Setup com formato, resolucao, workflow e modelos.
-- Passos guiados para narrativa, visual, storyboard, vídeo, finalização e QA.
+- Passos guiados para narrativa, cenas/planos, visual, storyboard, vídeo, finalização e QA.
 - Asset Canvas para personagens, cenários, objetos e referências.
 - Storyboard Grid para revisar quadros antes de gerar clipes.
 - Timeline Assembly para acompanhar a montagem.
@@ -196,9 +196,16 @@ Endpoints operacionais:
 ```text
 GET  /api/v1/storage/usage
 GET  /api/v1/storage/projects/{project_id}/usage
+POST /api/v1/storage/reconcile
+POST /api/v1/storage/projects/{project_id}/reconcile
 GET  /api/v1/storage/orphans
 POST /api/v1/storage/orphans/cleanup?dry_run=true
+POST /api/v1/storage/orphans/cleanup?dry_run=false&confirm=true
 ```
+
+`/usage` usa `size_bytes` persistido para abrir rapido. A varredura completa de
+arquivos locais fica nos endpoints administrativos de `reconcile`, `orphans` e
+`cleanup`, que aceitam filtros por `project_id`, `kind` e `older_than_days`.
 
 Custos e orçamentos usam uma política padrão por operação, com limites por
 projeto e por etapa gravados em `project_production_settings.metadata_json`.
@@ -234,13 +241,17 @@ Correlation ID é propagado por `X-Correlation-ID` nas chamadas externas relevan
 ## Testes
 
 ```powershell
-python -m pytest
 ruff check .
 mypy app tests
+python -m pytest -m "not smoke"
 ```
 
 Os testes automatizados não devem chamar APIs pagas. Providers externos entram por
-interfaces falsas nos testes; o fluxo da aplicação não deve escolher mocks.
+interfaces falsas nos testes; smokes reais exigem `RUN_PROVIDER_SMOKE_TESTS=1`
+e variáveis específicas como `OMNIROUTE_SMOKE=1`.
+
+Detalhes de comandos por marcador, troubleshooting e checklist de release ficam em
+[`docs/quality-dependencies.md`](docs/quality-dependencies.md).
 
 ## Estado atual
 

@@ -1,6 +1,7 @@
-﻿from uuid import UUID
+from datetime import datetime
+from uuid import UUID
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +19,11 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     storage_uri: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
     sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    missing_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    storage_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     current_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 

@@ -31,8 +31,10 @@ from app.costs.models import CostEntry
 from app.costs.service import (
     assert_project_budget_allows,
     calculate_total_cost,
+    cost_audit_metadata,
     estimate_batch_cost,
     estimate_operation_cost,
+    final_budget_cost,
 )
 from app.observability.schemas import OperationalEventCreate
 from app.observability.service import emit_project_event
@@ -41,6 +43,7 @@ from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.providers.video.omniroute import OmniRouteVideoProvider
 from app.providers.video.types import VideoProvider, VideoRequest, VideoResult
+from app.storage.service import apply_asset_storage_metadata
 from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
 from app.video_generation.models import ClipReview, GenerationJob, VideoClip
@@ -303,6 +306,7 @@ async def _persist_video_success(
         sha256=result.sha256,
         metadata_json=result.metadata,
     )
+    apply_asset_storage_metadata(asset)
     session.add(asset)
     await session.flush()
     session.add(
@@ -344,7 +348,7 @@ async def _persist_video_success(
         model=result.model,
     )
     provider_cost = Decimal(str(result.estimated_cost or "0.000000"))
-    total_cost = provider_cost if provider_cost > 0 else clip_cost_estimate.estimated
+    total_cost = final_budget_cost(clip_cost_estimate.estimated, provider_cost)
     item.job.cost_estimate = total_cost
     item.job.completed_at = datetime.now(UTC)
 
@@ -387,12 +391,17 @@ async def _persist_video_success(
             unit_cost=clip_cost_estimate.unit_cost,
             total_cost=total_cost,
             currency="USD",
-            metadata_json={
-                "job_id": str(item.job.id),
-                "provider": result.provider,
-                "external_job_id": result.external_job_id,
-                "provider_reported_cost": str(provider_cost),
-            },
+            metadata_json=cost_audit_metadata(
+                estimated_cost=clip_cost_estimate.estimated,
+                provider_reported_cost=provider_cost,
+                final_budget_cost=total_cost,
+                stage="video",
+                extra={
+                    "job_id": str(item.job.id),
+                    "provider": result.provider,
+                    "external_job_id": result.external_job_id,
+                },
+            ),
         )
     )
     await _emit_video_job_event(

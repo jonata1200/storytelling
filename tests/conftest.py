@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,11 @@ PROVIDER_TEST_FILES = {
     "test_speech_provider.py",
     "test_visual_bible.py",
     "test_visual_bible_script_profiles.py",
+}
+
+SMOKE_TEST_FILES = {
+    "test_omniroute_smoke.py",
+    "test_omniroute_video_speech_smoke.py",
 }
 
 UI_TEST_FILES = {
@@ -60,6 +66,7 @@ INTEGRATION_TEST_FILES = {
 MARKER_BY_FILE = {
     "integration": INTEGRATION_TEST_FILES,
     "provider": PROVIDER_TEST_FILES,
+    "smoke": SMOKE_TEST_FILES,
     "security": SECURITY_TEST_FILES,
     "ui": UI_TEST_FILES,
 }
@@ -77,3 +84,9 @@ def pytest_collection_modifyitems(items: list[Item]) -> None:
             markers.add("unit")
         for marker_name in sorted(markers):
             item.add_marker(getattr(pytest.mark, marker_name))
+        if filename in SMOKE_TEST_FILES and os.getenv("RUN_PROVIDER_SMOKE_TESTS") != "1":
+            item.add_marker(
+                pytest.mark.skip(
+                    reason="Defina RUN_PROVIDER_SMOKE_TESTS=1 para executar smokes reais."
+                )
+            )

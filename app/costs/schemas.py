@@ -103,6 +103,7 @@ class CostEntryRead(BaseModel):
     unit_cost: Decimal
     total_cost: Decimal
     currency: str
+    metadata_json: dict
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

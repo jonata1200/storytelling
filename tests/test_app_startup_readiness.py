@@ -1,0 +1,56 @@
+from typing import Any
+
+import pytest
+
+from app.config.settings import Settings
+from app.factory import create_app
+from app.observability import service as observability_service
+from app.observability.schemas import ReadinessComponentRead
+
+
+def test_create_app_without_ui_starts_api_routes() -> None:
+    app = create_app(include_ui=False)
+
+    assert app.title == "Storytelling"
+    assert len(app.routes) >= 2
+
+
+class _ReadySession:
+    async def execute(self, _statement: Any) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_readiness_dashboard_degrades_without_redis_worker_and_providers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def degraded_redis(name: str, _url: str) -> ReadinessComponentRead:
+        return ReadinessComponentRead(
+            name=name,
+            status="degraded",
+            message=f"{name} indisponivel no teste",
+        )
+
+    async def degraded_worker() -> ReadinessComponentRead:
+        return ReadinessComponentRead(
+            name="worker",
+            status="degraded",
+            message="worker indisponivel no teste",
+        )
+
+    monkeypatch.setattr(observability_service, "_redis_check", degraded_redis)
+    monkeypatch.setattr(observability_service, "_celery_worker_check", degraded_worker)
+    monkeypatch.setattr(observability_service.shutil, "which", lambda _name: None)
+
+    dashboard = await observability_service.readiness_dashboard(
+        _ReadySession(),  # type: ignore[arg-type]
+        Settings(ai_provider="omniroute", omniroute_api_key=None, speech_api_key=None),
+    )
+
+    statuses = {component.name: component.status for component in dashboard.components}
+    assert dashboard.status == "degraded"
+    assert statuses["database"] == "ready"
+    assert statuses["redis"] == "degraded"
+    assert statuses["worker"] == "degraded"
+    assert statuses["image_provider"] == "degraded"
+    assert statuses["character_speech"] == "degraded"

@@ -14,7 +14,10 @@ from app.core.enums import (
     ArtifactStatus,
     ArtifactType,
     AssetKind,
+    CostEntryType,
 )
+from app.costs.models import CostEntry
+from app.costs.service import cost_audit_metadata, estimate_operation_cost, final_budget_cost
 from app.generation.model_settings import llm_provider_for_task
 from app.generation.models import PromptExecution
 from app.generation.service import run_structured_generation
@@ -23,6 +26,7 @@ from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
 from app.providers.image.types import ImageGenerationRequest
+from app.storage.service import apply_asset_storage_metadata
 from app.storytelling.models import Script, StoryIdea
 from app.visual_bible.artifacts import _add_dependency, _create_artifact
 from app.visual_bible.image_generation import (
@@ -533,6 +537,7 @@ async def generate_visual_references(
                 **generation_metadata,
             },
         )
+        apply_asset_storage_metadata(asset)
         session.add(asset)
         await session.flush()
         session.add(
@@ -575,6 +580,36 @@ async def generate_visual_references(
             duration_ms=duration_ms,
         )
         session.add(execution)
+        cost_estimate = estimate_operation_cost(
+            "image_generation",
+            Decimal("1"),
+            provider=image_result.provider,
+            model=image_result.model,
+        )
+        provider_cost = Decimal(str(image_result.estimated_cost or "0.000000"))
+        budget_cost = final_budget_cost(cost_estimate.estimated, provider_cost)
+        session.add(
+            CostEntry(
+                project_id=project_id,
+                artifact_id=artifact.id,
+                entry_type=CostEntryType.ESTIMATE,
+                provider=image_result.provider,
+                model=image_result.model,
+                operation="image_generation",
+                quantity=cost_estimate.quantity,
+                unit=cost_estimate.unit,
+                unit_cost=cost_estimate.unit_cost,
+                total_cost=budget_cost,
+                currency=cost_estimate.currency,
+                metadata_json=cost_audit_metadata(
+                    estimated_cost=cost_estimate.estimated,
+                    provider_reported_cost=provider_cost,
+                    final_budget_cost=budget_cost,
+                    stage="visual_bible",
+                    extra={"asset_id": str(asset.id), "view_type": view_type},
+                ),
+            )
+        )
         reference = VisualReference(
             project_id=project_id,
             artifact_id=artifact.id,

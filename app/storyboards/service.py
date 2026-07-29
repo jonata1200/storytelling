@@ -6,12 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetVersion
 from app.config.settings import get_settings
-from app.core.enums import ArtifactType, AssetKind, ProjectStatus
+from app.core.enums import ArtifactType, AssetKind, CostEntryType, ProjectStatus
+from app.costs.models import CostEntry
+from app.costs.service import cost_audit_metadata, estimate_operation_cost, final_budget_cost
 from app.generation.models import PromptExecution
 from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
+from app.storage.service import apply_asset_storage_metadata
 from app.storyboards.animatic import (
     _animatic_fingerprint as _animatic_fingerprint,
 )
@@ -224,6 +227,7 @@ async def generate_storyboard_frames(
                     **generation_metadata,
                 },
             )
+            apply_asset_storage_metadata(asset)
             session.add(asset)
             await session.flush()
             session.add(
@@ -288,6 +292,37 @@ async def generate_storyboard_frames(
                         duration_ms=duration_ms,
                     )
                 )
+                if image is not None:
+                    cost_estimate = estimate_operation_cost(
+                        "image_generation",
+                        Decimal("1"),
+                        provider=image.provider,
+                        model=image.model,
+                    )
+                    provider_cost = Decimal(str(image.estimated_cost or "0.000000"))
+                    budget_cost = final_budget_cost(cost_estimate.estimated, provider_cost)
+                    session.add(
+                        CostEntry(
+                            project_id=project_id,
+                            artifact_id=existing_frame.artifact_id,
+                            entry_type=CostEntryType.ESTIMATE,
+                            provider=image.provider,
+                            model=image.model,
+                            operation="image_generation",
+                            quantity=cost_estimate.quantity,
+                            unit=cost_estimate.unit,
+                            unit_cost=cost_estimate.unit_cost,
+                            total_cost=budget_cost,
+                            currency=cost_estimate.currency,
+                            metadata_json=cost_audit_metadata(
+                                estimated_cost=cost_estimate.estimated,
+                                provider_reported_cost=provider_cost,
+                                final_budget_cost=budget_cost,
+                                stage="storyboard",
+                                extra={"asset_id": str(asset_id), "shot_id": str(shot.id)},
+                            ),
+                        )
+                    )
             elif metadata_changed:
                 artifact = await session.get(Artifact, existing_frame.artifact_id)
                 if artifact is not None:
@@ -336,6 +371,37 @@ async def generate_storyboard_frames(
                     duration_ms=duration_ms,
                 )
             )
+            if image is not None:
+                cost_estimate = estimate_operation_cost(
+                    "image_generation",
+                    Decimal("1"),
+                    provider=image.provider,
+                    model=image.model,
+                )
+                provider_cost = Decimal(str(image.estimated_cost or "0.000000"))
+                budget_cost = final_budget_cost(cost_estimate.estimated, provider_cost)
+                session.add(
+                    CostEntry(
+                        project_id=project_id,
+                        artifact_id=artifact.id,
+                        entry_type=CostEntryType.ESTIMATE,
+                        provider=image.provider,
+                        model=image.model,
+                        operation="image_generation",
+                        quantity=cost_estimate.quantity,
+                        unit=cost_estimate.unit,
+                        unit_cost=cost_estimate.unit_cost,
+                        total_cost=budget_cost,
+                        currency=cost_estimate.currency,
+                        metadata_json=cost_audit_metadata(
+                            estimated_cost=cost_estimate.estimated,
+                            provider_reported_cost=provider_cost,
+                            final_budget_cost=budget_cost,
+                            stage="storyboard",
+                            extra={"asset_id": str(asset_id), "shot_id": str(shot.id)},
+                        ),
+                    )
+                )
             frame = StoryboardFrame(
                 project_id=project_id,
                 artifact_id=artifact.id,
