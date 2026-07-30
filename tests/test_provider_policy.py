@@ -27,10 +27,10 @@ def test_effective_provider_for_channel_uses_media_override() -> None:
     assert effective_provider_for_channel(settings, "image") == "omniroute"
 
 
-def test_validate_model_name_allows_omniroute_oc_dash_free_model() -> None:
+def test_validate_model_name_allows_omniroute_opencode_zen_model() -> None:
     assert (
-        validate_model_name("oc/deepseek-v4-flash-free", provider="omniroute")
-        == "oc/deepseek-v4-flash-free"
+        validate_model_name("opencode-zen/deepseek-v4-flash", provider="omniroute")
+        == "opencode-zen/deepseek-v4-flash"
     )
 
 

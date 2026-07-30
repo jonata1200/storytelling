@@ -12,6 +12,70 @@ def normalize_omniroute_api_key(value: str | None) -> str | None:
     return normalize_api_key(value, "omniroute")
 
 
+OMNIROUTE_TEXT_MODELS = (
+    "opencode-zen/big-pickle",
+    "opencode-zen/deepseek-v4-flash",
+    "opencode-zen/deepseek-v4-flash-free",
+    "opencode-zen/deepseek-v4-pro",
+    "opencode-zen/gpt-5",
+    "opencode-zen/gpt-5-nano",
+    "opencode-zen/gpt-5-codex",
+    "opencode-zen/gpt-5.1",
+    "opencode-zen/gpt-5.1-codex",
+    "opencode-zen/gpt-5.1-codex-max",
+    "opencode-zen/gpt-5.1-codex-mini",
+    "opencode-zen/gpt-5.2",
+    "opencode-zen/gpt-5.2-codex",
+    "opencode-zen/gpt-5.3-codex",
+    "opencode-zen/gpt-5.3-codex-spark",
+    "opencode-zen/gpt-5.4",
+    "opencode-zen/gpt-5.4-pro",
+    "opencode-zen/gpt-5.4-mini",
+    "opencode-zen/gpt-5.4-nano",
+    "opencode-zen/gpt-5.5",
+    "opencode-zen/gpt-5.5-pro",
+    "opencode-zen/gpt-5.6-sol",
+    "opencode-zen/gpt-5.6-terra",
+    "opencode-zen/gpt-5.6-luna",
+    "opencode-zen/claude-fable-5",
+    "opencode-zen/claude-haiku-4-5",
+    "opencode-zen/claude-sonnet-4",
+    "opencode-zen/claude-sonnet-4-5",
+    "opencode-zen/claude-sonnet-4-6",
+    "opencode-zen/claude-sonnet-5",
+    "opencode-zen/claude-opus-4-1",
+    "opencode-zen/claude-opus-4-5",
+    "opencode-zen/claude-opus-4-6",
+    "opencode-zen/claude-opus-4-7",
+    "opencode-zen/claude-opus-4-8",
+    "opencode-zen/claude-opus-5",
+    "opencode-zen/gemini-3-flash",
+    "opencode-zen/gemini-3.1-pro",
+    "opencode-zen/gemini-3.5-flash",
+    "opencode-zen/gemini-3.5-flash-lite",
+    "opencode-zen/gemini-3.6-flash",
+    "opencode-zen/grok-build-0.1",
+    "opencode-zen/grok-4.5",
+    "opencode-zen/glm-5",
+    "opencode-zen/glm-5.1",
+    "opencode-zen/glm-5.2",
+    "opencode-zen/minimax-m3",
+    "opencode-zen/minimax-m2.7",
+    "opencode-zen/minimax-m2.5",
+    "opencode-zen/mimo-v2.5-free",
+    "opencode-zen/kimi-k2.5",
+    "opencode-zen/kimi-k2.6",
+    "opencode-zen/kimi-k2.7-code",
+    "opencode-zen/kimi-k3",
+    "opencode-zen/qwen3.6-plus",
+    "opencode-zen/qwen3.5-plus",
+    "opencode-zen/ling-3.0-flash-free",
+    "opencode-zen/nemotron-3-ultra-free",
+    "opencode-zen/north-mini-code-free",
+    "opencode-zen/laguna-s-2.1-free",
+)
+
+
 class Settings(BaseSettings):
     app_name: str = "Storytelling"
     app_env: str = "local"
@@ -30,7 +94,7 @@ class Settings(BaseSettings):
 
     omniroute_api_key: str | None = Field(default=None, repr=False)
     omniroute_base_url: str = "https://omnirouters.com/v1"
-    omniroute_default_model: str = "oc/deepseek-v4-flash-free"
+    omniroute_default_model: str = "opencode-zen/deepseek-v4-flash"
     omniroute_image_model: str = "chatgpt-web/gpt-5.5"
     omniroute_video_model: str = "veo-free/veo"
     omniroute_speech_model: str = ""

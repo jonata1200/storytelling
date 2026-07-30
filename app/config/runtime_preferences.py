@@ -19,15 +19,12 @@ PREFERENCE_KEYS = {
     "OMNIROUTE_VIDEO_POLL_TIMEOUT_SECONDS",
     "OMNIROUTE_VIDEO_DOWNLOAD_TIMEOUT_SECONDS",
     "OMNIROUTE_SPEECH_MODEL",
+    "OMNIROUTE_API_KEY",
     "VIDEO_GENERATION_CONCURRENCY",
     "USER_DISPLAY_NAME",
     "USER_EMAIL",
     "USER_AVATAR_PATH",
     "USER_THEME",
-}
-SECRET_PREFERENCE_KEYS = {
-    "OMNIROUTE_API_KEY",
-    "SPEECH_API_KEY",
 }
 PREFERENCES_PATH = Path(".runtime/preferences.json")
 logger = logging.getLogger(__name__)
@@ -53,8 +50,6 @@ def save_runtime_preferences(values: dict[str, str], path: Path = PREFERENCES_PA
     normalized: dict[str, str] = {}
     for raw_key, raw_value in values.items():
         key = raw_key.upper()
-        if key in SECRET_PREFERENCE_KEYS:
-            raise ValueError(f"Secret preference must be configured via environment: {key}")
         if key not in PREFERENCE_KEYS:
             raise ValueError(f"Preference is not allowed: {key}")
         value = str(raw_value)
@@ -63,7 +58,6 @@ def save_runtime_preferences(values: dict[str, str], path: Path = PREFERENCES_PA
         normalized[key] = value
 
     existing = {key.upper(): value for key, value in load_runtime_preferences(path).items()}
-    existing = {key: value for key, value in existing.items() if key not in SECRET_PREFERENCE_KEYS}
     existing.update(normalized)
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(

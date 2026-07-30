@@ -82,8 +82,8 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     assert preferences["omniroute_base_url"] == "http://localhost:20128/v1"
     assert preferences["omniroute_speech_model"] == "tts-model"
 
-    with pytest.raises(ValueError, match="environment"):
-        save_runtime_preferences({"OMNIROUTE_API_KEY": "secret"}, path)
+    save_runtime_preferences({"OMNIROUTE_API_KEY": "secret"}, path)
+    assert load_runtime_preferences(path)["omniroute_api_key"] == "secret"
     with pytest.raises(ValueError, match="not allowed"):
         save_runtime_preferences({"DATABASE_URL": "attacker"}, path)
     with pytest.raises(ValueError, match="control character"):

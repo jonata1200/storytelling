@@ -12,6 +12,7 @@ from app.config.preferences import save_preferences
 from app.config.provider_policy import validate_model_name
 from app.config.runtime_preferences import load_runtime_preferences
 from app.config.settings import (
+    OMNIROUTE_TEXT_MODELS,
     get_settings,
     normalize_omniroute_api_key,
 )
@@ -200,13 +201,19 @@ def register_settings_page(
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
                             )
+                            text_model_options = list(OMNIROUTE_TEXT_MODELS)
+                            if (
+                                current.omniroute_default_model
+                                and current.omniroute_default_model not in text_model_options
+                            ):
+                                text_model_options.append(current.omniroute_default_model)
                             omniroute_text_model = (
-                                ui.input(
-                                    "Modelo de texto OmniRoute",
+                                ui.select(
+                                    text_model_options,
+                                    label="Modelo de texto OmniRoute",
                                     value=current.omniroute_default_model,
-                                    placeholder="oc/deepseek-v4-flash-free",
                                 )
-                                .props("outlined stack-label")
+                                .props("outlined stack-label options-dense")
                                 .classes("w-full mt-3")
                             )
                             omniroute_image_model = (
@@ -265,16 +272,10 @@ def register_settings_page(
                                     if normalized_omniroute_key is None:
                                         ui.notify("Chave OmniRoute inválida.", color="negative")
                                         return
-                                    ui.notify(
-                                        (
-                                            "Por segurança, salve OMNIROUTE_API_KEY no .env "
-                                            "ou nas variáveis do ambiente."
-                                        ),
-                                        color="warning",
-                                    )
+                                    values["OMNIROUTE_API_KEY"] = normalized_omniroute_key
                                 elif saved_omniroute_api_key_invalid:
                                     ui.notify(
-                                        "Remova a chave inválida do .env antes de continuar.",
+                                        "Substitua a chave OmniRoute inválida antes de continuar.",
                                         color="warning",
                                     )
                                 save_preferences(values)

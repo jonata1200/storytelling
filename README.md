@@ -52,8 +52,8 @@ aprovação e controle sobre o resultado.
 
 ## Provedor De IA
 
-O texto, imagem e video usam o gateway OmniRoute. Modelos com prefixo `oc/`,
-como `oc/deepseek-v4-flash-free`, tambem sao chamados pela mesma chave
+O texto, imagem e video usam o gateway OmniRoute. Modelos com prefixo
+`opencode-zen/`, como `opencode-zen/deepseek-v4-flash`, tambem sao chamados pela mesma chave
 `OMNIROUTE_API_KEY`.
 
 A aplicação usa OmniRoute como provedor principal para texto, imagem e vídeo.
@@ -64,7 +64,7 @@ AI_PROVIDER=omniroute
 TEXT_PROVIDER=
 OMNIROUTE_BASE_URL=https://omnirouters.com/v1
 OMNIROUTE_API_KEY=sua_chave_aqui
-OMNIROUTE_DEFAULT_MODEL=oc/deepseek-v4-flash-free
+OMNIROUTE_DEFAULT_MODEL=opencode-zen/deepseek-v4-flash
 OMNIROUTE_IMAGE_MODEL=chatgpt-web/gpt-5.5
 OMNIROUTE_VIDEO_MODEL=veo-free/veo
 ```
@@ -77,9 +77,25 @@ IMAGE_PROVIDER=
 VIDEO_PROVIDER=
 ```
 
-Quando esses campos ficam vazios, a aplicação usa `AI_PROVIDER`. Preferências
-não sensíveis alteradas pela interface são salvas em `.runtime/preferences.json`;
-segredos devem permanecer no `.env` ou em variáveis de ambiente.
+Quando esses campos ficam vazios, a aplicação usa `AI_PROVIDER`. A tela de
+Configurações de IA pode salvar chave OmniRoute, URL base e modelos em
+`.runtime/preferences.json`; esses valores têm prioridade sobre o `.env` no
+runtime local.
+
+## Modelos De Texto OmniRoute
+
+Modelos `opencode-zen/` selecionaveis na tela de configuracoes incluem:
+
+```text
+opencode-zen/big-pickle
+opencode-zen/deepseek-v4-flash
+opencode-zen/deepseek-v4-flash-free
+opencode-zen/gpt-5.6-sol
+opencode-zen/claude-sonnet-4-5
+opencode-zen/gemini-3.6-flash
+opencode-zen/qwen3.6-plus
+opencode-zen/nemotron-3-ultra-free
+```
 
 ## Requisitos Locais
 
@@ -99,7 +115,7 @@ pip install -e . --no-deps
 Copy-Item .env.example .env
 ```
 
-Edite o `.env` e configure pelo menos `OMNIROUTE_API_KEY`.
+Configure `OMNIROUTE_API_KEY` no `.env` ou pela tela de Configurações de IA.
 
 ## Executando
 
