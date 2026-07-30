@@ -22,7 +22,10 @@ def redact_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     redacted: dict[str, Any] = {}
     for key, raw_value in value.items():
         normalized_key = str(key).lower()
-        if any(marker in normalized_key for marker in ("key", "token", "secret", "password")):
+        if any(
+            marker in normalized_key
+            for marker in ("key", "token", "secret", "password", "cookie", "csrf", "session")
+        ):
             redacted[str(key)] = "[REDACTED]"
         elif isinstance(raw_value, Mapping):
             redacted[str(key)] = redact_mapping(raw_value)

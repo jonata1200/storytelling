@@ -24,6 +24,15 @@ from app.config.settings import (
     get_settings,
     normalize_omniroute_api_key,
 )
+from app.providers.veo_free.session import (
+    clear_session as clear_veo_free_session,
+)
+from app.providers.veo_free.session import (
+    save_cookie_bundle as save_veo_free_cookie_bundle,
+)
+from app.providers.veo_free.session import (
+    validate_session as validate_veo_free_session,
+)
 from app.storytelling.idea_lab import load_generated_ideas, load_saved_ideas
 
 BodyStyle = Callable[[], None]
@@ -193,6 +202,15 @@ def register_settings_page(
                                 .props("outlined stack-label options-dense")
                                 .classes("w-full mt-3")
                             )
+                            text_provider_fallbacks = (
+                                ui.input(
+                                    "Fallbacks de texto",
+                                    value=current.text_provider_fallbacks,
+                                    placeholder="nvidia_nim,ollama",
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
                             saved_omniroute_api_key = saved_preferences.get(
                                 "omniroute_api_key", ""
                             ).strip()
@@ -201,22 +219,22 @@ def register_settings_page(
                                 and normalize_omniroute_api_key(saved_omniroute_api_key) is None
                             )
                             if current.omniroute_api_key:
-                                ui.label("Chave OmniRoute configurada.").classes(
+                                ui.label("Chave de mídia legada configurada.").classes(
                                     "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 border border-emerald-800 mt-2"
                                 )
                             elif saved_omniroute_api_key_invalid:
-                                ui.label("A chave OmniRoute salva é inválida.").classes(
+                                ui.label("A chave de mídia legada salva é inválida.").classes(
                                     "text-xs px-2 py-1 rounded-md bg-red-950 text-red-200 border border-red-800 mt-2"
                                 )
                             else:
                                 ui.label(
-                                    "Configure a chave OmniRoute para executar gerações reais."
+                                    "Configure a chave de mídia legada para imagem e vídeo atuais."
                                 ).classes(
                                     "text-xs px-2 py-1 rounded-md bg-slate-900 text-slate-300 border border-slate-800 mt-2"
                                 )
                             omniroute_api_key = (
                                 ui.input(
-                                    "Chave OmniRoute",
+                                    "Chave de mídia legada",
                                     placeholder=(
                                         "Chave configurada — digite apenas para substituir"
                                         if current.omniroute_api_key
@@ -243,7 +261,7 @@ def register_settings_page(
                                         OMNIROUTE_TEXT_MODELS,
                                         current.omniroute_default_model,
                                     ),
-                                    label="Modelo de texto OmniRoute legado",
+                                    label="Modelo de texto legado",
                                     value=current.omniroute_default_model,
                                 )
                                 .props("outlined stack-label options-dense")
@@ -347,7 +365,7 @@ def register_settings_page(
                             )
                             omniroute_image_model = (
                                 ui.input(
-                                    "Modelo de imagem OmniRoute",
+                                    "Modelo de imagem legado",
                                     value=current.omniroute_image_model,
                                     placeholder="chatgpt-web/gpt-5.5",
                                 )
@@ -356,13 +374,51 @@ def register_settings_page(
                             )
                             omniroute_video_model = (
                                 ui.input(
-                                    "Modelo de vídeo OmniRoute",
+                                    "Modelo de vídeo legado",
                                     value=current.omniroute_video_model,
                                     placeholder="veo-free/veo",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
                             )
+                            veo_validation = validate_veo_free_session(
+                                current.veo_ai_free_session_path
+                            )
+                            veo_enabled = ui.checkbox(
+                                "Veo AI Free experimental",
+                                value=current.veo_ai_free_enabled,
+                            ).classes("mt-4")
+                            ui.label(veo_validation.message).classes(
+                                "text-xs px-2 py-1 rounded-md bg-slate-900 text-slate-300 border border-slate-800"
+                            )
+                            veo_cookie_bundle = (
+                                ui.textarea(
+                                    "Bundle JSON de cookies Veo AI Free",
+                                    placeholder='{"cookies":[{"name":"...","value":"...","domain":"..."}]}',
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
+
+                            def save_veo_session() -> None:
+                                payload = str(veo_cookie_bundle.value or "").strip()
+                                if not payload:
+                                    ui.notify("Cole um bundle JSON de cookies.", color="warning")
+                                    return
+                                try:
+                                    validation = save_veo_free_cookie_bundle(
+                                        payload,
+                                        current.veo_ai_free_session_path,
+                                    )
+                                except ValueError as exc:
+                                    ui.notify(str(exc), color="negative")
+                                    return
+                                ui.notify(validation.message, color="positive")
+                                veo_cookie_bundle.value = ""
+
+                            def clear_veo_session() -> None:
+                                clear_veo_free_session(current.veo_ai_free_session_path)
+                                ui.notify("Sessão Veo AI Free removida.", color="positive")
 
                             def save_ai() -> None:
                                 typed_omniroute_api_key = str(
@@ -383,6 +439,9 @@ def register_settings_page(
                                         # phases 05/06 replace those channels.
                                         "AI_PROVIDER": "omniroute",
                                         "TEXT_PROVIDER": selected_text_provider,
+                                        "TEXT_PROVIDER_FALLBACKS": str(
+                                            text_provider_fallbacks.value or ""
+                                        ).strip(),
                                         "OLLAMA_BASE_URL": str(
                                             ollama_base_url.value or ""
                                         ).strip(),
@@ -427,6 +486,9 @@ def register_settings_page(
                                             "Modelo de vídeo OmniRoute",
                                             provider="omniroute",
                                         ),
+                                        "VEO_AI_FREE_ENABLED": (
+                                            "true" if veo_enabled.value else "false"
+                                        ),
                                     }
                                 except ValueError as exc:
                                     ui.notify(str(exc), color="negative")
@@ -455,6 +517,18 @@ def register_settings_page(
                                 ui.button(
                                     "Salvar configurações", icon="save", on_click=save_ai
                                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                                ui.button(
+                                    "Salvar sessão Veo",
+                                    icon="vpn_key",
+                                    on_click=save_veo_session,
+                                ).props("outline no-caps").classes("rounded-xl")
+                                ui.button(
+                                    "Apagar sessão Veo",
+                                    icon="delete",
+                                    on_click=clear_veo_session,
+                                ).props("outline no-caps").classes(
+                                    "text-red-300 border-red-900 rounded-xl"
+                                )
                     with ui.tab_panel(data_tab).classes("px-0"):
                         with ui.element("div").classes("entity-card rounded-2xl p-6"):
                             ui.label("Gerenciamento de dados").classes("text-xl font-semibold")

@@ -64,7 +64,7 @@ provider experimental de Veo AI Free. Os modelos padrao ficam no `.env`:
 ```env
 AI_PROVIDER=omniroute
 TEXT_PROVIDER=groq
-TEXT_PROVIDER_FALLBACKS=
+TEXT_PROVIDER_FALLBACKS=nvidia_nim,ollama
 IMAGE_PROVIDER=omniroute
 VIDEO_PROVIDER=omniroute
 
@@ -79,6 +79,9 @@ GROQ_DEFAULT_MODEL=llama-3.3-70b-versatile
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_API_KEY=sua_chave_nvidia
 NVIDIA_NIM_DEFAULT_MODEL=openai/gpt-oss-20b
+
+VEO_AI_FREE_ENABLED=false
+VEO_AI_FREE_SESSION_PATH=.runtime/veo_free/session.json
 
 OMNIROUTE_BASE_URL=https://omnirouters.com/v1
 OMNIROUTE_API_KEY=sua_chave_omniroute_legada

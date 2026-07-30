@@ -34,9 +34,9 @@ Servicos:
 
 Regras:
 
-- [ ] Nunca versionar `.runtime/veo_free/`.
-- [ ] Redigir cookies/tokens em logs.
-- [ ] Permitir apagar sessao pela UI.
+- [x] Nunca versionar `.runtime/veo_free/`.
+- [x] Redigir cookies/tokens em logs.
+- [x] Permitir apagar sessao pela UI.
 - [ ] Idealmente criptografar localmente quando houver chave de app.
 
 ## Checklist Descoberta Tecnica
@@ -52,17 +52,17 @@ Regras:
 
 ## Checklist Validador De Sessao
 
-- [ ] Criar funcao `save_cookie_bundle`.
-- [ ] Criar funcao `validate_session`.
-- [ ] Criar funcao `clear_session`.
-- [ ] Retornar estados: `connected`, `expired`, `blocked`, `unknown`.
-- [ ] Criar readiness `veo_ai_free_session`.
-- [ ] Adicionar UI para colar/importar cookie ou conectar via navegador.
-- [ ] Exibir aviso de integracao experimental.
+- [x] Criar funcao `save_cookie_bundle`.
+- [x] Criar funcao `validate_session`.
+- [x] Criar funcao `clear_session`.
+- [x] Retornar estados: `connected`, `expired`, `blocked`, `unknown`.
+- [x] Criar readiness `veo_ai_free_session`.
+- [x] Adicionar UI para colar/importar cookie.
+- [x] Exibir aviso de integracao experimental.
 
 ## Criterios De Saida
 
-- [ ] A aplicacao consegue dizer se a sessao Veo AI Free parece valida.
-- [ ] Sessao expirada pede reconexao manual.
-- [ ] Nenhum token/cookie aparece em log, evento ou teste.
-- [ ] Nenhum job de imagem/video depende ainda dessa integracao.
+- [x] A aplicacao consegue dizer se a sessao Veo AI Free parece valida.
+- [x] Sessao expirada pede reconexao manual.
+- [x] Nenhum token/cookie aparece em log, evento ou teste.
+- [x] Nenhum job de imagem/video depende ainda dessa integracao.

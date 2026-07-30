@@ -14,6 +14,7 @@ from app.observability.redaction import redact_mapping, redact_secrets
 from app.observability.schemas import OperationalEventCreate
 from app.observability.service import (
     _provider_channel_readiness,
+    _veo_ai_free_session_readiness,
     emit_project_event,
     project_execution_summary,
 )
@@ -82,6 +83,50 @@ def test_provider_channel_readiness_reports_missing_omniroute_configuration() ->
     assert image.status == "degraded"
     assert image.details["provider"] == "omniroute"
     assert "OMNIROUTE_API_KEY" in image.message
+
+
+def test_provider_channel_readiness_reports_text_fallbacks() -> None:
+    settings = Settings(
+        ai_provider="omniroute",
+        text_provider="ollama",
+        text_provider_fallbacks="groq,nvidia_nim",
+        ollama_default_model="llama3.1:8b",
+    )
+
+    text = _provider_channel_readiness(settings, "text")
+
+    assert text.status == "ready"
+    assert text.details["provider"] == "ollama"
+    assert text.details["fallbacks"] == "groq,nvidia_nim"
+    assert text.details["api_key_configured"] == "true"
+
+
+def test_provider_channel_readiness_reports_missing_groq_key() -> None:
+    settings = Settings(
+        ai_provider="omniroute",
+        text_provider="groq",
+        groq_api_key=None,
+        groq_default_model="llama-3.3-70b-versatile",
+    )
+
+    text = _provider_channel_readiness(settings, "text")
+
+    assert text.status == "degraded"
+    assert "GROQ_API_KEY" in text.message
+
+
+def test_veo_ai_free_session_readiness_uses_local_validator(tmp_path) -> None:
+    settings = Settings(
+        veo_ai_free_enabled=True,
+        veo_ai_free_session_path=tmp_path / "missing.json",
+    )
+
+    component = _veo_ai_free_session_readiness(settings)
+
+    assert component.name == "veo_ai_free_session"
+    assert component.status == "degraded"
+    assert component.details["enabled"] == "true"
+    assert component.details["session_status"] == "unknown"
 
 
 class _FakeEventSession:

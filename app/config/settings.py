@@ -137,6 +137,10 @@ class Settings(BaseSettings):
     nvidia_nim_api_key: str | None = Field(default=None, repr=False)
     nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_nim_default_model: str = "openai/gpt-oss-20b"
+    veo_ai_free_enabled: bool = False
+    veo_ai_free_session_path: Path = Path(".runtime/veo_free/session.json")
+    veo_ai_free_image_model: str = "veo-ai-free/image"
+    veo_ai_free_video_model: str = "veo-ai-free/video"
     image_provider: str | None = None
     video_provider: str | None = None
     storyboard_image_concurrency: int = 3

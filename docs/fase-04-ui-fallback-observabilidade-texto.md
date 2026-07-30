@@ -15,43 +15,43 @@ chaves e veja claramente qual provider falhou ou foi usado.
 
 ## Checklist UI
 
-- [ ] Criar seletor `Provider de texto`: Ollama, Groq, NVIDIA NIM.
-- [ ] Mostrar campos especificos do provider selecionado.
-- [ ] Permitir salvar chaves de Groq e NVIDIA NIM pela UI.
-- [ ] Permitir editar base URL de Ollama e NVIDIA NIM.
-- [ ] Mostrar lista selecionavel de modelos por provider.
-- [ ] Se um modelo salvo nao estiver na lista, inclui-lo como opcao adicional.
-- [ ] Remover textos e campos OmniRoute.
-- [ ] Atualizar copy da pagina para explicar fallback.
+- [x] Criar seletor `Provider de texto`: Ollama, Groq, NVIDIA NIM.
+- [x] Mostrar campos especificos do provider selecionado.
+- [x] Permitir salvar chaves de Groq e NVIDIA NIM pela UI.
+- [x] Permitir editar base URL de Ollama e NVIDIA NIM.
+- [x] Mostrar lista selecionavel de modelos por provider.
+- [x] Se um modelo salvo nao estiver na lista, inclui-lo como opcao adicional.
+- [x] Remover textos e campos OmniRoute.
+- [x] Atualizar copy da pagina para explicar fallback.
 
 ## Checklist Fallback
 
-- [ ] Adicionar `TEXT_PROVIDER_FALLBACKS`.
-- [ ] Implementar fallback opcional em `llm_provider_for_task`.
-- [ ] Registrar provider primario e provider final usado.
-- [ ] Nao fazer fallback quando erro for validacao de prompt/JSON recuperavel.
-- [ ] Fazer fallback em timeout, 429, 5xx e erro de rede.
-- [ ] Nao fazer fallback em erro de chave ausente sem notificar claramente.
+- [x] Adicionar `TEXT_PROVIDER_FALLBACKS`.
+- [x] Implementar fallback opcional em `run_structured_generation`.
+- [x] Registrar provider primario e provider final usado.
+- [x] Nao fazer fallback quando erro for validacao de prompt/JSON recuperavel.
+- [x] Fazer fallback em timeout, 429, 5xx e erro de rede.
+- [x] Nao fazer fallback em erro de chave ausente sem notificar claramente.
 
 ## Checklist Observabilidade
 
-- [ ] Atualizar readiness para listar `text_provider`.
-- [ ] Incluir detalhes: provider, base_url, model, api_key_configured.
-- [ ] Registrar falhas por provider em `OperationalEvent`.
-- [ ] Registrar fallback em `PromptExecution.parameters`.
-- [ ] Redigir chaves em logs e eventos.
+- [x] Atualizar readiness para listar `text_provider`.
+- [x] Incluir detalhes: provider, base_url, model, api_key_configured.
+- [x] Registrar falhas por provider em `OperationalEvent`.
+- [x] Registrar fallback em `PromptExecution.parameters`.
+- [x] Redigir chaves em logs e eventos.
 
 ## Checklist Testes
 
-- [ ] Testar salvamento de preferencias por provider.
-- [ ] Testar readiness de Ollama sem chave.
-- [ ] Testar readiness de Groq/NVIDIA sem chave.
-- [ ] Testar fallback provider A falha, provider B responde.
-- [ ] Testar que segredo nao aparece em logs.
+- [x] Testar salvamento de preferencias por provider.
+- [x] Testar readiness de Ollama sem chave.
+- [x] Testar readiness de Groq/NVIDIA sem chave.
+- [x] Testar fallback provider A falha, provider B responde.
+- [x] Testar que segredo nao aparece em logs.
 
 ## Criterios De Saida
 
-- [ ] Usuario consegue alternar provider/modelo pela UI.
-- [ ] Fallback e opcional, configuravel e auditavel.
-- [ ] A UI nao menciona OmniRoute como provider ativo.
-- [ ] Testes de UI/config passam.
+- [x] Usuario consegue alternar provider/modelo pela UI.
+- [x] Fallback e opcional, configuravel e auditavel.
+- [x] A UI nao menciona OmniRoute como provider ativo.
+- [x] Testes de UI/config passam.

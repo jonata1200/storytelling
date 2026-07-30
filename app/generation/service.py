@@ -1,18 +1,23 @@
 ﻿import asyncio
 from time import perf_counter
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.provider_policy import (
+    SUPPORTED_TEXT_PROVIDERS,
     effective_provider_for_channel,
+    normalize_provider_name,
     provider_model,
     validate_model_name,
 )
 from app.config.settings import get_settings
 from app.generation.models import PromptExecution, PromptTemplate
 from app.generation.prompt_compiler import compile_prompt
+from app.observability.models import OperationalEvent
+from app.observability.redaction import redact_secrets
 from app.providers.llm.types import LLMProvider, LLMRequest, LLMResult
 from app.video_generation.durations import (
     VIDEO_CLIP_MAX_SECONDS,
@@ -255,6 +260,75 @@ def should_fallback_to_mock(exc: Exception) -> bool:
     return any(term in message for term in transient_terms)
 
 
+def should_fallback_to_text_provider(exc: Exception) -> bool:
+    message = str(exc).lower()
+    if isinstance(exc, ValueError):
+        return False
+    non_transient_terms = (
+        "_api_key",
+        "api key",
+        "chave",
+        "não configurada",
+        "nao configurada",
+        "json válido",
+        "json valido",
+        "json fora",
+        "conteúdo que não é json",
+        "conteudo que nao e json",
+        "empty field",
+        "schema",
+        "mock bloqueado",
+    )
+    if any(term in message for term in non_transient_terms):
+        return False
+    transient_terms = (
+        "http 429",
+        " 429",
+        "rate limit",
+        "quota",
+        "resource exhausted",
+        "resourceexhausted",
+        "http 500",
+        "http 502",
+        "http 503",
+        "http 504",
+        "5xx",
+        "timeout",
+        "timed out",
+        "network",
+        "connection",
+        "urlerror",
+        "dns",
+        "temporary failure",
+        "temporarily unavailable",
+        "remote end closed",
+        "overloaded",
+    )
+    return any(term in message for term in transient_terms)
+
+
+def text_provider_fallback_names(settings: object, primary_provider: str) -> list[str]:
+    configured = str(getattr(settings, "text_provider_fallbacks", "") or "")
+    primary = str(primary_provider or "").strip().casefold()
+    names: list[str] = []
+    for raw_name in configured.split(","):
+        name = raw_name.strip().casefold()
+        if not name:
+            continue
+        try:
+            normalized = normalize_provider_name(
+                name,
+                "TEXT_PROVIDER_FALLBACKS",
+                SUPPORTED_TEXT_PROVIDERS,
+            )
+        except ValueError:
+            continue
+        if normalized == primary or normalized in names:
+            continue
+        names.append(normalized)
+    return names
+
+
 def allow_runtime_mock_fallback(task: str, requested: bool) -> bool:
     _ = task, requested
     return False
@@ -289,6 +363,75 @@ async def get_or_create_prompt_template(session: AsyncSession, task: str) -> Pro
     return template
 
 
+def _build_llm_request(
+    *,
+    task: str,
+    prompt: str,
+    variables: dict,
+    output_schema: dict,
+    model: str,
+    timeout_seconds: float,
+    provider_name: str | None = None,
+) -> LLMRequest:
+    return LLMRequest(
+        task=task,
+        prompt=prompt,
+        variables=variables,
+        output_schema=output_schema,
+        model=validate_model_name(model, provider=provider_name),
+        timeout_seconds=timeout_seconds,
+    )
+
+
+async def _generate_with_timeout(
+    provider: LLMProvider,
+    request: LLMRequest,
+    *,
+    task: str,
+    timeout_seconds: float,
+) -> LLMResult:
+    if getattr(provider, "provider_name", "") == "mock":
+        raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")
+    try:
+        return await asyncio.wait_for(
+            provider.generate_structured(request),
+            timeout=timeout_seconds,
+        )
+    except TimeoutError as exc:
+        raise RuntimeError(
+            f"Provider demorou mais de {timeout_seconds}s na tarefa {task}"
+        ) from exc
+
+
+def _record_text_provider_failure(
+    session: AsyncSession,
+    *,
+    project_id: UUID,
+    artifact_id: UUID | None,
+    task: str,
+    provider_name: str,
+    model: str,
+    exc: Exception,
+) -> None:
+    session.add(
+        OperationalEvent(
+            project_id=project_id,
+            artifact_id=artifact_id,
+            event_type="text_provider_failure",
+            status="failed",
+            actor="system",
+            provider=provider_name,
+            model=model,
+            operation=task,
+            message=redact_secrets(exc),
+            details={
+                "fallback_candidate": provider_name,
+                "error": redact_secrets(exc),
+            },
+        )
+    )
+
+
 async def run_structured_generation(
     session: AsyncSession,
     provider: LLMProvider,
@@ -307,45 +450,118 @@ async def run_structured_generation(
         TASK_TIMEOUT_SECONDS.get(task, LLM_PROVIDER_TIMEOUT_SECONDS),
         LLM_PROVIDER_TIMEOUT_SECONDS,
     )
-    request = LLMRequest(
+    settings = get_settings()
+    primary_provider = str(
+        getattr(provider, "provider_name", "")
+        or effective_provider_for_channel(settings, "text")
+    ).strip().casefold()
+    primary_model = validate_model_name(
+        model or provider_model(settings, primary_provider, "text"),
+        provider=primary_provider or None,
+    )
+    request = _build_llm_request(
         task=task,
         prompt=prompt,
         variables=variables,
         output_schema=template.output_schema,
-        model=validate_model_name(
-            model
-            or provider_model(
-                get_settings(),
-                effective_provider_for_channel(get_settings(), "text"),
-                "text",
-            )
-        ),
+        model=primary_model,
         timeout_seconds=timeout_seconds,
+        provider_name=primary_provider or None,
     )
-    fallback_error: str | None = None
+    fallback_attempts: list[dict[str, str]] = []
+    final_provider = primary_provider
+    final_model = primary_model
     try:
-        if getattr(provider, "provider_name", "") == "mock":
-            raise ValueError(
-                "Provider mock bloqueado. Configure um modelo real de IA."
-            )
-        provider_call = provider.generate_structured(request)
-        result = await asyncio.wait_for(
-            provider_call,
-            timeout=timeout_seconds,
+        result = await _generate_with_timeout(
+            provider,
+            request,
+            task=task,
+            timeout_seconds=timeout_seconds,
         )
     except (RuntimeError, TimeoutError, ValueError) as exc:
-        if isinstance(exc, TimeoutError):
-            exc = RuntimeError(
-                f"Provider demorou mais de {timeout_seconds}s na tarefa {task}"
-            )
-        _ = fallback_on_runtime_error, should_fallback_to_mock(exc)
-        raise exc
+        if not (
+            fallback_on_runtime_error
+            and should_fallback_to_text_provider(exc)
+            and text_provider_fallback_names(settings, primary_provider)
+        ):
+            raise exc
+        _record_text_provider_failure(
+            session,
+            project_id=project_id,
+            artifact_id=artifact_id,
+            task=task,
+            provider_name=primary_provider,
+            model=primary_model,
+            exc=exc,
+        )
+        fallback_attempts.append(
+            {
+                "provider": primary_provider,
+                "model": primary_model,
+                "error": redact_secrets(exc),
+            }
+        )
+        from app.generation.model_settings import llm_provider_for_name
+
+        last_error: Exception = exc
+        for fallback_provider_name in text_provider_fallback_names(settings, primary_provider):
+            try:
+                fallback_provider = llm_provider_for_name(settings, fallback_provider_name)
+                fallback_model = validate_model_name(
+                    provider_model(settings, fallback_provider_name, "text"),
+                    provider=fallback_provider_name,
+                )
+                fallback_request = _build_llm_request(
+                    task=task,
+                    prompt=prompt,
+                    variables=variables,
+                    output_schema=template.output_schema,
+                    model=fallback_model,
+                    timeout_seconds=timeout_seconds,
+                    provider_name=fallback_provider_name,
+                )
+                result = await _generate_with_timeout(
+                    fallback_provider,
+                    fallback_request,
+                    task=task,
+                    timeout_seconds=timeout_seconds,
+                )
+                final_provider = fallback_provider_name
+                final_model = fallback_model
+                break
+            except (RuntimeError, TimeoutError, ValueError) as fallback_exc:
+                last_error = fallback_exc
+                fallback_attempts.append(
+                    {
+                        "provider": fallback_provider_name,
+                        "model": provider_model(settings, fallback_provider_name, "text"),
+                        "error": redact_secrets(fallback_exc),
+                    }
+                )
+                _record_text_provider_failure(
+                    session,
+                    project_id=project_id,
+                    artifact_id=artifact_id,
+                    task=task,
+                    provider_name=fallback_provider_name,
+                    model=provider_model(settings, fallback_provider_name, "text"),
+                    exc=fallback_exc,
+                )
+                if not should_fallback_to_text_provider(fallback_exc):
+                    break
+        else:
+            raise last_error
+
+        if final_provider == primary_provider:
+            raise last_error from None
     duration_ms = int((perf_counter() - started) * 1000)
-    parameters: dict[str, str] = {}
-    if fallback_error:
-        if model is not None:
-            parameters["fallback_from"] = model
-        parameters["fallback_error"] = fallback_error
+    parameters: dict[str, Any] = {}
+    if fallback_attempts:
+        parameters["primary_provider"] = primary_provider
+        parameters["primary_model"] = primary_model
+        parameters["final_provider"] = final_provider
+        parameters["final_model"] = final_model
+        parameters["fallback_attempts"] = fallback_attempts
     if result.recovery_strategy:
         parameters["recovery_strategy"] = result.recovery_strategy
     if result.recovery_strategy and result.raw_content:
