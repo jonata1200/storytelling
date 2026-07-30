@@ -98,29 +98,50 @@ Edite o `.env` e configure pelo menos `OMNIROUTE_API_KEY`.
 
 ## Executando
 
-O script unificado inicia PostgreSQL, Redis, aplica migrations e sobe a
-aplicação:
+O script principal fica em `scripts/app.ps1`. Para o uso diário, o comando mais
+simples é:
 
 ```powershell
-.\scripts\app.ps1 start
+.\scripts\app.ps1 up
 ```
 
-Para executar em segundo plano:
+Esse comando inicia PostgreSQL, Redis, aplica migrations e sobe a aplicação em
+segundo plano.
+
+Para desenvolver com reload automático:
 
 ```powershell
-.\scripts\app.ps1 start -Background
+.\scripts\app.ps1 dev
 ```
 
-Para parar a aplicação e manter os containers:
+Para parar apenas a aplicação:
 
 ```powershell
-.\scripts\app.ps1 stop -KeepDocker
+.\scripts\app.ps1 stop
 ```
 
 Para parar aplicação e containers:
 
 ```powershell
-.\scripts\app.ps1 stop
+.\scripts\app.ps1 down
+```
+
+Outros comandos úteis:
+
+```powershell
+.\scripts\app.ps1 restart
+.\scripts\app.ps1 status
+.\scripts\app.ps1 logs
+.\scripts\app.ps1 check
+.\scripts\app.ps1 test
+.\scripts\app.ps1 clean
+```
+
+Atalhos em português continuam disponíveis:
+
+```powershell
+.\scripts\executar.ps1
+.\scripts\finalizar.ps1
 ```
 
 URL local:
@@ -138,7 +159,7 @@ http://127.0.0.1:8000/api/v1/health/live
 Se o PowerShell bloquear scripts locais:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\app.ps1 start
+powershell -ExecutionPolicy Bypass -File .\scripts\app.ps1 up
 ```
 
 ## Configuração Importante
@@ -232,7 +253,7 @@ app/
   video_generation/  clipes, jobs e revisão
   visual_bible/      personagens, locais, objetos e referências
 tests/               suíte automatizada
-scripts/             automação local de start/stop
+scripts/             automação local de execução, status, logs e checks
 alembic/             migrations do banco
 storage/             arquivos gerados localmente
 ```

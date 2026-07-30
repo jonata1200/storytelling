@@ -7,8 +7,7 @@ param(
 )
 
 & "$PSScriptRoot\app.ps1" `
-    stop `
+    down `
     -Port $Port `
     -PortRangeEnd $PortRangeEnd `
-    -KeepDocker:$KeepDocker `
-    -Down:$Down
+    -KeepDocker:$KeepDocker

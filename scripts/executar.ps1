@@ -2,15 +2,19 @@
 param(
     [string]$HostAddress = "127.0.0.1",
     [int]$Port = 8000,
-    [switch]$SkipDocker,
-    [switch]$SkipMigrations,
-    [switch]$Background
+    [Alias("SkipDocker")]
+    [switch]$NoDocker,
+    [Alias("SkipMigrations")]
+    [switch]$NoMigrate,
+    [switch]$Background,
+    [switch]$Dev
 )
 
+$command = if ($Dev) { "dev" } else { "up" }
+
 & "$PSScriptRoot\app.ps1" `
-    start `
+    $command `
     -HostAddress $HostAddress `
     -Port $Port `
-    -SkipDocker:$SkipDocker `
-    -SkipMigrations:$SkipMigrations `
-    -Background:$Background
+    -NoDocker:$NoDocker `
+    -NoMigrate:$NoMigrate

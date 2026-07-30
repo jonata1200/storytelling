@@ -1,21 +1,29 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("start", "stop", "restart")]
-    [string]$Action = "start",
+    [ValidateSet("up", "dev", "start", "stop", "down", "restart", "status", "logs", "test", "check", "migrate", "clean")]
+    [string]$Command = "up",
     [string]$HostAddress = "127.0.0.1",
     [int]$Port = 8000,
     [int]$PortRangeEnd = 8020,
-    [switch]$SkipDocker,
-    [switch]$SkipMigrations,
+    [Alias("SkipDocker")]
+    [switch]$NoDocker,
+    [Alias("SkipMigrations")]
+    [switch]$NoMigrate,
+    [switch]$Foreground,
     [switch]$Background,
     [switch]$KeepDocker,
-    [switch]$Down
+    [switch]$Follow
 )
 
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $ProjectRoot
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host "==> $Message"
+}
 
 function Get-ProjectPython {
     $venvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
@@ -51,6 +59,7 @@ function Invoke-DockerCompose {
     if ($null -eq $docker) {
         throw "Docker nao encontrado no PATH. Abra o Docker Desktop e reinicie o terminal."
     }
+
     $dockerDirectory = Split-Path -Parent $docker
     $originalPath = $env:PATH
     try {
@@ -76,7 +85,8 @@ function Wait-PostgresReady {
     if ($null -eq $docker) {
         throw "Docker nao encontrado."
     }
-    Write-Host "Aguardando PostgreSQL ficar pronto..."
+
+    Write-Step "Aguardando PostgreSQL"
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
         & $docker inspect `
             --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" `
@@ -92,21 +102,34 @@ function Wait-PostgresReady {
         }
         Start-Sleep -Seconds $IntervalSeconds
     }
-    throw "PostgreSQL nao ficou pronto dentro do tempo esperado. Consulte: docker compose logs postgres"
+    throw "PostgreSQL nao ficou pronto dentro do tempo esperado."
 }
 
-function Test-StorytellingPort {
+function Test-AppHealth {
     param([int]$CandidatePort)
 
     try {
         $health = Invoke-RestMethod `
             -Uri "http://127.0.0.1:$CandidatePort/api/v1/health/live" `
-            -TimeoutSec 2 `
+            -TimeoutSec 1 `
             -ErrorAction Stop
         return ([string]$health.app -like "Storytelling*")
     } catch {
         return $false
     }
+}
+
+function Get-ListeningProcessIds {
+    param([int]$CandidatePort)
+
+    $connections = Get-NetTCPConnection `
+        -LocalPort $CandidatePort `
+        -State Listen `
+        -ErrorAction SilentlyContinue
+    if ($null -eq $connections) {
+        return @()
+    }
+    return @($connections | Select-Object -ExpandProperty OwningProcess -Unique)
 }
 
 function Stop-ProcessSafely {
@@ -116,32 +139,21 @@ function Stop-ProcessSafely {
     )
 
     $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
-    if ($null -ne $process) {
-        try {
-            Write-Host "Finalizando $Description (PID $ProcessId)..."
-            Stop-Process -Id $ProcessId -Force -ErrorAction Stop
-            return $true
-        } catch {
-            Write-Warning "O processo PID $ProcessId exige permissao de administrador."
-        }
+    if ($null -eq $process) {
+        return $false
     }
 
-    Write-Host "Solicitando permissao do Windows para finalizar o PID $ProcessId..."
     try {
-        $elevatedKill = Start-Process `
-            -FilePath "$env:SystemRoot\System32\taskkill.exe" `
-            -ArgumentList @("/PID", $ProcessId.ToString(), "/T", "/F") `
-            -Verb RunAs `
-            -Wait `
-            -PassThru
-        return ($elevatedKill.ExitCode -eq 0)
+        Write-Host "Finalizando $Description (PID $ProcessId)..."
+        Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+        return $true
     } catch {
-        Write-Warning "A autorizacao para finalizar o PID $ProcessId foi cancelada ou negada."
+        Write-Warning "Nao foi possivel finalizar o PID $ProcessId sem permissao elevada."
         return $false
     }
 }
 
-function Stop-AppProcesses {
+function Stop-App {
     $runtimeDir = Join-Path $ProjectRoot ".runtime"
     $stoppedIds = [System.Collections.Generic.HashSet[int]]::new()
     $stoppedPorts = [System.Collections.Generic.HashSet[int]]::new()
@@ -157,28 +169,8 @@ function Stop-AppProcesses {
                 Select-Object -First 1
             if ($pidValue -match "^\d+$") {
                 $numericPid = [int]$pidValue
-                $registeredPort = $null
-                if ($pidFile.BaseName -match "^uvicorn-(\d+)$") {
-                    $registeredPort = [int]$Matches[1]
-                }
-                $registeredProcess = Get-Process `
-                    -Id $numericPid `
-                    -ErrorAction SilentlyContinue
-                $isExpectedProcess = (
-                    $null -ne $registeredProcess -and
-                    $registeredProcess.ProcessName -match "python|uvicorn"
-                )
-                $isConfirmedApp = (
-                    $null -ne $registeredPort -and
-                    (Test-StorytellingPort -CandidatePort $registeredPort)
-                )
-                if ($isExpectedProcess -and $isConfirmedApp) {
-                    if (Stop-ProcessSafely `
-                        -ProcessId $numericPid `
-                        -Description "instancia registrada do Storytelling") {
-                        [void]$stoppedIds.Add($numericPid)
-                        [void]$stoppedPorts.Add($registeredPort)
-                    }
+                if (Stop-ProcessSafely -ProcessId $numericPid -Description "Storytelling registrado") {
+                    [void]$stoppedIds.Add($numericPid)
                 }
             }
             Remove-Item -LiteralPath $pidFile.FullName -Force -ErrorAction SilentlyContinue
@@ -187,25 +179,14 @@ function Stop-AppProcesses {
 
     $lastPort = [Math]::Max($Port, $PortRangeEnd)
     foreach ($candidatePort in $Port..$lastPort) {
-        $connections = Get-NetTCPConnection `
-            -LocalPort $candidatePort `
-            -State Listen `
-            -ErrorAction SilentlyContinue
-        if ($null -eq $connections) {
+        if (-not (Test-AppHealth -CandidatePort $candidatePort)) {
             continue
         }
-        if (-not (Test-StorytellingPort -CandidatePort $candidatePort)) {
-            Write-Warning "Porta $candidatePort ocupada por outro servico; ela foi preservada."
-            continue
-        }
-        $processIds = $connections | Select-Object -ExpandProperty OwningProcess -Unique
-        foreach ($processId in $processIds) {
+        foreach ($processId in Get-ListeningProcessIds -CandidatePort $candidatePort) {
             if ($stoppedIds.Contains([int]$processId)) {
                 continue
             }
-            if (Stop-ProcessSafely `
-                -ProcessId ([int]$processId) `
-                -Description "Storytelling na porta $candidatePort") {
+            if (Stop-ProcessSafely -ProcessId ([int]$processId) -Description "Storytelling na porta $candidatePort") {
                 [void]$stoppedIds.Add([int]$processId)
                 [void]$stoppedPorts.Add($candidatePort)
             }
@@ -218,38 +199,27 @@ function Stop-AppProcesses {
     )
 }
 
-function Stop-Storytelling {
-    Stop-AppProcesses
-
+function Stop-Stack {
+    Stop-App
     if ($KeepDocker) {
-        Write-Host "Containers mantidos em execucao por causa de -KeepDocker."
+        Write-Host "Containers mantidos em execucao."
         return
     }
 
     $docker = Get-DockerExecutable
     if ($null -eq $docker) {
-        Write-Warning "Docker nao encontrado. A aplicacao foi finalizada, mas os containers nao foram alterados."
+        Write-Warning "Docker nao encontrado. A aplicacao foi finalizada, mas containers nao foram alterados."
         return
     }
 
-    if ($Down) {
-        Write-Host "Executando docker compose down..."
-        & $docker compose down
-    } else {
-        Write-Host "Parando containers com docker compose stop..."
-        & $docker compose stop
-    }
-
-    Write-Host "Projeto finalizado."
+    Write-Step "Parando containers"
+    & $docker compose stop
 }
 
 function Get-NextAvailablePort {
-    param(
-        [int]$StartPort,
-        [int]$MaxAttempts = 20
-    )
+    param([int]$StartPort)
 
-    for ($candidate = $StartPort; $candidate -lt ($StartPort + $MaxAttempts); $candidate++) {
+    for ($candidate = $StartPort; $candidate -le $PortRangeEnd; $candidate++) {
         $listener = Get-NetTCPConnection `
             -LocalPort $candidate `
             -State Listen `
@@ -258,47 +228,65 @@ function Get-NextAvailablePort {
             return $candidate
         }
     }
-    throw "Nenhuma porta livre encontrada entre $StartPort e $($StartPort + $MaxAttempts - 1)."
+    throw "Nenhuma porta livre encontrada entre $StartPort e $PortRangeEnd."
 }
 
-function Start-Storytelling {
-    $python = Get-ProjectPython
-
-    if (-not (Test-Path ".env")) {
-        if (Test-Path ".env.example") {
-            Copy-Item ".env.example" ".env"
-            Write-Host "Arquivo .env criado a partir de .env.example."
-        } else {
-            Write-Warning "Arquivo .env nao encontrado e .env.example nao existe."
-        }
+function Ensure-EnvironmentFile {
+    if (Test-Path ".env") {
+        return
     }
+    if (-not (Test-Path ".env.example")) {
+        Write-Warning "Arquivo .env nao encontrado e .env.example nao existe."
+        return
+    }
+    Copy-Item ".env.example" ".env"
+    Write-Host "Arquivo .env criado a partir de .env.example."
+}
 
-    if (-not $SkipDocker) {
-        Write-Host "Iniciando PostgreSQL e Redis com Docker Compose..."
+function Invoke-Migrations {
+    $python = Get-ProjectPython
+    Write-Step "Aplicando migrations"
+    & $python -m alembic upgrade head
+    if ($LASTEXITCODE -ne 0) {
+        throw "As migrations do Alembic falharam com codigo de saida $LASTEXITCODE."
+    }
+}
+
+function Wait-AppReady {
+    param([int]$CandidatePort)
+
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        if (Test-AppHealth -CandidatePort $CandidatePort) {
+            return $true
+        }
+        Start-Sleep -Seconds 1
+    }
+    return $false
+}
+
+function Start-App {
+    param([switch]$Reload)
+
+    $python = Get-ProjectPython
+    Ensure-EnvironmentFile
+
+    if (-not $NoDocker) {
+        Write-Step "Subindo PostgreSQL e Redis"
         Invoke-DockerCompose -ComposeArguments @("up", "-d")
         Wait-PostgresReady
     }
 
-    if (-not $SkipMigrations) {
-        Write-Host "Aplicando migrations do Alembic..."
-        & $python -m alembic upgrade head
-        if ($LASTEXITCODE -ne 0) {
-            throw "As migrations do Alembic falharam com codigo de saida $LASTEXITCODE."
-        }
+    if (-not $NoMigrate) {
+        Invoke-Migrations
     }
 
-    $existingListener = Get-NetTCPConnection `
-        -LocalPort $Port `
-        -State Listen `
-        -ErrorAction SilentlyContinue
-    if ($null -ne $existingListener) {
-        if (Test-StorytellingPort -CandidatePort $Port) {
-            Stop-AppProcesses
-        } else {
-            $requestedPort = $Port
-            $Port = Get-NextAvailablePort -StartPort ($requestedPort + 1)
-            Write-Warning "Porta $requestedPort ocupada por outro servico; usando porta $Port."
-        }
+    if (Test-AppHealth -CandidatePort $Port) {
+        Write-Step "Reiniciando instancia existente na porta $Port"
+        Stop-App
+    } elseif ((Get-ListeningProcessIds -CandidatePort $Port).Count -gt 0) {
+        $requestedPort = $Port
+        $script:Port = Get-NextAvailablePort -StartPort ($requestedPort + 1)
+        Write-Warning "Porta $requestedPort ocupada por outro servico; usando porta $Port."
     }
 
     $url = "http://${HostAddress}:$Port"
@@ -312,40 +300,135 @@ function Start-Storytelling {
         $Port.ToString()
     )
 
-    if ($Background) {
-        $runtimeDir = Join-Path $ProjectRoot ".runtime"
-        New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
-        $stdoutLog = Join-Path $runtimeDir "uvicorn.out.log"
-        $stderrLog = Join-Path $runtimeDir "uvicorn.err.log"
-        $pidFile = Join-Path $runtimeDir "uvicorn-$Port.pid"
-
-        $process = Start-Process `
-            -FilePath $python `
-            -ArgumentList $uvicornArguments `
-            -WorkingDirectory $ProjectRoot `
-            -RedirectStandardOutput $stdoutLog `
-            -RedirectStandardError $stderrLog `
-            -PassThru `
-            -WindowStyle Hidden
-
-        Set-Content -Path $pidFile -Value $process.Id
-        Write-Host "Aplicacao iniciada em segundo plano: $url"
-        Write-Host "PID: $($process.Id)"
-        Write-Host "Logs: $stdoutLog e $stderrLog"
+    if ($Reload) {
+        $uvicornArguments += "--reload"
+        Write-Step "Iniciando aplicacao em modo dev: $url"
+        & $python @uvicornArguments
         return
     }
 
-    $uvicornArguments += "--reload"
-    Write-Host "Iniciando aplicacao em primeiro plano: $url"
-    Write-Host "Para finalizar, pressione Ctrl+C ou execute: .\scripts\app.ps1 stop"
-    & $python @uvicornArguments
+    $runtimeDir = Join-Path $ProjectRoot ".runtime"
+    New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
+    $stdoutLog = Join-Path $runtimeDir "uvicorn.out.log"
+    $stderrLog = Join-Path $runtimeDir "uvicorn.err.log"
+    $pidFile = Join-Path $runtimeDir "uvicorn-$Port.pid"
+
+    $process = Start-Process `
+        -FilePath $python `
+        -ArgumentList $uvicornArguments `
+        -WorkingDirectory $ProjectRoot `
+        -RedirectStandardOutput $stdoutLog `
+        -RedirectStandardError $stderrLog `
+        -PassThru `
+        -WindowStyle Hidden
+
+    if (-not (Wait-AppReady -CandidatePort $Port)) {
+        Write-Warning "A aplicacao nao respondeu no tempo esperado. Consulte: .\scripts\app.ps1 logs"
+        Set-Content -Path $pidFile -Value $process.Id
+        return
+    }
+
+    $listenerIds = Get-ListeningProcessIds -CandidatePort $Port
+    $serverPid = if ($listenerIds.Count -gt 0) { [int]$listenerIds[0] } else { $process.Id }
+    Set-Content -Path $pidFile -Value $serverPid
+
+    Write-Host "Aplicacao iniciada: $url"
+    Write-Host "PID: $serverPid"
+    Write-Host "Logs: .runtime\uvicorn.out.log e .runtime\uvicorn.err.log"
 }
 
-switch ($Action) {
-    "start" { Start-Storytelling }
-    "stop" { Stop-Storytelling }
-    "restart" {
-        Stop-Storytelling
-        Start-Storytelling
+function Show-Status {
+    $found = $false
+    foreach ($candidatePort in $Port..$PortRangeEnd) {
+        if (Test-AppHealth -CandidatePort $candidatePort) {
+            $found = $true
+            Write-Host "Storytelling online: http://127.0.0.1:$candidatePort"
+            break
+        }
     }
+    if (-not $found) {
+        Write-Host "Storytelling offline nas portas $Port-$PortRangeEnd."
+    }
+
+    if (-not $NoDocker) {
+        $docker = Get-DockerExecutable
+        if ($null -ne $docker) {
+            try {
+                & $docker compose ps
+            } catch {
+                Write-Warning "Nao foi possivel consultar Docker Compose: $($_.Exception.Message)"
+            }
+        }
+    }
+}
+
+function Show-Logs {
+    $runtimeDir = Join-Path $ProjectRoot ".runtime"
+    $logFiles = @(
+        (Join-Path $runtimeDir "uvicorn.err.log"),
+        (Join-Path $runtimeDir "uvicorn.out.log")
+    ) | Where-Object { Test-Path $_ }
+
+    if (-not $logFiles) {
+        Write-Host "Nenhum log encontrado em .runtime."
+        return
+    }
+
+    foreach ($logFile in $logFiles) {
+        Write-Host ""
+        Write-Host "### $logFile"
+        if ($Follow) {
+            Get-Content -Path $logFile -Tail 80 -Wait
+        } else {
+            Get-Content -Path $logFile -Tail 80
+        }
+    }
+}
+
+function Clean-Runtime {
+    Stop-App
+    $runtimeDir = Join-Path $ProjectRoot ".runtime"
+    if (-not (Test-Path $runtimeDir)) {
+        Write-Host "Nada para limpar."
+        return
+    }
+
+    $targets = Get-ChildItem -Path $runtimeDir -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -in ".log", ".pid" }
+    foreach ($target in $targets) {
+        Remove-Item -LiteralPath $target.FullName -Force
+    }
+    Write-Host "Arquivos runtime removidos: $($targets.Count)."
+}
+
+function Invoke-Tests {
+    $python = Get-ProjectPython
+    & $python -m pytest -q
+}
+
+function Invoke-Checks {
+    $python = Get-ProjectPython
+    & $python -m ruff check app tests
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $python -m mypy app tests
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $python -m pytest -q
+}
+
+switch ($Command) {
+    "start" { Start-App }
+    "up" { Start-App }
+    "dev" { Start-App -Reload }
+    "stop" { Stop-App }
+    "down" { Stop-Stack }
+    "restart" {
+        Stop-App
+        Start-App
+    }
+    "status" { Show-Status }
+    "logs" { Show-Logs }
+    "migrate" { Invoke-Migrations }
+    "test" { Invoke-Tests }
+    "check" { Invoke-Checks }
+    "clean" { Clean-Runtime }
 }
