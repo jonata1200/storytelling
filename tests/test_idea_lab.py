@@ -209,7 +209,11 @@ async def test_generate_freeform_ideas_reports_omniroute_failure(
         "get_settings",
         lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
-    monkeypatch.setattr(idea_lab, "OmniRouteLLMProvider", FailingOmniRouteProvider)
+    monkeypatch.setattr(
+        idea_lab,
+        "configured_text_llm_provider",
+        lambda settings: (FailingOmniRouteProvider(), "provider/text-model", "omniroute"),
+    )
 
     with pytest.raises(RuntimeError, match="Não foi possível gerar ideias"):
         await generate_freeform_ideas(count=3, genre="Suspense")
@@ -231,7 +235,11 @@ async def test_generate_freeform_ideas_reports_omniroute_timeout(
         "get_settings",
         lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
-    monkeypatch.setattr(idea_lab, "OmniRouteLLMProvider", SlowOmniRouteProvider)
+    monkeypatch.setattr(
+        idea_lab,
+        "configured_text_llm_provider",
+        lambda settings: (SlowOmniRouteProvider(), "provider/text-model", "omniroute"),
+    )
     monkeypatch.setattr(idea_lab, "IDEA_PROVIDER_TIMEOUT_SECONDS", 0.001)
 
     with pytest.raises(RuntimeError, match="demorou mais"):
@@ -304,7 +312,11 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
         "get_settings",
         lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
-    monkeypatch.setattr(idea_lab, "OmniRouteLLMProvider", lambda: provider)
+    monkeypatch.setattr(
+        idea_lab,
+        "configured_text_llm_provider",
+        lambda settings: (provider, "provider/text-model", "omniroute"),
+    )
 
     ideas = await generate_freeform_ideas(count=1, genre="Suspense")
 
@@ -359,7 +371,11 @@ async def test_generate_freeform_ideas_keeps_partial_valid_omniroute_response(
         "get_settings",
         lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
     )
-    monkeypatch.setattr(idea_lab, "OmniRouteLLMProvider", PartialProvider)
+    monkeypatch.setattr(
+        idea_lab,
+        "configured_text_llm_provider",
+        lambda settings: (PartialProvider(), "provider/text-model", "omniroute"),
+    )
 
     ideas = await generate_freeform_ideas(count=3, genre="Drama")
 

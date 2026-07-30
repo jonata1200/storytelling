@@ -53,6 +53,7 @@ def test_redact_secrets_masks_omniroute_api_key_assignments() -> None:
 def test_provider_channel_readiness_reports_omniroute_media_components() -> None:
     settings = Settings(
         ai_provider="omniroute",
+        text_provider="",
         omniroute_api_key="omni-secret",
         omniroute_default_model="vendor/text",
         omniroute_image_model="vendor/image",
@@ -81,6 +82,24 @@ def test_provider_channel_readiness_reports_missing_omniroute_configuration() ->
     assert image.status == "degraded"
     assert image.details["provider"] == "omniroute"
     assert "OMNIROUTE_API_KEY" in image.message
+
+
+def test_provider_channel_readiness_reports_opencode_text_provider() -> None:
+    settings = Settings(
+        ai_provider="omniroute",
+        text_provider="opencode",
+        omniroute_api_key="omni-secret",
+        omniroute_default_model="vendor/text",
+        opencode_default_model="oc/deepseek-v4-flash-free",
+    )
+
+    text = _provider_channel_readiness(settings, "text")
+
+    assert text.name == "text_provider"
+    assert text.status == "ready"
+    assert text.details["provider"] == "opencode"
+    assert text.details["model"] == "oc/deepseek-v4-flash-free"
+    assert text.details["api_key_configured"] == "true"
 
 
 class _FakeEventSession:

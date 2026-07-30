@@ -8,7 +8,7 @@ class LLMRequest(BaseModel):
     prompt: str
     variables: dict[str, Any] = Field(default_factory=dict)
     output_schema: dict[str, Any] = Field(default_factory=dict)
-    model: str = "ds-web/deepseek-v4-flash"
+    model: str = "oc/deepseek-v4-flash-free"
     timeout_seconds: float | None = None
 
 

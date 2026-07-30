@@ -8,6 +8,7 @@ def test_settings_defaults_to_omniroute_provider() -> None:
     assert settings.omniroute_default_model == "ds-web/deepseek-v4-flash"
     assert settings.omniroute_image_model == "chatgpt-web/gpt-5.5"
     assert settings.omniroute_video_model == "veo-free/veo"
+    assert settings.opencode_default_model == "oc/deepseek-v4-flash-free"
 
 
 def test_settings_reads_omniroute_configuration() -> None:
@@ -28,6 +29,21 @@ def test_settings_reads_omniroute_configuration() -> None:
     assert settings.omniroute_image_model == "vendor/image-model"
     assert settings.omniroute_video_model == "vendor/video-model"
     assert settings.omniroute_speech_model == "vendor/speech-model"
+
+
+def test_settings_reads_opencode_text_configuration() -> None:
+    settings = Settings(
+        ai_provider="omniroute",
+        text_provider="opencode",
+        opencode_api_key="  oc-secret  ",
+        opencode_base_url="https://omnirouters.com/v1",
+        opencode_default_model="oc/deepseek-v4-flash-free",
+    )
+
+    assert settings.text_provider == "opencode"
+    assert settings.opencode_api_key == "oc-secret"
+    assert settings.opencode_base_url == "https://omnirouters.com/v1"
+    assert settings.opencode_default_model == "oc/deepseek-v4-flash-free"
 
 
 def test_settings_rejects_unknown_ai_provider() -> None:

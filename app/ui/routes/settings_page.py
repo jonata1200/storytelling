@@ -14,6 +14,7 @@ from app.config.runtime_preferences import load_runtime_preferences
 from app.config.settings import (
     get_settings,
     normalize_omniroute_api_key,
+    normalize_opencode_api_key,
 )
 from app.storytelling.idea_lab import load_generated_ideas, load_saved_ideas
 
@@ -209,6 +210,54 @@ def register_settings_page(
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
                             )
+                            if current.opencode_api_key or current.omniroute_api_key:
+                                ui.label(
+                                    "OpenCode Free configurado para texto. Se OPENCODE_API_KEY "
+                                    "não existir, a aplicação usa OMNIROUTE_API_KEY."
+                                ).classes(
+                                    "text-xs px-2 py-1 rounded-md bg-emerald-950 "
+                                    "text-emerald-200 border border-emerald-800 mt-3"
+                                )
+                            else:
+                                ui.label(
+                                    "Configure OPENCODE_API_KEY ou OMNIROUTE_API_KEY para usar "
+                                    "OpenCode Free no texto."
+                                ).classes(
+                                    "text-xs px-2 py-1 rounded-md bg-slate-900 "
+                                    "text-slate-300 border border-slate-800 mt-3"
+                                )
+                            opencode_api_key = (
+                                ui.input(
+                                    "Chave OpenCode Free",
+                                    placeholder=(
+                                        "Chave configurada — digite apenas para substituir"
+                                        if current.opencode_api_key
+                                        else "Opcional; usa OMNIROUTE_API_KEY se ficar vazia"
+                                    ),
+                                    password=True,
+                                    password_toggle_button=True,
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
+                            opencode_base_url = (
+                                ui.input(
+                                    "URL base OpenCode Free",
+                                    value=current.opencode_base_url or current.omniroute_base_url,
+                                    placeholder="http://localhost:20128/v1",
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
+                            opencode_text_model = (
+                                ui.input(
+                                    "Modelo de texto OpenCode Free",
+                                    value=current.opencode_default_model,
+                                    placeholder="oc/deepseek-v4-flash-free",
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
                             omniroute_image_model = (
                                 ui.input(
                                     "Modelo de imagem OmniRoute",
@@ -232,9 +281,11 @@ def register_settings_page(
                                 typed_omniroute_api_key = str(
                                     omniroute_api_key.value or ""
                                 ).strip()
+                                typed_opencode_api_key = str(opencode_api_key.value or "").strip()
                                 try:
                                     values = {
                                         "AI_PROVIDER": "omniroute",
+                                        "TEXT_PROVIDER": "opencode",
                                         "OMNIROUTE_BASE_URL": str(
                                             omniroute_base_url.value or ""
                                         ).strip(),
@@ -253,6 +304,14 @@ def register_settings_page(
                                             "Modelo de vídeo OmniRoute",
                                             provider="omniroute",
                                         ),
+                                        "OPENCODE_BASE_URL": str(
+                                            opencode_base_url.value or ""
+                                        ).strip(),
+                                        "OPENCODE_DEFAULT_MODEL": validate_model_name(
+                                            opencode_text_model.value,
+                                            "Modelo de texto OpenCode Free",
+                                            provider="opencode",
+                                        ),
                                     }
                                 except ValueError as exc:
                                     ui.notify(str(exc), color="negative")
@@ -267,6 +326,20 @@ def register_settings_page(
                                     ui.notify(
                                         (
                                             "Por segurança, salve OMNIROUTE_API_KEY no .env "
+                                            "ou nas variáveis do ambiente."
+                                        ),
+                                        color="warning",
+                                    )
+                                if typed_opencode_api_key:
+                                    normalized_opencode_key = normalize_opencode_api_key(
+                                        typed_opencode_api_key
+                                    )
+                                    if normalized_opencode_key is None:
+                                        ui.notify("Chave OpenCode Free inválida.", color="negative")
+                                        return
+                                    ui.notify(
+                                        (
+                                            "Por segurança, salve OPENCODE_API_KEY no .env "
                                             "ou nas variáveis do ambiente."
                                         ),
                                         color="warning",

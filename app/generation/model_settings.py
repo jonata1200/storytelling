@@ -1,4 +1,5 @@
-﻿from uuid import UUID
+﻿from typing import Any
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,12 +8,14 @@ from app.config.provider_policy import (
     SUPPORTED_MODEL_PROVIDERS,
     effective_provider_for_channel,
     ensure_provider_api_key,
+    provider_api_key,
     provider_model,
     validate_model_name,
 )
 from app.config.settings import get_settings
 from app.generation.models import ProjectModelSetting
 from app.providers.llm.omniroute import OmniRouteLLMProvider
+from app.providers.llm.opencode import OpenCodeLLMProvider
 from app.providers.llm.types import LLMProvider
 
 NARRATIVE_TASKS = [
@@ -30,6 +33,32 @@ TASK_LABELS = {
     "generate_visual_bible": "Biblioteca visual",
     "generate_storyboard_prompts": "Prompts de storyboard",
 }
+
+
+def llm_provider_for_name(settings: Any, provider: str) -> LLMProvider:
+    if provider == "omniroute":
+        ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
+        return OmniRouteLLMProvider()
+    if provider == "opencode":
+        ensure_provider_api_key(
+            provider_api_key(settings, "opencode"),
+            "opencode",
+            "OPENCODE_API_KEY ou OMNIROUTE_API_KEY",
+        )
+        return OpenCodeLLMProvider()
+    if provider == "mock":
+        raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")
+    raise ValueError("Provider de texto não suportado.")
+
+
+def configured_text_llm_provider(settings: Any) -> tuple[LLMProvider, str, str]:
+    provider = effective_provider_for_channel(settings, "text")
+    llm_provider = llm_provider_for_name(settings, provider)
+    model = validate_model_name(
+        provider_model(settings, provider, "text"),
+        provider=provider,
+    )
+    return llm_provider, model, provider
 
 
 async def get_model_setting(
@@ -104,14 +133,10 @@ async def llm_provider_for_task(
 ) -> tuple[LLMProvider, str]:
     setting = await get_model_setting(session, project_id, task)
     settings = get_settings()
-    if setting is not None and setting.provider == "omniroute":
-        ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
-        return OmniRouteLLMProvider(), validate_model_name(setting.model, provider="omniroute")
-    if setting is not None and setting.provider == "mock":
-        raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")
-    provider = effective_provider_for_channel(settings, "text")
-    ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
-    return OmniRouteLLMProvider(), validate_model_name(
-        provider_model(settings, provider, "text"),
-        provider=provider,
-    )
+    if setting is not None:
+        return llm_provider_for_name(settings, setting.provider), validate_model_name(
+            setting.model,
+            provider=setting.provider,
+        )
+    llm_provider, model, _provider = configured_text_llm_provider(settings)
+    return llm_provider, model

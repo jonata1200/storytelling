@@ -417,6 +417,7 @@ async def test_llm_provider_for_task_uses_omniroute_default(
         "get_settings",
         lambda: Settings(
             ai_provider="omniroute",
+            text_provider="",
             omniroute_api_key="omni-secret",
             omniroute_default_model="provider/text-model",
         ),

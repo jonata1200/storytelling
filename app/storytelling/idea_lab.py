@@ -8,13 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from app.config.provider_policy import (
-    effective_provider_for_channel,
-    ensure_provider_api_key,
-    provider_model,
     validate_model_name,
 )
 from app.config.settings import get_settings
-from app.providers.llm.omniroute import OmniRouteLLMProvider
+from app.generation.model_settings import configured_text_llm_provider
 from app.providers.llm.types import LLMProvider, LLMRequest, LLMResult
 from app.storytelling.service import (
     GenerationOutputError,
@@ -103,11 +100,9 @@ async def generate_freeform_ideas(
     target_duration_minutes: float = 5.0,
 ) -> list[dict[str, Any]]:
     settings = get_settings()
-    configured_provider = effective_provider_for_channel(settings, "text")
-    ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
-    provider: LLMProvider = OmniRouteLLMProvider()
+    provider, model, configured_provider = configured_text_llm_provider(settings)
     model = validate_model_name(
-        provider_model(settings, configured_provider, "text"),
+        model,
         provider=configured_provider,
     )
     count = max(1, min(10, int(count)))

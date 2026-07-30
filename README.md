@@ -52,16 +52,23 @@ aprovação e controle sobre o resultado.
 
 ## Provedor De IA
 
+Texto usa OpenCode Free quando `TEXT_PROVIDER=opencode`; imagem e video
+continuam no OmniRoute. No gateway OmniCode/OmniRoute, `OPENCODE_API_KEY` pode
+ficar vazia e o texto reutiliza `OMNIROUTE_API_KEY`.
+
 A aplicação usa OmniRoute como provedor principal para texto, imagem e vídeo.
 Os modelos padrão ficam no `.env`:
 
 ```env
 AI_PROVIDER=omniroute
+TEXT_PROVIDER=opencode
 OMNIROUTE_BASE_URL=https://omnirouters.com/v1
 OMNIROUTE_API_KEY=sua_chave_aqui
 OMNIROUTE_DEFAULT_MODEL=ds-web/deepseek-v4-flash
 OMNIROUTE_IMAGE_MODEL=chatgpt-web/gpt-5.5
 OMNIROUTE_VIDEO_MODEL=veo-free/veo
+OPENCODE_BASE_URL=http://localhost:20128/v1
+OPENCODE_DEFAULT_MODEL=oc/deepseek-v4-flash-free
 ```
 
 Também é possível configurar provedores por mídia:
