@@ -493,7 +493,7 @@ def test_script_loading_stops_when_script_and_scenes_exist() -> None:
     )
 
 
-def test_script_loading_continues_when_scenes_are_missing() -> None:
+def test_script_loading_stops_when_only_scenes_are_missing() -> None:
     assert (
         script_area.script_generation_in_progress(
             script=object(),
@@ -502,7 +502,7 @@ def test_script_loading_continues_when_scenes_are_missing() -> None:
             should_recover_missing_scenes=False,
             should_resume_stale_script=False,
         )
-        is True
+        is False
     )
 
 

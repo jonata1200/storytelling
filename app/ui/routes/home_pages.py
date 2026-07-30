@@ -679,6 +679,7 @@ def register_home_pages(
                                     if existing.get("id") != saved["id"]
                                 ]
                                 saved_ideas.insert(0, saved)
+                            refresh_idea_filter_options()
                             saved_results.refresh()
                             ui.notify(
                                 f"{len(generated)} ideia(s) gerada(s) e salva(s).",
@@ -734,6 +735,7 @@ def register_home_pages(
                     saved_ideas[:] = [
                         idea for idea in saved_ideas if str(idea.get("id")) != idea_id
                     ]
+                    refresh_idea_filter_options()
                     saved_results.refresh()
                     ui.notify("Ideia apagada definitivamente.", color="warning")
 
@@ -776,6 +778,58 @@ def register_home_pages(
                     "all": "Todas",
                     **{f"{value:g}": f"{value:g} min" for value in sorted(duration_values)},
                 }
+
+                def current_idea_genre_filter_options() -> dict[str, str]:
+                    return {
+                        "all": "Todos",
+                        **{
+                            genre: genre
+                            for genre in sorted(
+                                {
+                                    *IDEA_GENRES,
+                                    *unique_idea_filter_options(saved_ideas, "genre"),
+                                },
+                                key=str.casefold,
+                            )
+                        },
+                    }
+
+                def current_idea_emotion_filter_options() -> dict[str, str]:
+                    return {
+                        "all": "Todas",
+                        **{
+                            emotion: emotion
+                            for emotion in sorted(
+                                {
+                                    *common_emotions,
+                                    *unique_idea_filter_options(saved_ideas, "primary_emotion"),
+                                },
+                                key=str.casefold,
+                            )
+                        },
+                    }
+
+                def current_idea_duration_filter_options() -> dict[str, str]:
+                    values = {
+                        float(coerce_duration_minutes(value)) for value in STORY_DURATION_OPTIONS
+                    }
+                    values.update(unique_idea_duration_options(saved_ideas))
+                    return {
+                        "all": "Todas",
+                        **{f"{value:g}": f"{value:g} min" for value in sorted(values)},
+                    }
+
+                def refresh_idea_filter_options() -> None:
+                    control_options = (
+                        (idea_genre_filter, current_idea_genre_filter_options()),
+                        (idea_emotion_filter, current_idea_emotion_filter_options()),
+                        (idea_duration_filter, current_idea_duration_filter_options()),
+                    )
+                    for control, options in control_options:
+                        control.options = options
+                        if control.value not in options:
+                            control.value = "all"
+                        control.update()
 
                 def clear_idea_filters() -> None:
                     idea_search.value = ""

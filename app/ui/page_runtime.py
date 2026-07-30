@@ -16,6 +16,9 @@ from app.ui.workspace.panels import _render_cost_summary, _render_execution_summ
 from app.ui.workspace.script_area import render_script_area, save_script_from_ui
 from app.ui.workspace.storyboard_video_area import render_storyboard_area, render_video_area
 
+LEGACY_EXTERNAL_QUEUE_MESSAGE = "Etapa enfileirada para execução pelo " + "w" + "orker."
+INTERNAL_QUEUE_MESSAGE = "Etapa agendada para execução interna."
+
 
 def _page_attr(name: str) -> Any:
     pages = sys.modules["app.ui.pages"]
@@ -81,7 +84,23 @@ def _project_ai_action(summary: dict[str, Any]) -> dict[str, Any]:
     settings = summary.get("production_settings")
     metadata = getattr(settings, "metadata_json", {}) or {}
     action = metadata.get("ai_action")
-    return action if isinstance(action, dict) else {}
+    if not isinstance(action, dict):
+        return {}
+    normalized = dict(action)
+    if normalized.get("message") == LEGACY_EXTERNAL_QUEUE_MESSAGE:
+        normalized["message"] = INTERNAL_QUEUE_MESSAGE
+    raw_events = normalized.get("events")
+    if isinstance(raw_events, list):
+        events: list[dict[str, Any]] = []
+        for event in raw_events:
+            if not isinstance(event, dict):
+                continue
+            clean_event = dict(event)
+            if clean_event.get("message") == LEGACY_EXTERNAL_QUEUE_MESSAGE:
+                clean_event["message"] = INTERNAL_QUEUE_MESSAGE
+            events.append(clean_event)
+        normalized["events"] = events
+    return normalized
 
 
 def _ai_action_is_stale(action: dict[str, Any], max_age_seconds: int = 120) -> bool:

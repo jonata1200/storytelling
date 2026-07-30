@@ -162,6 +162,24 @@ def test_filter_projects_combines_query_status_stage_period_and_sort() -> None:
     assert project_stage(projects[2]) == "script"
 
 
+def test_project_updated_period_uses_exact_day_window() -> None:
+    project = ProjectItem(
+        title="Janela exata",
+        description=None,
+        status="SCRIPT_GENERATION",
+        created_at="2026-01-01T00:00:00+00:00",
+        updated_at="2026-07-21T23:59:00+00:00",
+    )
+
+    result = filter_projects(
+        [project],
+        updated_period="7",
+        now=datetime(2026, 7, 29, tzinfo=UTC),
+    )
+
+    assert result == []
+
+
 def test_has_project_filters_detects_non_default_state() -> None:
     assert not has_project_filters("", "all", "all", "any", "updated_desc")
     assert has_project_filters("mercado", "all", "all", "any", "updated_desc")
@@ -181,7 +199,7 @@ def test_filter_ideas_combines_query_filters_and_sorting() -> None:
             "duration_minutes": 5,
             "retention_potential": 8,
             "cliche_risk": 2,
-            "production_complexity": 3,
+            "production_complexity": 30,
             "created_at": "2026-07-28T00:00:00+00:00",
         },
         {
@@ -195,7 +213,7 @@ def test_filter_ideas_combines_query_filters_and_sorting() -> None:
             "duration_minutes": 5,
             "retention_potential": 9,
             "cliche_risk": 4,
-            "production_complexity": 8,
+            "production_complexity": 80,
             "created_at": "2026-07-29T00:00:00+00:00",
         },
     ]
@@ -212,6 +230,13 @@ def test_filter_ideas_combines_query_filters_and_sorting() -> None:
 
     assert result == [ideas[0]]
     assert idea_complexity_bucket(ideas[1]) == "high"
+
+
+def test_idea_complexity_bucket_uses_zero_to_one_hundred_scale() -> None:
+    assert idea_complexity_bucket({"production_complexity": 33}) == "low"
+    assert idea_complexity_bucket({"production_complexity": 34}) == "medium"
+    assert idea_complexity_bucket({"production_complexity": 66}) == "medium"
+    assert idea_complexity_bucket({"production_complexity": 67}) == "high"
 
 
 def test_filter_ideas_sorts_by_metrics_and_title() -> None:

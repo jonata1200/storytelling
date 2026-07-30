@@ -214,16 +214,34 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
 
             story_idea = await _latest(session, StoryIdea, project_id)
             if story_idea is None:
-                await _set_project_ai_action_status(
-                    session,
-                    project_id,
-                    status="running",
-                    message="Vou criar uma ideia base para orientar o roteiro.",
+                settings = await get_or_create_production_settings(session, project_id)
+                metadata = settings.metadata_json or {}
+                source_idea = (
+                    metadata.get("source_idea") if isinstance(metadata, dict) else None
                 )
-                generated_ideas = await generate_story_ideas(session, project_id)
-                if not generated_ideas:
-                    raise ValueError("não foi possível gerar ideias iniciais")
-                story_idea = generated_ideas[0]
+                if isinstance(source_idea, dict):
+                    await _set_project_ai_action_status(
+                        session,
+                        project_id,
+                        status="running",
+                        message="Vou registrar a ideia escolhida dentro deste projeto.",
+                    )
+                    story_idea = await create_story_idea_from_payload(
+                        session, project_id, source_idea
+                    )
+                    if story_idea is None:
+                        raise ValueError("não foi possível registrar a ideia selecionada")
+                else:
+                    await _set_project_ai_action_status(
+                        session,
+                        project_id,
+                        status="running",
+                        message="Vou criar uma ideia base para orientar o roteiro.",
+                    )
+                    generated_ideas = await generate_story_ideas(session, project_id)
+                    if not generated_ideas:
+                        raise ValueError("não foi possível gerar ideias iniciais")
+                    story_idea = generated_ideas[0]
 
             await _set_project_ai_action_status(
                 session,
@@ -326,7 +344,7 @@ async def _reload_project_when_script_ready(project_id: UUID) -> bool:
         metadata = settings.metadata_json or {}
         action = metadata.get("ai_action") if isinstance(metadata, dict) else None
         status = str(action.get("status") or "") if isinstance(action, dict) else ""
-    if status in {"completed", "failed"} or (script is not None and scene_count > 0):
+    if status in {"completed", "failed"} or script is not None or scene_count > 0:
         ui.navigate.reload()
         return True
     return False

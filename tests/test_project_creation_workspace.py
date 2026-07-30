@@ -12,8 +12,8 @@ test_retry_initial_script_opens_loading_dialog_and_watches_status = (
 test_script_loading_stops_when_script_and_scenes_exist = (
     cases.test_script_loading_stops_when_script_and_scenes_exist
 )
-test_script_loading_continues_when_scenes_are_missing = (
-    cases.test_script_loading_continues_when_scenes_are_missing
+test_script_loading_stops_when_only_scenes_are_missing = (
+    cases.test_script_loading_stops_when_only_scenes_are_missing
 )
 test_characters_section_unlocks_when_script_exists_without_shots = (
     cases.test_characters_section_unlocks_when_script_exists_without_shots

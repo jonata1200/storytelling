@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from redis.asyncio import Redis
+from redis.asyncio import from_url
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -270,9 +270,9 @@ async def project_execution_summary(
 
 
 async def _redis_check(name: str, url: str) -> ReadinessComponentRead:
-    redis = Redis.from_url(url)
+    redis = from_url(url)
     try:
-        await asyncio.wait_for(redis.ping(), timeout=1.5)
+        await asyncio.wait_for(redis.ping(), timeout=5.0)
     except Exception as exc:
         return ReadinessComponentRead(
             name=name,

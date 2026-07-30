@@ -1,6 +1,6 @@
 import unicodedata
 from collections.abc import Callable, Iterable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 type FieldGetter[T] = str | Callable[[T], object]
@@ -269,7 +269,7 @@ def project_matches_updated_period(
     reference = now or datetime.now(UTC)
     if reference.tzinfo is None:
         reference = reference.replace(tzinfo=UTC)
-    return (reference.astimezone(UTC) - updated_at).days <= days
+    return reference.astimezone(UTC) - updated_at <= timedelta(days=days)
 
 
 def filter_projects(
@@ -305,9 +305,9 @@ def idea_complexity_bucket(idea: dict[str, object]) -> str:
     value = _safe_decimal(idea.get("production_complexity"))
     if value is None:
         return "medium"
-    if value <= Decimal("3"):
+    if value <= Decimal("33"):
         return "low"
-    if value >= Decimal("8"):
+    if value >= Decimal("67"):
         return "high"
     return "medium"
 

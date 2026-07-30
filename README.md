@@ -1,16 +1,89 @@
-﻿# Storytelling
+# Storytelling Studio
 
-Aplicação para produção estruturada de histórias emocionais em vídeos verticais,
-com domínio versionado, aprovação humana e pipeline recuperável.
+Storytelling Studio é uma aplicação para criar, organizar e produzir histórias
+cinematográficas com apoio de IA. O produto foi desenhado para transformar uma
+ideia inicial em um projeto completo de vídeo vertical, passando por roteiro,
+cenas, personagens, referências visuais, storyboard, clipes, montagem,
+exportação e controle de qualidade.
 
-## Requisitos locais
+A proposta da aplicação é funcionar como um estúdio de produção guiado: a IA
+acelera as etapas criativas e operacionais, enquanto o usuário mantém revisão,
+aprovação e controle sobre o resultado.
+
+## Principais Recursos
+
+- Geração de ideias narrativas com filtros e busca.
+- Criação de projetos a partir de prompt, ideia salva ou briefing estruturado.
+- Geração de roteiro inicial com execução interna da aplicação, sem worker
+  externo.
+- Divisão do roteiro em cenas e planos.
+- Biblioteca visual para personagens, locais, objetos e referências.
+- Storyboard com frames, prompts visuais e animatic.
+- Geração e revisão de clipes de vídeo.
+- Timeline final, exportação e manifesto quando renderização não estiver
+  disponível.
+- Controle de custos, orçamento por projeto e estimativas por operação.
+- Observabilidade por projeto com eventos, execuções de prompt e readiness.
+- Autenticação local, sessões persistidas, CSRF e modo de usuário único.
+- Storage local auditável, reconciliação e limpeza de arquivos órfãos.
+
+## Fluxo Da Aplicação
+
+1. O usuário descreve uma ideia ou escolhe uma ideia já gerada.
+2. A aplicação cria o projeto com briefing, formato e modelos de produção.
+3. A IA gera o roteiro e, em seguida, cenas e planos.
+4. O usuário revisa personagens, locais, objetos e referências visuais.
+5. A aplicação monta storyboard, animatic e prompts de vídeo.
+6. Os clipes são gerados, revisados e encaminhados para montagem.
+7. A timeline final é exportada ou registrada como manifesto.
+8. O controle de qualidade consolida continuidade, custos, eventos e pendências.
+
+## Stack Técnica
+
+- Python 3.12
+- FastAPI
+- NiceGUI
+- SQLAlchemy async
+- Alembic
+- PostgreSQL com pgvector
+- Redis
+- Pydantic Settings
+- Ruff, mypy e pytest
+
+## Provedor De IA
+
+A aplicação usa OmniRoute como provedor principal para texto, imagem e vídeo.
+Os modelos padrão ficam no `.env`:
+
+```env
+AI_PROVIDER=omniroute
+OMNIROUTE_BASE_URL=https://omnirouters.com/v1
+OMNIROUTE_API_KEY=sua_chave_aqui
+OMNIROUTE_DEFAULT_MODEL=ds-web/deepseek-v4-flash
+OMNIROUTE_IMAGE_MODEL=chatgpt-web/gpt-5.5
+OMNIROUTE_VIDEO_MODEL=veo-free/veo
+```
+
+Também é possível configurar provedores por mídia:
+
+```env
+TEXT_PROVIDER=
+IMAGE_PROVIDER=
+VIDEO_PROVIDER=
+```
+
+Quando esses campos ficam vazios, a aplicação usa `AI_PROVIDER`. Preferências
+não sensíveis alteradas pela interface são salvas em `.runtime/preferences.json`;
+segredos devem permanecer no `.env` ou em variáveis de ambiente.
+
+## Requisitos Locais
 
 - Python 3.12 ou superior
-- Docker Desktop com WSL 2 no Windows
+- Docker Desktop
 - Git
-- FFmpeg será necessário nas fases de renderização
+- FFmpeg opcional para exportação/renderização de vídeo
 
-## Configuração
+## Instalação
 
 ```powershell
 python -m venv .venv
@@ -19,155 +92,72 @@ python -m pip install --upgrade pip
 pip install -r requirements.lock
 pip install -e . --no-deps
 Copy-Item .env.example .env
-docker compose up -d
-alembic upgrade head
-uvicorn app.main:app --reload
 ```
 
-O arquivo `requirements.lock` trava as versões usadas em desenvolvimento e CI.
-Quando dependências mudarem em `pyproject.toml`, regenere o lock em um ambiente
-limpo e rode `pip check`, `ruff check .`, `mypy app tests` e `pytest`.
+Edite o `.env` e configure pelo menos `OMNIROUTE_API_KEY`.
 
-Depois da primeira configuração, você pode usar o script unificado da pasta `scripts`:
+## Executando
+
+O script unificado inicia PostgreSQL, Redis, aplica migrations e sobe a
+aplicação:
 
 ```powershell
 .\scripts\app.ps1 start
 ```
 
-O comando inicia PostgreSQL, Redis, aplica migrations e sobe a API. As etapas
-longas rodam em background dentro da própria aplicação, sem worker externo.
-
-Para iniciar a API em segundo plano:
+Para executar em segundo plano:
 
 ```powershell
 .\scripts\app.ps1 start -Background
 ```
 
-Para finalizar API e containers:
+Para parar a aplicação e manter os containers:
+
+```powershell
+.\scripts\app.ps1 stop -KeepDocker
+```
+
+Para parar aplicação e containers:
 
 ```powershell
 .\scripts\app.ps1 stop
 ```
 
-Para reiniciar tudo em um único comando:
-
-```powershell
-.\scripts\app.ps1 restart
-```
-
-Se o PowerShell bloquear scripts locais, use:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\app.ps1 start
-```
-
-Os atalhos `.\scripts\executar.ps1` e `.\scripts\finalizar.ps1` continuam
-existindo por compatibilidade e chamam o script unificado.
-
-## Provedores de IA
-
-OmniRoute é o provider único para texto, imagem e vídeo. Sem chave válida, as
-etapas de IA retornam erro para a interface, em vez de gerar conteúdo mock.
-Configure no `.env`:
-
-```env
-OMNIROUTE_API_KEY=sua_chave_aqui
-AI_PROVIDER=omniroute
-TEXT_PROVIDER=
-IMAGE_PROVIDER=
-VIDEO_PROVIDER=
-OMNIROUTE_BASE_URL=https://omnirouters.com/v1
-OMNIROUTE_DEFAULT_MODEL=ds-web/deepseek-v4-flash
-OMNIROUTE_IMAGE_MODEL=chatgpt-web/gpt-5.5
-OMNIROUTE_VIDEO_MODEL=veo-free/veo
-OMNIROUTE_SPEECH_MODEL=
-SPEECH_PROVIDER=openai_compatible
-SPEECH_MODEL=
-ALLOW_USER_REGISTRATION=true
-SINGLE_USER_MODE=true
-```
-
-No workspace de cada projeto, use o bloco **Modelos de IA por etapa** para
-definir provider e modelos diferentes para ideias, roteiro, cenas/planos,
-biblioteca visual e prompts de storyboard.
-Modelos com sufixo `:free` e modelos `mock-*` são bloqueados porque tendem a
-falhar ou confundir o fluxo de produção.
-
-OmniRoute pode ser configurado globalmente por `AI_PROVIDER=omniroute` ou por
-mídia (`TEXT_PROVIDER`, `IMAGE_PROVIDER`, `VIDEO_PROVIDER`).
-Para vozes dos personagens, use
-`SPEECH_PROVIDER=omniroute` com `OMNIROUTE_API_KEY` e `OMNIROUTE_SPEECH_MODEL`
-ou mantenha `SPEECH_PROVIDER=openai_compatible`.
-
-Preferências não sensíveis alteradas pela interface são gravadas em
-`.runtime/preferences.json`. Segredos como `OMNIROUTE_API_KEY` e `SPEECH_API_KEY`
-devem ficar somente no `.env` ou nas variáveis do ambiente; a aplicação não
-persiste esses valores no arquivo runtime.
-
-Os providers reais atualmente implementados usam OmniRoute para texto, imagem e
-vídeo. Os clipes são gerados sem narração
-nativa; o roteiro e a decupagem priorizam
-interação e diálogo entre personagens. Na finalização, falas presentes em
-`dialogue_text` podem ser sintetizadas como vozes de personagens quando
-o provider de speech escolhido está configurado.
-
-## Experiência de produção
-
-A interface principal funciona como um cockpit de produção:
-
-- Ideia inicial em linguagem natural.
-- Core Setup com formato, resolucao, workflow e modelos.
-- Passos guiados para narrativa, cenas/planos, visual, storyboard, vídeo, finalização e QA.
-- Asset Canvas para personagens, cenários, objetos e referências.
-- Storyboard Grid para revisar quadros antes de gerar clipes.
-- Timeline Assembly para acompanhar a montagem.
-- Criação de próximo episódio herdando configurações e briefing.
-
-Esse fluxo preserva o backend versionado já existente, mas reorganiza o uso para
-ficar mais próximo de uma plataforma full-pipeline de vídeo com IA: primeiro a
-ideia, depois configuração de produção, ativos reutilizáveis, storyboard,
-geração de clipes, montagem e exportação.
-
-Se o comando `docker` não aparecer no PowerShell logo após instalar o Docker
-Desktop, reinicie o VS Code/terminal ou use temporariamente:
-
-```powershell
-$env:Path = "C:\Program Files\Docker\Docker\resources\bin;$env:Path"
-& "C:\Program Files\Docker\Docker\resources\bin\docker.exe" compose up -d
-```
-
-Interface:
+URL local:
 
 ```text
-http://localhost:8000/
+http://127.0.0.1:8000/
 ```
 
 Health check:
 
 ```text
-http://localhost:8000/api/v1/health/live
+http://127.0.0.1:8000/api/v1/health/live
 ```
 
-Autenticação:
+Se o PowerShell bloquear scripts locais:
 
-Em `APP_ENV=local` ou `APP_ENV=test`, a API operacional usa bypass local para
-preservar a experiência de desenvolvimento. Em ambientes fora de local/test, as
-rotas operacionais em `/api/v1` exigem cookie de sessão ou token bearer gerado
-pelo fluxo de login. O endpoint `/api/v1/health/live` permanece público; o
-readiness e as demais rotas exigem autenticação quando a aplicação não está em
-ambiente local/test.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\app.ps1 start
+```
 
-O cadastro usa e-mail como login e exige senha forte: pelo menos 6 caracteres,
-com letra maiúscula, letra minúscula, número e símbolo. Com
-`SINGLE_USER_MODE=true`, apenas o primeiro cadastro é permitido; depois disso a
-tela de cadastro é bloqueada e o link "Criar uma conta" desaparece do login.
-O usuário autenticado pode sair pelo botão **Sair** na navegação da aplicação.
-Sessões novas são persistidas no banco com expiração e podem ser revogadas no
-logout sem trocar `APP_SECRET_KEY`. Formulários HTML mutantes usam token CSRF
-assinado; em produção, mantenha `APP_SECRET_KEY` forte, `APP_DEBUG=false` e
-execute `alembic upgrade head` antes de expor a aplicação.
+## Configuração Importante
 
-Checklist mínimo para produção:
+Variáveis principais:
+
+```env
+APP_ENV=local
+APP_DEBUG=true
+APP_SECRET_KEY=change-me-in-development
+DATABASE_URL=postgresql+asyncpg://storytelling:storytelling@localhost:5432/storytelling
+REDIS_URL=redis://localhost:6379/0
+ALLOW_USER_REGISTRATION=true
+SINGLE_USER_MODE=true
+MAX_UPLOAD_BYTES=26214400
+MAX_GENERATED_ASSET_BYTES=786432000
+```
+
+Para produção, use valores seguros:
 
 ```env
 APP_ENV=production
@@ -177,184 +167,81 @@ ALLOW_USER_REGISTRATION=false
 OMNIROUTE_API_KEY=sua_chave_no_ambiente
 ```
 
-## Storage e custos
+## API Principal
 
-O storage local é auditável por API. Os limites padrão podem ser ajustados no
-`.env`:
-
-```env
-MAX_UPLOAD_BYTES=26214400
-MAX_GENERATED_ASSET_BYTES=786432000
-```
-
-Endpoints operacionais:
+Rotas públicas:
 
 ```text
-GET  /api/v1/storage/usage
-GET  /api/v1/storage/projects/{project_id}/usage
-POST /api/v1/storage/reconcile
-POST /api/v1/storage/projects/{project_id}/reconcile
-GET  /api/v1/storage/orphans
-POST /api/v1/storage/orphans/cleanup?dry_run=true
-POST /api/v1/storage/orphans/cleanup?dry_run=false&confirm=true
+GET /api/v1/health/live
 ```
 
-`/usage` usa `size_bytes` persistido para abrir rapido. A varredura completa de
-arquivos locais fica nos endpoints administrativos de `reconcile`, `orphans` e
-`cleanup`, que aceitam filtros por `project_id`, `kind` e `older_than_days`.
-
-Custos e orçamentos usam uma política padrão por operação, com limites por
-projeto e por etapa gravados em `project_production_settings.metadata_json`.
-A geração de vídeo valida o limite antes de chamar o provider externo.
+Rotas autenticadas principais:
 
 ```text
-GET   /api/v1/costs/policies
-POST  /api/v1/costs/operation-estimate
-GET   /api/v1/costs/projects/{project_id}/budget
-PATCH /api/v1/costs/projects/{project_id}/budget
-POST  /api/v1/costs/budget-check
-GET   /api/v1/costs/projects/{project_id}/summary
-```
-
-## Finalização e observabilidade
-
-A exportação final aceita perfil configurável e tenta normalizar clipes via FFmpeg quando o
-concat direto falha. Quando FFmpeg não está disponível ou a renderização falha, o fluxo grava
-um manifest estruturado com mensagem redigida.
-
-Eventos operacionais por projeto ficam disponíveis em:
-
-```text
-GET /api/v1/observability/projects/{project_id}/events
-GET /api/v1/observability/projects/{project_id}/summary
-GET /api/v1/observability/readiness
-```
-
-O readiness separa API, banco, Redis, FFmpeg, providers de texto, imagem, vídeo
-e vozes de personagens.
-Correlation ID é propagado por `X-Correlation-ID` nas chamadas externas relevantes.
-
-## Testes
-
-```powershell
-ruff check .
-mypy app tests
-python -m pytest -m "not smoke"
-```
-
-Os testes automatizados não devem chamar APIs pagas. Providers externos entram por
-interfaces falsas nos testes; smokes reais exigem `RUN_PROVIDER_SMOKE_TESTS=1`
-e variáveis específicas como `OMNIROUTE_SMOKE=1`.
-
-Detalhes de comandos por marcador, troubleshooting e checklist de release ficam em
-[`docs/quality-dependencies.md`](docs/quality-dependencies.md).
-
-## Estado atual
-
-Fases 1 a 8 estão implementadas em base funcional:
-
-- API FastAPI com UI NiceGUI inicial.
-- PostgreSQL, pgvector e Redis via Docker Compose.
-- Alembic async usando `asyncpg`.
-- Projetos, versões, artefatos, aprovações, dependências, assets e custos.
-- Máquina de estados inicial para o pipeline de projeto.
-- Briefing, ideias, Story Bible, roteiro, cenas e planos com OmniRoute.
-- Templates e execuções de prompt auditáveis.
-- Personagens, locais, objetos e referências visuais reais via OmniRoute Images.
-- Storyboards, animatic visual e timeline preliminar.
-- Jobs de vídeo via OmniRoute, clipes e revisão humana.
-- Timeline final e export MP4/manifest sem narração, com mix de vozes por personagem.
-- Continuity Ledger, quality gate, varredura inicial de segurança e correlation
-  ID por requisição.
-- Testes de health, maquina de estados, dependências, custos e mock LLM.
-
-## Fluxo narrativo inicial
-
-Endpoints principais da Fase 3:
-
-```text
-POST /api/v1/storytelling/projects/{project_id}/briefing
+GET  /api/v1/projects
+GET  /api/v1/projects/search
 POST /api/v1/storytelling/projects/{project_id}/ideas/generate
-GET  /api/v1/storytelling/projects/{project_id}/ideas
-POST /api/v1/storytelling/projects/{project_id}/story-bible/generate
+GET  /api/v1/storytelling/projects/{project_id}/ideas/search
 POST /api/v1/storytelling/projects/{project_id}/script/generate
 POST /api/v1/storytelling/projects/{project_id}/scenes/generate
-```
-
-As gerações da Fase 3 usam o provider de texto configurado no fluxo da aplicação. Sem chave válida,
-com modelo `:free` ou com modelo `mock-*`, a etapa retorna erro em vez de criar
-conteúdo falso.
-
-## Fluxo visual inicial
-
-Endpoints principais da Fase 4:
-
-```text
 POST /api/v1/visual-bible/projects/{project_id}/generate
-GET  /api/v1/visual-bible/projects/{project_id}/characters
-GET  /api/v1/visual-bible/projects/{project_id}/locations
-GET  /api/v1/visual-bible/projects/{project_id}/props
-POST /api/v1/visual-bible/projects/{project_id}/references/generate
-GET  /api/v1/visual-bible/projects/{project_id}/consistency/{target_kind}/{target_id}
-```
-
-As referências visuais usam o provider de imagem configurado. Fallback para imagem mock local
-está bloqueado; falhas do provedor devem aparecer como erro para o usuário.
-
-## Fluxo de storyboard inicial
-
-Endpoints principais da Fase 5:
-
-```text
 POST /api/v1/storyboards/projects/{project_id}/generate
-GET  /api/v1/storyboards/projects/{project_id}/frames
-POST /api/v1/storyboards/projects/{project_id}/animatic/generate
-```
-
-O animatic da Fase 5 é um manifesto JSON com quadros, durações, diálogos de
-referência e timeline preliminar. Renderização em vídeo fica para a fase de FFmpeg.
-
-## Fluxo de vídeo inicial
-
-Endpoints principais da Fase 6:
-
-```text
-POST /api/v1/video/projects/{project_id}/cost-estimate
 POST /api/v1/video/projects/{project_id}/clips/generate
-GET  /api/v1/video/projects/{project_id}/clips
-GET  /api/v1/video/projects/{project_id}/jobs/{job_id}
-POST /api/v1/video/projects/{project_id}/clips/{clip_id}/review
-```
-
-Os clipes usam o provider de vídeo configurado. Provider `mock` e modelo `mock-video` são
-recusados no fluxo da aplicação.
-
-## Fluxo de finalização inicial
-
-Endpoints principais da Fase 7:
-
-```text
-POST /api/v1/finalization/projects/{project_id}/timeline/final
 POST /api/v1/finalization/projects/{project_id}/exports
+POST /api/v1/quality/projects/{project_id}/checks/run
+GET  /api/v1/observability/projects/{project_id}/summary
+GET  /api/v1/storage/usage
+GET  /api/v1/costs/projects/{project_id}/summary
 ```
 
-A finalização monta a timeline final, sintetiza diálogos com voz consistente por
-personagem quando o provider de speech está configurado, e grava um manifesto JSON
-quando `ffmpeg` não está disponível no PATH ou quando a renderização falha.
+Em `APP_ENV=local` e `APP_ENV=test`, a aplicação usa bypass local para facilitar
+desenvolvimento. Fora desses ambientes, as rotas operacionais exigem sessão ou
+token bearer.
 
-## Fluxo de qualidade inicial
+## Qualidade E Desenvolvimento
 
-Endpoints principais da Fase 8:
+Comandos recomendados antes de entregar alterações:
+
+```powershell
+ruff check app tests
+mypy app tests
+pytest -q
+```
+
+Testes automatizados não devem chamar provedores pagos. Testes smoke reais devem
+ser habilitados explicitamente por variáveis como `RUN_PROVIDER_SMOKE_TESTS=1`.
+
+## Estrutura Do Projeto
 
 ```text
-POST /api/v1/quality/projects/{project_id}/continuity/build
-GET  /api/v1/quality/projects/{project_id}/continuity/issues
-POST /api/v1/quality/projects/{project_id}/continuity/issues/{issue_id}/accept
-POST /api/v1/quality/projects/{project_id}/checks/run
-GET  /api/v1/quality/projects/{project_id}/observability
-POST /api/v1/quality/security/scan
+app/
+  api/               roteadores centrais
+  auth/              login, cadastro, sessão e CSRF
+  config/            settings, providers e preferências
+  costs/             estimativas, políticas e orçamento
+  finalization/      timeline e exportação
+  generation/        prompts, modelos e provedores
+  jobs/              execução interna de etapas longas
+  observability/     eventos, readiness e métricas
+  projects/          projetos, artefatos e versionamento
+  quality/           continuidade e checks de qualidade
+  storyboards/       frames, prompts e animatic
+  storytelling/      briefing, ideias, roteiro, cenas e planos
+  storage/           uso, reconciliação e limpeza local
+  ui/                interface NiceGUI
+  video_generation/  clipes, jobs e revisão
+  visual_bible/      personagens, locais, objetos e referências
+tests/               suíte automatizada
+scripts/             automação local de start/stop
+alembic/             migrations do banco
+storage/             arquivos gerados localmente
 ```
 
-O controle de qualidade cria estados de continuidade por plano, alerta
-divergências estruturadas e resume jobs, custos, artefatos obsoletos e score de
-qualidade do projeto.
+## Estado Atual
+
+O projeto está em uma base funcional para desenvolvimento local: criação de
+projetos, geração narrativa com OmniRoute, busca em ideias/projetos, fluxo
+visual, storyboard, vídeo, custos, storage, autenticação e observabilidade.
+
+Etapas longas rodam dentro da própria aplicação. Não há dependência de Celery ou
+worker externo para criar roteiro.

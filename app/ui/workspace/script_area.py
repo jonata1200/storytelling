@@ -1,11 +1,11 @@
-﻿from collections.abc import Awaitable, Callable
+﻿import asyncio
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
 from nicegui import ui
 
 from app.database.session import AsyncSessionLocal
-from app.jobs.service import enqueue_project_step
 from app.projects.models import Artifact
 from app.projects.versioning import (
     create_artifact_version,
@@ -14,7 +14,9 @@ from app.projects.versioning import (
 from app.storytelling.models import Script, ScriptVersion
 from app.storytelling.service import regenerate_scenes_and_shots
 from app.ui.project.workflows import (
+    _generate_missing_scenes_in_background,
     _reload_project_when_script_ready,
+    _resume_initial_script_in_background,
 )
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, STEP_LOADING_COPY
 from app.visual_bible.service import generate_visual_bible
@@ -34,12 +36,7 @@ def script_generation_in_progress(
     should_recover_missing_scenes: bool,
     should_resume_stale_script: bool,
 ) -> bool:
-    script_pipeline_ready = script is not None and bool(scenes)
-    return (
-        (ai_status in {"queued", "running"} and not script_pipeline_ready)
-        or should_recover_missing_scenes
-        or should_resume_stale_script
-    )
+    return (script is None and ai_status in {"queued", "running"}) or should_resume_stale_script
 
 
 async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID) -> None:
@@ -53,9 +50,12 @@ async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID)
         await resolve_stale_artifacts_after_regeneration(session, project_id)
 
 
-async def _enqueue_script_pipeline_from_ui(project_id: UUID, step: str = "script") -> None:
-    async with AsyncSessionLocal() as session:
-        await enqueue_project_step(session, project_id, step)
+def _schedule_initial_script_resume(project_id: UUID) -> None:
+    asyncio.create_task(_resume_initial_script_in_background(project_id))
+
+
+def _schedule_missing_scenes_generation(project_id: UUID, script_id: UUID) -> None:
+    asyncio.create_task(_generate_missing_scenes_in_background(project_id, script_id))
 
 
 async def _close_loading_dialog_when_script_ready(project_id: UUID, loading_dialog: Any) -> None:
@@ -158,9 +158,15 @@ def render_script_area(
         and ai_action_is_stale(ai_action)
     )
     if should_recover_missing_scenes:
-        ui.timer(0.1, lambda: _enqueue_script_pipeline_from_ui(project_id, "scenes"), once=True)
+        script_id = getattr(script, "id", None)
+        if isinstance(script_id, UUID):
+            ui.timer(
+                0.1,
+                lambda: _schedule_missing_scenes_generation(project_id, script_id),
+                once=True,
+            )
     if should_resume_stale_script:
-        ui.timer(0.1, lambda: _enqueue_script_pipeline_from_ui(project_id), once=True)
+        ui.timer(0.1, lambda: _schedule_initial_script_resume(project_id), once=True)
     generation_in_progress = script_generation_in_progress(
         script=script,
         scenes=summary["scenes"],
@@ -181,9 +187,13 @@ def render_script_area(
         loading_message = (
             "A IA está criando cenas e planos para o roteiro."
             if missing_scenes
-            else str(
-                ai_action.get("message")
-                or "A IA está desenvolvendo o roteiro com base na ideia."
+            else (
+                "Retomando a criação do roteiro internamente."
+                if should_resume_stale_script
+                else str(
+                    ai_action.get("message")
+                    or "A IA está desenvolvendo o roteiro com base na ideia."
+                )
             )
         )
         loading_dialog = loading_dialog_factory(loading_title, loading_message)
