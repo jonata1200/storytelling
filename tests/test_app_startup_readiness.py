@@ -21,7 +21,7 @@ class _ReadySession:
 
 
 @pytest.mark.asyncio
-async def test_readiness_dashboard_degrades_without_redis_worker_and_providers(
+async def test_readiness_dashboard_degrades_without_redis_and_providers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def degraded_redis(name: str, _url: str) -> ReadinessComponentRead:
@@ -31,15 +31,7 @@ async def test_readiness_dashboard_degrades_without_redis_worker_and_providers(
             message=f"{name} indisponivel no teste",
         )
 
-    async def degraded_worker() -> ReadinessComponentRead:
-        return ReadinessComponentRead(
-            name="worker",
-            status="degraded",
-            message="worker indisponivel no teste",
-        )
-
     monkeypatch.setattr(observability_service, "_redis_check", degraded_redis)
-    monkeypatch.setattr(observability_service, "_celery_worker_check", degraded_worker)
     monkeypatch.setattr(observability_service.shutil, "which", lambda _name: None)
 
     dashboard = await observability_service.readiness_dashboard(
@@ -51,6 +43,6 @@ async def test_readiness_dashboard_degrades_without_redis_worker_and_providers(
     assert dashboard.status == "degraded"
     assert statuses["database"] == "ready"
     assert statuses["redis"] == "degraded"
-    assert statuses["worker"] == "degraded"
+    assert "worker" not in statuses
     assert statuses["image_provider"] == "degraded"
     assert statuses["character_speech"] == "degraded"

@@ -58,6 +58,12 @@ async def _enqueue_script_pipeline_from_ui(project_id: UUID, step: str = "script
         await enqueue_project_step(session, project_id, step)
 
 
+async def _close_loading_dialog_when_script_ready(project_id: UUID, loading_dialog: Any) -> None:
+    ready = await _reload_project_when_script_ready(project_id)
+    if ready and hasattr(loading_dialog, "close"):
+        loading_dialog.close()
+
+
 async def save_script_from_ui(
     project_id: UUID,
     script_id: UUID,
@@ -182,7 +188,7 @@ def render_script_area(
         )
         loading_dialog = loading_dialog_factory(loading_title, loading_message)
         loading_dialog.open()
-        ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
+        ui.timer(5.0, lambda: _close_loading_dialog_when_script_ready(project_id, loading_dialog))
     edit_dialog = None
     if script is not None:
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_dialog, ui.card().classes(

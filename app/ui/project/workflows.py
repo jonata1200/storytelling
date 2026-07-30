@@ -318,7 +318,7 @@ async def _generate_missing_scenes_in_background(project_id: UUID, script_id: UU
             )
 
 
-async def _reload_project_when_script_ready(project_id: UUID) -> None:
+async def _reload_project_when_script_ready(project_id: UUID) -> bool:
     async with AsyncSessionLocal() as session:
         script = await _latest(session, Script, project_id)
         scene_count = await _scalar_count(session, Scene, project_id)
@@ -328,6 +328,8 @@ async def _reload_project_when_script_ready(project_id: UUID) -> None:
         status = str(action.get("status") or "") if isinstance(action, dict) else ""
     if status in {"completed", "failed"} or (script is not None and scene_count > 0):
         ui.navigate.reload()
+        return True
+    return False
 
 
 def _requests_script_generation(message: str, active: str) -> bool:

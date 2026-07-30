@@ -20,8 +20,6 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://storytelling:storytelling@localhost:5432/storytelling"
     redis_url: str = "redis://localhost:6379/0"
-    celery_broker_url: str = "redis://localhost:6379/1"
-    celery_result_backend: str = "redis://localhost:6379/2"
 
     storage_backend: str = "local"
     local_storage_path: Path = Path("./storage")

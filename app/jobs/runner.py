@@ -201,14 +201,14 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
         await mark_job_running(
             session,
             job,
-            message=f"Worker iniciou a etapa {step}.",
+            message=f"Executor interno iniciou a etapa {step}.",
         )
         await _emit_step_event(
             session,
             job,
             step=step,
             status="started",
-            message=f"Worker iniciou a etapa {step}.",
+            message=f"Executor interno iniciou a etapa {step}.",
             details={"attempt": job.attempts},
         )
         try:

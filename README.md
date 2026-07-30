@@ -34,25 +34,16 @@ Depois da primeira configuração, você pode usar o script unificado da pasta `
 .\scripts\app.ps1 start
 ```
 
-O comando inicia PostgreSQL, Redis, aplica migrations, sobe a API e inicia o
-worker Celery usado pelas etapas avançadas enfileiradas. O roteiro inicial da
-criação de projeto roda em background na própria aplicação. Se precisar subir
-somente API e infraestrutura, use `-SkipWorker`.
+O comando inicia PostgreSQL, Redis, aplica migrations e sobe a API. As etapas
+longas rodam em background dentro da própria aplicação, sem worker externo.
 
-Para iniciar API e worker em segundo plano:
+Para iniciar a API em segundo plano:
 
 ```powershell
 .\scripts\app.ps1 start -Background
 ```
 
-Para iniciar apenas o worker manualmente, mantenha Redis ativo pelo Docker
-Compose e rode:
-
-```powershell
-celery -A app.workers.celery_app.celery_app worker --loglevel=info --pool=solo --queues storytelling
-```
-
-Para finalizar API, worker e containers:
+Para finalizar API e containers:
 
 ```powershell
 .\scripts\app.ps1 stop
@@ -239,8 +230,8 @@ GET /api/v1/observability/projects/{project_id}/summary
 GET /api/v1/observability/readiness
 ```
 
-O readiness separa API, banco, Redis, broker do worker, FFmpeg, providers de
-texto, imagem, vídeo e vozes de personagens.
+O readiness separa API, banco, Redis, FFmpeg, providers de texto, imagem, vídeo
+e vozes de personagens.
 Correlation ID é propagado por `X-Correlation-ID` nas chamadas externas relevantes.
 
 ## Testes

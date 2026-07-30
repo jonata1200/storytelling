@@ -77,7 +77,7 @@ async def _run_step(
                 if not visual_report["complete"]:
                     raise ValueError(visual_reference_completion_message(visual_report))
             await enqueue_project_step(session, project_id, step_key)
-        ui.notify("Etapa enfileirada para execução pelo worker.", color="positive")
+        ui.notify("Etapa agendada para execução interna.", color="positive")
         ui.navigate.reload()
     except Exception as exc:
         message = friendly_ai_error(exc)

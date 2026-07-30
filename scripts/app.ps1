@@ -7,7 +7,6 @@ param(
     [int]$PortRangeEnd = 8020,
     [switch]$SkipDocker,
     [switch]$SkipMigrations,
-    [switch]$SkipWorker,
     [switch]$Background,
     [switch]$KeepDocker,
     [switch]$Down
@@ -142,56 +141,12 @@ function Stop-ProcessSafely {
     }
 }
 
-function Test-CeleryWorkerProcess {
-    param([int]$ProcessId)
-
-    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
-    if ($null -eq $process -or $process.ProcessName -notmatch "python|celery") {
-        return $false
-    }
-
-    try {
-        $workerProcess = Get-CimInstance `
-            -ClassName Win32_Process `
-            -Filter "ProcessId = $ProcessId" `
-            -ErrorAction Stop
-        $commandLine = [string]$workerProcess.CommandLine
-        return (
-            $commandLine -match "celery" -and
-            $commandLine -match "app\.workers\.celery_app\.celery_app"
-        )
-    } catch {
-        return $true
-    }
-}
-
 function Stop-AppProcesses {
     $runtimeDir = Join-Path $ProjectRoot ".runtime"
     $stoppedIds = [System.Collections.Generic.HashSet[int]]::new()
     $stoppedPorts = [System.Collections.Generic.HashSet[int]]::new()
 
     if (Test-Path $runtimeDir) {
-        $workerPidFiles = Get-ChildItem `
-            -Path $runtimeDir `
-            -Filter "celery-worker*.pid" `
-            -File `
-            -ErrorAction SilentlyContinue
-        foreach ($pidFile in $workerPidFiles) {
-            $pidValue = Get-Content $pidFile.FullName -ErrorAction SilentlyContinue |
-                Select-Object -First 1
-            if ($pidValue -match "^\d+$") {
-                $numericPid = [int]$pidValue
-                if (Test-CeleryWorkerProcess -ProcessId $numericPid) {
-                    if (Stop-ProcessSafely `
-                        -ProcessId $numericPid `
-                        -Description "worker Celery registrado do Storytelling") {
-                        [void]$stoppedIds.Add($numericPid)
-                    }
-                }
-            }
-            Remove-Item -LiteralPath $pidFile.FullName -Force -ErrorAction SilentlyContinue
-        }
-
         $pidFiles = Get-ChildItem `
             -Path $runtimeDir `
             -Filter "uvicorn*.pid" `
@@ -261,59 +216,6 @@ function Stop-AppProcesses {
         "Instancias finalizadas: $($stoppedIds.Count). " +
         "Portas liberadas: $(if ($stoppedPorts.Count) { $stoppedPorts -join ', ' } else { 'nenhuma' })."
     )
-}
-
-function Start-CeleryWorker {
-    param([string]$PythonExecutable)
-
-    if ($SkipWorker) {
-        Write-Host "Worker Celery nao iniciado por causa de -SkipWorker."
-        return
-    }
-
-    $runtimeDir = Join-Path $ProjectRoot ".runtime"
-    New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
-    $pidFile = Join-Path $runtimeDir "celery-worker.pid"
-    $stdoutLog = Join-Path $runtimeDir "celery-worker.out.log"
-    $stderrLog = Join-Path $runtimeDir "celery-worker.err.log"
-
-    if (Test-Path $pidFile) {
-        $pidValue = Get-Content $pidFile -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-        if ($pidValue -match "^\d+$") {
-            if (Test-CeleryWorkerProcess -ProcessId ([int]$pidValue)) {
-                Write-Host "Worker Celery ja esta em execucao (PID $pidValue)."
-                return
-            }
-        }
-        Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
-    }
-
-    $workerArguments = @(
-        "-m",
-        "celery",
-        "-A",
-        "app.workers.celery_app.celery_app",
-        "worker",
-        "--loglevel=info",
-        "--pool=solo",
-        "--queues",
-        "storytelling"
-    )
-
-    $process = Start-Process `
-        -FilePath $PythonExecutable `
-        -ArgumentList $workerArguments `
-        -WorkingDirectory $ProjectRoot `
-        -RedirectStandardOutput $stdoutLog `
-        -RedirectStandardError $stderrLog `
-        -PassThru `
-        -WindowStyle Hidden
-
-    Set-Content -Path $pidFile -Value $process.Id
-    Write-Host "Worker Celery iniciado em segundo plano."
-    Write-Host "Worker PID: $($process.Id)"
-    Write-Host "Worker logs: $stdoutLog e $stderrLog"
 }
 
 function Stop-Storytelling {
@@ -398,8 +300,6 @@ function Start-Storytelling {
             Write-Warning "Porta $requestedPort ocupada por outro servico; usando porta $Port."
         }
     }
-
-    Start-CeleryWorker -PythonExecutable $python
 
     $url = "http://${HostAddress}:$Port"
     $uvicornArguments = @(

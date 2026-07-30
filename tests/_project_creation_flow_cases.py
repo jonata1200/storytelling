@@ -407,7 +407,7 @@ async def test_retry_initial_script_opens_loading_dialog_and_watches_status(
     project_id = uuid4()
     status_updates: list[dict[str, Any]] = []
     background_calls: list[UUID] = []
-    created_tasks: list[object] = []
+    created_tasks: list[Any] = []
     timers: list[dict[str, Any]] = []
     notifications: list[str] = []
 

@@ -284,37 +284,6 @@ async def _redis_check(name: str, url: str) -> ReadinessComponentRead:
     return ReadinessComponentRead(name=name, status="ready", message="Redis respondeu ao ping")
 
 
-async def _celery_worker_check() -> ReadinessComponentRead:
-    def ping_workers() -> dict[str, Any] | None:
-        from app.workers.celery_app import celery_app
-
-        inspector = celery_app.control.inspect(timeout=1)
-        response = inspector.ping()
-        return response if isinstance(response, dict) else None
-
-    try:
-        response = await asyncio.wait_for(asyncio.to_thread(ping_workers), timeout=2.5)
-    except Exception as exc:
-        return ReadinessComponentRead(
-            name="worker",
-            status="degraded",
-            message=f"Worker Celery não respondeu: {redact_secrets(exc)}",
-        )
-    worker_names = sorted(response or {})
-    if not worker_names:
-        return ReadinessComponentRead(
-            name="worker",
-            status="degraded",
-            message="Nenhum worker Celery respondeu ao ping",
-        )
-    return ReadinessComponentRead(
-        name="worker",
-        status="ready",
-        message=f"{len(worker_names)} worker(s) ativo(s)",
-        details={"workers": worker_names},
-    )
-
-
 def _provider_model_env_name(provider: str, channel: str) -> str:
     suffix_by_channel = {
         "text": "DEFAULT_MODEL",
@@ -385,11 +354,6 @@ async def readiness_dashboard(
         )
 
     components.append(await _redis_check("redis", app_settings.redis_url))
-    components.append(await _redis_check("worker_broker", app_settings.celery_broker_url))
-    components.append(
-        await _redis_check("worker_result_backend", app_settings.celery_result_backend)
-    )
-    components.append(await _celery_worker_check())
     ffmpeg_path = shutil.which("ffmpeg")
     components.append(
         ReadinessComponentRead(

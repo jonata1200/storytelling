@@ -318,6 +318,12 @@ async def _generate_initial_script(
     return script
 
 
+async def _close_loading_dialog_when_script_ready(project_id: UUID, loading_dialog: Any) -> None:
+    ready = await _reload_project_when_script_ready(project_id)
+    if ready and hasattr(loading_dialog, "close"):
+        loading_dialog.close()
+
+
 async def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -> None:
     loading_dialog.open()
     async with AsyncSessionLocal() as session:
@@ -329,7 +335,7 @@ async def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -
             action="create_initial_script",
         )
     asyncio.create_task(_generate_initial_script_in_background(project_id))
-    ui.timer(5.0, lambda: _reload_project_when_script_ready(project_id))
+    ui.timer(5.0, lambda: _close_loading_dialog_when_script_ready(project_id, loading_dialog))
     ui.notify("Retomando a criação do roteiro.", color="positive")
 
 

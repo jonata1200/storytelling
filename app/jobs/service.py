@@ -1,9 +1,11 @@
-﻿import hashlib
+﻿import asyncio
+import hashlib
 import json
+import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from uuid import UUID
 
-from celery.exceptions import CeleryError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +13,8 @@ from app.core.enums import GenerationJobStatus, GenerationJobType
 from app.production.service import get_or_create_production_settings
 from app.projects.repository import ProjectRepository
 from app.video_generation.models import GenerationJob
+
+logger = logging.getLogger(__name__)
 
 PROJECT_STEP_JOB_TYPES = {
     "initial_script": GenerationJobType.ANALYSIS,
@@ -164,7 +168,7 @@ async def create_or_resume_project_job(
         action_message = "Etapa falhou e atingiu o limite de tentativas."
     else:
         action_status = "queued"
-        action_message = "Etapa enfileirada para execução pelo worker."
+        action_message = "Etapa agendada para execução interna."
     await _set_project_job_action(
         session,
         job,
@@ -174,7 +178,7 @@ async def create_or_resume_project_job(
     )
     await session.commit()
     await session.refresh(job)
-    job._should_dispatch_after_enqueue = should_dispatch
+    cast(Any, job)._should_dispatch_after_enqueue = should_dispatch
     return job
 
 
@@ -250,12 +254,19 @@ async def list_project_jobs(session: AsyncSession, project_id: UUID) -> list[Gen
 
 
 def dispatch_project_job(job_id: UUID) -> None:
-    from app.workers.tasks import run_project_step
+    from app.jobs.runner import run_project_step_job
+
+    async def run_job() -> None:
+        try:
+            await run_project_step_job(job_id)
+        except Exception as exc:
+            logger.warning("project_step_background_failed %s: %s", job_id, exc)
 
     try:
-        run_project_step.delay(str(job_id))
-    except CeleryError as exc:
-        raise RuntimeError(f"Não foi possível enfileirar job no Celery: {exc}") from exc
+        asyncio.get_running_loop()
+    except RuntimeError as exc:
+        raise RuntimeError("Não há loop assíncrono ativo para executar a etapa.") from exc
+    asyncio.create_task(run_job(), name=f"project-step:{job_id}")
 
 
 async def enqueue_project_step(
