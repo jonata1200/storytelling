@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.assets.models import Asset, AssetVersion
 from app.config.provider_policy import (
     effective_provider_for_channel,
-    ensure_provider_api_key,
     provider_model,
 )
 from app.config.settings import get_settings
@@ -41,8 +40,8 @@ from app.observability.service import emit_project_event
 from app.production.service import get_or_create_production_settings, resolve_video_model
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
-from app.providers.video.omniroute import OmniRouteVideoProvider
 from app.providers.video.types import VideoProvider, VideoRequest, VideoResult
+from app.providers.video.veo_ai_free import VeoAiFreeVideoProvider
 from app.storage.service import apply_asset_storage_metadata
 from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
@@ -198,19 +197,20 @@ async def _video_provider_for_project(
         model or production_settings.video_model,
         provider_model(app_settings, resolved_provider, "video"),
     )
-    if resolved_provider == "omniroute":
-        ensure_provider_api_key(app_settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
+    if resolved_provider == "veo_ai_free":
         return (
-            OmniRouteVideoProvider(),
-            "omniroute",
+            VeoAiFreeVideoProvider(),
+            "veo_ai_free",
             requested_model,
-            "omniroute_videos",
+            "veo_ai_free_videos",
             production_settings.aspect_ratio,
             production_settings.video_resolution,
         )
     if resolved_provider == "mock":
         raise ValueError("Provider mock bloqueado. Use um provider real de vídeo.")
-    raise ValueError(f"Provider de vídeo não suportado: {provider_name}. Use OmniRoute.")
+    raise ValueError(
+        f"Provider de vídeo não suportado: {provider_name}. Use Veo AI Free experimental."
+    )
 
 
 async def _asset_storage_uri(session: AsyncSession, asset_id: UUID) -> str | None:

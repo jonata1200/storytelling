@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -10,7 +11,7 @@ from app.providers.veo_free.session import (
 )
 
 
-def test_veo_free_session_save_validate_and_clear(tmp_path) -> None:
+def test_veo_free_session_save_validate_and_clear(tmp_path: Path) -> None:
     path = tmp_path / "session.json"
     expires = (datetime.now(UTC) + timedelta(hours=1)).timestamp()
 
@@ -39,7 +40,7 @@ def test_veo_free_session_save_validate_and_clear(tmp_path) -> None:
     assert validate_session(path).status == "unknown"
 
 
-def test_veo_free_session_reports_expired_cookie(tmp_path) -> None:
+def test_veo_free_session_reports_expired_cookie(tmp_path: Path) -> None:
     path = tmp_path / "session.json"
     expires = (datetime.now(UTC) - timedelta(hours=1)).timestamp()
 
@@ -51,7 +52,7 @@ def test_veo_free_session_reports_expired_cookie(tmp_path) -> None:
     assert validation.status == "expired"
 
 
-def test_veo_free_session_accepts_browser_expiration_date(tmp_path) -> None:
+def test_veo_free_session_accepts_browser_expiration_date(tmp_path: Path) -> None:
     path = tmp_path / "session.json"
     expires = (datetime.now(UTC) + timedelta(hours=1)).timestamp()
 
@@ -63,7 +64,7 @@ def test_veo_free_session_accepts_browser_expiration_date(tmp_path) -> None:
     assert validation.status == "connected"
 
 
-def test_veo_free_session_rejects_invalid_or_empty_bundle(tmp_path) -> None:
+def test_veo_free_session_rejects_invalid_or_empty_bundle(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="JSON valido"):
         save_cookie_bundle("{broken", tmp_path / "session.json")
 

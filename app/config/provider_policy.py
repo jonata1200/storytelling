@@ -3,11 +3,11 @@ from typing import Any, Literal
 
 ProviderChannel = Literal["text", "image", "video", "speech"]
 
-DEFAULT_PROVIDER = "omniroute"
-SUPPORTED_TEXT_PROVIDERS = ("omniroute", "ollama", "groq", "nvidia_nim")
-SUPPORTED_MEDIA_PROVIDERS = ("omniroute", "veo_ai_free")
+DEFAULT_PROVIDER = "ollama"
+LEGACY_AI_PROVIDERS = ("omniroute", "opencode")
+SUPPORTED_TEXT_PROVIDERS = ("ollama", "groq", "nvidia_nim")
+SUPPORTED_MEDIA_PROVIDERS = ("veo_ai_free",)
 SUPPORTED_AI_PROVIDERS = (
-    "omniroute",
     "ollama",
     "groq",
     "nvidia_nim",
@@ -38,6 +38,8 @@ def normalize_provider_name(
     allowed: Iterable[str] = SUPPORTED_AI_PROVIDERS,
 ) -> str:
     provider = str(value or "").strip().casefold()
+    if provider in LEGACY_AI_PROVIDERS:
+        return DEFAULT_PROVIDER
     allowed_values = tuple(allowed)
     if provider not in allowed_values:
         allowed_text = ", ".join(allowed_values)
@@ -48,6 +50,11 @@ def normalize_provider_name(
 def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> str:
     channel_provider = getattr(settings, f"{channel}_provider", None)
     configured_provider = channel_provider or getattr(settings, "ai_provider", DEFAULT_PROVIDER)
+    configured_text = str(configured_provider or "").strip().casefold()
+    if configured_text in LEGACY_AI_PROVIDERS:
+        return "veo_ai_free" if channel in {"image", "video"} else DEFAULT_PROVIDER
+    if channel in {"image", "video"} and not channel_provider:
+        return "veo_ai_free"
     return normalize_provider_name(configured_provider, f"{channel.upper()}_PROVIDER")
 
 

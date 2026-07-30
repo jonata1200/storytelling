@@ -8,7 +8,6 @@ from sqlalchemy.orm import aliased
 
 from app.config.provider_policy import (
     effective_provider_for_channel,
-    ensure_provider_api_key,
     provider_model,
 )
 from app.config.settings import get_settings
@@ -16,8 +15,8 @@ from app.core.enums import ArtifactStatus, ArtifactType, DependencyKind
 from app.production.service import get_or_create_production_settings, resolve_image_model
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.versioning import INACTIVE_DERIVED_STATUSES
-from app.providers.image.omniroute import OmniRouteImageProvider
 from app.providers.image.types import ImageProvider
+from app.providers.image.veo_ai_free import VeoAiFreeImageProvider
 from app.storytelling.models import Scene, Shot
 from app.workflows.models import ArtifactDependency
 
@@ -37,10 +36,9 @@ async def _image_provider_for_project(
         production_settings.image_model,
         provider_model(app_settings, provider, "image"),
     )
-    if provider == "omniroute":
-        ensure_provider_api_key(app_settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
-        return OmniRouteImageProvider(), model, "omniroute_storyboards"
-    raise ValueError("Provider de storyboard não suportado. Use OmniRoute.")
+    if provider == "veo_ai_free":
+        return VeoAiFreeImageProvider(), model, "veo_ai_free_storyboards"
+    raise ValueError("Provider de storyboard não suportado. Use Veo AI Free experimental.")
 
 
 async def _create_artifact(

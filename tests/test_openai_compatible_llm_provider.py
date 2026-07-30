@@ -189,12 +189,13 @@ def test_llm_provider_for_name_supports_text_providers() -> None:
         nvidia_nim_api_key="nv-secret",
     )
 
-    assert model_settings.llm_provider_for_name(settings, "ollama").provider_name == "ollama"
-    assert model_settings.llm_provider_for_name(settings, "groq").provider_name == "groq"
-    assert (
-        model_settings.llm_provider_for_name(settings, "nvidia_nim").provider_name
-        == "nvidia_nim"
-    )
+    ollama_provider = cast(Any, model_settings.llm_provider_for_name(settings, "ollama"))
+    groq_provider = cast(Any, model_settings.llm_provider_for_name(settings, "groq"))
+    nvidia_provider = cast(Any, model_settings.llm_provider_for_name(settings, "nvidia_nim"))
+
+    assert ollama_provider.provider_name == "ollama"
+    assert groq_provider.provider_name == "groq"
+    assert nvidia_provider.provider_name == "nvidia_nim"
 
 
 def test_llm_provider_for_name_requires_groq_api_key() -> None:
@@ -208,6 +209,6 @@ def test_nvidia_nim_self_hosted_allows_missing_api_key() -> None:
         nvidia_nim_base_url="http://localhost:8000/v1",
     )
 
-    provider = model_settings.llm_provider_for_name(settings, "nvidia_nim")
+    provider = cast(Any, model_settings.llm_provider_for_name(settings, "nvidia_nim"))
 
     assert provider.provider_name == "nvidia_nim"

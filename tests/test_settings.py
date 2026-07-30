@@ -1,49 +1,30 @@
+from app.config.provider_policy import effective_provider_for_channel
 from app.config.settings import (
     GROQ_TEXT_MODELS,
     NVIDIA_NIM_TEXT_MODELS,
     OLLAMA_TEXT_MODELS,
-    OMNIROUTE_TEXT_MODELS,
     Settings,
 )
 
 
-def test_settings_defaults_to_omniroute_provider() -> None:
+def test_settings_defaults_to_new_ai_providers() -> None:
     settings = Settings()
 
-    assert settings.ai_provider == "omniroute"
-    assert settings.omniroute_default_model == "opencode-zen/deepseek-v4-flash"
-    assert settings.omniroute_image_model == "chatgpt-web/gpt-5.5"
-    assert settings.omniroute_video_model == "veo-free/veo"
+    assert settings.ai_provider == "ollama"
+    assert effective_provider_for_channel(settings, "text") == "ollama"
+    assert effective_provider_for_channel(settings, "image") == "veo_ai_free"
+    assert effective_provider_for_channel(settings, "video") == "veo_ai_free"
+    assert settings.ollama_default_model == "llama3.1:8b"
+    assert settings.veo_ai_free_image_model == "veo-ai-free/image"
+    assert settings.veo_ai_free_video_model == "veo-ai-free/video"
 
 
-def test_omniroute_text_models_are_selectable_opencode_zen_models() -> None:
-    assert len(OMNIROUTE_TEXT_MODELS) == 60
-    assert "opencode-zen/big-pickle" in OMNIROUTE_TEXT_MODELS
-    assert "opencode-zen/deepseek-v4-flash" in OMNIROUTE_TEXT_MODELS
-    assert "opencode-zen/deepseek-v4-flash-free" in OMNIROUTE_TEXT_MODELS
-    assert "opencode-zen/gpt-5.6-sol" in OMNIROUTE_TEXT_MODELS
-    assert "opencode-zen/claude-sonnet-4-5" in OMNIROUTE_TEXT_MODELS
-    assert "opencode-zen/qwen3.6-plus" in OMNIROUTE_TEXT_MODELS
-
-
-def test_settings_reads_omniroute_configuration() -> None:
+def test_settings_maps_legacy_omniroute_provider_to_new_default() -> None:
     settings = Settings(
         ai_provider="omniroute",
-        omniroute_api_key="  omni-secret  ",
-        omniroute_base_url="https://omnirouters.com/v1",
-        omniroute_default_model="vendor/text-model",
-        omniroute_image_model="vendor/image-model",
-        omniroute_video_model="vendor/video-model",
-        omniroute_speech_model="vendor/speech-model",
     )
 
-    assert settings.ai_provider == "omniroute"
-    assert settings.omniroute_api_key == "omni-secret"
-    assert settings.omniroute_base_url == "https://omnirouters.com/v1"
-    assert settings.omniroute_default_model == "vendor/text-model"
-    assert settings.omniroute_image_model == "vendor/image-model"
-    assert settings.omniroute_video_model == "vendor/video-model"
-    assert settings.omniroute_speech_model == "vendor/speech-model"
+    assert settings.ai_provider == "ollama"
 
 
 def test_settings_reads_openai_compatible_text_providers() -> None:

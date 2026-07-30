@@ -15,14 +15,11 @@ from app.config.provider_policy import (
     provider_display_name,
     validate_model_name,
 )
-from app.config.runtime_preferences import load_runtime_preferences
 from app.config.settings import (
     GROQ_TEXT_MODELS,
     NVIDIA_NIM_TEXT_MODELS,
     OLLAMA_TEXT_MODELS,
-    OMNIROUTE_TEXT_MODELS,
     get_settings,
-    normalize_omniroute_api_key,
 )
 from app.providers.veo_free.session import (
     clear_session as clear_veo_free_session,
@@ -173,12 +170,11 @@ def register_settings_page(
                             ui.label(
                                 "Conecte sua conta e escolha modelos diferentes para cada mídia."
                             ).classes("text-sm text-[#858b86] mb-4")
-                            saved_preferences = load_runtime_preferences()
                             current_text_provider = effective_provider_for_channel(
                                 current, "text"
                             )
                             if current_text_provider not in SUPPORTED_TEXT_PROVIDERS:
-                                current_text_provider = "omniroute"
+                                current_text_provider = "ollama"
                             provider_options = {
                                 provider: provider_display_name(provider)
                                 for provider in SUPPORTED_TEXT_PROVIDERS
@@ -209,62 +205,6 @@ def register_settings_page(
                                     placeholder="nvidia_nim,ollama",
                                 )
                                 .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            saved_omniroute_api_key = saved_preferences.get(
-                                "omniroute_api_key", ""
-                            ).strip()
-                            saved_omniroute_api_key_invalid = bool(
-                                saved_omniroute_api_key
-                                and normalize_omniroute_api_key(saved_omniroute_api_key) is None
-                            )
-                            if current.omniroute_api_key:
-                                ui.label("Chave de mídia legada configurada.").classes(
-                                    "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 border border-emerald-800 mt-2"
-                                )
-                            elif saved_omniroute_api_key_invalid:
-                                ui.label("A chave de mídia legada salva é inválida.").classes(
-                                    "text-xs px-2 py-1 rounded-md bg-red-950 text-red-200 border border-red-800 mt-2"
-                                )
-                            else:
-                                ui.label(
-                                    "Configure a chave de mídia legada para imagem e vídeo atuais."
-                                ).classes(
-                                    "text-xs px-2 py-1 rounded-md bg-slate-900 text-slate-300 border border-slate-800 mt-2"
-                                )
-                            omniroute_api_key = (
-                                ui.input(
-                                    "Chave de mídia legada",
-                                    placeholder=(
-                                        "Chave configurada — digite apenas para substituir"
-                                        if current.omniroute_api_key
-                                        else "omr-... ou chave do gateway configurado"
-                                    ),
-                                    password=True,
-                                    password_toggle_button=True,
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-4")
-                            )
-                            omniroute_base_url = (
-                                ui.input(
-                                    "URL base OmniRoute",
-                                    value=current.omniroute_base_url,
-                                    placeholder="http://localhost:20128/v1",
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            omniroute_text_model = (
-                                ui.select(
-                                    model_options(
-                                        OMNIROUTE_TEXT_MODELS,
-                                        current.omniroute_default_model,
-                                    ),
-                                    label="Modelo de texto legado",
-                                    value=current.omniroute_default_model,
-                                )
-                                .props("outlined stack-label options-dense")
                                 .classes("w-full mt-3")
                             )
                             ollama_base_url = (
@@ -363,20 +303,20 @@ def register_settings_page(
                                 .props("outlined stack-label options-dense")
                                 .classes("w-full mt-3")
                             )
-                            omniroute_image_model = (
+                            veo_image_model = (
                                 ui.input(
-                                    "Modelo de imagem legado",
-                                    value=current.omniroute_image_model,
-                                    placeholder="chatgpt-web/gpt-5.5",
+                                    "Modelo de imagem Veo AI Free",
+                                    value=current.veo_ai_free_image_model,
+                                    placeholder="veo-ai-free/image",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
                             )
-                            omniroute_video_model = (
+                            veo_video_model = (
                                 ui.input(
-                                    "Modelo de vídeo legado",
-                                    value=current.omniroute_video_model,
-                                    placeholder="veo-free/veo",
+                                    "Modelo de vídeo Veo AI Free",
+                                    value=current.veo_ai_free_video_model,
+                                    placeholder="veo-ai-free/video",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
@@ -421,9 +361,6 @@ def register_settings_page(
                                 ui.notify("Sessão Veo AI Free removida.", color="positive")
 
                             def save_ai() -> None:
-                                typed_omniroute_api_key = str(
-                                    omniroute_api_key.value or ""
-                                ).strip()
                                 typed_groq_api_key = str(groq_api_key.value or "").strip()
                                 typed_nvidia_nim_api_key = str(
                                     nvidia_nim_api_key.value or ""
@@ -435,10 +372,10 @@ def register_settings_page(
                                     if selected_text_provider not in SUPPORTED_TEXT_PROVIDERS:
                                         raise ValueError("Provider de texto invalido.")
                                     values = {
-                                        # Image and video still use the legacy provider until
-                                        # phases 05/06 replace those channels.
-                                        "AI_PROVIDER": "omniroute",
+                                        "AI_PROVIDER": "ollama",
                                         "TEXT_PROVIDER": selected_text_provider,
+                                        "IMAGE_PROVIDER": "veo_ai_free",
+                                        "VIDEO_PROVIDER": "veo_ai_free",
                                         "TEXT_PROVIDER_FALLBACKS": str(
                                             text_provider_fallbacks.value or ""
                                         ).strip(),
@@ -468,23 +405,15 @@ def register_settings_page(
                                             "Modelo de texto NVIDIA NIM",
                                             provider="nvidia_nim",
                                         ),
-                                        "OMNIROUTE_BASE_URL": str(
-                                            omniroute_base_url.value or ""
-                                        ).strip(),
-                                        "OMNIROUTE_DEFAULT_MODEL": validate_model_name(
-                                            omniroute_text_model.value,
-                                            "Modelo de texto OmniRoute",
-                                            provider="omniroute",
+                                        "VEO_AI_FREE_IMAGE_MODEL": validate_model_name(
+                                            veo_image_model.value,
+                                            "Modelo de imagem Veo AI Free",
+                                            provider="veo_ai_free",
                                         ),
-                                        "OMNIROUTE_IMAGE_MODEL": validate_model_name(
-                                            omniroute_image_model.value,
-                                            "Modelo de imagem OmniRoute",
-                                            provider="omniroute",
-                                        ),
-                                        "OMNIROUTE_VIDEO_MODEL": validate_model_name(
-                                            omniroute_video_model.value,
-                                            "Modelo de vídeo OmniRoute",
-                                            provider="omniroute",
+                                        "VEO_AI_FREE_VIDEO_MODEL": validate_model_name(
+                                            veo_video_model.value,
+                                            "Modelo de vídeo Veo AI Free",
+                                            provider="veo_ai_free",
                                         ),
                                         "VEO_AI_FREE_ENABLED": (
                                             "true" if veo_enabled.value else "false"
@@ -493,19 +422,6 @@ def register_settings_page(
                                 except ValueError as exc:
                                     ui.notify(str(exc), color="negative")
                                     return
-                                if typed_omniroute_api_key:
-                                    normalized_omniroute_key = normalize_omniroute_api_key(
-                                        typed_omniroute_api_key
-                                    )
-                                    if normalized_omniroute_key is None:
-                                        ui.notify("Chave OmniRoute inválida.", color="negative")
-                                        return
-                                    values["OMNIROUTE_API_KEY"] = normalized_omniroute_key
-                                elif saved_omniroute_api_key_invalid:
-                                    ui.notify(
-                                        "Substitua a chave OmniRoute inválida antes de continuar.",
-                                        color="warning",
-                                    )
                                 if typed_groq_api_key:
                                     values["GROQ_API_KEY"] = typed_groq_api_key
                                 if typed_nvidia_nim_api_key:

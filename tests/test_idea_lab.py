@@ -181,16 +181,16 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_requires_omniroute_key(
+async def test_generate_freeform_ideas_requires_groq_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="omniroute", omniroute_api_key=None),
+        lambda: Settings(ai_provider="ollama", text_provider="groq", groq_api_key=None),
     )
 
-    with pytest.raises(ValueError, match="OMNIROUTE_API_KEY"):
+    with pytest.raises(ValueError, match="GROQ_API_KEY"):
         await generate_freeform_ideas(count=3)
 
 

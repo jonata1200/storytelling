@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
@@ -51,14 +52,15 @@ def test_redact_secrets_masks_omniroute_api_key_assignments() -> None:
     assert "[REDACTED]" in redacted
 
 
-def test_provider_channel_readiness_reports_omniroute_media_components() -> None:
+def test_provider_channel_readiness_reports_new_provider_components() -> None:
     settings = Settings(
-        ai_provider="omniroute",
+        ai_provider="ollama",
         text_provider="",
-        omniroute_api_key="omni-secret",
-        omniroute_default_model="vendor/text",
-        omniroute_image_model="vendor/image",
-        omniroute_video_model="vendor/video",
+        image_provider="veo_ai_free",
+        video_provider="veo_ai_free",
+        ollama_default_model="llama3.1:8b",
+        veo_ai_free_image_model="veo-ai-free/image",
+        veo_ai_free_video_model="veo-ai-free/video",
     )
 
     text = _provider_channel_readiness(settings, "text")
@@ -69,20 +71,20 @@ def test_provider_channel_readiness_reports_omniroute_media_components() -> None
     assert image.name == "image_provider"
     assert video.name == "video_provider"
     assert {text.status, image.status, video.status} == {"ready"}
-    assert text.details["provider"] == "omniroute"
-    assert image.details["model"] == "vendor/image"
-    assert video.details["api_key_configured"] == "true"
+    assert text.details["provider"] == "ollama"
+    assert image.details["model"] == "veo-ai-free/image"
+    assert video.details["api_key_configured"] == "false"
 
 
-def test_provider_channel_readiness_reports_missing_omniroute_configuration() -> None:
-    settings = Settings(ai_provider="omniroute", omniroute_api_key=None)
+def test_provider_channel_readiness_reports_missing_veo_model() -> None:
+    settings = Settings(image_provider="veo_ai_free", veo_ai_free_image_model="")
 
     image = _provider_channel_readiness(settings, "image")
 
     assert image.name == "image_provider"
     assert image.status == "degraded"
-    assert image.details["provider"] == "omniroute"
-    assert "OMNIROUTE_API_KEY" in image.message
+    assert image.details["provider"] == "veo_ai_free"
+    assert "VEO_AI_FREE_IMAGE_MODEL" in image.message
 
 
 def test_provider_channel_readiness_reports_text_fallbacks() -> None:
@@ -115,7 +117,7 @@ def test_provider_channel_readiness_reports_missing_groq_key() -> None:
     assert "GROQ_API_KEY" in text.message
 
 
-def test_veo_ai_free_session_readiness_uses_local_validator(tmp_path) -> None:
+def test_veo_ai_free_session_readiness_uses_local_validator(tmp_path: Path) -> None:
     settings = Settings(
         veo_ai_free_enabled=True,
         veo_ai_free_session_path=tmp_path / "missing.json",

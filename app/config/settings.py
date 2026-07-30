@@ -125,8 +125,8 @@ class Settings(BaseSettings):
     omniroute_video_poll_interval_seconds: int = 8
     omniroute_video_poll_timeout_seconds: int = 900
     omniroute_video_download_timeout_seconds: int = 300
-    ai_provider: str = "omniroute"
-    text_provider: str | None = None
+    ai_provider: str = "ollama"
+    text_provider: str | None = "ollama"
     text_provider_fallbacks: str = ""
     ollama_api_key: str | None = Field(default="ollama", repr=False)
     ollama_base_url: str = "http://localhost:11434/v1"
@@ -141,8 +141,8 @@ class Settings(BaseSettings):
     veo_ai_free_session_path: Path = Path(".runtime/veo_free/session.json")
     veo_ai_free_image_model: str = "veo-ai-free/image"
     veo_ai_free_video_model: str = "veo-ai-free/video"
-    image_provider: str | None = None
-    video_provider: str | None = None
+    image_provider: str | None = "veo_ai_free"
+    video_provider: str | None = "veo_ai_free"
     storyboard_image_concurrency: int = 3
     video_generation_concurrency: int = Field(default=2, ge=1, le=4)
     speech_provider: str = "openai_compatible"
@@ -166,8 +166,16 @@ class Settings(BaseSettings):
         self.nvidia_nim_api_key = normalize_api_key(self.nvidia_nim_api_key, "nvidia_nim")
         self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
         self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")
-        self.image_provider = self._optional_provider(self.image_provider, "IMAGE_PROVIDER")
-        self.video_provider = self._optional_provider(self.video_provider, "VIDEO_PROVIDER")
+        self.image_provider = self._optional_provider(
+            self.image_provider,
+            "IMAGE_PROVIDER",
+            legacy_default="veo_ai_free",
+        )
+        self.video_provider = self._optional_provider(
+            self.video_provider,
+            "VIDEO_PROVIDER",
+            legacy_default="veo_ai_free",
+        )
         if self.app_env.lower() not in {"local", "development", "test"}:
             if self.app_secret_key == "change-me-in-development":
                 raise ValueError("APP_SECRET_KEY must be changed outside local environments")
@@ -176,9 +184,17 @@ class Settings(BaseSettings):
         return self
 
     @staticmethod
-    def _optional_provider(value: str | None, field_name: str) -> str | None:
+    def _optional_provider(
+        value: str | None,
+        field_name: str,
+        *,
+        legacy_default: str = "ollama",
+    ) -> str | None:
         if not str(value or "").strip():
             return None
+        text = str(value or "").strip().casefold()
+        if text in {"omniroute", "opencode"}:
+            return legacy_default
         return normalize_provider_name(value, field_name)
 
 

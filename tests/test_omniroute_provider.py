@@ -405,7 +405,7 @@ def test_omniroute_image_provider_keeps_visual_references_in_request(
 
 
 @pytest.mark.asyncio
-async def test_llm_provider_for_task_uses_omniroute_default(
+async def test_llm_provider_for_task_maps_legacy_omniroute_to_ollama(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def no_project_setting(*args: object, **kwargs: object) -> Any:
@@ -418,8 +418,7 @@ async def test_llm_provider_for_task_uses_omniroute_default(
         lambda: Settings(
             ai_provider="omniroute",
             text_provider="",
-            omniroute_api_key="omni-secret",
-            omniroute_default_model="provider/text-model",
+            ollama_default_model="llama3.1:8b",
         ),
     )
 
@@ -429,5 +428,5 @@ async def test_llm_provider_for_task_uses_omniroute_default(
         "generate_story_ideas",
     )
 
-    assert getattr(provider, "provider_name", None) == "omniroute"
-    assert model == "provider/text-model"
+    assert getattr(provider, "provider_name", None) == "ollama"
+    assert model == "llama3.1:8b"

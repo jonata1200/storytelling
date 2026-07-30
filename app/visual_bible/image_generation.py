@@ -6,13 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.provider_policy import (
     effective_provider_for_channel,
-    ensure_provider_api_key,
     provider_model,
 )
 from app.config.settings import get_settings
 from app.production.service import get_or_create_production_settings, resolve_image_model
-from app.providers.image.omniroute import OmniRouteImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider, ImageResult
+from app.providers.image.veo_ai_free import VeoAiFreeImageProvider
 
 
 def _service_attr(name: str, fallback: object) -> Any:
@@ -35,10 +34,9 @@ async def _image_provider_for_project(
         production_settings.image_model,
         provider_model(app_settings, provider, "image"),
     )
-    if provider == "omniroute":
-        ensure_provider_api_key(app_settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
-        return OmniRouteImageProvider(), model, "omniroute_images"
-    raise ValueError("Provider de imagem não suportado. Use OmniRoute.")
+    if provider == "veo_ai_free":
+        return VeoAiFreeImageProvider(), model, "veo_ai_free_images"
+    raise ValueError("Provider de imagem não suportado. Use Veo AI Free experimental.")
 
 
 def _transient_image_provider_error(exc: Exception) -> bool:
@@ -66,11 +64,11 @@ async def _generate_image_with_provider_fallback(
     try:
         return await provider.generate(request), {}
     except RuntimeError as exc:
-        if getattr(provider, "provider_name", "") != "omniroute" or not (
+        if getattr(provider, "provider_name", "") != "veo_ai_free" or not (
             _transient_image_provider_error(exc)
         ):
             raise
-        provider_label = "OmniRoute Images"
+        provider_label = "Veo AI Free Images"
         raise RuntimeError(
             f"{provider_label} falhou ao gerar a imagem real. Nenhuma imagem mock foi criada "
             f"automaticamente. Detalhes: {exc}"

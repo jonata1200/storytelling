@@ -58,15 +58,15 @@ Texto pode usar providers OpenAI-compatible diferentes por API:
 - `groq`
 - `nvidia_nim`
 
-OmniRoute permanece como provider legado para imagem/video ate a migracao para o
-provider experimental de Veo AI Free. Os modelos padrao ficam no `.env`:
+Imagem e video usam o provider experimental `veo_ai_free`, que depende de sessao
+local do navegador e pode ser desabilitado. Os modelos padrao ficam no `.env`:
 
 ```env
-AI_PROVIDER=omniroute
+AI_PROVIDER=ollama
 TEXT_PROVIDER=groq
 TEXT_PROVIDER_FALLBACKS=nvidia_nim,ollama
-IMAGE_PROVIDER=omniroute
-VIDEO_PROVIDER=omniroute
+IMAGE_PROVIDER=veo_ai_free
+VIDEO_PROVIDER=veo_ai_free
 
 OLLAMA_BASE_URL=http://localhost:11434/v1
 OLLAMA_API_KEY=ollama
@@ -82,12 +82,6 @@ NVIDIA_NIM_DEFAULT_MODEL=openai/gpt-oss-20b
 
 VEO_AI_FREE_ENABLED=false
 VEO_AI_FREE_SESSION_PATH=.runtime/veo_free/session.json
-
-OMNIROUTE_BASE_URL=https://omnirouters.com/v1
-OMNIROUTE_API_KEY=sua_chave_omniroute_legada
-OMNIROUTE_DEFAULT_MODEL=opencode-zen/deepseek-v4-flash
-OMNIROUTE_IMAGE_MODEL=chatgpt-web/gpt-5.5
-OMNIROUTE_VIDEO_MODEL=veo-free/veo
 ```
 
 Para Ollama local, rode `ollama serve` e baixe o modelo antes de selecionar o
@@ -99,53 +93,6 @@ ollama pull llama3.1:8b
 
 As chaves e modelos de texto tambem podem ser salvos pela tela de Configuracoes
 de IA em `.runtime/preferences.json`.
-
-## Provedor De IA Legado
-
-O texto, imagem e video usam o gateway OmniRoute. Modelos com prefixo
-`opencode-zen/`, como `opencode-zen/deepseek-v4-flash`, tambem sao chamados pela mesma chave
-`OMNIROUTE_API_KEY`.
-
-A aplicação usa OmniRoute como provedor principal para texto, imagem e vídeo.
-Os modelos padrão ficam no `.env`:
-
-```env
-AI_PROVIDER=omniroute
-TEXT_PROVIDER=
-OMNIROUTE_BASE_URL=https://omnirouters.com/v1
-OMNIROUTE_API_KEY=sua_chave_aqui
-OMNIROUTE_DEFAULT_MODEL=opencode-zen/deepseek-v4-flash
-OMNIROUTE_IMAGE_MODEL=chatgpt-web/gpt-5.5
-OMNIROUTE_VIDEO_MODEL=veo-free/veo
-```
-
-Também é possível configurar provedores por mídia:
-
-```env
-TEXT_PROVIDER=
-IMAGE_PROVIDER=
-VIDEO_PROVIDER=
-```
-
-Quando esses campos ficam vazios, a aplicação usa `AI_PROVIDER`. A tela de
-Configurações de IA pode salvar chave OmniRoute, URL base e modelos em
-`.runtime/preferences.json`; esses valores têm prioridade sobre o `.env` no
-runtime local.
-
-## Modelos De Texto OmniRoute
-
-Modelos `opencode-zen/` selecionaveis na tela de configuracoes incluem:
-
-```text
-opencode-zen/big-pickle
-opencode-zen/deepseek-v4-flash
-opencode-zen/deepseek-v4-flash-free
-opencode-zen/gpt-5.6-sol
-opencode-zen/claude-sonnet-4-5
-opencode-zen/gemini-3.6-flash
-opencode-zen/qwen3.6-plus
-opencode-zen/nemotron-3-ultra-free
-```
 
 ## Requisitos Locais
 
@@ -165,7 +112,8 @@ pip install -e . --no-deps
 Copy-Item .env.example .env
 ```
 
-Configure `OMNIROUTE_API_KEY` no `.env` ou pela tela de Configurações de IA.
+Configure `GROQ_API_KEY`, `NVIDIA_NIM_API_KEY`, Ollama local e a sessão
+experimental do Veo AI Free pela tela de Configurações de IA ou pelo `.env`.
 
 ## Executando
 
@@ -269,7 +217,8 @@ APP_ENV=production
 APP_DEBUG=false
 APP_SECRET_KEY=gere-um-segredo-longo-e-unico
 ALLOW_USER_REGISTRATION=false
-OMNIROUTE_API_KEY=sua_chave_no_ambiente
+GROQ_API_KEY=sua_chave_no_ambiente
+NVIDIA_NIM_API_KEY=sua_chave_no_ambiente
 ```
 
 ## API Principal
@@ -345,7 +294,7 @@ storage/             arquivos gerados localmente
 ## Estado Atual
 
 O projeto está em uma base funcional para desenvolvimento local: criação de
-projetos, geração narrativa com OmniRoute, busca em ideias/projetos, fluxo
+projetos, geracao narrativa com Ollama/Groq/NVIDIA NIM, busca em ideias/projetos, fluxo
 visual, storyboard, vídeo, custos, storage, autenticação e observabilidade.
 
 Etapas longas rodam dentro da própria aplicação. Não há dependência de Celery ou

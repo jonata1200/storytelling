@@ -145,7 +145,7 @@ def test_omniroute_video_provider_reports_failed_task(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
-async def test_video_provider_for_project_uses_omniroute(
+async def test_video_provider_for_project_maps_legacy_omniroute_to_veo_ai_free(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_production_settings(*args: object, **kwargs: object) -> SimpleNamespace:
@@ -166,8 +166,7 @@ async def test_video_provider_for_project_uses_omniroute(
         lambda: Settings(
             ai_provider="omniroute",
             video_provider="omniroute",
-            omniroute_api_key="omni-secret",
-            omniroute_video_model="veo-free/veo",
+            veo_ai_free_video_model="veo-ai-free/video",
         ),
     )
 
@@ -180,10 +179,10 @@ async def test_video_provider_for_project_uses_omniroute(
         )
     )
 
-    assert getattr(provider, "provider_name", None) == "omniroute"
-    assert provider_name == "omniroute"
-    assert model == "veo-free/veo"
-    assert directory == "omniroute_videos"
+    assert getattr(provider, "provider_name", None) == "veo_ai_free"
+    assert provider_name == "veo_ai_free"
+    assert model == "veo-ai-free/video"
+    assert directory == "veo_ai_free_videos"
     assert aspect_ratio == "9:16"
     assert resolution == "1080x1920"
 

@@ -28,14 +28,14 @@ def test_effective_provider_for_channel_uses_media_override() -> None:
         image_provider="omniroute",
     )
 
-    assert effective_provider_for_channel(settings, "text") == "omniroute"
-    assert effective_provider_for_channel(settings, "image") == "omniroute"
+    assert effective_provider_for_channel(settings, "text") == "ollama"
+    assert effective_provider_for_channel(settings, "image") == "veo_ai_free"
 
 
-def test_validate_model_name_allows_omniroute_opencode_zen_model() -> None:
+def test_validate_model_name_allows_veo_ai_free_model() -> None:
     assert (
-        validate_model_name("opencode-zen/deepseek-v4-flash", provider="omniroute")
-        == "opencode-zen/deepseek-v4-flash"
+        validate_model_name("veo-ai-free/video", provider="veo_ai_free")
+        == "veo-ai-free/video"
     )
 
 
@@ -55,6 +55,7 @@ def test_provider_policy_supports_new_text_providers() -> None:
         ollama_default_model="llama3.1:8b",
     )
 
+    assert "omniroute" not in SUPPORTED_AI_PROVIDERS
     assert "ollama" in SUPPORTED_AI_PROVIDERS
     assert "groq" in SUPPORTED_AI_PROVIDERS
     assert "nvidia_nim" in SUPPORTED_AI_PROVIDERS

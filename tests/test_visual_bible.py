@@ -45,18 +45,18 @@ def test_sourceful_502_is_treated_as_transient_image_provider_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_omniroute_image_transient_error_is_reported_without_mock_fallback(
+async def test_veo_ai_free_image_transient_error_is_reported_without_mock_fallback(
     tmp_path: Path,
 ) -> None:
-    class FailingOmniRouteProvider:
-        provider_name = "omniroute"
+    class FailingVeoProvider:
+        provider_name = "veo_ai_free"
 
         async def generate(self, request: ImageGenerationRequest) -> object:
-            raise RuntimeError("OmniRoute Images HTTP 502: provider returned an internal error")
+            raise RuntimeError("Veo AI Free Images HTTP 502: provider returned an internal error")
 
     with pytest.raises(RuntimeError, match="Nenhuma imagem mock foi criada"):
         await _generate_image_with_provider_fallback(
-            FailingOmniRouteProvider(),  # type: ignore[arg-type]
+            FailingVeoProvider(),  # type: ignore[arg-type]
             ImageGenerationRequest(
                 prompt="Personagem em pe, vista frontal",
                 target_id="character-1",
@@ -82,10 +82,9 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         visual_bible_service,
         "get_settings",
         lambda: SimpleNamespace(
-            ai_provider="omniroute",
-            image_provider="omniroute",
-            omniroute_api_key="omni-secret",
-            omniroute_image_model="chatgpt-web/gpt-5.5",
+            ai_provider="ollama",
+            image_provider="veo_ai_free",
+            veo_ai_free_image_model="veo-ai-free/image",
         ),
     )
     monkeypatch.setattr(
@@ -99,13 +98,13 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         project_id,
     )
 
-    assert getattr(provider, "provider_name", None) == "omniroute"
-    assert model == "chatgpt-web/gpt-5.5"
-    assert directory == "omniroute_images"
+    assert getattr(provider, "provider_name", None) == "veo_ai_free"
+    assert model == "veo-ai-free/image"
+    assert directory == "veo_ai_free_images"
 
 
 @pytest.mark.asyncio
-async def test_image_provider_uses_omniroute_when_configured(
+async def test_image_provider_uses_veo_ai_free_when_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
@@ -117,10 +116,9 @@ async def test_image_provider_uses_omniroute_when_configured(
         visual_bible_service,
         "get_settings",
         lambda: Settings(
-            ai_provider="omniroute",
-            image_provider="omniroute",
-            omniroute_api_key="omni-secret",
-            omniroute_image_model="chatgpt-web/gpt-5.5",
+            ai_provider="ollama",
+            image_provider="veo_ai_free",
+            veo_ai_free_image_model="veo-ai-free/image",
         ),
     )
     monkeypatch.setattr(
@@ -134,13 +132,13 @@ async def test_image_provider_uses_omniroute_when_configured(
         project_id,
     )
 
-    assert getattr(provider, "provider_name", None) == "omniroute"
-    assert model == "chatgpt-web/gpt-5.5"
-    assert directory == "omniroute_images"
+    assert getattr(provider, "provider_name", None) == "veo_ai_free"
+    assert model == "veo-ai-free/image"
+    assert directory == "veo_ai_free_images"
 
 
 @pytest.mark.asyncio
-async def test_image_provider_reports_missing_key_for_real_image_model(
+async def test_image_provider_uses_legacy_omniroute_preference_as_veo_ai_free(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_settings(*args: object, **kwargs: object) -> SimpleNamespace:
@@ -150,10 +148,9 @@ async def test_image_provider_reports_missing_key_for_real_image_model(
         visual_bible_service,
         "get_settings",
         lambda: SimpleNamespace(
-            ai_provider="omniroute",
-            image_provider="omniroute",
-            omniroute_api_key=None,
-            omniroute_image_model="chatgpt-web/gpt-5.5",
+                ai_provider="ollama",
+                image_provider="omniroute",
+                veo_ai_free_image_model="veo-ai-free/image",
         ),
     )
     monkeypatch.setattr(
@@ -162,11 +159,14 @@ async def test_image_provider_reports_missing_key_for_real_image_model(
         fake_settings,
     )
 
-    with pytest.raises(ValueError, match="OMNIROUTE_API_KEY"):
-        await _image_provider_for_project(
-            object(),  # type: ignore[arg-type]
-            uuid4(),
-        )
+    provider, model, directory = await _image_provider_for_project(
+        object(),  # type: ignore[arg-type]
+        uuid4(),
+    )
+
+    assert getattr(provider, "provider_name", None) == "veo_ai_free"
+    assert model == "veo-ai-free/image"
+    assert directory == "veo_ai_free_images"
 
 
 def test_initial_visual_reference_is_single_canonical_view() -> None:

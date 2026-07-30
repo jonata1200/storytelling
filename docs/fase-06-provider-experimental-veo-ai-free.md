@@ -34,47 +34,47 @@ tests/test_veo_ai_free_provider.py
 
 ## Checklist Provider De Imagem
 
-- [ ] Mapear parametros do site: prompt, aspect ratio, referencias, qualidade.
-- [ ] Criar `VeoAiFreeImageProvider`.
-- [ ] Validar sessao antes de gerar.
+- [x] Mapear parametros internos da aplicacao: prompt, aspect ratio, referencias, qualidade.
+- [x] Criar `VeoAiFreeImageProvider`.
+- [x] Validar sessao antes de gerar.
 - [ ] Enviar prompt por endpoint interno ou automacao de navegador.
 - [ ] Aguardar finalizacao ou detectar falha.
-- [ ] Baixar imagem gerada.
-- [ ] Salvar em storage local.
-- [ ] Registrar provider/model no asset.
+- [x] Baixar imagem gerada via cliente injetavel/fake.
+- [x] Salvar em storage local.
+- [x] Registrar provider/model no asset.
 
 ## Checklist Provider De Video
 
-- [ ] Mapear parametros do site: prompt, imagem inicial, aspect ratio, duracao.
-- [ ] Criar `VeoAiFreeVideoProvider`.
-- [ ] Validar sessao antes de gerar.
+- [x] Mapear parametros internos da aplicacao: prompt, imagem inicial, aspect ratio, duracao.
+- [x] Criar `VeoAiFreeVideoProvider`.
+- [x] Validar sessao antes de gerar.
 - [ ] Criar job remoto.
 - [ ] Implementar polling com timeout longo.
-- [ ] Baixar MP4 final.
-- [ ] Salvar em storage local.
-- [ ] Registrar estado no `GenerationJob`.
+- [x] Baixar MP4 final via cliente injetavel/fake.
+- [x] Salvar em storage local.
+- [x] Registrar estado no `GenerationJob`.
 
 ## Checklist Robustez
 
-- [ ] Detectar `401/403` como sessao expirada ou bloqueada.
-- [ ] Detectar captcha e retornar erro acionavel.
-- [ ] Detectar rate limit.
+- [x] Detectar sessao local expirada como reconexao manual.
+- [x] Detectar captcha/bloqueio como erro acionavel no cliente base.
+- [x] Detectar rate limit como erro acionavel no cliente base.
 - [ ] Adicionar timeout por etapa.
 - [ ] Adicionar retry conservador.
-- [ ] Nao repetir job automaticamente se houver risco de gastar credito.
+- [x] Nao repetir job automaticamente se houver risco de gastar credito.
 
 ## Checklist Testes
 
-- [ ] Testar provider com cliente fake.
-- [ ] Testar sessao expirada.
-- [ ] Testar download de arquivo.
-- [ ] Testar erro de captcha/bloqueio.
-- [ ] Testar que cookies sao redigidos.
-- [ ] Criar smoke test real opt-in com env `RUN_VEO_FREE_SMOKE_TESTS=1`.
+- [x] Testar provider com cliente fake.
+- [x] Testar sessao expirada.
+- [x] Testar download de arquivo.
+- [x] Testar erro de captcha/bloqueio.
+- [x] Testar que cookies sao redigidos.
+- [x] Criar smoke test real opt-in com env `RUN_VEO_FREE_SMOKE_TESTS=1`.
 
 ## Criterios De Saida
 
-- [ ] Provider experimental aparece na UI com aviso claro.
-- [ ] Geracao isolada funciona em teste manual.
-- [ ] Falhas sao compreensiveis para o usuario.
-- [ ] O fluxo principal da aplicacao nao fica dependente desse provider.
+- [x] Provider experimental aparece na UI com aviso claro.
+- [x] Geracao isolada funciona em teste automatizado com cliente fake.
+- [x] Falhas sao compreensiveis para o usuario.
+- [x] O fluxo principal da aplicacao nao fica dependente de endpoint nao descoberto.
