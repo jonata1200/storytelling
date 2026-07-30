@@ -4,7 +4,7 @@ from typing import Any, Literal
 ProviderChannel = Literal["text", "image", "video", "speech"]
 
 DEFAULT_PROVIDER = "omniroute"
-SUPPORTED_AI_PROVIDERS = ("omniroute", "opencode")
+SUPPORTED_AI_PROVIDERS = ("omniroute",)
 SUPPORTED_MODEL_PROVIDERS = frozenset(SUPPORTED_AI_PROVIDERS)
 MOCK_MODEL_IDS = {
     "mock",
@@ -46,18 +46,12 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
 def provider_display_name(provider: str) -> str:
     names = {
         "omniroute": "OmniRoute",
-        "opencode": "OpenCode Free",
     }
     return names.get(provider, provider)
 
 
 def provider_api_key(settings: Any, provider: str) -> str | None:
-    key = normalize_api_key(getattr(settings, f"{provider}_api_key", None), provider)
-    if key:
-        return key
-    if provider == "opencode":
-        return normalize_api_key(getattr(settings, "omniroute_api_key", None), provider)
-    return None
+    return normalize_api_key(getattr(settings, f"{provider}_api_key", None), provider)
 
 
 def provider_model(settings: Any, provider: str, channel: ProviderChannel) -> str:
@@ -72,12 +66,7 @@ def provider_model(settings: Any, provider: str, channel: ProviderChannel) -> st
 
 
 def provider_base_url(settings: Any, provider: str) -> str:
-    base_url = str(getattr(settings, f"{provider}_base_url", "") or "").strip()
-    if base_url:
-        return base_url
-    if provider == "opencode":
-        return str(getattr(settings, "omniroute_base_url", "") or "").strip()
-    return ""
+    return str(getattr(settings, f"{provider}_base_url", "") or "").strip()
 
 
 def normalize_model_name(value: object, field_name: str = "modelo") -> str:

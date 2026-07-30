@@ -84,24 +84,6 @@ def test_provider_channel_readiness_reports_missing_omniroute_configuration() ->
     assert "OMNIROUTE_API_KEY" in image.message
 
 
-def test_provider_channel_readiness_reports_opencode_text_provider() -> None:
-    settings = Settings(
-        ai_provider="omniroute",
-        text_provider="opencode",
-        omniroute_api_key="omni-secret",
-        omniroute_default_model="vendor/text",
-        opencode_default_model="oc/deepseek-v4-flash-free",
-    )
-
-    text = _provider_channel_readiness(settings, "text")
-
-    assert text.name == "text_provider"
-    assert text.status == "ready"
-    assert text.details["provider"] == "opencode"
-    assert text.details["model"] == "oc/deepseek-v4-flash-free"
-    assert text.details["api_key_configured"] == "true"
-
-
 class _FakeEventSession:
     def __init__(self) -> None:
         self.added: list[Any] = []

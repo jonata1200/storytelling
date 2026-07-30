@@ -4,8 +4,6 @@ from app.config.provider_policy import (
     effective_provider_for_channel,
     ensure_provider_api_key,
     normalize_provider_name,
-    provider_api_key,
-    provider_base_url,
     validate_model_name,
 )
 from app.config.settings import Settings
@@ -22,29 +20,16 @@ def test_validate_model_name_blocks_free_and_mock_models() -> None:
 def test_effective_provider_for_channel_uses_media_override() -> None:
     settings = Settings(
         ai_provider="omniroute",
-        text_provider="opencode",
         image_provider="omniroute",
     )
 
-    assert effective_provider_for_channel(settings, "text") == "opencode"
+    assert effective_provider_for_channel(settings, "text") == "omniroute"
     assert effective_provider_for_channel(settings, "image") == "omniroute"
 
 
-def test_opencode_uses_omniroute_gateway_configuration_as_fallback() -> None:
-    settings = Settings(
-        omniroute_api_key="omni-secret",
-        omniroute_base_url="https://omnirouters.com/v1",
-        opencode_api_key=None,
-        opencode_base_url="",
-    )
-
-    assert provider_api_key(settings, "opencode") == "omni-secret"
-    assert provider_base_url(settings, "opencode") == "https://omnirouters.com/v1"
-
-
-def test_validate_model_name_allows_opencode_dash_free_model() -> None:
+def test_validate_model_name_allows_omniroute_oc_dash_free_model() -> None:
     assert (
-        validate_model_name("oc/deepseek-v4-flash-free", provider="opencode")
+        validate_model_name("oc/deepseek-v4-flash-free", provider="omniroute")
         == "oc/deepseek-v4-flash-free"
     )
 

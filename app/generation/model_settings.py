@@ -8,14 +8,12 @@ from app.config.provider_policy import (
     SUPPORTED_MODEL_PROVIDERS,
     effective_provider_for_channel,
     ensure_provider_api_key,
-    provider_api_key,
     provider_model,
     validate_model_name,
 )
 from app.config.settings import get_settings
 from app.generation.models import ProjectModelSetting
 from app.providers.llm.omniroute import OmniRouteLLMProvider
-from app.providers.llm.opencode import OpenCodeLLMProvider
 from app.providers.llm.types import LLMProvider
 
 NARRATIVE_TASKS = [
@@ -36,16 +34,9 @@ TASK_LABELS = {
 
 
 def llm_provider_for_name(settings: Any, provider: str) -> LLMProvider:
-    if provider == "omniroute":
+    if provider in {"omniroute", "opencode"}:
         ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
         return OmniRouteLLMProvider()
-    if provider == "opencode":
-        ensure_provider_api_key(
-            provider_api_key(settings, "opencode"),
-            "opencode",
-            "OPENCODE_API_KEY ou OMNIROUTE_API_KEY",
-        )
-        return OpenCodeLLMProvider()
     if provider == "mock":
         raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")
     raise ValueError("Provider de texto não suportado.")

@@ -12,10 +12,6 @@ def normalize_omniroute_api_key(value: str | None) -> str | None:
     return normalize_api_key(value, "omniroute")
 
 
-def normalize_opencode_api_key(value: str | None) -> str | None:
-    return normalize_api_key(value, "opencode")
-
-
 class Settings(BaseSettings):
     app_name: str = "Storytelling"
     app_env: str = "local"
@@ -34,7 +30,7 @@ class Settings(BaseSettings):
 
     omniroute_api_key: str | None = Field(default=None, repr=False)
     omniroute_base_url: str = "https://omnirouters.com/v1"
-    omniroute_default_model: str = "ds-web/deepseek-v4-flash"
+    omniroute_default_model: str = "oc/deepseek-v4-flash-free"
     omniroute_image_model: str = "chatgpt-web/gpt-5.5"
     omniroute_video_model: str = "veo-free/veo"
     omniroute_speech_model: str = ""
@@ -43,9 +39,6 @@ class Settings(BaseSettings):
     omniroute_video_poll_interval_seconds: int = 8
     omniroute_video_poll_timeout_seconds: int = 900
     omniroute_video_download_timeout_seconds: int = 300
-    opencode_api_key: str | None = Field(default=None, repr=False)
-    opencode_base_url: str = ""
-    opencode_default_model: str = "oc/deepseek-v4-flash-free"
     ai_provider: str = "omniroute"
     text_provider: str | None = None
     image_provider: str | None = None
@@ -68,7 +61,6 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def reject_insecure_non_local_defaults(self) -> "Settings":
         self.omniroute_api_key = normalize_omniroute_api_key(self.omniroute_api_key)
-        self.opencode_api_key = normalize_opencode_api_key(self.opencode_api_key)
         self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
         self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")
         self.image_provider = self._optional_provider(self.image_provider, "IMAGE_PROVIDER")
