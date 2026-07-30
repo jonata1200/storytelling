@@ -16,6 +16,8 @@ class LLMResult(BaseModel):
     content: dict[str, Any]
     model: str
     provider: str
+    raw_content: str | None = None
+    recovery_strategy: str | None = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
     estimated_cost: str = "0.000000"

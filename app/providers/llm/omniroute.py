@@ -12,6 +12,19 @@ from app.providers.llm.types import LLMRequest, LLMResult
 
 OMNIROUTE_LLM_HTTP_TIMEOUT_SECONDS = 300
 OMNIROUTE_LLM_MIN_HTTP_TIMEOUT_SECONDS = 15
+SCRIPT_TEXT_RECOVERY_TASKS = {"generate_script", "revise_script"}
+
+
+def _raw_response_preview(value: str, limit: int = 800) -> str:
+    return " ".join(str(value or "").split())[:limit]
+
+
+class OmniRouteResponseFormatError(RuntimeError):
+    def __init__(self, message: str, raw_content: str = "") -> None:
+        self.raw_content = raw_content
+        preview = _raw_response_preview(raw_content)
+        detail = f"{message}. Prévia da resposta: {preview}" if preview else message
+        super().__init__(detail)
 
 
 class OmniRouteLLMProvider:
@@ -23,12 +36,14 @@ class OmniRouteLLMProvider:
         )
         response = await asyncio.to_thread(self._send_request, request, True)
         content_text = self._extract_message_content(response)
-        content = self._parse_json_content(content_text)
+        content, recovery_strategy = self._parse_json_content(content_text, request.task)
         usage = response.get("usage", {})
         return LLMResult(
             content=content,
             model=str(response.get("model") or request.model),
             provider=self.provider_name,
+            raw_content=content_text,
+            recovery_strategy=recovery_strategy,
             prompt_tokens=int(usage.get("prompt_tokens") or 0),
             completion_tokens=int(usage.get("completion_tokens") or 0),
             estimated_cost=str(usage.get("cost") or "0.000000"),
@@ -54,7 +69,7 @@ class OmniRouteLLMProvider:
                 },
                 {"role": "user", "content": request.prompt},
             ],
-            "temperature": 0.7,
+            "temperature": self._temperature_for_task(request.task),
             "stream": False,
         }
         if use_response_format:
@@ -186,7 +201,45 @@ class OmniRouteLLMProvider:
             raise RuntimeError("OmniRoute retornou content vazio ou fora do formato esperado")
         return content
 
-    def _parse_json_content(self, content_text: str) -> dict[str, Any]:
+    def _temperature_for_task(self, task: str) -> float:
+        if task in {"generate_script", "revise_script"}:
+            return 0.4
+        if task in {
+            "generate_scenes_and_shots",
+            "generate_visual_bible",
+            "generate_storyboard_prompts",
+        }:
+            return 0.45
+        return 0.7
+
+    def _json_from_embedded_object(self, value: str) -> dict[str, Any] | None:
+        decoder = json.JSONDecoder()
+        for index, char in enumerate(value):
+            if char != "{":
+                continue
+            try:
+                parsed, _end = decoder.raw_decode(value[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return None
+
+    def _looks_like_screenplay_text(self, value: str) -> bool:
+        text = str(value or "").strip().upper()
+        if not text:
+            return False
+        return (
+            "FADE IN" in text
+            and "CENA" in text
+            and any(marker in text for marker in ("INT.", "EXT.", "INT/EXT."))
+        )
+
+    def _parse_json_content(
+        self,
+        content_text: str,
+        task: str | None = None,
+    ) -> tuple[dict[str, Any], str | None]:
         stripped = content_text.strip()
         if stripped.startswith("```"):
             stripped = stripped.removeprefix("```json").removeprefix("```").strip()
@@ -194,7 +247,18 @@ class OmniRouteLLMProvider:
         try:
             parsed = json.loads(stripped)
         except json.JSONDecodeError as exc:
-            raise RuntimeError("OmniRoute retornou conteúdo que não é JSON válido") from exc
+            embedded = self._json_from_embedded_object(stripped)
+            if embedded is not None:
+                return embedded, "embedded_json"
+            if task in SCRIPT_TEXT_RECOVERY_TASKS and self._looks_like_screenplay_text(stripped):
+                return {"content": stripped}, "screenplay_text"
+            raise OmniRouteResponseFormatError(
+                "OmniRoute retornou conteúdo que não é JSON válido",
+                stripped,
+            ) from exc
         if not isinstance(parsed, dict):
-            raise RuntimeError("OmniRoute retornou JSON fora do formato esperado")
-        return parsed
+            raise OmniRouteResponseFormatError(
+                "OmniRoute retornou JSON fora do formato esperado",
+                stripped,
+            )
+        return parsed, None

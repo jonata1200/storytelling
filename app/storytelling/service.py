@@ -104,6 +104,35 @@ SCRIPT_GENERATION_MAX_ATTEMPTS = 3
 
 
 
+def _retry_script_generation_after_runtime_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    if "api_key" in message or "api key" in message or "chave" in message:
+        return False
+    retry_terms = (
+        "json",
+        "formato",
+        "format",
+        "content vazio",
+        "fora do formato",
+        "resposta fora",
+        "timeout",
+        "demorou mais",
+        "connection",
+        "network",
+        "temporarily unavailable",
+    )
+    return any(term in message for term in retry_terms)
+
+
+def _script_runtime_retry_guidance(exc: Exception) -> str:
+    return (
+        "A resposta anterior não pôde ser lida pela aplicação: "
+        f"{str(exc)[:600]}. Responda com um único objeto JSON válido, sem markdown, "
+        "sem comentários antes ou depois, mantendo o roteiro completo em content. "
+        "Escape aspas internas de diálogo quando necessário."
+    )
+
+
 def _briefing_payload(data: BriefingCreate) -> dict:
     return data.model_dump(mode="json")
 
@@ -195,15 +224,23 @@ async def generate_script(
     payload: dict | None = None
     last_error: GenerationOutputError | None = None
     for attempt in range(SCRIPT_GENERATION_MAX_ATTEMPTS):
-        result, _execution = await run_structured_generation(
-            session,
-            provider,
-            project_id,
-            "generate_script",
-            variables,
-            model=model,
-            fallback_on_runtime_error=True,
-        )
+        try:
+            result, _execution = await run_structured_generation(
+                session,
+                provider,
+                project_id,
+                "generate_script",
+                variables,
+                model=model,
+                fallback_on_runtime_error=True,
+            )
+        except RuntimeError as exc:
+            if attempt == SCRIPT_GENERATION_MAX_ATTEMPTS - 1 or not (
+                _retry_script_generation_after_runtime_error(exc)
+            ):
+                raise
+            variables["retry_guidance"] = _script_runtime_retry_guidance(exc)
+            continue
         try:
             payload = normalize_script_payload(
                 _required_mapping(result.content, "generate_script"),
@@ -294,16 +331,24 @@ async def revise_script(
     payload: dict | None = None
     execution = None
     for attempt in range(SCRIPT_GENERATION_MAX_ATTEMPTS):
-        result, execution = await run_structured_generation(
-            session,
-            provider,
-            project_id,
-            "revise_script",
-            variables,
-            artifact_id=script.artifact_id,
-            model=model,
-            fallback_on_runtime_error=True,
-        )
+        try:
+            result, execution = await run_structured_generation(
+                session,
+                provider,
+                project_id,
+                "revise_script",
+                variables,
+                artifact_id=script.artifact_id,
+                model=model,
+                fallback_on_runtime_error=True,
+            )
+        except RuntimeError as exc:
+            if attempt == SCRIPT_GENERATION_MAX_ATTEMPTS - 1 or not (
+                _retry_script_generation_after_runtime_error(exc)
+            ):
+                raise
+            variables["retry_guidance"] = _script_runtime_retry_guidance(exc)
+            continue
         try:
             payload = normalize_script_payload(
                 _required_mapping(result.content, "revise_script"),

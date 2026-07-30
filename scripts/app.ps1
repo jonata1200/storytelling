@@ -265,7 +265,10 @@ function Wait-AppReady {
 }
 
 function Start-App {
-    param([switch]$Reload)
+    param(
+        [switch]$Reload,
+        [switch]$AsBackground
+    )
 
     $python = Get-ProjectPython
     Ensure-EnvironmentFile
@@ -292,8 +295,7 @@ function Start-App {
     $url = "http://${HostAddress}:$Port"
     $uvicornArguments = @(
         "-m",
-        "uvicorn",
-        "app.main:app",
+        "app.server",
         "--host",
         $HostAddress,
         "--port",
@@ -302,7 +304,13 @@ function Start-App {
 
     if ($Reload) {
         $uvicornArguments += "--reload"
-        Write-Step "Iniciando aplicacao em modo dev: $url"
+    }
+
+    if (-not $AsBackground) {
+        $mode = if ($Reload) { "modo dev" } else { "primeiro plano" }
+        Write-Step "Iniciando aplicacao em ${mode}: $url"
+        Write-Host "Logs e erros ficarao visiveis neste terminal."
+        Write-Host "Para finalizar, pressione Ctrl+C."
         & $python @uvicornArguments
         return
     }
@@ -416,14 +424,14 @@ function Invoke-Checks {
 }
 
 switch ($Command) {
-    "start" { Start-App }
-    "up" { Start-App }
+    "start" { Start-App -AsBackground:(-not $Foreground) }
+    "up" { Start-App -AsBackground:$Background }
     "dev" { Start-App -Reload }
     "stop" { Stop-App }
     "down" { Stop-Stack }
     "restart" {
         Stop-App
-        Start-App
+        Start-App -AsBackground:$Background
     }
     "status" { Show-Status }
     "logs" { Show-Logs }

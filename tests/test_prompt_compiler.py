@@ -12,7 +12,7 @@ from app.generation.service import (
     run_structured_generation,
     should_fallback_to_mock,
 )
-from app.providers.llm.types import LLMRequest
+from app.providers.llm.types import LLMRequest, LLMResult
 
 
 def test_compile_prompt_keeps_missing_variables_visible() -> None:
@@ -182,6 +182,53 @@ async def test_structured_generation_reports_timeout_without_mock_fallback(
         )
 
     assert session.flushed is False
+
+
+@pytest.mark.asyncio
+async def test_structured_generation_records_recovered_raw_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RecoveringProvider:
+        provider_name = "OmniRoute"
+
+        async def generate_structured(self, request: LLMRequest) -> LLMResult:
+            return LLMResult(
+                content={"content": "FADE IN:\n\nCENA 01\nINT. CASA - DIA\n\nA porta abre."},
+                model=request.model,
+                provider="omniroute",
+                raw_content="FADE IN:\n\nCENA 01\nINT. CASA - DIA\n\nA porta abre.",
+                recovery_strategy="screenplay_text",
+            )
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.item: object | None = None
+            self.flushed = False
+
+        def add(self, item: object) -> None:
+            self.item = item
+
+        async def flush(self) -> None:
+            self.flushed = True
+
+    async def fake_template(session: object, task: str) -> SimpleNamespace:
+        return SimpleNamespace(id=uuid4(), version=1, template_text="{prompt}", output_schema={})
+
+    monkeypatch.setattr(generation_service, "get_or_create_prompt_template", fake_template)
+
+    session = FakeSession()
+    _result, execution = await run_structured_generation(
+        session,  # type: ignore[arg-type]
+        RecoveringProvider(),
+        uuid4(),
+        "generate_script",
+        {"prompt": "Gere roteiro"},
+        model="script-model",
+    )
+
+    assert session.flushed is True
+    assert execution.parameters["recovery_strategy"] == "screenplay_text"
+    assert "FADE IN" in execution.parameters["raw_response_preview"]
 
 
 @pytest.mark.asyncio

@@ -17,4 +17,5 @@ $command = if ($Dev) { "dev" } else { "up" }
     -HostAddress $HostAddress `
     -Port $Port `
     -NoDocker:$NoDocker `
-    -NoMigrate:$NoMigrate
+    -NoMigrate:$NoMigrate `
+    -Background:$Background

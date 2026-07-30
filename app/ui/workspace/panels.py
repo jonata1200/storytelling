@@ -242,7 +242,7 @@ def _render_storyboard_grid(frames: list[StoryboardFrame]) -> None:
 
 
 def _render_timeline_strip(timeline: Timeline | None, items: list[TimelineItem]) -> None:
-    with ui.card().classes(_card_classes("w-full")):
+    with ui.element("section").classes(_card_classes("workspace-summary-card w-full")):
         with ui.row().classes("items-center gap-2"):
             ui.icon("timeline").classes("text-cyan-300")
             ui.label("Montagem da timeline").classes("text-lg font-semibold")
@@ -279,7 +279,7 @@ def _render_execution_summary(execution_summary: Any | None) -> None:
     metrics = list(getattr(execution_summary, "prompt_metrics", []) or [])
     recent_jobs = list(getattr(execution_summary, "recent_jobs", []) or [])[:8]
     recent_prompts = list(getattr(execution_summary, "prompt_executions", []) or [])[:8]
-    with ui.card().classes(_card_classes("w-full")):
+    with ui.element("section").classes(_card_classes("workspace-summary-card w-full")):
         with ui.row().classes("items-center justify-between w-full gap-3"):
             with ui.row().classes("items-center gap-2"):
                 ui.icon("query_stats").classes("text-cyan-300")
@@ -293,7 +293,7 @@ def _render_execution_summary(execution_summary: Any | None) -> None:
             )
             return
         if metrics:
-            with ui.grid(columns=3).classes("w-full gap-3"):
+            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"):
                 for metric in metrics[:6]:
                     with ui.column().classes(
                         "gap-1 rounded-md border border-slate-800 bg-slate-950 p-3"
@@ -353,7 +353,7 @@ def _render_cost_summary(cost_summary: Any | None) -> None:
         return
     stages = list(getattr(cost_summary, "by_stage", []) or [])
     providers = list(getattr(cost_summary, "by_provider", []) or [])
-    with ui.card().classes(_card_classes("w-full")):
+    with ui.element("section").classes(_card_classes("workspace-summary-card w-full")):
         with ui.row().classes("items-center justify-between w-full gap-3"):
             with ui.row().classes("items-center gap-2"):
                 ui.icon("paid").classes("text-cyan-300")
@@ -365,7 +365,7 @@ def _render_cost_summary(cost_summary: Any | None) -> None:
             ui.label("Sem custos registrados para este projeto.").classes("text-sm text-slate-500")
             return
         if stages:
-            with ui.grid(columns=3).classes("w-full gap-3"):
+            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"):
                 for item in stages[:6]:
                     with ui.column().classes(
                         "gap-1 rounded-md border border-slate-800 bg-slate-950 p-3"

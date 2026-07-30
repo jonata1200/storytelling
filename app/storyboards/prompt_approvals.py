@@ -108,16 +108,16 @@ async def _ensure_storyboard_prompts_generated_with_llm(
         model=model,
         fallback_on_runtime_error=True,
     )
+    fallback_prompt_by_shot = {
+        str(item["shot_id"]): str(item["prompt"]) for item in fallback_prompts
+    }
     llm_prompt_by_shot = _storyboard_generated_prompt_payload(result.content)
     if not llm_prompt_by_shot:
-        raise RuntimeError("DeepSeek não retornou prompts de storyboard válidos.")
-    missing_prompt_shots = [
-        str(shot.id) for shot, _scene in pending_rows if str(shot.id) not in llm_prompt_by_shot
-    ]
-    if missing_prompt_shots:
-        raise RuntimeError(
-            "DeepSeek não retornou prompts para todos os planos de storyboard."
-        )
+        llm_prompt_by_shot = fallback_prompt_by_shot
+    else:
+        for shot, _scene in pending_rows:
+            shot_key = str(shot.id)
+            llm_prompt_by_shot.setdefault(shot_key, fallback_prompt_by_shot[shot_key])
 
     updated = metadata
     changed = False
@@ -145,6 +145,7 @@ async def list_storyboard_prompt_previews(
     script_id: UUID,
     scene_number: int | None = None,
     shot_id: UUID | None = None,
+    generate_missing: bool = True,
 ) -> list[dict]:
     project = await ProjectRepository(session).get_project(project_id)
     script = await session.get(Script, script_id)
@@ -163,14 +164,15 @@ async def list_storyboard_prompt_previews(
     production_settings = await get_or_create_production_settings(session, project_id)
     metadata = production_settings.metadata_json or {}
     visual_context = await _storyboard_visual_context(session, project_id)
-    metadata = await _ensure_storyboard_prompts_generated_with_llm(
-        session,
-        project_id,
-        script,
-        shot_rows,
-        visual_context,
-        metadata,
-    )
+    if generate_missing:
+        metadata = await _ensure_storyboard_prompts_generated_with_llm(
+            session,
+            project_id,
+            script,
+            shot_rows,
+            visual_context,
+            metadata,
+        )
     existing_frames = await list_storyboard_frames(session, project_id, script_id)
     existing_by_shot = {frame.shot_id: frame for frame in existing_frames}
     previews: list[dict] = []

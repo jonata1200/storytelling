@@ -106,7 +106,20 @@ simples é:
 ```
 
 Esse comando inicia PostgreSQL, Redis, aplica migrations e sobe a aplicação em
-segundo plano.
+primeiro plano. Logs e erros ficam visíveis no terminal, o que facilita debug.
+Para finalizar, pressione `Ctrl+C`.
+
+Para executar em segundo plano:
+
+```powershell
+.\scripts\app.ps1 start
+```
+
+Ou:
+
+```powershell
+.\scripts\app.ps1 up -Background
+```
 
 Para desenvolver com reload automático:
 

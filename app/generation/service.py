@@ -219,6 +219,10 @@ DEFAULT_TEMPLATE_VARIABLES: dict[str, int] = {
 }
 
 
+def _raw_response_preview(value: str | None, limit: int = 1200) -> str:
+    return " ".join(str(value or "").split())[:limit]
+
+
 def should_fallback_to_mock(exc: Exception) -> bool:
     message = str(exc).lower()
     transient_terms = (
@@ -337,6 +341,15 @@ async def run_structured_generation(
         _ = fallback_on_runtime_error, should_fallback_to_mock(exc)
         raise exc
     duration_ms = int((perf_counter() - started) * 1000)
+    parameters: dict[str, str] = {}
+    if fallback_error:
+        if model is not None:
+            parameters["fallback_from"] = model
+        parameters["fallback_error"] = fallback_error
+    if result.recovery_strategy:
+        parameters["recovery_strategy"] = result.recovery_strategy
+    if result.recovery_strategy and result.raw_content:
+        parameters["raw_response_preview"] = _raw_response_preview(result.raw_content)
     execution = PromptExecution(
         project_id=project_id,
         artifact_id=artifact_id,
@@ -347,9 +360,7 @@ async def run_structured_generation(
         prompt=prompt,
         variables=variables,
         response=result.content,
-        parameters={"fallback_from": model, "fallback_error": fallback_error}
-        if fallback_error
-        else {},
+        parameters=parameters,
         estimated_cost=result.estimated_cost,
         duration_ms=duration_ms,
     )

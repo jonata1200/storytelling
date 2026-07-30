@@ -124,7 +124,14 @@ async def dashboard_metrics() -> dict[str, str]:
     }
 
 
-async def project_summary(project_id: UUID) -> dict[str, Any] | None:
+async def project_summary(project_id: UUID, section: str = "script") -> dict[str, Any] | None:
+    active_section = section if section in {"script", "assets", "storyboard", "video"} else "script"
+    load_script_details = active_section == "script"
+    load_assets = active_section == "assets"
+    load_storyboard = active_section == "storyboard"
+    load_video = active_section == "video"
+    load_frames = load_storyboard or load_video
+
     async with AsyncSessionLocal() as session:
         project = await ProjectRepository(session).get_project(project_id)
         if project is None:
@@ -139,7 +146,7 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
         cost_summary = await project_cost_summary(session, project_id)
         latest_quality = await latest(session, QualityCheck, project_id)
         latest_export = await latest(session, Export, project_id)
-        latest_timeline = await latest(session, Timeline, project_id)
+        latest_timeline = await latest(session, Timeline, project_id) if load_video else None
         execution_summary = await project_execution_summary(session, project_id)
         timeline_items: list[TimelineItem] = []
         if latest_timeline is not None:
@@ -151,8 +158,10 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             )
             timeline_items = list(item_result.scalars())
         script = await latest(session, Script, project_id)
-        visual_refs = await active_many(session, VisualReference, project_id, 100)
-        if script is not None:
+        visual_refs = (
+            await active_many(session, VisualReference, project_id, 100) if load_assets else []
+        )
+        if script is not None and load_frames:
             frame_result = await session.execute(
                 select(StoryboardFrame)
                 .join(Shot, StoryboardFrame.shot_id == Shot.id)
@@ -169,17 +178,25 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
         else:
             frames = []
         storyboard_prompt_previews = (
-            await list_storyboard_prompt_previews(session, project_id, script.id)
-            if script is not None
+            await list_storyboard_prompt_previews(
+                session,
+                project_id,
+                script.id,
+                generate_missing=False,
+            )
+            if script is not None and load_storyboard
             else []
         )
-        clips = await latest_many(session, VideoClip, project_id, 100)
-        generated_clip_frame_result = await session.execute(
-            select(VideoClip.storyboard_frame_id).where(VideoClip.project_id == project_id)
-        )
-        generated_clip_frame_ids = set(generated_clip_frame_result.scalars())
+        clips = await latest_many(session, VideoClip, project_id, 100) if load_video else []
+        if load_video:
+            generated_clip_frame_result = await session.execute(
+                select(VideoClip.storyboard_frame_id).where(VideoClip.project_id == project_id)
+            )
+            generated_clip_frame_ids = set(generated_clip_frame_result.scalars())
+        else:
+            generated_clip_frame_ids = set()
         video_prompt_previews: list[dict[str, Any]] = []
-        if frames:
+        if frames and load_video:
             frame_shot_ids = [frame.shot_id for frame in frames if frame.shot_id is not None]
             shot_context: dict[UUID, tuple[Shot, Scene]] = {}
             if frame_shot_ids:
@@ -265,11 +282,19 @@ async def project_summary(project_id: UUID) -> dict[str, Any] | None:
             "export": latest_export,
             "model_settings": list(model_result.scalars()),
             "script": script,
-            "scenes": await active_many(session, Scene, project_id, 12),
-            "shots": await active_many(session, Shot, project_id, 20),
-            "characters": await active_many(session, Character, project_id, 100),
-            "locations": await active_many(session, Location, project_id, 100),
-            "props": await active_many(session, Prop, project_id, 100),
+            "scenes": await active_many(session, Scene, project_id, 12)
+            if load_script_details
+            else [],
+            "shots": await active_many(session, Shot, project_id, 20)
+            if load_script_details
+            else [],
+            "characters": await active_many(session, Character, project_id, 100)
+            if load_assets
+            else [],
+            "locations": await active_many(session, Location, project_id, 100)
+            if load_assets
+            else [],
+            "props": await active_many(session, Prop, project_id, 100) if load_assets else [],
             "visual_refs": visual_refs,
             "assets": assets,
             "frames": frames,

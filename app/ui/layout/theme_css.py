@@ -180,6 +180,14 @@ THEME_HEAD_HTML = r"""
           body:not(.body--dark) .idea-badge-duration { background:#eee4ff!important; color:#54358a!important; }
           .entity-card { background:#151816; border:1px solid #252a26; transition:.2s ease; }
           .entity-card:hover { transform:translateY(-2px); border-color:#555d4c; }
+          .workspace-summary-card.entity-card {
+            display:flex!important;
+            flex-direction:column!important;
+            gap:16px!important;
+            min-height:132px!important;
+            padding:24px!important;
+            overflow:visible!important;
+          }
           .visual-placeholder { background:radial-gradient(circle at 70% 15%,#4e5531 0,#24281e 32%,#141614 70%); }
           .chat-shell { box-shadow:0 30px 90px rgba(0,0,0,.45); }
           .script-upload-control {

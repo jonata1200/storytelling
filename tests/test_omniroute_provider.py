@@ -227,7 +227,58 @@ def test_omniroute_llm_provider_requires_api_key(monkeypatch: pytest.MonkeyPatch
 def test_omniroute_llm_provider_parses_json_content() -> None:
     provider = OmniRouteLLMProvider()
 
-    assert provider._parse_json_content('```json\n{"ideas": []}\n```') == {"ideas": []}
+    assert provider._parse_json_content('```json\n{"ideas": []}\n```') == ({"ideas": []}, None)
+
+
+def test_omniroute_llm_provider_recovers_embedded_json_content() -> None:
+    provider = OmniRouteLLMProvider()
+
+    assert provider._parse_json_content('Claro.\n{"title":"Teste","content":"ok"}\nFim.') == (
+        {"title": "Teste", "content": "ok"},
+        "embedded_json",
+    )
+
+
+def test_omniroute_llm_provider_recovers_screenplay_text_for_script() -> None:
+    provider = OmniRouteLLMProvider()
+    screenplay = "FADE IN:\n\nCENA 01\nINT. CASA - DIA\n\nCLARA abre a porta."
+
+    assert provider._parse_json_content(screenplay, "generate_script") == (
+        {"content": screenplay},
+        "screenplay_text",
+    )
+
+
+def test_omniroute_llm_provider_uses_lower_temperature_for_script(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OmniRouteLLMProvider()
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        "app.providers.llm.omniroute.get_settings",
+        lambda: Settings(
+            ai_provider="omniroute",
+            omniroute_api_key="omni-secret",
+            omniroute_base_url="https://omnirouters.com/v1",
+        ),
+    )
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
+        _ = kwargs
+        captured["body"] = _request_json_body(request)
+        return _JsonResponse(
+            {"choices": [{"message": {"content": '{"title":"T","content":"ok"}'}}]}
+        )
+
+    monkeypatch.setattr("app.providers.llm.omniroute.urllib.request.urlopen", fake_urlopen)
+
+    provider._send_request(
+        LLMRequest(task="generate_script", prompt="{}", model="provider/text-model"),
+        use_response_format=True,
+    )
+
+    assert captured["body"]["temperature"] == 0.4
 
 
 def test_omniroute_image_provider_writes_generated_image(

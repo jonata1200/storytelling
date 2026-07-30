@@ -9,7 +9,7 @@ from nicegui import ui
 from app.projects.models import Project
 
 BodyStyle = Callable[[], None]
-ProjectSummaryLoader = Callable[[UUID], Awaitable[dict[str, Any] | None]]
+ProjectSummaryLoader = Callable[[UUID, str], Awaitable[dict[str, Any] | None]]
 WorkspaceAccessChecker = Callable[[str, dict[str, int]], tuple[bool, str]]
 WorkspaceFallbackResolver = Callable[[dict[str, int]], str]
 WorkspaceHeaderRenderer = Callable[[Project, str, dict[str, int]], None]
@@ -43,7 +43,7 @@ def register_project_workspace_pages(
             return
         try:
             project_uuid = UUID(project_id)
-            summary = await project_summary(project_uuid)
+            summary = await project_summary(project_uuid, section)
         except (ValueError, TypeError):
             summary = None
         if summary is None:
