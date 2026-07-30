@@ -42,6 +42,8 @@ def llm_provider_for_name(settings: Any, provider: str) -> LLMProvider:
         ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
         return OmniRouteLLMProvider()
     if provider == "ollama":
+        if provider_requires_api_key(settings, "ollama"):
+            ensure_provider_api_key(settings.ollama_api_key, "ollama", "OLLAMA_API_KEY")
         return OllamaLLMProvider()
     if provider == "groq":
         ensure_provider_api_key(settings.groq_api_key, "groq", "GROQ_API_KEY")

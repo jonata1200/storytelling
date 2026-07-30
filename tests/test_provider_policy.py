@@ -66,6 +66,12 @@ def test_provider_policy_supports_new_text_providers() -> None:
     assert provider_requires_api_key(settings, "ollama") is False
 
 
+def test_ollama_cloud_requires_api_key() -> None:
+    settings = Settings(ollama_base_url="https://ollama.com", ollama_api_key="cloud-secret")
+
+    assert provider_requires_api_key(settings, "ollama") is True
+
+
 def test_nvidia_nim_requires_key_only_for_hosted_endpoint() -> None:
     hosted = Settings(nvidia_nim_base_url="https://integrate.api.nvidia.com/v1")
     local = Settings(nvidia_nim_base_url="http://localhost:8000/v1")

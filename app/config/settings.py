@@ -76,6 +76,8 @@ OMNIROUTE_TEXT_MODELS = (
 )
 
 OLLAMA_TEXT_MODELS = (
+    "gpt-oss:120b",
+    "gpt-oss:20b",
     "llama3.1:8b",
     "llama3.1:70b",
     "llama3.2:3b",

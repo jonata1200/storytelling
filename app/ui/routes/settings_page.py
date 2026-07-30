@@ -12,6 +12,7 @@ from app.config.preferences import save_preferences
 from app.config.provider_policy import (
     SUPPORTED_TEXT_PROVIDERS,
     effective_provider_for_channel,
+    is_ollama_cloud_base_url,
     provider_display_name,
     validate_model_name,
 )
@@ -211,7 +212,7 @@ def register_settings_page(
                                 ui.input(
                                     "URL base Ollama",
                                     value=current.ollama_base_url,
-                                    placeholder="http://localhost:11434/v1",
+                                    placeholder="https://ollama.com ou http://localhost:11434/v1",
                                 )
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
@@ -219,8 +220,8 @@ def register_settings_page(
                             ollama_api_key = (
                                 ui.input(
                                     "Chave Ollama",
-                                    value=current.ollama_api_key or "ollama",
-                                    placeholder="ollama",
+                                    value=current.ollama_api_key or "",
+                                    placeholder="Obrigatoria no Cloud; use ollama no modo local",
                                     password=True,
                                     password_toggle_button=True,
                                 )
@@ -371,6 +372,20 @@ def register_settings_page(
                                     ).strip().casefold()
                                     if selected_text_provider not in SUPPORTED_TEXT_PROVIDERS:
                                         raise ValueError("Provider de texto invalido.")
+                                    selected_ollama_base_url = str(
+                                        ollama_base_url.value or ""
+                                    ).strip()
+                                    selected_ollama_api_key = str(
+                                        ollama_api_key.value or ""
+                                    ).strip()
+                                    if (
+                                        selected_text_provider == "ollama"
+                                        and is_ollama_cloud_base_url(selected_ollama_base_url)
+                                        and not selected_ollama_api_key
+                                    ):
+                                        raise ValueError(
+                                            "Informe a Chave Ollama para usar Ollama Cloud."
+                                        )
                                     values = {
                                         "AI_PROVIDER": "ollama",
                                         "TEXT_PROVIDER": selected_text_provider,
@@ -379,12 +394,8 @@ def register_settings_page(
                                         "TEXT_PROVIDER_FALLBACKS": str(
                                             text_provider_fallbacks.value or ""
                                         ).strip(),
-                                        "OLLAMA_BASE_URL": str(
-                                            ollama_base_url.value or ""
-                                        ).strip(),
-                                        "OLLAMA_API_KEY": str(
-                                            ollama_api_key.value or "ollama"
-                                        ).strip()
+                                        "OLLAMA_BASE_URL": selected_ollama_base_url,
+                                        "OLLAMA_API_KEY": selected_ollama_api_key
                                         or "ollama",
                                         "OLLAMA_DEFAULT_MODEL": validate_model_name(
                                             ollama_text_model.value,

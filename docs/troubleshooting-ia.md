@@ -7,6 +7,12 @@
 - `NVIDIA_NIM_API_KEY nao configurada`: obrigatoria para
   `https://integrate.api.nvidia.com/v1`; endpoints NIM locais podem rodar sem
   chave.
+- `Ollama local nao esta acessivel` ou `WinError 10061`: a aplicacao esta
+  tentando acessar `http://localhost:11434/v1`. Para Ollama Cloud, nao instale
+  o Ollama local; configure `OLLAMA_BASE_URL=https://ollama.com`,
+  `OLLAMA_API_KEY` e um modelo Cloud como `gpt-oss:120b`.
+- `OLLAMA_API_KEY nao configurada`: obrigatoria quando `OLLAMA_BASE_URL` aponta
+  para `https://ollama.com`.
 - Timeout, HTTP 429, 5xx ou erro de rede: habilite `TEXT_PROVIDER_FALLBACKS`
   com uma lista como `nvidia_nim,ollama`.
 - Erro de JSON/schema: revise o prompt/modelo. O fallback nao mascara esse tipo

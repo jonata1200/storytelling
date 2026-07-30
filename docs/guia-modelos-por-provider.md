@@ -1,6 +1,25 @@
 # Guia De Modelos Por Provider
 
-## Ollama
+## Ollama Cloud
+
+Uso recomendado: modelo na nuvem com chave `OLLAMA_API_KEY`, sem instalar o
+Ollama na maquina.
+
+Modelo inicial:
+
+```text
+gpt-oss:120b
+```
+
+Configuracao:
+
+```env
+OLLAMA_BASE_URL=https://ollama.com
+OLLAMA_API_KEY=sua_chave_ollama_cloud
+OLLAMA_DEFAULT_MODEL=gpt-oss:120b
+```
+
+## Ollama Local
 
 Uso recomendado: desenvolvimento local, fallback sem chave externa e testes.
 
@@ -10,10 +29,16 @@ Modelo inicial:
 llama3.1:8b
 ```
 
-Antes de usar:
+Antes de usar localmente:
 
 ```powershell
 ollama pull llama3.1:8b
+```
+
+```env
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_API_KEY=ollama
+OLLAMA_DEFAULT_MODEL=llama3.1:8b
 ```
 
 ## Groq

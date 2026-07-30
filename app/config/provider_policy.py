@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 ProviderChannel = Literal["text", "image", "video", "speech"]
 
@@ -88,9 +89,18 @@ def provider_base_url(settings: Any, provider: str) -> str:
     return str(getattr(settings, f"{provider}_base_url", "") or "").strip()
 
 
+def is_ollama_cloud_base_url(base_url: object) -> bool:
+    value = str(base_url or "").strip()
+    if not value:
+        return False
+    parsed = urlparse(value if "://" in value else f"https://{value}")
+    host = parsed.netloc.casefold().removeprefix("www.")
+    return host == "ollama.com"
+
+
 def provider_requires_api_key(settings: Any, provider: str) -> bool:
     if provider == "ollama":
-        return False
+        return is_ollama_cloud_base_url(provider_base_url(settings, provider))
     if provider == "nvidia_nim":
         base_url = provider_base_url(settings, provider).casefold()
         return "integrate.api.nvidia.com" in base_url

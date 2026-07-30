@@ -9,6 +9,7 @@ import pytest
 
 from app.config.settings import Settings
 from app.generation import model_settings
+from app.providers.llm.ollama import OllamaLLMProvider
 from app.providers.llm.openai_compatible import (
     OpenAICompatibleLLMConfig,
     OpenAICompatibleLLMProvider,
@@ -179,6 +180,103 @@ def test_openai_compatible_provider_reports_timeout(
         provider._send_request(
             LLMRequest(task="generate_story_ideas", prompt="{}", model="llama-3.3"),
             use_response_format=True,
+        )
+
+
+def test_openai_compatible_provider_explains_ollama_local_connection_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenAICompatibleLLMProvider(
+        OpenAICompatibleLLMConfig(
+            provider_name="ollama",
+            display_name="Ollama",
+            base_url="http://localhost:11434/v1",
+            api_key="ollama",
+            require_api_key=False,
+        )
+    )
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
+        _ = request, kwargs
+        raise urllib.error.URLError(OSError(10061, "actively refused"))
+
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        provider._send_request(
+            LLMRequest(task="generate_story_ideas", prompt="{}", model="llama3.1:8b"),
+            use_response_format=True,
+        )
+
+    assert "Ollama local nao esta acessivel" in str(exc.value)
+    assert "OLLAMA_BASE_URL=https://ollama.com" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_ollama_cloud_provider_uses_native_chat_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.providers.llm.ollama.get_settings",
+        lambda: Settings(
+            ollama_base_url="https://ollama.com",
+            ollama_api_key="cloud-secret",
+            ollama_default_model="gpt-oss:120b",
+        ),
+    )
+    provider = OllamaLLMProvider()
+    captured: dict[str, Any] = {}
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
+        captured["url"] = request.full_url
+        captured["authorization"] = request.get_header("Authorization")
+        captured["body"] = _request_json_body(request)
+        captured["timeout"] = kwargs.get("timeout")
+        return _JsonResponse(
+            {
+                "model": "gpt-oss:120b",
+                "message": {"role": "assistant", "content": '{"ok": true}'},
+                "prompt_eval_count": 5,
+                "eval_count": 7,
+            }
+        )
+
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    result = await provider.generate_structured(
+        LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:120b")
+    )
+
+    assert captured["url"] == "https://ollama.com/api/chat"
+    assert captured["authorization"] == "Bearer cloud-secret"
+    assert captured["body"]["format"] == "json"
+    assert captured["body"]["stream"] is False
+    assert captured["body"]["options"]["temperature"] == 0.7
+    assert captured["timeout"] == 300
+    assert result.content == {"ok": True}
+    assert result.model == "gpt-oss:120b"
+    assert result.prompt_tokens == 5
+    assert result.completion_tokens == 7
+
+
+@pytest.mark.asyncio
+async def test_ollama_cloud_provider_requires_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.providers.llm.ollama.get_settings",
+        lambda: Settings(ollama_base_url="https://ollama.com", ollama_api_key=None),
+    )
+
+    with pytest.raises(ValueError, match="OLLAMA_API_KEY"):
+        await OllamaLLMProvider().generate_structured(
+            LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:120b")
         )
 
 

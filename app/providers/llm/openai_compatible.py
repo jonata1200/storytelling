@@ -134,9 +134,7 @@ class OpenAICompatibleLLMProvider:
                 f"{config.display_name} HTTP {exc.code}: {redact_secrets(detail)}"
             ) from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(
-                f"{config.display_name} network error: {redact_secrets(exc.reason)}"
-            ) from exc
+            raise RuntimeError(self._network_error_message(config, exc.reason)) from exc
         except TimeoutError as exc:
             raise RuntimeError(f"{config.display_name} timeout ao aguardar resposta") from exc
         except OSError as exc:
@@ -166,6 +164,28 @@ class OpenAICompatibleLLMProvider:
         timeout_seconds: float,
     ) -> Any:
         return urllib.request.urlopen(request, timeout=timeout_seconds)
+
+    def _network_error_message(
+        self,
+        config: OpenAICompatibleLLMConfig,
+        reason: object,
+    ) -> str:
+        detail = str(redact_secrets(reason))
+        lower_detail = detail.casefold()
+        refused = (
+            "10061" in lower_detail
+            or "connection refused" in lower_detail
+            or "actively refused" in lower_detail
+            or "recusou ativamente" in lower_detail
+        )
+        if config.provider_name == "ollama" and refused:
+            return (
+                f"{config.display_name} local nao esta acessivel em {config.base_url}. "
+                "Se voce quer usar Ollama Cloud, configure OLLAMA_BASE_URL=https://ollama.com "
+                "e uma OLLAMA_API_KEY valida. Se quer usar Ollama local, inicie o servico "
+                "com `ollama serve`."
+            )
+        return f"{config.display_name} network error: {detail}"
 
     def _request_timeout_seconds(self, request: LLMRequest) -> float:
         if request.timeout_seconds is None:
