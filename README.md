@@ -52,6 +52,53 @@ aprovação e controle sobre o resultado.
 
 ## Provedor De IA
 
+Texto pode usar providers OpenAI-compatible diferentes por API:
+
+- `ollama`
+- `groq`
+- `nvidia_nim`
+
+OmniRoute permanece como provider legado para imagem/video ate a migracao para o
+provider experimental de Veo AI Free. Os modelos padrao ficam no `.env`:
+
+```env
+AI_PROVIDER=omniroute
+TEXT_PROVIDER=groq
+TEXT_PROVIDER_FALLBACKS=
+IMAGE_PROVIDER=omniroute
+VIDEO_PROVIDER=omniroute
+
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_API_KEY=ollama
+OLLAMA_DEFAULT_MODEL=llama3.1:8b
+
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_API_KEY=sua_chave_groq
+GROQ_DEFAULT_MODEL=llama-3.3-70b-versatile
+
+NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_NIM_API_KEY=sua_chave_nvidia
+NVIDIA_NIM_DEFAULT_MODEL=openai/gpt-oss-20b
+
+OMNIROUTE_BASE_URL=https://omnirouters.com/v1
+OMNIROUTE_API_KEY=sua_chave_omniroute_legada
+OMNIROUTE_DEFAULT_MODEL=opencode-zen/deepseek-v4-flash
+OMNIROUTE_IMAGE_MODEL=chatgpt-web/gpt-5.5
+OMNIROUTE_VIDEO_MODEL=veo-free/veo
+```
+
+Para Ollama local, rode `ollama serve` e baixe o modelo antes de selecionar o
+provider:
+
+```powershell
+ollama pull llama3.1:8b
+```
+
+As chaves e modelos de texto tambem podem ser salvos pela tela de Configuracoes
+de IA em `.runtime/preferences.json`.
+
+## Provedor De IA Legado
+
 O texto, imagem e video usam o gateway OmniRoute. Modelos com prefixo
 `opencode-zen/`, como `opencode-zen/deepseek-v4-flash`, tambem sao chamados pela mesma chave
 `OMNIROUTE_API_KEY`.

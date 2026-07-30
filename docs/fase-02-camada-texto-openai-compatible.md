@@ -26,16 +26,16 @@ Responsabilidades:
 
 ## Checklist
 
-- [ ] Criar `OpenAICompatibleLLMProvider`.
-- [ ] Extrair parsing de JSON/stream do provider atual para helper reutilizavel.
-- [ ] Criar tipo de configuracao por provider: `provider_name`, `base_url`, `api_key`, `model`.
-- [ ] Permitir providers sem chave obrigatoria, caso de Ollama local.
-- [ ] Adicionar timeout por tarefa.
-- [ ] Preservar recuperacao de resposta com JSON embutido.
-- [ ] Preservar recuperacao de roteiro em texto quando aplicavel.
-- [ ] Testar retry sem `response_format`.
-- [ ] Testar erro HTTP com redacao de segredo.
-- [ ] Testar timeout e erro de rede.
+- [x] Criar `OpenAICompatibleLLMProvider`.
+- [x] Extrair parsing de JSON/stream do provider atual para helper reutilizavel.
+- [x] Criar tipo de configuracao por provider: `provider_name`, `base_url`, `api_key`, `model`.
+- [x] Permitir providers sem chave obrigatoria, caso de Ollama local.
+- [x] Adicionar timeout por tarefa.
+- [x] Preservar recuperacao de resposta com JSON embutido.
+- [x] Preservar recuperacao de roteiro em texto quando aplicavel.
+- [x] Testar retry sem `response_format`.
+- [x] Testar erro HTTP com redacao de segredo.
+- [x] Testar timeout e erro de rede.
 
 ## Env Vars Propostas
 
@@ -46,7 +46,7 @@ TEXT_PROVIDER_FALLBACKS=nvidia_nim,ollama
 
 ## Criterios De Saida
 
-- [ ] Provider generico passa em testes unitarios.
-- [ ] Nenhum provider real externo e chamado em testes unitarios.
-- [ ] A camada generica consegue substituir o provider OmniRoute para texto.
-- [ ] `run_structured_generation` continua sem conhecer detalhes dos providers.
+- [x] Provider generico passa em testes unitarios.
+- [x] Nenhum provider real externo e chamado em testes unitarios.
+- [x] A camada generica consegue substituir o provider OmniRoute para texto.
+- [x] `run_structured_generation` continua sem conhecer detalhes dos providers.

@@ -15,6 +15,7 @@ build/
 logs/
 *.log
 *.pid
+.runtime/
 .runtime/playwright-screenshots/
 *.json
 .idea/

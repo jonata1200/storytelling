@@ -9,9 +9,17 @@ from fastapi import Request
 from nicegui import ui
 
 from app.config.preferences import save_preferences
-from app.config.provider_policy import validate_model_name
+from app.config.provider_policy import (
+    SUPPORTED_TEXT_PROVIDERS,
+    effective_provider_for_channel,
+    provider_display_name,
+    validate_model_name,
+)
 from app.config.runtime_preferences import load_runtime_preferences
 from app.config.settings import (
+    GROQ_TEXT_MODELS,
+    NVIDIA_NIM_TEXT_MODELS,
+    OLLAMA_TEXT_MODELS,
     OMNIROUTE_TEXT_MODELS,
     get_settings,
     normalize_omniroute_api_key,
@@ -157,6 +165,34 @@ def register_settings_page(
                                 "Conecte sua conta e escolha modelos diferentes para cada mídia."
                             ).classes("text-sm text-[#858b86] mb-4")
                             saved_preferences = load_runtime_preferences()
+                            current_text_provider = effective_provider_for_channel(
+                                current, "text"
+                            )
+                            if current_text_provider not in SUPPORTED_TEXT_PROVIDERS:
+                                current_text_provider = "omniroute"
+                            provider_options = {
+                                provider: provider_display_name(provider)
+                                for provider in SUPPORTED_TEXT_PROVIDERS
+                            }
+
+                            def model_options(
+                                options: tuple[str, ...],
+                                current_model: str,
+                            ) -> list[str]:
+                                selectable = list(options)
+                                if current_model and current_model not in selectable:
+                                    selectable.append(current_model)
+                                return selectable
+
+                            text_provider = (
+                                ui.select(
+                                    provider_options,
+                                    label="Provider de texto",
+                                    value=current_text_provider,
+                                )
+                                .props("outlined stack-label options-dense")
+                                .classes("w-full mt-3")
+                            )
                             saved_omniroute_api_key = saved_preferences.get(
                                 "omniroute_api_key", ""
                             ).strip()
@@ -201,17 +237,110 @@ def register_settings_page(
                                 .props("outlined stack-label")
                                 .classes("w-full mt-3")
                             )
-                            text_model_options = list(OMNIROUTE_TEXT_MODELS)
-                            if (
-                                current.omniroute_default_model
-                                and current.omniroute_default_model not in text_model_options
-                            ):
-                                text_model_options.append(current.omniroute_default_model)
                             omniroute_text_model = (
                                 ui.select(
-                                    text_model_options,
-                                    label="Modelo de texto OmniRoute",
+                                    model_options(
+                                        OMNIROUTE_TEXT_MODELS,
+                                        current.omniroute_default_model,
+                                    ),
+                                    label="Modelo de texto OmniRoute legado",
                                     value=current.omniroute_default_model,
+                                )
+                                .props("outlined stack-label options-dense")
+                                .classes("w-full mt-3")
+                            )
+                            ollama_base_url = (
+                                ui.input(
+                                    "URL base Ollama",
+                                    value=current.ollama_base_url,
+                                    placeholder="http://localhost:11434/v1",
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
+                            ollama_api_key = (
+                                ui.input(
+                                    "Chave Ollama",
+                                    value=current.ollama_api_key or "ollama",
+                                    placeholder="ollama",
+                                    password=True,
+                                    password_toggle_button=True,
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
+                            ollama_text_model = (
+                                ui.select(
+                                    model_options(OLLAMA_TEXT_MODELS, current.ollama_default_model),
+                                    label="Modelo de texto Ollama",
+                                    value=current.ollama_default_model,
+                                )
+                                .props("outlined stack-label options-dense")
+                                .classes("w-full mt-3")
+                            )
+                            groq_api_key = (
+                                ui.input(
+                                    "Chave Groq",
+                                    placeholder=(
+                                        "Chave configurada — digite apenas para substituir"
+                                        if current.groq_api_key
+                                        else "gsk_..."
+                                    ),
+                                    password=True,
+                                    password_toggle_button=True,
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
+                            groq_base_url = (
+                                ui.input(
+                                    "URL base Groq",
+                                    value=current.groq_base_url,
+                                    placeholder="https://api.groq.com/openai/v1",
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
+                            groq_text_model = (
+                                ui.select(
+                                    model_options(GROQ_TEXT_MODELS, current.groq_default_model),
+                                    label="Modelo de texto Groq",
+                                    value=current.groq_default_model,
+                                )
+                                .props("outlined stack-label options-dense")
+                                .classes("w-full mt-3")
+                            )
+                            nvidia_nim_api_key = (
+                                ui.input(
+                                    "Chave NVIDIA NIM",
+                                    placeholder=(
+                                        "Chave configurada — digite apenas para substituir"
+                                        if current.nvidia_nim_api_key
+                                        else "nvapi-..."
+                                    ),
+                                    password=True,
+                                    password_toggle_button=True,
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
+                            nvidia_nim_base_url = (
+                                ui.input(
+                                    "URL base NVIDIA NIM",
+                                    value=current.nvidia_nim_base_url,
+                                    placeholder="https://integrate.api.nvidia.com/v1",
+                                )
+                                .props("outlined stack-label")
+                                .classes("w-full mt-3")
+                            )
+                            nvidia_nim_text_model = (
+                                ui.select(
+                                    model_options(
+                                        NVIDIA_NIM_TEXT_MODELS,
+                                        current.nvidia_nim_default_model,
+                                    ),
+                                    label="Modelo de texto NVIDIA NIM",
+                                    value=current.nvidia_nim_default_model,
                                 )
                                 .props("outlined stack-label options-dense")
                                 .classes("w-full mt-3")
@@ -239,10 +368,47 @@ def register_settings_page(
                                 typed_omniroute_api_key = str(
                                     omniroute_api_key.value or ""
                                 ).strip()
+                                typed_groq_api_key = str(groq_api_key.value or "").strip()
+                                typed_nvidia_nim_api_key = str(
+                                    nvidia_nim_api_key.value or ""
+                                ).strip()
                                 try:
+                                    selected_text_provider = str(
+                                        text_provider.value or ""
+                                    ).strip().casefold()
+                                    if selected_text_provider not in SUPPORTED_TEXT_PROVIDERS:
+                                        raise ValueError("Provider de texto invalido.")
                                     values = {
+                                        # Image and video still use the legacy provider until
+                                        # phases 05/06 replace those channels.
                                         "AI_PROVIDER": "omniroute",
-                                        "TEXT_PROVIDER": "",
+                                        "TEXT_PROVIDER": selected_text_provider,
+                                        "OLLAMA_BASE_URL": str(
+                                            ollama_base_url.value or ""
+                                        ).strip(),
+                                        "OLLAMA_API_KEY": str(
+                                            ollama_api_key.value or "ollama"
+                                        ).strip()
+                                        or "ollama",
+                                        "OLLAMA_DEFAULT_MODEL": validate_model_name(
+                                            ollama_text_model.value,
+                                            "Modelo de texto Ollama",
+                                            provider="ollama",
+                                        ),
+                                        "GROQ_BASE_URL": str(groq_base_url.value or "").strip(),
+                                        "GROQ_DEFAULT_MODEL": validate_model_name(
+                                            groq_text_model.value,
+                                            "Modelo de texto Groq",
+                                            provider="groq",
+                                        ),
+                                        "NVIDIA_NIM_BASE_URL": str(
+                                            nvidia_nim_base_url.value or ""
+                                        ).strip(),
+                                        "NVIDIA_NIM_DEFAULT_MODEL": validate_model_name(
+                                            nvidia_nim_text_model.value,
+                                            "Modelo de texto NVIDIA NIM",
+                                            provider="nvidia_nim",
+                                        ),
                                         "OMNIROUTE_BASE_URL": str(
                                             omniroute_base_url.value or ""
                                         ).strip(),
@@ -278,6 +444,10 @@ def register_settings_page(
                                         "Substitua a chave OmniRoute inválida antes de continuar.",
                                         color="warning",
                                     )
+                                if typed_groq_api_key:
+                                    values["GROQ_API_KEY"] = typed_groq_api_key
+                                if typed_nvidia_nim_api_key:
+                                    values["NVIDIA_NIM_API_KEY"] = typed_nvidia_nim_api_key
                                 save_preferences(values)
                                 ui.notify("Configurações de IA salvas.", color="positive")
 

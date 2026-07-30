@@ -17,6 +17,7 @@ from app.config.provider_policy import (
     provider_base_url,
     provider_display_name,
     provider_model,
+    provider_requires_api_key,
 )
 from app.config.settings import Settings, get_settings
 from app.generation.models import PromptExecution, PromptTemplate
@@ -299,7 +300,7 @@ def _provider_channel_readiness(settings: Settings, channel: str) -> ReadinessCo
     api_key = provider_api_key(settings, provider)
     model = provider_model(settings, provider, channel)  # type: ignore[arg-type]
     missing: list[str] = []
-    if not api_key:
+    if provider_requires_api_key(settings, provider) and not api_key:
         missing.append(f"{provider.upper()}_API_KEY")
     if not model:
         missing.append(_provider_model_env_name(provider, channel))

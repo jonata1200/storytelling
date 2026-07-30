@@ -18,14 +18,19 @@ testes, UI e documentacao, preparando a remocao sem quebrar fluxos existentes.
 
 ## Checklist
 
-- [ ] Rodar `rg -n "omniroute|OMNIROUTE|OmniRoute|omnirouter|omniroute" app tests README.md .env.example`.
-- [ ] Separar usos de OmniRoute por categoria: texto, imagem, video, speech, docs e testes.
-- [ ] Identificar quais tabelas ou registros podem ter `provider="omniroute"` persistido.
-- [ ] Criar mapa de compatibilidade para dados antigos.
-- [ ] Definir nomes novos de provider: `ollama`, `groq`, `nvidia_nim`, `veo_ai_free`.
-- [ ] Planejar migracao de env vars antigas para novas.
-- [ ] Remover defaults OmniRoute apenas depois de providers novos passarem nos testes.
-- [ ] Manter mensagens de erro antigas enquanto dados legados existirem.
+- [x] Rodar `rg -n "omniroute|OMNIROUTE|OmniRoute|omnirouter|omniroute" app tests README.md .env.example`.
+- [x] Separar usos de OmniRoute por categoria: texto, imagem, video, speech, docs e testes.
+- [x] Identificar quais tabelas ou registros podem ter `provider="omniroute"` persistido.
+- [x] Criar mapa de compatibilidade para dados antigos.
+- [x] Definir nomes novos de provider: `ollama`, `groq`, `nvidia_nim`, `veo_ai_free`.
+- [x] Planejar migracao de env vars antigas para novas.
+- [x] Remover defaults OmniRoute apenas depois de providers novos passarem nos testes.
+- [x] Manter mensagens de erro antigas enquanto dados legados existirem.
+
+## Nota Tecnica
+
+O inventario detalhado foi salvo em
+`docs/fase-01-nota-tecnica-inventario-omniroute.md`.
 
 ## Mudancas Esperadas
 
@@ -42,7 +47,7 @@ testes, UI e documentacao, preparando a remocao sem quebrar fluxos existentes.
 
 ## Criterios De Saida
 
-- [ ] Inventario completo salvo em issue ou nota tecnica.
-- [ ] Lista de arquivos afetados revisada.
-- [ ] Decisao tomada sobre compatibilidade com dados antigos.
-- [ ] Nenhuma remocao destrutiva feita antes da camada nova existir.
+- [x] Inventario completo salvo em issue ou nota tecnica.
+- [x] Lista de arquivos afetados revisada.
+- [x] Decisao tomada sobre compatibilidade com dados antigos.
+- [x] Nenhuma remocao destrutiva feita antes da camada nova existir.

@@ -4,8 +4,16 @@ from typing import Any, Literal
 ProviderChannel = Literal["text", "image", "video", "speech"]
 
 DEFAULT_PROVIDER = "omniroute"
-SUPPORTED_AI_PROVIDERS = ("omniroute",)
-SUPPORTED_MODEL_PROVIDERS = frozenset(SUPPORTED_AI_PROVIDERS)
+SUPPORTED_TEXT_PROVIDERS = ("omniroute", "ollama", "groq", "nvidia_nim")
+SUPPORTED_MEDIA_PROVIDERS = ("omniroute", "veo_ai_free")
+SUPPORTED_AI_PROVIDERS = (
+    "omniroute",
+    "ollama",
+    "groq",
+    "nvidia_nim",
+    "veo_ai_free",
+)
+SUPPORTED_MODEL_PROVIDERS = frozenset(SUPPORTED_TEXT_PROVIDERS)
 MOCK_MODEL_IDS = {
     "mock",
     "mock-llm",
@@ -46,6 +54,10 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
 def provider_display_name(provider: str) -> str:
     names = {
         "omniroute": "OmniRoute",
+        "ollama": "Ollama",
+        "groq": "Groq",
+        "nvidia_nim": "NVIDIA NIM",
+        "veo_ai_free": "Veo AI Free",
     }
     return names.get(provider, provider)
 
@@ -67,6 +79,17 @@ def provider_model(settings: Any, provider: str, channel: ProviderChannel) -> st
 
 def provider_base_url(settings: Any, provider: str) -> str:
     return str(getattr(settings, f"{provider}_base_url", "") or "").strip()
+
+
+def provider_requires_api_key(settings: Any, provider: str) -> bool:
+    if provider == "ollama":
+        return False
+    if provider == "nvidia_nim":
+        base_url = provider_base_url(settings, provider).casefold()
+        return "integrate.api.nvidia.com" in base_url
+    if provider == "veo_ai_free":
+        return False
+    return True
 
 
 def normalize_model_name(value: object, field_name: str = "modelo") -> str:

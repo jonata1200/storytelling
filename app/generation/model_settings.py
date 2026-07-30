@@ -9,10 +9,14 @@ from app.config.provider_policy import (
     effective_provider_for_channel,
     ensure_provider_api_key,
     provider_model,
+    provider_requires_api_key,
     validate_model_name,
 )
 from app.config.settings import get_settings
 from app.generation.models import ProjectModelSetting
+from app.providers.llm.groq import GroqLLMProvider
+from app.providers.llm.nvidia_nim import NvidiaNimLLMProvider
+from app.providers.llm.ollama import OllamaLLMProvider
 from app.providers.llm.omniroute import OmniRouteLLMProvider
 from app.providers.llm.types import LLMProvider
 
@@ -37,6 +41,19 @@ def llm_provider_for_name(settings: Any, provider: str) -> LLMProvider:
     if provider in {"omniroute", "opencode"}:
         ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
         return OmniRouteLLMProvider()
+    if provider == "ollama":
+        return OllamaLLMProvider()
+    if provider == "groq":
+        ensure_provider_api_key(settings.groq_api_key, "groq", "GROQ_API_KEY")
+        return GroqLLMProvider()
+    if provider == "nvidia_nim":
+        if provider_requires_api_key(settings, "nvidia_nim"):
+            ensure_provider_api_key(
+                settings.nvidia_nim_api_key,
+                "nvidia_nim",
+                "NVIDIA_NIM_API_KEY",
+            )
+        return NvidiaNimLLMProvider()
     if provider == "mock":
         raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")
     raise ValueError("Provider de texto não suportado.")

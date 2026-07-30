@@ -75,6 +75,28 @@ OMNIROUTE_TEXT_MODELS = (
     "opencode-zen/laguna-s-2.1-free",
 )
 
+OLLAMA_TEXT_MODELS = (
+    "llama3.1:8b",
+    "llama3.1:70b",
+    "llama3.2:3b",
+    "mistral:7b",
+    "qwen2.5:7b",
+)
+
+GROQ_TEXT_MODELS = (
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "mixtral-8x7b-32768",
+    "gemma2-9b-it",
+)
+
+NVIDIA_NIM_TEXT_MODELS = (
+    "openai/gpt-oss-20b",
+    "meta/llama-3.1-8b-instruct",
+    "meta/llama-3.1-70b-instruct",
+    "mistralai/mixtral-8x7b-instruct-v0.1",
+)
+
 
 class Settings(BaseSettings):
     app_name: str = "Storytelling"
@@ -105,6 +127,16 @@ class Settings(BaseSettings):
     omniroute_video_download_timeout_seconds: int = 300
     ai_provider: str = "omniroute"
     text_provider: str | None = None
+    text_provider_fallbacks: str = ""
+    ollama_api_key: str | None = Field(default="ollama", repr=False)
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_default_model: str = "llama3.1:8b"
+    groq_api_key: str | None = Field(default=None, repr=False)
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_default_model: str = "llama-3.3-70b-versatile"
+    nvidia_nim_api_key: str | None = Field(default=None, repr=False)
+    nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nvidia_nim_default_model: str = "openai/gpt-oss-20b"
     image_provider: str | None = None
     video_provider: str | None = None
     storyboard_image_concurrency: int = 3
@@ -125,6 +157,9 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def reject_insecure_non_local_defaults(self) -> "Settings":
         self.omniroute_api_key = normalize_omniroute_api_key(self.omniroute_api_key)
+        self.ollama_api_key = normalize_api_key(self.ollama_api_key, "ollama")
+        self.groq_api_key = normalize_api_key(self.groq_api_key, "groq")
+        self.nvidia_nim_api_key = normalize_api_key(self.nvidia_nim_api_key, "nvidia_nim")
         self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
         self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")
         self.image_provider = self._optional_provider(self.image_provider, "IMAGE_PROVIDER")
