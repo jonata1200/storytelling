@@ -1,6 +1,7 @@
 from app.config.provider_policy import effective_provider_for_channel
 from app.config.settings import (
     GROQ_TEXT_MODELS,
+    NVIDIA_NIM_IMAGE_MODELS,
     NVIDIA_NIM_TEXT_MODELS,
     OLLAMA_TEXT_MODELS,
     Settings,
@@ -12,9 +13,11 @@ def test_settings_defaults_to_new_ai_providers() -> None:
 
     assert settings.ai_provider == "ollama"
     assert effective_provider_for_channel(settings, "text") == "ollama"
-    assert effective_provider_for_channel(settings, "image") == "veo_ai_free"
+    assert effective_provider_for_channel(settings, "image") == "nvidia_nim"
     assert effective_provider_for_channel(settings, "video") == "veo_ai_free"
     assert settings.ollama_default_model == "kimi-k3:cloud"
+    assert settings.nvidia_nim_image_base_url == "https://ai.api.nvidia.com/v1/genai"
+    assert settings.nvidia_nim_image_model == "qwen/qwen-image"
     assert settings.veo_ai_free_image_model == "veo-ai-free/image"
     assert settings.veo_ai_free_video_model == "veo-ai-free/video"
 
@@ -82,6 +85,12 @@ def test_new_text_model_lists_have_initial_defaults() -> None:
         "nvidia/nemotron-3-super-120b-a12b",
         "mistralai/mistral-medium-3.5-128b",
         "minimaxai/minimax-m2.7",
+    )
+    assert NVIDIA_NIM_IMAGE_MODELS == (
+        "qwen/qwen-image",
+        "black-forest-labs/flux.1-schnell",
+        "black-forest-labs/flux.1-dev",
+        "stabilityai/stable-diffusion-3.5-large",
     )
 
 

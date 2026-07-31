@@ -56,10 +56,11 @@ def test_provider_channel_readiness_reports_new_provider_components() -> None:
     settings = Settings(
         ai_provider="ollama",
         text_provider="",
-        image_provider="veo_ai_free",
+        image_provider="nvidia_nim",
         video_provider="veo_ai_free",
         ollama_default_model="kimi-k3:cloud",
-        veo_ai_free_image_model="veo-ai-free/image",
+        nvidia_nim_api_key="nv-secret",
+        nvidia_nim_image_model="qwen/qwen-image",
         veo_ai_free_video_model="veo-ai-free/video",
     )
 
@@ -72,7 +73,8 @@ def test_provider_channel_readiness_reports_new_provider_components() -> None:
     assert video.name == "video_provider"
     assert {text.status, image.status, video.status} == {"ready"}
     assert text.details["provider"] == "ollama"
-    assert image.details["model"] == "veo-ai-free/image"
+    assert image.details["model"] == "qwen/qwen-image"
+    assert image.details["base_url"] == "https://ai.api.nvidia.com/v1/genai"
     assert video.details["api_key_configured"] == "false"
 
 

@@ -110,6 +110,13 @@ NVIDIA_NIM_TEXT_MODELS = (
     "minimaxai/minimax-m2.7",
 )
 
+NVIDIA_NIM_IMAGE_MODELS = (
+    "qwen/qwen-image",
+    "black-forest-labs/flux.1-schnell",
+    "black-forest-labs/flux.1-dev",
+    "stabilityai/stable-diffusion-3.5-large",
+)
+
 
 class Settings(BaseSettings):
     app_name: str = "Storytelling"
@@ -150,11 +157,13 @@ class Settings(BaseSettings):
     nvidia_nim_api_key: str | None = Field(default=None, repr=False)
     nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_nim_default_model: str = "z-ai/glm-5.2"
+    nvidia_nim_image_base_url: str = "https://ai.api.nvidia.com/v1/genai"
+    nvidia_nim_image_model: str = "qwen/qwen-image"
     veo_ai_free_enabled: bool = False
     veo_ai_free_session_path: Path = Path(".runtime/veo_free/session.json")
     veo_ai_free_image_model: str = "veo-ai-free/image"
     veo_ai_free_video_model: str = "veo-ai-free/video"
-    image_provider: str | None = "veo_ai_free"
+    image_provider: str | None = "nvidia_nim"
     video_provider: str | None = "veo_ai_free"
     storyboard_image_concurrency: int = 3
     video_generation_concurrency: int = Field(default=2, ge=1, le=4)

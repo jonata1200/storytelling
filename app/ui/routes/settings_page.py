@@ -18,6 +18,7 @@ from app.config.provider_policy import (
 )
 from app.config.settings import (
     GROQ_TEXT_MODELS,
+    NVIDIA_NIM_IMAGE_MODELS,
     NVIDIA_NIM_TEXT_MODELS,
     OLLAMA_TEXT_MODELS,
     get_settings,
@@ -380,38 +381,57 @@ def register_settings_page(
                                 .props("no-caps active-color=primary indicator-color=primary")
                                 as media_tabs
                             ):
-                                veo_models_tab = ui.tab("Modelos Veo", icon="movie")
+                                image_models_tab = ui.tab("Imagem NVIDIA", icon="image")
+                                veo_models_tab = ui.tab("Vídeo Veo", icon="movie")
                                 veo_session_tab = ui.tab("Sessão", icon="vpn_key")
-                            with ui.tab_panels(media_tabs, value=veo_models_tab).classes(
+                            with ui.tab_panels(media_tabs, value=image_models_tab).classes(
                                 "w-full bg-transparent p-0"
                             ):
+                                with ui.tab_panel(image_models_tab).classes("px-0 py-4"):
+                                    with ui.column().classes("w-full gap-3"):
+                                        with ui.row().classes(
+                                            "w-full items-center gap-2 text-xs text-[#8f9590]"
+                                        ):
+                                            ui.icon("image").classes("text-base acid")
+                                            ui.label(
+                                                "Imagens usam NVIDIA NIM nesta fase de testes."
+                                            )
+                                        nvidia_nim_image_base_url = (
+                                            ui.input(
+                                                "URL base NVIDIA NIM para imagem",
+                                                value=current.nvidia_nim_image_base_url,
+                                                placeholder="https://ai.api.nvidia.com/v1/genai",
+                                            )
+                                            .props("outlined stack-label")
+                                            .classes("w-full")
+                                        )
+                                        nvidia_nim_image_model = (
+                                            ui.select(
+                                                model_options(
+                                                    NVIDIA_NIM_IMAGE_MODELS,
+                                                    current.nvidia_nim_image_model,
+                                                ),
+                                                label="Modelo de imagem NVIDIA NIM",
+                                                value=current.nvidia_nim_image_model,
+                                            )
+                                            .props("outlined stack-label options-dense")
+                                            .classes("w-full")
+                                        )
                                 with ui.tab_panel(veo_models_tab).classes("px-0 py-4"):
                                     with ui.column().classes("w-full gap-3"):
                                         veo_enabled = ui.checkbox(
                                             "Veo AI Free experimental",
                                             value=current.veo_ai_free_enabled,
                                         )
-                                        with ui.grid().classes(
-                                            "w-full grid-cols-1 md:grid-cols-2 gap-3"
-                                        ):
-                                            veo_image_model = (
-                                                ui.input(
-                                                    "Modelo de imagem Veo AI Free",
-                                                    value=current.veo_ai_free_image_model,
-                                                    placeholder="veo-ai-free/image",
-                                                )
-                                                .props("outlined stack-label")
-                                                .classes("w-full")
+                                        veo_video_model = (
+                                            ui.input(
+                                                "Modelo de video Veo AI Free",
+                                                value=current.veo_ai_free_video_model,
+                                                placeholder="veo-ai-free/video",
                                             )
-                                            veo_video_model = (
-                                                ui.input(
-                                                    "Modelo de video Veo AI Free",
-                                                    value=current.veo_ai_free_video_model,
-                                                    placeholder="veo-ai-free/video",
-                                                )
-                                                .props("outlined stack-label")
-                                                .classes("w-full")
-                                            )
+                                            .props("outlined stack-label")
+                                            .classes("w-full")
+                                        )
                                 with ui.tab_panel(veo_session_tab).classes("px-0 py-4"):
                                     with ui.column().classes("w-full gap-3"):
                                         veo_validation = validate_veo_free_session(
@@ -481,7 +501,7 @@ def register_settings_page(
                                     values = {
                                         "AI_PROVIDER": "ollama",
                                         "TEXT_PROVIDER": selected_text_provider,
-                                        "IMAGE_PROVIDER": "veo_ai_free",
+                                        "IMAGE_PROVIDER": "nvidia_nim",
                                         "VIDEO_PROVIDER": "veo_ai_free",
                                         "TEXT_PROVIDER_FALLBACKS": str(
                                             text_provider_fallbacks.value or ""
@@ -508,10 +528,13 @@ def register_settings_page(
                                             "Modelo de texto NVIDIA NIM",
                                             provider="nvidia_nim",
                                         ),
-                                        "VEO_AI_FREE_IMAGE_MODEL": validate_model_name(
-                                            veo_image_model.value,
-                                            "Modelo de imagem Veo AI Free",
-                                            provider="veo_ai_free",
+                                        "NVIDIA_NIM_IMAGE_BASE_URL": str(
+                                            nvidia_nim_image_base_url.value or ""
+                                        ).strip(),
+                                        "NVIDIA_NIM_IMAGE_MODEL": validate_model_name(
+                                            nvidia_nim_image_model.value,
+                                            "Modelo de imagem NVIDIA NIM",
+                                            provider="nvidia_nim",
                                         ),
                                         "VEO_AI_FREE_VIDEO_MODEL": validate_model_name(
                                             veo_video_model.value,

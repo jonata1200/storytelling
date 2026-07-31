@@ -12,9 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.provider_policy import (
     SUPPORTED_AI_PROVIDERS,
+    ProviderChannel,
     effective_provider_for_channel,
     provider_api_key,
-    provider_base_url,
+    provider_channel_base_url,
     provider_display_name,
     provider_model,
     provider_requires_api_key,
@@ -286,7 +287,7 @@ async def _redis_check(name: str, url: str) -> ReadinessComponentRead:
     return ReadinessComponentRead(name=name, status="ready", message="Redis respondeu ao ping")
 
 
-def _provider_model_env_name(provider: str, channel: str) -> str:
+def _provider_model_env_name(provider: str, channel: ProviderChannel) -> str:
     suffix_by_channel = {
         "text": "DEFAULT_MODEL",
         "image": "IMAGE_MODEL",
@@ -295,11 +296,14 @@ def _provider_model_env_name(provider: str, channel: str) -> str:
     return f"{provider.upper()}_{suffix_by_channel[channel]}"
 
 
-def _provider_channel_readiness(settings: Settings, channel: str) -> ReadinessComponentRead:
-    provider = effective_provider_for_channel(settings, channel)  # type: ignore[arg-type]
+def _provider_channel_readiness(
+    settings: Settings,
+    channel: ProviderChannel,
+) -> ReadinessComponentRead:
+    provider = effective_provider_for_channel(settings, channel)
     display_name = provider_display_name(provider)
     api_key = provider_api_key(settings, provider)
-    model = provider_model(settings, provider, channel)  # type: ignore[arg-type]
+    model = provider_model(settings, provider, channel)
     missing: list[str] = []
     if provider_requires_api_key(settings, provider) and not api_key:
         missing.append(f"{provider.upper()}_API_KEY")
@@ -325,7 +329,7 @@ def _provider_channel_readiness(settings: Settings, channel: str) -> ReadinessCo
         details={
             "provider": provider,
             "model": model,
-            "base_url": provider_base_url(settings, provider),
+            "base_url": provider_channel_base_url(settings, provider, channel),
             "api_key_configured": str(bool(api_key)).lower(),
             "fallbacks": (
                 str(getattr(settings, "text_provider_fallbacks", "") or "")

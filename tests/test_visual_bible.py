@@ -83,8 +83,8 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         "get_settings",
         lambda: SimpleNamespace(
             ai_provider="ollama",
-            image_provider="veo_ai_free",
-            veo_ai_free_image_model="veo-ai-free/image",
+            image_provider="nvidia_nim",
+            nvidia_nim_image_model="qwen/qwen-image",
         ),
     )
     monkeypatch.setattr(
@@ -98,9 +98,9 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         project_id,
     )
 
-    assert getattr(provider, "provider_name", None) == "veo_ai_free"
-    assert model == "veo-ai-free/image"
-    assert directory == "veo_ai_free_images"
+    assert getattr(provider, "provider_name", None) == "nvidia_nim"
+    assert model == "qwen/qwen-image"
+    assert directory == "nvidia_nim_images"
 
 
 @pytest.mark.asyncio

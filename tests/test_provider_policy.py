@@ -74,7 +74,10 @@ def test_ollama_cloud_requires_api_key() -> None:
 
 def test_nvidia_nim_requires_key_only_for_hosted_endpoint() -> None:
     hosted = Settings(nvidia_nim_base_url="https://integrate.api.nvidia.com/v1")
-    local = Settings(nvidia_nim_base_url="http://localhost:8000/v1")
+    local = Settings(
+        nvidia_nim_base_url="http://localhost:8000/v1",
+        nvidia_nim_image_base_url="http://localhost:8000/v1",
+    )
 
     assert provider_requires_api_key(hosted, "nvidia_nim") is True
     assert provider_requires_api_key(local, "nvidia_nim") is False

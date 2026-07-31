@@ -29,6 +29,7 @@ LEGACY_DEFAULT_IMAGE_MODELS = {
     ".......",
     "sourceful/riverflow-v2.5-pro",
     "sourceful/riverflow-v2-fast",
+    "veo-ai-free/image",
 }
 LEGACY_DEFAULT_VIDEO_MODELS = {
     ".......",

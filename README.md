@@ -58,14 +58,15 @@ Texto pode usar providers diferentes por API:
 - `groq`
 - `nvidia_nim`
 
-Imagem e video usam o provider experimental `veo_ai_free`, que depende de sessao
-local do navegador e pode ser desabilitado. Os modelos padrao ficam no `.env`:
+Imagem usa `nvidia_nim` pela API da NVIDIA. Video continua no provider
+experimental `veo_ai_free`, que depende de sessao local do navegador e pode ser
+desabilitado. Os modelos padrao ficam no `.env`:
 
 ```env
 AI_PROVIDER=ollama
 TEXT_PROVIDER=ollama
 TEXT_PROVIDER_FALLBACKS=nvidia_nim,ollama
-IMAGE_PROVIDER=veo_ai_free
+IMAGE_PROVIDER=nvidia_nim
 VIDEO_PROVIDER=veo_ai_free
 
 OLLAMA_BASE_URL=https://ollama.com
@@ -79,10 +80,19 @@ GROQ_DEFAULT_MODEL=openai/gpt-oss-120b
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_API_KEY=sua_chave_nvidia
 NVIDIA_NIM_DEFAULT_MODEL=z-ai/glm-5.2
+NVIDIA_NIM_IMAGE_BASE_URL=https://ai.api.nvidia.com/v1/genai
+NVIDIA_NIM_IMAGE_MODEL=qwen/qwen-image
 
 VEO_AI_FREE_ENABLED=false
 VEO_AI_FREE_SESSION_PATH=.runtime/veo_free/session.json
 ```
+
+Modelos de imagem NVIDIA NIM disponiveis na tela de Configuracoes:
+
+- `qwen/qwen-image`
+- `black-forest-labs/flux.1-schnell`
+- `black-forest-labs/flux.1-dev`
+- `stabilityai/stable-diffusion-3.5-large`
 
 Para Ollama Cloud, nao e necessario instalar Ollama na maquina. Configure
 `OLLAMA_BASE_URL=https://ollama.com`, uma `OLLAMA_API_KEY` valida e selecione um

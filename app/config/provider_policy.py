@@ -7,7 +7,7 @@ ProviderChannel = Literal["text", "image", "video", "speech"]
 DEFAULT_PROVIDER = "ollama"
 LEGACY_AI_PROVIDERS = ("omniroute", "opencode")
 SUPPORTED_TEXT_PROVIDERS = ("ollama", "groq", "nvidia_nim")
-SUPPORTED_MEDIA_PROVIDERS = ("veo_ai_free",)
+SUPPORTED_MEDIA_PROVIDERS = ("nvidia_nim", "veo_ai_free")
 SUPPORTED_AI_PROVIDERS = (
     "ollama",
     "groq",
@@ -54,7 +54,9 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
     configured_text = str(configured_provider or "").strip().casefold()
     if configured_text in LEGACY_AI_PROVIDERS:
         return "veo_ai_free" if channel in {"image", "video"} else DEFAULT_PROVIDER
-    if channel in {"image", "video"} and not channel_provider:
+    if channel == "image" and not channel_provider:
+        return "nvidia_nim"
+    if channel == "video" and not channel_provider:
         return "veo_ai_free"
     return normalize_provider_name(configured_provider, f"{channel.upper()}_PROVIDER")
 
@@ -89,6 +91,13 @@ def provider_base_url(settings: Any, provider: str) -> str:
     return str(getattr(settings, f"{provider}_base_url", "") or "").strip()
 
 
+def provider_channel_base_url(settings: Any, provider: str, channel: ProviderChannel) -> str:
+    channel_specific = str(getattr(settings, f"{provider}_{channel}_base_url", "") or "").strip()
+    if channel_specific:
+        return channel_specific
+    return provider_base_url(settings, provider)
+
+
 def is_ollama_cloud_base_url(base_url: object) -> bool:
     value = str(base_url or "").strip()
     if not value:
@@ -102,8 +111,16 @@ def provider_requires_api_key(settings: Any, provider: str) -> bool:
     if provider == "ollama":
         return is_ollama_cloud_base_url(provider_base_url(settings, provider))
     if provider == "nvidia_nim":
-        base_url = provider_base_url(settings, provider).casefold()
-        return "integrate.api.nvidia.com" in base_url
+        base_urls = (
+            provider_base_url(settings, provider),
+            provider_channel_base_url(settings, provider, "image"),
+        )
+        hosted_hosts = ("integrate.api.nvidia.com", "ai.api.nvidia.com")
+        return any(
+            hosted_host in str(base_url or "").casefold()
+            for base_url in base_urls
+            for hosted_host in hosted_hosts
+        )
     if provider == "veo_ai_free":
         return False
     return True

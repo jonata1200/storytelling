@@ -10,6 +10,7 @@ from app.config.provider_policy import (
 )
 from app.config.settings import get_settings
 from app.production.service import get_or_create_production_settings, resolve_image_model
+from app.providers.image.nvidia_nim import NvidiaNimImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider, ImageResult
 from app.providers.image.veo_ai_free import VeoAiFreeImageProvider
 
@@ -34,9 +35,11 @@ async def _image_provider_for_project(
         production_settings.image_model,
         provider_model(app_settings, provider, "image"),
     )
+    if provider == "nvidia_nim":
+        return NvidiaNimImageProvider(), model, "nvidia_nim_images"
     if provider == "veo_ai_free":
         return VeoAiFreeImageProvider(), model, "veo_ai_free_images"
-    raise ValueError("Provider de imagem não suportado. Use Veo AI Free experimental.")
+    raise ValueError("Provider de imagem não suportado. Use NVIDIA NIM ou Veo AI Free.")
 
 
 def _transient_image_provider_error(exc: Exception) -> bool:
