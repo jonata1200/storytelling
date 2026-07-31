@@ -52,7 +52,7 @@ def test_provider_policy_supports_new_text_providers() -> None:
     settings = Settings(
         text_provider="ollama",
         ollama_base_url="http://localhost:11434/v1",
-        ollama_default_model="llama3.1:8b",
+        ollama_default_model="gpt-oss:120b",
     )
 
     assert "omniroute" not in SUPPORTED_AI_PROVIDERS
@@ -62,7 +62,7 @@ def test_provider_policy_supports_new_text_providers() -> None:
     assert effective_provider_for_channel(settings, "text") == "ollama"
     assert provider_display_name("nvidia_nim") == "NVIDIA NIM"
     assert provider_base_url(settings, "ollama") == "http://localhost:11434/v1"
-    assert provider_model(settings, "ollama", "text") == "llama3.1:8b"
+    assert provider_model(settings, "ollama", "text") == "gpt-oss:120b"
     assert provider_requires_api_key(settings, "ollama") is False
 
 

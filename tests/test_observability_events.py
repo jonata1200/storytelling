@@ -58,7 +58,7 @@ def test_provider_channel_readiness_reports_new_provider_components() -> None:
         text_provider="",
         image_provider="veo_ai_free",
         video_provider="veo_ai_free",
-        ollama_default_model="llama3.1:8b",
+        ollama_default_model="gpt-oss:120b",
         veo_ai_free_image_model="veo-ai-free/image",
         veo_ai_free_video_model="veo-ai-free/video",
     )
@@ -92,7 +92,7 @@ def test_provider_channel_readiness_reports_text_fallbacks() -> None:
         ai_provider="omniroute",
         text_provider="ollama",
         text_provider_fallbacks="groq,nvidia_nim",
-        ollama_default_model="llama3.1:8b",
+        ollama_default_model="gpt-oss:120b",
     )
 
     text = _provider_channel_readiness(settings, "text")
@@ -108,7 +108,7 @@ def test_provider_channel_readiness_reports_missing_groq_key() -> None:
         ai_provider="omniroute",
         text_provider="groq",
         groq_api_key=None,
-        groq_default_model="llama-3.3-70b-versatile",
+        groq_default_model="openai/gpt-oss-120b",
     )
 
     text = _provider_channel_readiness(settings, "text")

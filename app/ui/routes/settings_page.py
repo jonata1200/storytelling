@@ -190,156 +190,248 @@ def register_settings_page(
                                     selectable.append(current_model)
                                 return selectable
 
-                            text_provider = (
-                                ui.select(
-                                    provider_options,
-                                    label="Provider de texto",
-                                    value=current_text_provider,
+                            ui.label("Texto").classes("text-sm font-semibold uppercase tracking-wide acid mt-5")
+                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
+                                text_provider = (
+                                    ui.select(
+                                        provider_options,
+                                        label="Provider ativo para texto",
+                                        value=current_text_provider,
+                                    )
+                                    .props("outlined stack-label options-dense")
+                                    .classes("w-full")
                                 )
-                                .props("outlined stack-label options-dense")
-                                .classes("w-full mt-3")
-                            )
-                            text_provider_fallbacks = (
-                                ui.input(
-                                    "Fallbacks de texto",
-                                    value=current.text_provider_fallbacks,
-                                    placeholder="nvidia_nim,ollama",
+                                text_provider_fallbacks = (
+                                    ui.input(
+                                        "Ordem de fallback",
+                                        value=current.text_provider_fallbacks,
+                                        placeholder="nvidia_nim,ollama",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
                                 )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
+
+                            active_provider_tab = current_text_provider
+                            with (
+                                ui.tabs()
+                                .classes("w-full mt-5 text-[#989e99]")
+                                .props("no-caps active-color=primary indicator-color=primary")
+                                as text_provider_tabs
+                            ):
+                                ollama_tab = ui.tab("Ollama", icon="cloud")
+                                groq_tab = ui.tab("Groq", icon="bolt")
+                                nvidia_nim_tab = ui.tab("NVIDIA NIM", icon="memory")
+                            provider_tab_by_name = {
+                                "ollama": ollama_tab,
+                                "groq": groq_tab,
+                                "nvidia_nim": nvidia_nim_tab,
+                            }
+                            with ui.tab_panels(
+                                text_provider_tabs,
+                                value=provider_tab_by_name.get(active_provider_tab, ollama_tab),
+                            ).classes("w-full bg-transparent p-0"):
+                                with ui.tab_panel(ollama_tab).classes("px-0 py-4"):
+                                    with ui.column().classes("w-full gap-3"):
+                                        with ui.row().classes(
+                                            "w-full items-center gap-2 text-xs text-[#8f9590]"
+                                        ):
+                                            ui.icon("cloud").classes("text-base acid")
+                                            ui.label("Ollama Cloud usa https://ollama.com; Ollama local usa localhost.")
+                                        with ui.grid().classes(
+                                            "w-full grid-cols-1 md:grid-cols-2 gap-3"
+                                        ):
+                                            ollama_base_url = (
+                                                ui.input(
+                                                    "URL base Ollama",
+                                                    value=current.ollama_base_url,
+                                                    placeholder=(
+                                                        "https://ollama.com ou "
+                                                        "http://localhost:11434/v1"
+                                                    ),
+                                                )
+                                                .props("outlined stack-label")
+                                                .classes("w-full")
+                                            )
+                                            ollama_api_key = (
+                                                ui.input(
+                                                    "Chave Ollama",
+                                                    value=current.ollama_api_key or "",
+                                                    placeholder=(
+                                                        "Obrigatoria no Cloud; use ollama no local"
+                                                    ),
+                                                    password=True,
+                                                    password_toggle_button=True,
+                                                )
+                                                .props("outlined stack-label")
+                                                .classes("w-full")
+                                            )
+                                        ollama_text_model = (
+                                            ui.select(
+                                                model_options(
+                                                    OLLAMA_TEXT_MODELS,
+                                                    current.ollama_default_model,
+                                                ),
+                                                label="Modelo de texto Ollama",
+                                                value=current.ollama_default_model,
+                                            )
+                                            .props("outlined stack-label options-dense")
+                                            .classes("w-full")
+                                        )
+                                with ui.tab_panel(groq_tab).classes("px-0 py-4"):
+                                    with ui.column().classes("w-full gap-3"):
+                                        with ui.row().classes(
+                                            "w-full items-center gap-2 text-xs text-[#8f9590]"
+                                        ):
+                                            ui.icon("bolt").classes("text-base acid")
+                                            ui.label("Groq usa endpoint OpenAI-compatible e requer chave API.")
+                                        with ui.grid().classes(
+                                            "w-full grid-cols-1 md:grid-cols-2 gap-3"
+                                        ):
+                                            groq_base_url = (
+                                                ui.input(
+                                                    "URL base Groq",
+                                                    value=current.groq_base_url,
+                                                    placeholder="https://api.groq.com/openai/v1",
+                                                )
+                                                .props("outlined stack-label")
+                                                .classes("w-full")
+                                            )
+                                            groq_api_key = (
+                                                ui.input(
+                                                    "Chave Groq",
+                                                    placeholder=(
+                                                        "Chave configurada; digite para substituir"
+                                                        if current.groq_api_key
+                                                        else "gsk_..."
+                                                    ),
+                                                    password=True,
+                                                    password_toggle_button=True,
+                                                )
+                                                .props("outlined stack-label")
+                                                .classes("w-full")
+                                            )
+                                        groq_text_model = (
+                                            ui.select(
+                                                model_options(
+                                                    GROQ_TEXT_MODELS,
+                                                    current.groq_default_model,
+                                                ),
+                                                label="Modelo de texto Groq",
+                                                value=current.groq_default_model,
+                                            )
+                                            .props("outlined stack-label options-dense")
+                                            .classes("w-full")
+                                        )
+                                with ui.tab_panel(nvidia_nim_tab).classes("px-0 py-4"):
+                                    with ui.column().classes("w-full gap-3"):
+                                        with ui.row().classes(
+                                            "w-full items-center gap-2 text-xs text-[#8f9590]"
+                                        ):
+                                            ui.icon("memory").classes("text-base acid")
+                                            ui.label("NVIDIA NIM pode usar endpoint hosted ou self-hosted.")
+                                        with ui.grid().classes(
+                                            "w-full grid-cols-1 md:grid-cols-2 gap-3"
+                                        ):
+                                            nvidia_nim_base_url = (
+                                                ui.input(
+                                                    "URL base NVIDIA NIM",
+                                                    value=current.nvidia_nim_base_url,
+                                                    placeholder=(
+                                                        "https://integrate.api.nvidia.com/v1"
+                                                    ),
+                                                )
+                                                .props("outlined stack-label")
+                                                .classes("w-full")
+                                            )
+                                            nvidia_nim_api_key = (
+                                                ui.input(
+                                                    "Chave NVIDIA NIM",
+                                                    placeholder=(
+                                                        "Chave configurada; digite para substituir"
+                                                        if current.nvidia_nim_api_key
+                                                        else "nvapi-..."
+                                                    ),
+                                                    password=True,
+                                                    password_toggle_button=True,
+                                                )
+                                                .props("outlined stack-label")
+                                                .classes("w-full")
+                                            )
+                                        nvidia_nim_text_model = (
+                                            ui.select(
+                                                model_options(
+                                                    NVIDIA_NIM_TEXT_MODELS,
+                                                    current.nvidia_nim_default_model,
+                                                ),
+                                                label="Modelo de texto NVIDIA NIM",
+                                                value=current.nvidia_nim_default_model,
+                                            )
+                                            .props("outlined stack-label options-dense")
+                                            .classes("w-full")
+                                        )
+
+                            ui.separator().classes("my-5")
+                            ui.label("Imagem e vídeo").classes(
+                                "text-sm font-semibold uppercase tracking-wide acid"
                             )
-                            ollama_base_url = (
-                                ui.input(
-                                    "URL base Ollama",
-                                    value=current.ollama_base_url,
-                                    placeholder="https://ollama.com ou http://localhost:11434/v1",
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            ollama_api_key = (
-                                ui.input(
-                                    "Chave Ollama",
-                                    value=current.ollama_api_key or "",
-                                    placeholder="Obrigatoria no Cloud; use ollama no modo local",
-                                    password=True,
-                                    password_toggle_button=True,
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            ollama_text_model = (
-                                ui.select(
-                                    model_options(OLLAMA_TEXT_MODELS, current.ollama_default_model),
-                                    label="Modelo de texto Ollama",
-                                    value=current.ollama_default_model,
-                                )
-                                .props("outlined stack-label options-dense")
-                                .classes("w-full mt-3")
-                            )
-                            groq_api_key = (
-                                ui.input(
-                                    "Chave Groq",
-                                    placeholder=(
-                                        "Chave configurada — digite apenas para substituir"
-                                        if current.groq_api_key
-                                        else "gsk_..."
-                                    ),
-                                    password=True,
-                                    password_toggle_button=True,
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            groq_base_url = (
-                                ui.input(
-                                    "URL base Groq",
-                                    value=current.groq_base_url,
-                                    placeholder="https://api.groq.com/openai/v1",
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            groq_text_model = (
-                                ui.select(
-                                    model_options(GROQ_TEXT_MODELS, current.groq_default_model),
-                                    label="Modelo de texto Groq",
-                                    value=current.groq_default_model,
-                                )
-                                .props("outlined stack-label options-dense")
-                                .classes("w-full mt-3")
-                            )
-                            nvidia_nim_api_key = (
-                                ui.input(
-                                    "Chave NVIDIA NIM",
-                                    placeholder=(
-                                        "Chave configurada — digite apenas para substituir"
-                                        if current.nvidia_nim_api_key
-                                        else "nvapi-..."
-                                    ),
-                                    password=True,
-                                    password_toggle_button=True,
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            nvidia_nim_base_url = (
-                                ui.input(
-                                    "URL base NVIDIA NIM",
-                                    value=current.nvidia_nim_base_url,
-                                    placeholder="https://integrate.api.nvidia.com/v1",
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            nvidia_nim_text_model = (
-                                ui.select(
-                                    model_options(
-                                        NVIDIA_NIM_TEXT_MODELS,
-                                        current.nvidia_nim_default_model,
-                                    ),
-                                    label="Modelo de texto NVIDIA NIM",
-                                    value=current.nvidia_nim_default_model,
-                                )
-                                .props("outlined stack-label options-dense")
-                                .classes("w-full mt-3")
-                            )
-                            veo_image_model = (
-                                ui.input(
-                                    "Modelo de imagem Veo AI Free",
-                                    value=current.veo_ai_free_image_model,
-                                    placeholder="veo-ai-free/image",
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            veo_video_model = (
-                                ui.input(
-                                    "Modelo de vídeo Veo AI Free",
-                                    value=current.veo_ai_free_video_model,
-                                    placeholder="veo-ai-free/video",
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
-                            veo_validation = validate_veo_free_session(
-                                current.veo_ai_free_session_path
-                            )
-                            veo_enabled = ui.checkbox(
-                                "Veo AI Free experimental",
-                                value=current.veo_ai_free_enabled,
-                            ).classes("mt-4")
-                            ui.label(veo_validation.message).classes(
-                                "text-xs px-2 py-1 rounded-md bg-slate-900 text-slate-300 border border-slate-800"
-                            )
-                            veo_cookie_bundle = (
-                                ui.textarea(
-                                    "Bundle JSON de cookies Veo AI Free",
-                                    placeholder='{"cookies":[{"name":"...","value":"...","domain":"..."}]}',
-                                )
-                                .props("outlined stack-label")
-                                .classes("w-full mt-3")
-                            )
+                            with (
+                                ui.tabs()
+                                .classes("w-full mt-3 text-[#989e99]")
+                                .props("no-caps active-color=primary indicator-color=primary")
+                                as media_tabs
+                            ):
+                                veo_models_tab = ui.tab("Modelos Veo", icon="movie")
+                                veo_session_tab = ui.tab("Sessão", icon="vpn_key")
+                            with ui.tab_panels(media_tabs, value=veo_models_tab).classes(
+                                "w-full bg-transparent p-0"
+                            ):
+                                with ui.tab_panel(veo_models_tab).classes("px-0 py-4"):
+                                    with ui.column().classes("w-full gap-3"):
+                                        veo_enabled = ui.checkbox(
+                                            "Veo AI Free experimental",
+                                            value=current.veo_ai_free_enabled,
+                                        )
+                                        with ui.grid().classes(
+                                            "w-full grid-cols-1 md:grid-cols-2 gap-3"
+                                        ):
+                                            veo_image_model = (
+                                                ui.input(
+                                                    "Modelo de imagem Veo AI Free",
+                                                    value=current.veo_ai_free_image_model,
+                                                    placeholder="veo-ai-free/image",
+                                                )
+                                                .props("outlined stack-label")
+                                                .classes("w-full")
+                                            )
+                                            veo_video_model = (
+                                                ui.input(
+                                                    "Modelo de video Veo AI Free",
+                                                    value=current.veo_ai_free_video_model,
+                                                    placeholder="veo-ai-free/video",
+                                                )
+                                                .props("outlined stack-label")
+                                                .classes("w-full")
+                                            )
+                                with ui.tab_panel(veo_session_tab).classes("px-0 py-4"):
+                                    with ui.column().classes("w-full gap-3"):
+                                        veo_validation = validate_veo_free_session(
+                                            current.veo_ai_free_session_path
+                                        )
+                                        ui.label(veo_validation.message).classes(
+                                            "text-xs px-2 py-1 rounded-md bg-slate-900 "
+                                            "text-slate-300 border border-slate-800"
+                                        )
+                                        veo_cookie_bundle = (
+                                            ui.textarea(
+                                                "Bundle JSON de cookies Veo AI Free",
+                                                placeholder=(
+                                                    '{"cookies":[{"name":"...","value":"...",'
+                                                    '"domain":"..."}]}'
+                                                ),
+                                            )
+                                            .props("outlined stack-label")
+                                            .classes("w-full")
+                                        )
 
                             def save_veo_session() -> None:
                                 payload = str(veo_cookie_bundle.value or "").strip()

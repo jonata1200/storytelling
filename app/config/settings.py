@@ -78,25 +78,19 @@ OMNIROUTE_TEXT_MODELS = (
 OLLAMA_TEXT_MODELS = (
     "gpt-oss:120b",
     "gpt-oss:20b",
-    "llama3.1:8b",
-    "llama3.1:70b",
-    "llama3.2:3b",
-    "mistral:7b",
-    "qwen2.5:7b",
 )
 
 GROQ_TEXT_MODELS = (
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "mixtral-8x7b-32768",
-    "gemma2-9b-it",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b",
+    "openai/gpt-oss-20b",
 )
 
 NVIDIA_NIM_TEXT_MODELS = (
+    "nvidia/nemotron-3-super-120b-a12b",
+    "openai/gpt-oss-120b",
+    "nvidia/llama-3.3-nemotron-super-49b-v1.5",
     "openai/gpt-oss-20b",
-    "meta/llama-3.1-8b-instruct",
-    "meta/llama-3.1-70b-instruct",
-    "mistralai/mixtral-8x7b-instruct-v0.1",
 )
 
 
@@ -132,13 +126,13 @@ class Settings(BaseSettings):
     text_provider_fallbacks: str = ""
     ollama_api_key: str | None = Field(default="ollama", repr=False)
     ollama_base_url: str = "http://localhost:11434/v1"
-    ollama_default_model: str = "llama3.1:8b"
+    ollama_default_model: str = "gpt-oss:120b"
     groq_api_key: str | None = Field(default=None, repr=False)
     groq_base_url: str = "https://api.groq.com/openai/v1"
-    groq_default_model: str = "llama-3.3-70b-versatile"
+    groq_default_model: str = "openai/gpt-oss-120b"
     nvidia_nim_api_key: str | None = Field(default=None, repr=False)
     nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
-    nvidia_nim_default_model: str = "openai/gpt-oss-20b"
+    nvidia_nim_default_model: str = "nvidia/nemotron-3-super-120b-a12b"
     veo_ai_free_enabled: bool = False
     veo_ai_free_session_path: Path = Path(".runtime/veo_free/session.json")
     veo_ai_free_image_model: str = "veo-ai-free/image"

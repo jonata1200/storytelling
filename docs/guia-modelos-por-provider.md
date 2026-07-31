@@ -5,10 +5,11 @@
 Uso recomendado: modelo na nuvem com chave `OLLAMA_API_KEY`, sem instalar o
 Ollama na maquina.
 
-Modelo inicial:
+Modelos mantidos na aplicacao:
 
 ```text
 gpt-oss:120b
+gpt-oss:20b
 ```
 
 Configuracao:
@@ -21,34 +22,37 @@ OLLAMA_DEFAULT_MODEL=gpt-oss:120b
 
 ## Ollama Local
 
-Uso recomendado: desenvolvimento local, fallback sem chave externa e testes.
+Uso recomendado: desenvolvimento local quando voce quiser rodar um dos modelos
+selecionados na propria maquina.
 
 Modelo inicial:
 
 ```text
-llama3.1:8b
+gpt-oss:20b
 ```
 
 Antes de usar localmente:
 
 ```powershell
-ollama pull llama3.1:8b
+ollama pull gpt-oss:20b
 ```
 
 ```env
 OLLAMA_BASE_URL=http://localhost:11434/v1
 OLLAMA_API_KEY=ollama
-OLLAMA_DEFAULT_MODEL=llama3.1:8b
+OLLAMA_DEFAULT_MODEL=gpt-oss:20b
 ```
 
 ## Groq
 
 Uso recomendado: baixa latencia para ideias, revisoes e tarefas narrativas.
 
-Modelo inicial:
+Modelos mantidos na aplicacao:
 
 ```text
-llama-3.3-70b-versatile
+openai/gpt-oss-120b
+qwen/qwen3.6-27b
+openai/gpt-oss-20b
 ```
 
 Requer `GROQ_API_KEY`.
@@ -57,9 +61,12 @@ Requer `GROQ_API_KEY`.
 
 Uso recomendado: hosted endpoint NVIDIA ou NIM local/self-hosted.
 
-Modelo inicial:
+Modelos mantidos na aplicacao:
 
 ```text
+nvidia/nemotron-3-super-120b-a12b
+openai/gpt-oss-120b
+nvidia/llama-3.3-nemotron-super-49b-v1.5
 openai/gpt-oss-20b
 ```
 

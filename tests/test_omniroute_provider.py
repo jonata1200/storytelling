@@ -418,7 +418,7 @@ async def test_llm_provider_for_task_maps_legacy_omniroute_to_ollama(
         lambda: Settings(
             ai_provider="omniroute",
             text_provider="",
-            ollama_default_model="llama3.1:8b",
+            ollama_default_model="gpt-oss:120b",
         ),
     )
 
@@ -429,4 +429,4 @@ async def test_llm_provider_for_task_maps_legacy_omniroute_to_ollama(
     )
 
     assert getattr(provider, "provider_name", None) == "ollama"
-    assert model == "llama3.1:8b"
+    assert model == "gpt-oss:120b"

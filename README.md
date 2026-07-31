@@ -74,11 +74,11 @@ OLLAMA_DEFAULT_MODEL=gpt-oss:120b
 
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 GROQ_API_KEY=sua_chave_groq
-GROQ_DEFAULT_MODEL=llama-3.3-70b-versatile
+GROQ_DEFAULT_MODEL=openai/gpt-oss-120b
 
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_API_KEY=sua_chave_nvidia
-NVIDIA_NIM_DEFAULT_MODEL=openai/gpt-oss-20b
+NVIDIA_NIM_DEFAULT_MODEL=nvidia/nemotron-3-super-120b-a12b
 
 VEO_AI_FREE_ENABLED=false
 VEO_AI_FREE_SESSION_PATH=.runtime/veo_free/session.json
@@ -93,7 +93,7 @@ Para Ollama local, troque para `OLLAMA_BASE_URL=http://localhost:11434/v1`, use
 o provider:
 
 ```powershell
-ollama pull llama3.1:8b
+ollama pull gpt-oss:20b
 ```
 
 As chaves e modelos de texto tambem podem ser salvos pela tela de Configuracoes

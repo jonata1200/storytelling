@@ -32,8 +32,9 @@ arquitetura de IA para:
 - Imagem e video podem ficar temporariamente indisponiveis em ambiente local ou
   staging durante a troca de provider. Antes de producao, a aplicacao deve
   mostrar estado indisponivel claro em vez de falhar silenciosamente.
-- Modelos iniciais sugeridos: `llama3.1:8b` para Ollama,
-  `llama-3.3-70b-versatile` para Groq e `openai/gpt-oss-20b` para NVIDIA NIM.
+- Modelos iniciais sugeridos: `gpt-oss:120b` para Ollama Cloud,
+  `openai/gpt-oss-120b` para Groq e `nvidia/nemotron-3-super-120b-a12b`
+  para NVIDIA NIM.
 - Fallback automatico de texto comeca desligado por padrao. A fase 04 pode
   habilitar fallback opt-in apos testes isolados de cada provider.
 - Veo AI Free via cookie/sessao deve ser habilitado apenas como recurso local e

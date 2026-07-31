@@ -112,7 +112,7 @@ def test_openai_compatible_provider_retries_without_response_format(
     )
 
     response = provider._send_request(
-        LLMRequest(task="generate_story_ideas", prompt="{}", model="llama3.1:8b"),
+        LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:20b"),
         use_response_format=True,
     )
 
@@ -207,7 +207,7 @@ def test_openai_compatible_provider_explains_ollama_local_connection_refused(
 
     with pytest.raises(RuntimeError) as exc:
         provider._send_request(
-            LLMRequest(task="generate_story_ideas", prompt="{}", model="llama3.1:8b"),
+            LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:20b"),
             use_response_format=True,
         )
 
