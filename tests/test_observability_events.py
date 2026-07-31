@@ -58,7 +58,7 @@ def test_provider_channel_readiness_reports_new_provider_components() -> None:
         text_provider="",
         image_provider="veo_ai_free",
         video_provider="veo_ai_free",
-        ollama_default_model="gpt-oss:120b",
+        ollama_default_model="kimi-k3:cloud",
         veo_ai_free_image_model="veo-ai-free/image",
         veo_ai_free_video_model="veo-ai-free/video",
     )
@@ -92,7 +92,7 @@ def test_provider_channel_readiness_reports_text_fallbacks() -> None:
         ai_provider="omniroute",
         text_provider="ollama",
         text_provider_fallbacks="groq,nvidia_nim",
-        ollama_default_model="gpt-oss:120b",
+        ollama_default_model="kimi-k3:cloud",
     )
 
     text = _provider_channel_readiness(settings, "text")

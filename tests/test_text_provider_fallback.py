@@ -54,7 +54,7 @@ async def test_text_provider_fallback_records_final_provider(
         text_provider_fallbacks="ollama",
         groq_api_key="groq-secret",
         groq_default_model="openai/gpt-oss-120b",
-        ollama_default_model="gpt-oss:120b",
+        ollama_default_model="kimi-k3:cloud",
     )
     monkeypatch.setattr(generation_service, "get_settings", lambda: settings)
     monkeypatch.setattr(generation_service, "get_or_create_prompt_template", _fake_template)

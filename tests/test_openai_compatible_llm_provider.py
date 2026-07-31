@@ -112,7 +112,7 @@ def test_openai_compatible_provider_retries_without_response_format(
     )
 
     response = provider._send_request(
-        LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:20b"),
+        LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:120b-cloud"),
         use_response_format=True,
     )
 
@@ -207,7 +207,7 @@ def test_openai_compatible_provider_explains_ollama_local_connection_refused(
 
     with pytest.raises(RuntimeError) as exc:
         provider._send_request(
-            LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:20b"),
+            LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:120b-cloud"),
             use_response_format=True,
         )
 
@@ -224,7 +224,7 @@ async def test_ollama_cloud_provider_uses_native_chat_api(
         lambda: Settings(
             ollama_base_url="https://ollama.com",
             ollama_api_key="cloud-secret",
-            ollama_default_model="gpt-oss:120b",
+            ollama_default_model="kimi-k3:cloud",
         ),
     )
     provider = OllamaLLMProvider()
@@ -237,7 +237,7 @@ async def test_ollama_cloud_provider_uses_native_chat_api(
         captured["timeout"] = kwargs.get("timeout")
         return _JsonResponse(
             {
-                "model": "gpt-oss:120b",
+                "model": "kimi-k3:cloud",
                 "message": {"role": "assistant", "content": '{"ok": true}'},
                 "prompt_eval_count": 5,
                 "eval_count": 7,
@@ -250,7 +250,7 @@ async def test_ollama_cloud_provider_uses_native_chat_api(
     )
 
     result = await provider.generate_structured(
-        LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:120b")
+        LLMRequest(task="generate_story_ideas", prompt="{}", model="kimi-k3:cloud")
     )
 
     assert captured["url"] == "https://ollama.com/api/chat"
@@ -260,7 +260,7 @@ async def test_ollama_cloud_provider_uses_native_chat_api(
     assert captured["body"]["options"]["temperature"] == 0.7
     assert captured["timeout"] == 300
     assert result.content == {"ok": True}
-    assert result.model == "gpt-oss:120b"
+    assert result.model == "kimi-k3:cloud"
     assert result.prompt_tokens == 5
     assert result.completion_tokens == 7
 
@@ -276,7 +276,7 @@ async def test_ollama_cloud_provider_requires_api_key(
 
     with pytest.raises(ValueError, match="OLLAMA_API_KEY"):
         await OllamaLLMProvider().generate_structured(
-            LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:120b")
+            LLMRequest(task="generate_story_ideas", prompt="{}", model="kimi-k3:cloud")
         )
 
 

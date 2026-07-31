@@ -76,21 +76,38 @@ OMNIROUTE_TEXT_MODELS = (
 )
 
 OLLAMA_TEXT_MODELS = (
-    "gpt-oss:120b",
-    "gpt-oss:20b",
+    "kimi-k3:cloud",
+    "glm-5.2:cloud",
+    "nemotron-3-ultra:cloud",
+    "deepseek-v4-pro:cloud",
+    "minimax-m3:cloud",
+    "kimi-k2.7-code:cloud",
+    "glm-5.1:cloud",
+    "qwen3.5:397b-cloud",
+    "nemotron-3-super:cloud",
+    "gpt-oss:120b-cloud",
 )
 
 GROQ_TEXT_MODELS = (
     "openai/gpt-oss-120b",
     "qwen/qwen3.6-27b",
+    "minimaxai/minimax-m2.7",
+    "llama-3.3-70b-versatile",
     "openai/gpt-oss-20b",
+    "llama-3.1-8b-instant",
 )
 
 NVIDIA_NIM_TEXT_MODELS = (
+    "z-ai/glm-5.2",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "deepseek-ai/deepseek-v4-pro",
+    "moonshotai/kimi-k2.6",
+    "minimaxai/minimax-m3",
+    "qwen/qwen3.5-397b-a17b",
+    "mistralai/mistral-large-3-675b-instruct-2512",
     "nvidia/nemotron-3-super-120b-a12b",
-    "openai/gpt-oss-120b",
-    "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-    "openai/gpt-oss-20b",
+    "mistralai/mistral-medium-3.5-128b",
+    "minimaxai/minimax-m2.7",
 )
 
 
@@ -126,13 +143,13 @@ class Settings(BaseSettings):
     text_provider_fallbacks: str = ""
     ollama_api_key: str | None = Field(default="ollama", repr=False)
     ollama_base_url: str = "http://localhost:11434/v1"
-    ollama_default_model: str = "gpt-oss:120b"
+    ollama_default_model: str = "kimi-k3:cloud"
     groq_api_key: str | None = Field(default=None, repr=False)
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_default_model: str = "openai/gpt-oss-120b"
     nvidia_nim_api_key: str | None = Field(default=None, repr=False)
     nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
-    nvidia_nim_default_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    nvidia_nim_default_model: str = "z-ai/glm-5.2"
     veo_ai_free_enabled: bool = False
     veo_ai_free_session_path: Path = Path(".runtime/veo_free/session.json")
     veo_ai_free_image_model: str = "veo-ai-free/image"

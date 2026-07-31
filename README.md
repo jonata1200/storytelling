@@ -70,7 +70,7 @@ VIDEO_PROVIDER=veo_ai_free
 
 OLLAMA_BASE_URL=https://ollama.com
 OLLAMA_API_KEY=sua_chave_ollama_cloud
-OLLAMA_DEFAULT_MODEL=gpt-oss:120b
+OLLAMA_DEFAULT_MODEL=kimi-k3:cloud
 
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 GROQ_API_KEY=sua_chave_groq
@@ -78,7 +78,7 @@ GROQ_DEFAULT_MODEL=openai/gpt-oss-120b
 
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_API_KEY=sua_chave_nvidia
-NVIDIA_NIM_DEFAULT_MODEL=nvidia/nemotron-3-super-120b-a12b
+NVIDIA_NIM_DEFAULT_MODEL=z-ai/glm-5.2
 
 VEO_AI_FREE_ENABLED=false
 VEO_AI_FREE_SESSION_PATH=.runtime/veo_free/session.json
@@ -86,14 +86,14 @@ VEO_AI_FREE_SESSION_PATH=.runtime/veo_free/session.json
 
 Para Ollama Cloud, nao e necessario instalar Ollama na maquina. Configure
 `OLLAMA_BASE_URL=https://ollama.com`, uma `OLLAMA_API_KEY` valida e selecione um
-modelo disponivel na conta, como `gpt-oss:120b`.
+modelo disponivel na conta, como `kimi-k3:cloud`.
 
 Para Ollama local, troque para `OLLAMA_BASE_URL=http://localhost:11434/v1`, use
 `OLLAMA_API_KEY=ollama`, rode `ollama serve` e baixe o modelo antes de selecionar
 o provider:
 
 ```powershell
-ollama pull gpt-oss:20b
+ollama pull gpt-oss:120b-cloud
 ```
 
 As chaves e modelos de texto tambem podem ser salvos pela tela de Configuracoes
