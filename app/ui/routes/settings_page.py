@@ -169,10 +169,8 @@ def register_settings_page(
                                 options: tuple[str, ...],
                                 current_model: str,
                             ) -> list[str]:
-                                selectable = list(options)
-                                if current_model and current_model not in selectable:
-                                    selectable.append(current_model)
-                                return selectable
+                                _ = current_model
+                                return list(options)
 
                             ui.label("Texto").classes("text-sm font-semibold uppercase tracking-wide acid mt-5")
                             with ui.column().classes("w-full gap-3 mt-3"):
