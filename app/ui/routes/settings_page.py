@@ -20,7 +20,7 @@ from app.providers.veo_free.session import (
     clear_session as clear_veo_free_session,
 )
 from app.providers.veo_free.session import (
-    save_cookie_bundle as save_veo_free_cookie_bundle,
+    save_cookie_value as save_veo_free_cookie_value,
 )
 from app.providers.veo_free.session import (
     validate_session as validate_veo_free_session,
@@ -269,25 +269,57 @@ def register_settings_page(
                                             "text-xs px-2 py-1 rounded-md bg-slate-900 "
                                             "text-slate-300 border border-slate-800"
                                         )
-                                        veo_cookie_bundle = (
-                                            ui.textarea(
-                                                "Bundle JSON de cookies Veo AI Free",
-                                                placeholder=(
-                                                    '{"cookies":[{"name":"...","value":"...",'
-                                                    '"domain":"..."}]}'
-                                                ),
+                                        with ui.element("div").classes(
+                                            "border border-[#343934] rounded-xl p-4"
+                                        ):
+                                            ui.label("Como pegar o cookie").classes(
+                                                "text-sm font-semibold"
+                                            )
+                                            with ui.column().classes(
+                                                "gap-1 text-xs text-[#aeb4af] mt-2"
+                                            ):
+                                                ui.label(
+                                                    "1. Entre no Veo AI Free no mesmo navegador."
+                                                )
+                                                ui.label(
+                                                    "2. Abra as ferramentas do navegador com F12."
+                                                )
+                                                ui.label(
+                                                    "3. Em Application/Storage > Cookies, escolha o dominio do Veo AI Free."
+                                                )
+                                                ui.label(
+                                                    "4. Se a lista for como o seu print, use wordpress_logged_in_...; copie Nome e Valor no formato nome=valor."
+                                                )
+                                                ui.label(
+                                                    "5. Se wordpress_logged_in_... nao aparecer, tente fern_token=... ou cole o cabecalho Cookie completo de uma requisicao autenticada."
+                                                )
+                                                ui.label(
+                                                    "Nao use CookieConsent, FCCDCF, FCNEC, _ga, _gads, _gpi, _stripe_mid, ph_phc ou socialPopup; eles nao autenticam sua conta."
+                                                )
+                                            ui.label(
+                                                "Trate esse valor como senha: use apenas neste app local e nao compartilhe."
+                                            ).classes("text-xs text-amber-200 mt-3")
+                                            ui.label(
+                                                "Status atual: a aplicação salva a sessão, mas o cliente de geração real do Veo ainda precisa ser conectado."
+                                            ).classes("text-xs text-red-200 mt-2")
+                                        veo_cookie_value = (
+                                            ui.input(
+                                                "Cookie de login Veo AI Free",
+                                                placeholder="wordpress_logged_in_...=seu_valor",
+                                                password=True,
+                                                password_toggle_button=True,
                                             )
                                             .props("outlined stack-label")
                                             .classes("w-full")
                                         )
 
                             def save_veo_session() -> None:
-                                payload = str(veo_cookie_bundle.value or "").strip()
+                                payload = str(veo_cookie_value.value or "").strip()
                                 if not payload:
-                                    ui.notify("Cole um bundle JSON de cookies.", color="warning")
+                                    ui.notify("Cole o cookie de login Veo AI Free.", color="warning")
                                     return
                                 try:
-                                    validation = save_veo_free_cookie_bundle(
+                                    validation = save_veo_free_cookie_value(
                                         payload,
                                         current.veo_ai_free_session_path,
                                     )
@@ -295,7 +327,7 @@ def register_settings_page(
                                     ui.notify(str(exc), color="negative")
                                     return
                                 ui.notify(validation.message, color="positive")
-                                veo_cookie_bundle.value = ""
+                                veo_cookie_value.value = ""
 
                             def clear_veo_session() -> None:
                                 clear_veo_free_session(current.veo_ai_free_session_path)

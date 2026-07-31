@@ -7,6 +7,7 @@ from app.providers.veo_free.session import (
     clear_session,
     load_cookie_bundle,
     save_cookie_bundle,
+    save_cookie_value,
     validate_session,
 )
 
@@ -62,6 +63,47 @@ def test_veo_free_session_accepts_browser_expiration_date(tmp_path: Path) -> Non
     )
 
     assert validation.status == "connected"
+
+
+def test_veo_free_session_accepts_single_cookie_value(tmp_path: Path) -> None:
+    path = tmp_path / "session.json"
+
+    validation = save_cookie_value("secret-cookie", path)
+
+    assert validation.status == "connected"
+    loaded = load_cookie_bundle(path)
+    assert loaded is not None
+    assert loaded.cookies[0].name == "__Secure-1PSID"
+    assert loaded.cookies[0].value == "secret-cookie"
+
+
+def test_veo_free_session_accepts_cookie_header(tmp_path: Path) -> None:
+    path = tmp_path / "session.json"
+
+    validation = save_cookie_value("__Secure-1PSID=secret-cookie; other=value", path)
+
+    assert validation.status == "connected"
+    loaded = load_cookie_bundle(path)
+    assert loaded is not None
+    assert [cookie.name for cookie in loaded.cookies] == ["__Secure-1PSID", "other"]
+
+
+def test_veo_free_session_accepts_wordpress_login_cookie(tmp_path: Path) -> None:
+    path = tmp_path / "session.json"
+
+    validation = save_cookie_value("wordpress_logged_in_04e805=secret-cookie", path)
+
+    assert validation.status == "connected"
+    assert "wordpress_logged_in_04e805" in validation.details["auth_cookie_names"]
+
+
+def test_veo_free_session_reports_non_auth_cookie_as_unknown(tmp_path: Path) -> None:
+    path = tmp_path / "session.json"
+
+    validation = save_cookie_value("CookieConsent=yes", path)
+
+    assert validation.status == "unknown"
+    assert "nenhum cookie de login" in validation.message
 
 
 def test_veo_free_session_rejects_invalid_or_empty_bundle(tmp_path: Path) -> None:

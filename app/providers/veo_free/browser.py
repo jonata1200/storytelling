@@ -3,6 +3,19 @@ from dataclasses import dataclass
 from app.providers.veo_free.session import validate_session
 from app.providers.veo_free.types import VeoFreeSessionValidation
 
+VEO_FREE_GENERATION_UNAVAILABLE_MESSAGE = (
+    "Veo AI Free experimental ainda precisa de descoberta manual de endpoint "
+    "ou automacao assistida pelo usuario antes de gerar midia real."
+)
+
+
+class VeoFreeGenerationUnavailableError(RuntimeError):
+    """Raised when the local Veo session exists but real generation is not wired yet."""
+
+
+def veo_free_generation_available() -> bool:
+    return False
+
 
 @dataclass(frozen=True)
 class VeoFreeGeneratedMedia:
@@ -24,14 +37,8 @@ class VeoFreeBrowserClient:
 
     async def generate_image(self, payload: dict) -> VeoFreeGeneratedMedia:
         _ = payload
-        raise RuntimeError(
-            "Veo AI Free experimental ainda precisa de descoberta manual de endpoint "
-            "ou automacao assistida pelo usuario antes de gerar imagem real."
-        )
+        raise VeoFreeGenerationUnavailableError(VEO_FREE_GENERATION_UNAVAILABLE_MESSAGE)
 
     async def generate_video(self, payload: dict) -> VeoFreeGeneratedMedia:
         _ = payload
-        raise RuntimeError(
-            "Veo AI Free experimental ainda precisa de descoberta manual de endpoint "
-            "ou automacao assistida pelo usuario antes de gerar video real."
-        )
+        raise VeoFreeGenerationUnavailableError(VEO_FREE_GENERATION_UNAVAILABLE_MESSAGE)

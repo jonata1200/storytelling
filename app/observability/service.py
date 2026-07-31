@@ -38,6 +38,7 @@ from app.observability.schemas import (
     ReadinessDashboardRead,
 )
 from app.providers.speech.service import speech_configuration_status
+from app.providers.veo_free.browser import veo_free_generation_available
 from app.providers.veo_free.session import validate_session as validate_veo_free_session
 from app.video_generation.models import GenerationJob
 
@@ -348,8 +349,15 @@ def _veo_ai_free_session_readiness(settings: Settings) -> ReadinessComponentRead
         status = "degraded"
         message = "Veo AI Free experimental desabilitado."
     elif validation.status == "connected":
-        status = "ready"
-        message = validation.message
+        if veo_free_generation_available():
+            status = "ready"
+            message = validation.message
+        else:
+            status = "degraded"
+            message = (
+                "Sessao Veo AI Free salva, mas a geracao real ainda nao esta conectada "
+                "neste app."
+            )
     elif validation.status in {"expired", "blocked"}:
         status = "down"
         message = validation.message
@@ -363,6 +371,9 @@ def _veo_ai_free_session_readiness(settings: Settings) -> ReadinessComponentRead
         details={
             "enabled": str(enabled).lower(),
             "session_status": validation.status,
+            "generation_client": (
+                "available" if veo_free_generation_available() else "not_implemented"
+            ),
             **validation.details,
         },
     )

@@ -1,7 +1,7 @@
 import json
 import os
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,24 @@ from app.providers.veo_free.types import (
 )
 
 DEFAULT_SESSION_PATH = Path(".runtime/veo_free/session.json")
+DEFAULT_COOKIE_NAME = "__Secure-1PSID"
+DEFAULT_COOKIE_DOMAIN = ".google.com"
+DEFAULT_COOKIE_TTL_DAYS = 30
+AUTH_COOKIE_NAMES = (
+    DEFAULT_COOKIE_NAME,
+    "SID",
+    "HSID",
+    "SSID",
+    "APISID",
+    "SAPISID",
+    "fern_token",
+    "xi_website_user",
+    "session",
+)
+AUTH_COOKIE_PREFIXES = (
+    "wordpress_logged_in_",
+    "wordpress_sec_",
+)
 
 
 def _session_path(path: Path | str | None = None) -> Path:
@@ -59,6 +77,57 @@ def _ensure_no_control_chars(value: Any) -> None:
             _ensure_no_control_chars(item)
 
 
+def _parse_cookie_header_or_value(cookie_value: str) -> list[dict[str, Any]]:
+    cleaned = cookie_value.strip()
+    if not cleaned:
+        raise ValueError("Informe o valor do cookie Veo AI Free.")
+
+    expires = (datetime.now(UTC) + timedelta(days=DEFAULT_COOKIE_TTL_DAYS)).timestamp()
+    if "=" not in cleaned:
+        return [
+            {
+                "name": DEFAULT_COOKIE_NAME,
+                "value": cleaned,
+                "domain": DEFAULT_COOKIE_DOMAIN,
+                "path": "/",
+                "expires": expires,
+                "secure": True,
+                "httpOnly": True,
+            }
+        ]
+
+    cookies: list[dict[str, Any]] = []
+    for item in cleaned.split(";"):
+        name, separator, value = item.strip().partition("=")
+        if not separator or not name.strip() or not value.strip():
+            continue
+        cookies.append(
+            {
+                "name": name.strip(),
+                "value": value.strip(),
+                "domain": DEFAULT_COOKIE_DOMAIN,
+                "path": "/",
+                "expires": expires,
+                "secure": True,
+                "httpOnly": True,
+            }
+        )
+    if not cookies:
+        raise ValueError("Informe um valor de cookie ou um cabecalho Cookie valido.")
+    return cookies
+
+
+def save_cookie_value(
+    cookie_value: str,
+    path: Path | str | None = None,
+) -> VeoFreeSessionValidation:
+    payload = {
+        "cookies": _parse_cookie_header_or_value(cookie_value),
+        "source": "manual_cookie_value",
+    }
+    return save_cookie_bundle(payload, path)
+
+
 def save_cookie_bundle(
     bundle: str | dict[str, Any] | list[dict[str, Any]],
     path: Path | str | None = None,
@@ -94,6 +163,19 @@ def save_cookie_bundle(
     return validate_session(target)
 
 
+def _auth_cookie_names(cookies: list[Any]) -> list[str]:
+    names: list[str] = []
+    for cookie in cookies:
+        name = str(getattr(cookie, "name", "") or "").strip()
+        if not name:
+            continue
+        if name in AUTH_COOKIE_NAMES or any(
+            name.startswith(prefix) for prefix in AUTH_COOKIE_PREFIXES
+        ):
+            names.append(name)
+    return names
+
+
 def load_cookie_bundle(path: Path | str | None = None) -> VeoFreeSessionBundle | None:
     target = _session_path(path)
     if not target.is_file():
@@ -118,6 +200,20 @@ def validate_session(path: Path | str | None = None) -> VeoFreeSessionValidation
             message="Sessao Veo AI Free nao configurada.",
             details={"configured": "false"},
         )
+    auth_cookie_names = _auth_cookie_names(session.cookies)
+    if not auth_cookie_names:
+        return VeoFreeSessionValidation(
+            status="unknown",
+            message=(
+                "Sessao Veo AI Free salva, mas nenhum cookie de login conhecido foi encontrado."
+            ),
+            details={
+                "configured": "true",
+                "cookie_count": str(len(session.cookies)),
+                "has_user_agent": str(bool(session.user_agent)).lower(),
+                "auth_cookie_names": "",
+            },
+        )
     now = datetime.now(UTC).timestamp()
     expiring_cookies = [
         float(cookie.expires)
@@ -132,6 +228,7 @@ def validate_session(path: Path | str | None = None) -> VeoFreeSessionValidation
                 "configured": "true",
                 "cookie_count": str(len(session.cookies)),
                 "has_user_agent": str(bool(session.user_agent)).lower(),
+                "auth_cookie_names": ", ".join(auth_cookie_names),
             },
         )
     if not expiring_cookies:
@@ -142,6 +239,7 @@ def validate_session(path: Path | str | None = None) -> VeoFreeSessionValidation
                 "configured": "true",
                 "cookie_count": str(len(session.cookies)),
                 "has_user_agent": str(bool(session.user_agent)).lower(),
+                "auth_cookie_names": ", ".join(auth_cookie_names),
             },
         )
     return VeoFreeSessionValidation(
@@ -151,5 +249,6 @@ def validate_session(path: Path | str | None = None) -> VeoFreeSessionValidation
             "configured": "true",
             "cookie_count": str(len(session.cookies)),
             "has_user_agent": str(bool(session.user_agent)).lower(),
+            "auth_cookie_names": ", ".join(auth_cookie_names),
         },
     )
