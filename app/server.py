@@ -1,16 +1,8 @@
 import argparse
-import asyncio
-import sys
 
 import uvicorn
 
-
-def configure_windows_event_loop() -> None:
-    if sys.platform != "win32":
-        return
-    selector_policy = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
-    if selector_policy is not None:
-        asyncio.set_event_loop_policy(selector_policy())
+from app.runtime import configure_windows_event_loop_policy
 
 
 def main() -> None:
@@ -20,7 +12,7 @@ def main() -> None:
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
 
-    configure_windows_event_loop()
+    configure_windows_event_loop_policy()
     uvicorn.run(
         "app.main:app",
         host=args.host,

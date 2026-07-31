@@ -9,6 +9,7 @@ from app.auth.ui_middleware import UIBasicAuthMiddleware
 from app.auth.ui_routes import router as auth_ui_router
 from app.config.settings import get_settings
 from app.observability.middleware import CorrelationIdMiddleware
+from app.runtime import install_asyncio_exception_filter
 from app.workflows.state_machine import WorkflowStateError
 
 LOCAL_STORAGE_MOUNT_ENVS = {"local", "test"}
@@ -29,6 +30,7 @@ def create_app(include_ui: bool = True) -> FastAPI:
     app.add_middleware(UIBasicAuthMiddleware)
     app.include_router(api_router)
     app.include_router(auth_ui_router)
+    app.router.on_startup.append(install_asyncio_exception_filter)
 
     @app.exception_handler(WorkflowStateError)
     async def workflow_state_error_handler(
