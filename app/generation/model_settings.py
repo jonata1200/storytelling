@@ -14,10 +14,7 @@ from app.config.provider_policy import (
 )
 from app.config.settings import get_settings
 from app.generation.models import ProjectModelSetting
-from app.providers.llm.groq import GroqLLMProvider
 from app.providers.llm.nvidia_nim import NvidiaNimLLMProvider
-from app.providers.llm.ollama import OllamaLLMProvider
-from app.providers.llm.omniroute import OmniRouteLLMProvider
 from app.providers.llm.types import LLMProvider
 
 NARRATIVE_TASKS = [
@@ -38,16 +35,8 @@ TASK_LABELS = {
 
 
 def llm_provider_for_name(settings: Any, provider: str) -> LLMProvider:
-    if provider in {"omniroute", "opencode"}:
-        ensure_provider_api_key(settings.omniroute_api_key, "omniroute", "OMNIROUTE_API_KEY")
-        return OmniRouteLLMProvider()
-    if provider == "ollama":
-        if provider_requires_api_key(settings, "ollama"):
-            ensure_provider_api_key(settings.ollama_api_key, "ollama", "OLLAMA_API_KEY")
-        return OllamaLLMProvider()
-    if provider == "groq":
-        ensure_provider_api_key(settings.groq_api_key, "groq", "GROQ_API_KEY")
-        return GroqLLMProvider()
+    if provider in {"omniroute", "opencode", "ollama", "groq"}:
+        provider = "nvidia_nim"
     if provider == "nvidia_nim":
         if provider_requires_api_key(settings, "nvidia_nim"):
             ensure_provider_api_key(
@@ -143,7 +132,7 @@ async def llm_provider_for_task(
 ) -> tuple[LLMProvider, str]:
     setting = await get_model_setting(session, project_id, task)
     settings = get_settings()
-    if setting is not None:
+    if setting is not None and setting.provider in SUPPORTED_MODEL_PROVIDERS:
         return llm_provider_for_name(settings, setting.provider), validate_model_name(
             setting.model,
             provider=setting.provider,

@@ -9,7 +9,6 @@ import pytest
 
 from app.config.settings import Settings
 from app.generation import model_settings
-from app.providers.llm.ollama import OllamaLLMProvider
 from app.providers.llm.openai_compatible import (
     OpenAICompatibleLLMConfig,
     OpenAICompatibleLLMProvider,
@@ -52,11 +51,11 @@ def test_openai_compatible_provider_sends_chat_completion_request(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="groq",
-            display_name="Groq",
-            base_url="https://api.groq.com/openai/v1",
-            api_key="groq-secret",
-            api_key_env="GROQ_API_KEY",
+            provider_name="nvidia_nim",
+            display_name="NVIDIA NIM",
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key="nv-secret",
+            api_key_env="NVIDIA_NIM_API_KEY",
         )
     )
     captured: dict[str, Any] = {}
@@ -78,8 +77,8 @@ def test_openai_compatible_provider_sends_chat_completion_request(
         use_response_format=True,
     )
 
-    assert captured["url"] == "https://api.groq.com/openai/v1/chat/completions"
-    assert captured["authorization"] == "Bearer groq-secret"
+    assert captured["url"] == "https://integrate.api.nvidia.com/v1/chat/completions"
+    assert captured["authorization"] == "Bearer nv-secret"
     assert captured["body"]["response_format"] == {"type": "json_object"}
     assert captured["timeout"] == 300
     assert response["choices"][0]["message"]["content"] == '{"ok": true}'
@@ -90,10 +89,10 @@ def test_openai_compatible_provider_retries_without_response_format(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="ollama",
-            display_name="Ollama",
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",
+            provider_name="nvidia_nim",
+            display_name="NVIDIA NIM",
+            base_url="http://localhost:8000/v1",
+            api_key=None,
             require_api_key=False,
         )
     )
@@ -112,7 +111,7 @@ def test_openai_compatible_provider_retries_without_response_format(
     )
 
     response = provider._send_request(
-        LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:120b-cloud"),
+        LLMRequest(task="generate_story_ideas", prompt="{}", model="z-ai/glm-5.2"),
         use_response_format=True,
     )
 
@@ -126,17 +125,17 @@ def test_openai_compatible_provider_redacts_http_error_secret(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="groq",
-            display_name="Groq",
-            base_url="https://api.groq.com/openai/v1",
-            api_key="groq-secret",
-            api_key_env="GROQ_API_KEY",
+            provider_name="nvidia_nim",
+            display_name="NVIDIA NIM",
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key="nv-secret",
+            api_key_env="NVIDIA_NIM_API_KEY",
         )
     )
 
     def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
         _ = request, kwargs
-        raise _http_error(429, '{"error":"Authorization: Bearer groq-secret quota"}')
+        raise _http_error(429, '{"error":"Authorization: Bearer nv-secret quota"}')
 
     monkeypatch.setattr(
         "app.providers.llm.openai_compatible.urllib.request.urlopen",
@@ -149,8 +148,8 @@ def test_openai_compatible_provider_redacts_http_error_secret(
             use_response_format=True,
         )
 
-    assert "Groq HTTP 429" in str(exc.value)
-    assert "groq-secret" not in str(exc.value)
+    assert "NVIDIA NIM HTTP 429" in str(exc.value)
+    assert "nv-secret" not in str(exc.value)
     assert "[REDACTED]" in str(exc.value)
 
 
@@ -159,11 +158,11 @@ def test_openai_compatible_provider_reports_timeout(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="groq",
-            display_name="Groq",
-            base_url="https://api.groq.com/openai/v1",
-            api_key="groq-secret",
-            api_key_env="GROQ_API_KEY",
+            provider_name="nvidia_nim",
+            display_name="NVIDIA NIM",
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key="nv-secret",
+            api_key_env="NVIDIA_NIM_API_KEY",
         )
     )
 
@@ -176,129 +175,29 @@ def test_openai_compatible_provider_reports_timeout(
         fake_urlopen,
     )
 
-    with pytest.raises(RuntimeError, match="Groq timeout"):
+    with pytest.raises(RuntimeError, match="NVIDIA NIM timeout"):
         provider._send_request(
             LLMRequest(task="generate_story_ideas", prompt="{}", model="llama-3.3"),
             use_response_format=True,
         )
 
 
-def test_openai_compatible_provider_explains_ollama_local_connection_refused(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    provider = OpenAICompatibleLLMProvider(
-        OpenAICompatibleLLMConfig(
-            provider_name="ollama",
-            display_name="Ollama",
-            base_url="http://localhost:11434/v1",
-            api_key="ollama",
-            require_api_key=False,
-        )
-    )
-
-    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
-        _ = request, kwargs
-        raise urllib.error.URLError(OSError(10061, "actively refused"))
-
-    monkeypatch.setattr(
-        "app.providers.llm.openai_compatible.urllib.request.urlopen",
-        fake_urlopen,
-    )
-
-    with pytest.raises(RuntimeError) as exc:
-        provider._send_request(
-            LLMRequest(task="generate_story_ideas", prompt="{}", model="gpt-oss:120b-cloud"),
-            use_response_format=True,
-        )
-
-    assert "Ollama local nao esta acessivel" in str(exc.value)
-    assert "OLLAMA_BASE_URL=https://ollama.com" in str(exc.value)
-
-
-@pytest.mark.asyncio
-async def test_ollama_cloud_provider_uses_native_chat_api(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "app.providers.llm.ollama.get_settings",
-        lambda: Settings(
-            ollama_base_url="https://ollama.com",
-            ollama_api_key="cloud-secret",
-            ollama_default_model="kimi-k3:cloud",
-        ),
-    )
-    provider = OllamaLLMProvider()
-    captured: dict[str, Any] = {}
-
-    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
-        captured["url"] = request.full_url
-        captured["authorization"] = request.get_header("Authorization")
-        captured["body"] = _request_json_body(request)
-        captured["timeout"] = kwargs.get("timeout")
-        return _JsonResponse(
-            {
-                "model": "kimi-k3:cloud",
-                "message": {"role": "assistant", "content": '{"ok": true}'},
-                "prompt_eval_count": 5,
-                "eval_count": 7,
-            }
-        )
-
-    monkeypatch.setattr(
-        "app.providers.llm.openai_compatible.urllib.request.urlopen",
-        fake_urlopen,
-    )
-
-    result = await provider.generate_structured(
-        LLMRequest(task="generate_story_ideas", prompt="{}", model="kimi-k3:cloud")
-    )
-
-    assert captured["url"] == "https://ollama.com/api/chat"
-    assert captured["authorization"] == "Bearer cloud-secret"
-    assert captured["body"]["format"] == "json"
-    assert captured["body"]["stream"] is False
-    assert captured["body"]["options"]["temperature"] == 0.7
-    assert captured["timeout"] == 300
-    assert result.content == {"ok": True}
-    assert result.model == "kimi-k3:cloud"
-    assert result.prompt_tokens == 5
-    assert result.completion_tokens == 7
-
-
-@pytest.mark.asyncio
-async def test_ollama_cloud_provider_requires_api_key(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "app.providers.llm.ollama.get_settings",
-        lambda: Settings(ollama_base_url="https://ollama.com", ollama_api_key=None),
-    )
-
-    with pytest.raises(ValueError, match="OLLAMA_API_KEY"):
-        await OllamaLLMProvider().generate_structured(
-            LLMRequest(task="generate_story_ideas", prompt="{}", model="kimi-k3:cloud")
-        )
-
-
 def test_llm_provider_for_name_supports_text_providers() -> None:
     settings = Settings(
-        text_provider="ollama",
-        groq_api_key="groq-secret",
         nvidia_nim_api_key="nv-secret",
     )
 
-    ollama_provider = cast(Any, model_settings.llm_provider_for_name(settings, "ollama"))
-    groq_provider = cast(Any, model_settings.llm_provider_for_name(settings, "groq"))
     nvidia_provider = cast(Any, model_settings.llm_provider_for_name(settings, "nvidia_nim"))
 
-    assert ollama_provider.provider_name == "ollama"
-    assert groq_provider.provider_name == "groq"
     assert nvidia_provider.provider_name == "nvidia_nim"
 
 
-def test_llm_provider_for_name_requires_groq_api_key() -> None:
-    with pytest.raises(ValueError, match="GROQ_API_KEY"):
-        model_settings.llm_provider_for_name(Settings(groq_api_key=None), "groq")
+def test_llm_provider_for_name_maps_removed_text_providers_to_nvidia() -> None:
+    settings = Settings(nvidia_nim_api_key="nv-secret")
+
+    provider = cast(Any, model_settings.llm_provider_for_name(settings, "groq"))
+
+    assert provider.provider_name == "nvidia_nim"
 
 
 def test_nvidia_nim_self_hosted_allows_missing_api_key() -> None:

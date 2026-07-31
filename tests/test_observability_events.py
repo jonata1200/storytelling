@@ -54,13 +54,13 @@ def test_redact_secrets_masks_omniroute_api_key_assignments() -> None:
 
 def test_provider_channel_readiness_reports_new_provider_components() -> None:
     settings = Settings(
-        ai_provider="ollama",
+        ai_provider="nvidia_nim",
         text_provider="",
-        image_provider="nvidia_nim",
+        image_provider="veo_ai_free",
         video_provider="veo_ai_free",
-        ollama_default_model="kimi-k3:cloud",
         nvidia_nim_api_key="nv-secret",
-        nvidia_nim_image_model="qwen/qwen-image",
+        nvidia_nim_default_model="z-ai/glm-5.2",
+        veo_ai_free_image_model="veo-ai-free/image",
         veo_ai_free_video_model="veo-ai-free/video",
     )
 
@@ -72,9 +72,8 @@ def test_provider_channel_readiness_reports_new_provider_components() -> None:
     assert image.name == "image_provider"
     assert video.name == "video_provider"
     assert {text.status, image.status, video.status} == {"ready"}
-    assert text.details["provider"] == "ollama"
-    assert image.details["model"] == "qwen/qwen-image"
-    assert image.details["base_url"] == "https://ai.api.nvidia.com/v1/genai"
+    assert text.details["provider"] == "nvidia_nim"
+    assert image.details["model"] == "veo-ai-free/image"
     assert video.details["api_key_configured"] == "false"
 
 
@@ -89,34 +88,35 @@ def test_provider_channel_readiness_reports_missing_veo_model() -> None:
     assert "VEO_AI_FREE_IMAGE_MODEL" in image.message
 
 
-def test_provider_channel_readiness_reports_text_fallbacks() -> None:
+def test_provider_channel_readiness_reports_no_text_fallbacks() -> None:
     settings = Settings(
         ai_provider="omniroute",
-        text_provider="ollama",
-        text_provider_fallbacks="groq,nvidia_nim",
-        ollama_default_model="kimi-k3:cloud",
+        text_provider="nvidia_nim",
+        text_provider_fallbacks="",
+        nvidia_nim_api_key="nv-secret",
+        nvidia_nim_default_model="z-ai/glm-5.2",
     )
 
     text = _provider_channel_readiness(settings, "text")
 
     assert text.status == "ready"
-    assert text.details["provider"] == "ollama"
-    assert text.details["fallbacks"] == "groq,nvidia_nim"
+    assert text.details["provider"] == "nvidia_nim"
+    assert text.details["fallbacks"] == ""
     assert text.details["api_key_configured"] == "true"
 
 
-def test_provider_channel_readiness_reports_missing_groq_key() -> None:
+def test_provider_channel_readiness_reports_missing_nvidia_key() -> None:
     settings = Settings(
         ai_provider="omniroute",
-        text_provider="groq",
-        groq_api_key=None,
-        groq_default_model="openai/gpt-oss-120b",
+        text_provider="nvidia_nim",
+        nvidia_nim_api_key=None,
+        nvidia_nim_default_model="z-ai/glm-5.2",
     )
 
     text = _provider_channel_readiness(settings, "text")
 
     assert text.status == "degraded"
-    assert "GROQ_API_KEY" in text.message
+    assert "NVIDIA_NIM_API_KEY" in text.message
 
 
 def test_veo_ai_free_session_readiness_uses_local_validator(tmp_path: Path) -> None:

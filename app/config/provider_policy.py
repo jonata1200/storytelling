@@ -1,16 +1,13 @@
 from collections.abc import Iterable
 from typing import Any, Literal
-from urllib.parse import urlparse
 
 ProviderChannel = Literal["text", "image", "video", "speech"]
 
-DEFAULT_PROVIDER = "ollama"
+DEFAULT_PROVIDER = "nvidia_nim"
 LEGACY_AI_PROVIDERS = ("omniroute", "opencode")
-SUPPORTED_TEXT_PROVIDERS = ("ollama", "groq", "nvidia_nim")
-SUPPORTED_MEDIA_PROVIDERS = ("nvidia_nim", "veo_ai_free")
+SUPPORTED_TEXT_PROVIDERS = ("nvidia_nim",)
+SUPPORTED_MEDIA_PROVIDERS = ("veo_ai_free",)
 SUPPORTED_AI_PROVIDERS = (
-    "ollama",
-    "groq",
     "nvidia_nim",
     "veo_ai_free",
 )
@@ -55,7 +52,7 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
     if configured_text in LEGACY_AI_PROVIDERS:
         return "veo_ai_free" if channel in {"image", "video"} else DEFAULT_PROVIDER
     if channel == "image" and not channel_provider:
-        return "nvidia_nim"
+        return "veo_ai_free"
     if channel == "video" and not channel_provider:
         return "veo_ai_free"
     return normalize_provider_name(configured_provider, f"{channel.upper()}_PROVIDER")
@@ -64,8 +61,6 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
 def provider_display_name(provider: str) -> str:
     names = {
         "omniroute": "OmniRoute",
-        "ollama": "Ollama",
-        "groq": "Groq",
         "nvidia_nim": "NVIDIA NIM",
         "veo_ai_free": "Veo AI Free",
     }
@@ -98,23 +93,9 @@ def provider_channel_base_url(settings: Any, provider: str, channel: ProviderCha
     return provider_base_url(settings, provider)
 
 
-def is_ollama_cloud_base_url(base_url: object) -> bool:
-    value = str(base_url or "").strip()
-    if not value:
-        return False
-    parsed = urlparse(value if "://" in value else f"https://{value}")
-    host = parsed.netloc.casefold().removeprefix("www.")
-    return host == "ollama.com"
-
-
 def provider_requires_api_key(settings: Any, provider: str) -> bool:
-    if provider == "ollama":
-        return is_ollama_cloud_base_url(provider_base_url(settings, provider))
     if provider == "nvidia_nim":
-        base_urls = (
-            provider_base_url(settings, provider),
-            provider_channel_base_url(settings, provider, "image"),
-        )
+        base_urls = (provider_base_url(settings, provider),)
         hosted_hosts = ("integrate.api.nvidia.com", "ai.api.nvidia.com")
         return any(
             hosted_host in str(base_url or "").casefold()

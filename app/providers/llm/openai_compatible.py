@@ -171,20 +171,6 @@ class OpenAICompatibleLLMProvider:
         reason: object,
     ) -> str:
         detail = str(redact_secrets(reason))
-        lower_detail = detail.casefold()
-        refused = (
-            "10061" in lower_detail
-            or "connection refused" in lower_detail
-            or "actively refused" in lower_detail
-            or "recusou ativamente" in lower_detail
-        )
-        if config.provider_name == "ollama" and refused:
-            return (
-                f"{config.display_name} local nao esta acessivel em {config.base_url}. "
-                "Se voce quer usar Ollama Cloud, configure OLLAMA_BASE_URL=https://ollama.com "
-                "e uma OLLAMA_API_KEY valida. Se quer usar Ollama local, inicie o servico "
-                "com `ollama serve`."
-            )
         return f"{config.display_name} network error: {detail}"
 
     def _request_timeout_seconds(self, request: LLMRequest) -> float:

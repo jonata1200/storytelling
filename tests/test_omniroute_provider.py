@@ -405,7 +405,7 @@ def test_omniroute_image_provider_keeps_visual_references_in_request(
 
 
 @pytest.mark.asyncio
-async def test_llm_provider_for_task_maps_legacy_omniroute_to_ollama(
+async def test_llm_provider_for_task_maps_legacy_omniroute_to_nvidia_nim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def no_project_setting(*args: object, **kwargs: object) -> Any:
@@ -418,7 +418,8 @@ async def test_llm_provider_for_task_maps_legacy_omniroute_to_ollama(
         lambda: Settings(
             ai_provider="omniroute",
             text_provider="",
-            ollama_default_model="kimi-k3:cloud",
+            nvidia_nim_api_key="nv-secret",
+            nvidia_nim_default_model="z-ai/glm-5.2",
         ),
     )
 
@@ -428,5 +429,5 @@ async def test_llm_provider_for_task_maps_legacy_omniroute_to_ollama(
         "generate_story_ideas",
     )
 
-    assert getattr(provider, "provider_name", None) == "ollama"
-    assert model == "kimi-k3:cloud"
+    assert getattr(provider, "provider_name", None) == "nvidia_nim"
+    assert model == "z-ai/glm-5.2"

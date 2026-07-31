@@ -135,7 +135,11 @@ async def test_generate_freeform_ideas_returns_ten_ai_suggested_ideas(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
+        lambda: Settings(
+            ai_provider="nvidia_nim",
+            text_provider="nvidia_nim",
+            nvidia_nim_api_key="nv-secret",
+        ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(
@@ -155,7 +159,11 @@ async def test_generate_freeform_ideas_respects_selected_genre(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
+        lambda: Settings(
+            ai_provider="nvidia_nim",
+            text_provider="nvidia_nim",
+            nvidia_nim_api_key="nv-secret",
+        ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(count=10, genre="Aventura")
@@ -171,7 +179,11 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
+        lambda: Settings(
+            ai_provider="nvidia_nim",
+            text_provider="nvidia_nim",
+            nvidia_nim_api_key="nv-secret",
+        ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
     ideas = await generate_freeform_ideas(count=99, target_duration_minutes=25)
@@ -181,16 +193,20 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_requires_groq_key(
+async def test_generate_freeform_ideas_requires_nvidia_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="ollama", text_provider="groq", groq_api_key=None),
+        lambda: Settings(
+            ai_provider="nvidia_nim",
+            text_provider="nvidia_nim",
+            nvidia_nim_api_key=None,
+        ),
     )
 
-    with pytest.raises(ValueError, match="GROQ_API_KEY"):
+    with pytest.raises(ValueError, match="NVIDIA_NIM_API_KEY"):
         await generate_freeform_ideas(count=3)
 
 
@@ -207,7 +223,11 @@ async def test_generate_freeform_ideas_reports_omniroute_failure(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
+        lambda: Settings(
+            ai_provider="nvidia_nim",
+            text_provider="nvidia_nim",
+            nvidia_nim_api_key="nv-secret",
+        ),
     )
     monkeypatch.setattr(
         idea_lab,
@@ -233,7 +253,11 @@ async def test_generate_freeform_ideas_reports_omniroute_timeout(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
+        lambda: Settings(
+            ai_provider="nvidia_nim",
+            text_provider="nvidia_nim",
+            nvidia_nim_api_key="nv-secret",
+        ),
     )
     monkeypatch.setattr(
         idea_lab,
@@ -310,7 +334,11 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
+        lambda: Settings(
+            ai_provider="nvidia_nim",
+            text_provider="nvidia_nim",
+            nvidia_nim_api_key="nv-secret",
+        ),
     )
     monkeypatch.setattr(
         idea_lab,
@@ -369,7 +397,11 @@ async def test_generate_freeform_ideas_keeps_partial_valid_omniroute_response(
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
-        lambda: Settings(ai_provider="omniroute", omniroute_api_key="omni-secret"),
+        lambda: Settings(
+            ai_provider="nvidia_nim",
+            text_provider="nvidia_nim",
+            nvidia_nim_api_key="nv-secret",
+        ),
     )
     monkeypatch.setattr(
         idea_lab,

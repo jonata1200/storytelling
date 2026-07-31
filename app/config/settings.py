@@ -75,28 +75,6 @@ OMNIROUTE_TEXT_MODELS = (
     "opencode-zen/laguna-s-2.1-free",
 )
 
-OLLAMA_TEXT_MODELS = (
-    "kimi-k3:cloud",
-    "glm-5.2:cloud",
-    "nemotron-3-ultra:cloud",
-    "deepseek-v4-pro:cloud",
-    "minimax-m3:cloud",
-    "kimi-k2.7-code:cloud",
-    "glm-5.1:cloud",
-    "qwen3.5:397b-cloud",
-    "nemotron-3-super:cloud",
-    "gpt-oss:120b-cloud",
-)
-
-GROQ_TEXT_MODELS = (
-    "openai/gpt-oss-120b",
-    "qwen/qwen3.6-27b",
-    "minimaxai/minimax-m2.7",
-    "llama-3.3-70b-versatile",
-    "openai/gpt-oss-20b",
-    "llama-3.1-8b-instant",
-)
-
 NVIDIA_NIM_TEXT_MODELS = (
     "z-ai/glm-5.2",
     "nvidia/nemotron-3-ultra-550b-a55b",
@@ -108,13 +86,6 @@ NVIDIA_NIM_TEXT_MODELS = (
     "nvidia/nemotron-3-super-120b-a12b",
     "mistralai/mistral-medium-3.5-128b",
     "minimaxai/minimax-m2.7",
-)
-
-NVIDIA_NIM_IMAGE_MODELS = (
-    "qwen/qwen-image",
-    "black-forest-labs/flux.1-schnell",
-    "black-forest-labs/flux.1-dev",
-    "stabilityai/stable-diffusion-3.5-large",
 )
 
 
@@ -145,25 +116,17 @@ class Settings(BaseSettings):
     omniroute_video_poll_interval_seconds: int = 8
     omniroute_video_poll_timeout_seconds: int = 900
     omniroute_video_download_timeout_seconds: int = 300
-    ai_provider: str = "ollama"
-    text_provider: str | None = "ollama"
+    ai_provider: str = "nvidia_nim"
+    text_provider: str | None = "nvidia_nim"
     text_provider_fallbacks: str = ""
-    ollama_api_key: str | None = Field(default="ollama", repr=False)
-    ollama_base_url: str = "http://localhost:11434/v1"
-    ollama_default_model: str = "kimi-k3:cloud"
-    groq_api_key: str | None = Field(default=None, repr=False)
-    groq_base_url: str = "https://api.groq.com/openai/v1"
-    groq_default_model: str = "openai/gpt-oss-120b"
     nvidia_nim_api_key: str | None = Field(default=None, repr=False)
     nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_nim_default_model: str = "z-ai/glm-5.2"
-    nvidia_nim_image_base_url: str = "https://ai.api.nvidia.com/v1/genai"
-    nvidia_nim_image_model: str = "qwen/qwen-image"
     veo_ai_free_enabled: bool = False
     veo_ai_free_session_path: Path = Path(".runtime/veo_free/session.json")
     veo_ai_free_image_model: str = "veo-ai-free/image"
     veo_ai_free_video_model: str = "veo-ai-free/video"
-    image_provider: str | None = "nvidia_nim"
+    image_provider: str | None = "veo_ai_free"
     video_provider: str | None = "veo_ai_free"
     storyboard_image_concurrency: int = 3
     video_generation_concurrency: int = Field(default=2, ge=1, le=4)
@@ -183,8 +146,6 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def reject_insecure_non_local_defaults(self) -> "Settings":
         self.omniroute_api_key = normalize_omniroute_api_key(self.omniroute_api_key)
-        self.ollama_api_key = normalize_api_key(self.ollama_api_key, "ollama")
-        self.groq_api_key = normalize_api_key(self.groq_api_key, "groq")
         self.nvidia_nim_api_key = normalize_api_key(self.nvidia_nim_api_key, "nvidia_nim")
         self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
         self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")
@@ -210,7 +171,7 @@ class Settings(BaseSettings):
         value: str | None,
         field_name: str,
         *,
-        legacy_default: str = "ollama",
+        legacy_default: str = "nvidia_nim",
     ) -> str | None:
         if not str(value or "").strip():
             return None

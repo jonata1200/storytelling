@@ -82,9 +82,9 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         visual_bible_service,
         "get_settings",
         lambda: SimpleNamespace(
-            ai_provider="ollama",
-            image_provider="nvidia_nim",
-            nvidia_nim_image_model="qwen/qwen-image",
+            ai_provider="nvidia_nim",
+            image_provider="veo_ai_free",
+            veo_ai_free_image_model="veo-ai-free/image",
         ),
     )
     monkeypatch.setattr(
@@ -98,9 +98,9 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         project_id,
     )
 
-    assert getattr(provider, "provider_name", None) == "nvidia_nim"
-    assert model == "qwen/qwen-image"
-    assert directory == "nvidia_nim_images"
+    assert getattr(provider, "provider_name", None) == "veo_ai_free"
+    assert model == "veo-ai-free/image"
+    assert directory == "veo_ai_free_images"
 
 
 @pytest.mark.asyncio
@@ -116,7 +116,7 @@ async def test_image_provider_uses_veo_ai_free_when_configured(
         visual_bible_service,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama",
+            ai_provider="nvidia_nim",
             image_provider="veo_ai_free",
             veo_ai_free_image_model="veo-ai-free/image",
         ),
@@ -148,7 +148,7 @@ async def test_image_provider_uses_legacy_omniroute_preference_as_veo_ai_free(
         visual_bible_service,
         "get_settings",
         lambda: SimpleNamespace(
-                ai_provider="ollama",
+                ai_provider="nvidia_nim",
                 image_provider="omniroute",
                 veo_ai_free_image_model="veo-ai-free/image",
         ),

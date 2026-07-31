@@ -28,7 +28,7 @@ def test_effective_provider_for_channel_uses_media_override() -> None:
         image_provider="omniroute",
     )
 
-    assert effective_provider_for_channel(settings, "text") == "ollama"
+    assert effective_provider_for_channel(settings, "text") == "nvidia_nim"
     assert effective_provider_for_channel(settings, "image") == "veo_ai_free"
 
 
@@ -50,33 +50,26 @@ def test_normalize_provider_name_rejects_mock_provider() -> None:
 
 def test_provider_policy_supports_new_text_providers() -> None:
     settings = Settings(
-        text_provider="ollama",
-        ollama_base_url="http://localhost:11434/v1",
-        ollama_default_model="kimi-k3:cloud",
+        text_provider="nvidia_nim",
+        nvidia_nim_base_url="https://integrate.api.nvidia.com/v1",
+        nvidia_nim_default_model="z-ai/glm-5.2",
     )
 
     assert "omniroute" not in SUPPORTED_AI_PROVIDERS
-    assert "ollama" in SUPPORTED_AI_PROVIDERS
-    assert "groq" in SUPPORTED_AI_PROVIDERS
+    assert "ollama" not in SUPPORTED_AI_PROVIDERS
+    assert "groq" not in SUPPORTED_AI_PROVIDERS
     assert "nvidia_nim" in SUPPORTED_AI_PROVIDERS
-    assert effective_provider_for_channel(settings, "text") == "ollama"
+    assert effective_provider_for_channel(settings, "text") == "nvidia_nim"
     assert provider_display_name("nvidia_nim") == "NVIDIA NIM"
-    assert provider_base_url(settings, "ollama") == "http://localhost:11434/v1"
-    assert provider_model(settings, "ollama", "text") == "kimi-k3:cloud"
-    assert provider_requires_api_key(settings, "ollama") is False
-
-
-def test_ollama_cloud_requires_api_key() -> None:
-    settings = Settings(ollama_base_url="https://ollama.com", ollama_api_key="cloud-secret")
-
-    assert provider_requires_api_key(settings, "ollama") is True
+    assert provider_base_url(settings, "nvidia_nim") == "https://integrate.api.nvidia.com/v1"
+    assert provider_model(settings, "nvidia_nim", "text") == "z-ai/glm-5.2"
+    assert provider_requires_api_key(settings, "nvidia_nim") is True
 
 
 def test_nvidia_nim_requires_key_only_for_hosted_endpoint() -> None:
     hosted = Settings(nvidia_nim_base_url="https://integrate.api.nvidia.com/v1")
     local = Settings(
         nvidia_nim_base_url="http://localhost:8000/v1",
-        nvidia_nim_image_base_url="http://localhost:8000/v1",
     )
 
     assert provider_requires_api_key(hosted, "nvidia_nim") is True

@@ -86,8 +86,7 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     assert load_runtime_preferences(path)["omniroute_api_key"] == "secret"
     save_runtime_preferences(
         {
-            "TEXT_PROVIDER_FALLBACKS": "nvidia_nim,ollama",
-            "GROQ_API_KEY": "groq-secret",
+            "TEXT_PROVIDER_FALLBACKS": "",
             "NVIDIA_NIM_API_KEY": "nv-secret",
             "VEO_AI_FREE_ENABLED": "true",
             "VEO_AI_FREE_SESSION_PATH": ".runtime/veo_free/session.json",
@@ -95,8 +94,7 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
         path,
     )
     preferences = load_runtime_preferences(path)
-    assert preferences["text_provider_fallbacks"] == "nvidia_nim,ollama"
-    assert preferences["groq_api_key"] == "groq-secret"
+    assert preferences["text_provider_fallbacks"] == ""
     assert preferences["nvidia_nim_api_key"] == "nv-secret"
     assert preferences["veo_ai_free_enabled"] == "true"
     with pytest.raises(ValueError, match="not allowed"):

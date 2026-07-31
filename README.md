@@ -52,58 +52,25 @@ aprovação e controle sobre o resultado.
 
 ## Provedor De IA
 
-Texto pode usar providers diferentes por API:
-
-- `ollama` Cloud pela API nativa ou local via OpenAI-compatible
-- `groq`
-- `nvidia_nim`
-
-Imagem usa `nvidia_nim` pela API da NVIDIA. Video continua no provider
-experimental `veo_ai_free`, que depende de sessao local do navegador e pode ser
-desabilitado. Os modelos padrao ficam no `.env`:
+Texto usa `nvidia_nim` por API. Imagem e video usam o provider experimental
+`veo_ai_free`, que depende de sessao local do navegador e pode ser desabilitado.
+Os modelos padrao ficam no `.env`:
 
 ```env
-AI_PROVIDER=ollama
-TEXT_PROVIDER=ollama
-TEXT_PROVIDER_FALLBACKS=nvidia_nim,ollama
-IMAGE_PROVIDER=nvidia_nim
+AI_PROVIDER=nvidia_nim
+TEXT_PROVIDER=nvidia_nim
+TEXT_PROVIDER_FALLBACKS=
+IMAGE_PROVIDER=veo_ai_free
 VIDEO_PROVIDER=veo_ai_free
-
-OLLAMA_BASE_URL=https://ollama.com
-OLLAMA_API_KEY=sua_chave_ollama_cloud
-OLLAMA_DEFAULT_MODEL=kimi-k3:cloud
-
-GROQ_BASE_URL=https://api.groq.com/openai/v1
-GROQ_API_KEY=sua_chave_groq
-GROQ_DEFAULT_MODEL=openai/gpt-oss-120b
 
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_API_KEY=sua_chave_nvidia
 NVIDIA_NIM_DEFAULT_MODEL=z-ai/glm-5.2
-NVIDIA_NIM_IMAGE_BASE_URL=https://ai.api.nvidia.com/v1/genai
-NVIDIA_NIM_IMAGE_MODEL=qwen/qwen-image
 
 VEO_AI_FREE_ENABLED=false
 VEO_AI_FREE_SESSION_PATH=.runtime/veo_free/session.json
-```
-
-Modelos de imagem NVIDIA NIM disponiveis na tela de Configuracoes:
-
-- `qwen/qwen-image`
-- `black-forest-labs/flux.1-schnell`
-- `black-forest-labs/flux.1-dev`
-- `stabilityai/stable-diffusion-3.5-large`
-
-Para Ollama Cloud, nao e necessario instalar Ollama na maquina. Configure
-`OLLAMA_BASE_URL=https://ollama.com`, uma `OLLAMA_API_KEY` valida e selecione um
-modelo disponivel na conta, como `kimi-k3:cloud`.
-
-Para Ollama local, troque para `OLLAMA_BASE_URL=http://localhost:11434/v1`, use
-`OLLAMA_API_KEY=ollama`, rode `ollama serve` e baixe o modelo antes de selecionar
-o provider:
-
-```powershell
-ollama pull gpt-oss:120b-cloud
+VEO_AI_FREE_IMAGE_MODEL=veo-ai-free/image
+VEO_AI_FREE_VIDEO_MODEL=veo-ai-free/video
 ```
 
 As chaves e modelos de texto tambem podem ser salvos pela tela de Configuracoes
@@ -127,7 +94,7 @@ pip install -e . --no-deps
 Copy-Item .env.example .env
 ```
 
-Configure `OLLAMA_API_KEY`, `GROQ_API_KEY`, `NVIDIA_NIM_API_KEY` e a sessão
+Configure `NVIDIA_NIM_API_KEY` e a sessão
 experimental do Veo AI Free pela tela de Configurações de IA ou pelo `.env`.
 
 ## Executando
@@ -232,7 +199,6 @@ APP_ENV=production
 APP_DEBUG=false
 APP_SECRET_KEY=gere-um-segredo-longo-e-unico
 ALLOW_USER_REGISTRATION=false
-GROQ_API_KEY=sua_chave_no_ambiente
 NVIDIA_NIM_API_KEY=sua_chave_no_ambiente
 ```
 
