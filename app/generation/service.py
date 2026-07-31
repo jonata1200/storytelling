@@ -37,12 +37,12 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
 
 LLM_PROVIDER_TIMEOUT_SECONDS = 300
 TASK_TIMEOUT_SECONDS: dict[str, int] = {
-    "generate_story_ideas": 120,
-    "generate_script": 120,
-    "generate_scenes_and_shots": 120,
-    "generate_visual_bible": 180,
-    "generate_storyboard_prompts": 180,
-    "revise_script": 120,
+    "generate_story_ideas": 180,
+    "generate_script": 240,
+    "generate_scenes_and_shots": 240,
+    "generate_visual_bible": 240,
+    "generate_storyboard_prompts": 240,
+    "revise_script": 240,
 }
 CREATIVE_NARRATIVE_TASKS = {
     "generate_story_ideas",

@@ -151,6 +151,14 @@ def friendly_ai_error(exc: BaseException) -> str:
             "O provedor de IA recusou a chamada por limite de uso. Aguarde alguns minutos "
             "ou troque para um modelo com mais disponibilidade."
         )
+    if (
+        "http 404" in normalized
+        and ("not found for account" in normalized or "modelo selecionado" in normalized)
+    ):
+        return (
+            "O modelo escolhido não está disponível para a sua chave NVIDIA NIM. "
+            "Escolha outro modelo nas configurações ou habilite esse modelo na conta NVIDIA."
+        )
     if "omniroute" in normalized and (
         "network" in normalized
         or "connection" in normalized

@@ -254,6 +254,18 @@ def test_friendly_ai_error_explains_timeout() -> None:
     assert "modelo" in message
 
 
+def test_friendly_ai_error_explains_nvidia_model_not_available() -> None:
+    message = pages._friendly_ai_error(
+        RuntimeError(
+            "NVIDIA NIM HTTP 404: o modelo selecionado nao esta disponivel para esta "
+            "chave/conta NVIDIA NIM. Detalhe: Not found for account"
+        )
+    )
+
+    assert "não está disponível" in message
+    assert "chave NVIDIA NIM" in message
+
+
 def test_expected_ai_timeout_logs_warning_without_traceback(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

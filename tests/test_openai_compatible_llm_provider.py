@@ -31,12 +31,19 @@ class _JsonResponse:
         return json.dumps(self.payload).encode("utf-8")
 
 
-def _http_error(status: int, payload: str) -> urllib.error.HTTPError:
+def _http_error(
+    status: int,
+    payload: str,
+    headers: dict[str, str] | None = None,
+) -> urllib.error.HTTPError:
+    message = Message()
+    for key, value in (headers or {}).items():
+        message[key] = value
     return urllib.error.HTTPError(
         url="https://provider.test/v1/chat/completions",
         code=status,
         msg="provider error",
-        hdrs=Message(),
+        hdrs=message,
         fp=io.BytesIO(payload.encode("utf-8")),
     )
 
@@ -141,6 +148,7 @@ def test_openai_compatible_provider_redacts_http_error_secret(
         "app.providers.llm.openai_compatible.urllib.request.urlopen",
         fake_urlopen,
     )
+    monkeypatch.setattr("app.providers.llm.openai_compatible.time.sleep", lambda _delay: None)
 
     with pytest.raises(RuntimeError) as exc:
         provider._send_request(
@@ -151,6 +159,180 @@ def test_openai_compatible_provider_redacts_http_error_secret(
     assert "NVIDIA NIM HTTP 429" in str(exc.value)
     assert "nv-secret" not in str(exc.value)
     assert "[REDACTED]" in str(exc.value)
+
+
+def test_openai_compatible_provider_retries_transient_resource_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenAICompatibleLLMProvider(
+        OpenAICompatibleLLMConfig(
+            provider_name="nvidia_nim",
+            display_name="NVIDIA NIM",
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key="nv-secret",
+            api_key_env="NVIDIA_NIM_API_KEY",
+        )
+    )
+    sleeps: list[float] = []
+    attempts = 0
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
+        nonlocal attempts
+        _ = request, kwargs
+        attempts += 1
+        if attempts == 1:
+            raise _http_error(
+                503,
+                (
+                    '{"error":{"message":"ResourceExhausted: Worker local total '
+                    'request limit reached"}}'
+                ),
+                {"Retry-After": "0.5"},
+            )
+        return _JsonResponse({"choices": [{"message": {"content": '{"ok": true}'}}]})
+
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.urllib.request.urlopen",
+        fake_urlopen,
+    )
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.time.sleep",
+        lambda delay: sleeps.append(delay),
+    )
+
+    response = provider._send_request(
+        LLMRequest(task="generate_script", prompt="{}", model="nvidia/nemotron"),
+        use_response_format=True,
+    )
+
+    assert attempts == 2
+    assert sleeps == [0.5]
+    assert response["choices"][0]["message"]["content"] == '{"ok": true}'
+
+
+def test_openai_compatible_provider_explains_resource_exhausted_after_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenAICompatibleLLMProvider(
+        OpenAICompatibleLLMConfig(
+            provider_name="nvidia_nim",
+            display_name="NVIDIA NIM",
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key="nv-secret",
+            api_key_env="NVIDIA_NIM_API_KEY",
+        )
+    )
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
+        _ = request, kwargs
+        raise _http_error(
+            503,
+            (
+                '{"error":{"message":"ResourceExhausted: Worker local total '
+                'request limit reached (33/16)"}}'
+            ),
+        )
+
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.urllib.request.urlopen",
+        fake_urlopen,
+    )
+    monkeypatch.setattr("app.providers.llm.openai_compatible.time.sleep", lambda _delay: None)
+
+    with pytest.raises(RuntimeError) as exc:
+        provider._send_request(
+            LLMRequest(task="generate_script", prompt="{}", model="nvidia/nemotron"),
+            use_response_format=True,
+        )
+
+    assert "limite temporario de capacidade" in str(exc.value)
+    assert "modelo menor/mais estavel" in str(exc.value)
+    assert "Modelo: nvidia/nemotron" in str(exc.value)
+
+
+def test_openai_compatible_provider_explains_nvidia_model_not_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenAICompatibleLLMProvider(
+        OpenAICompatibleLLMConfig(
+            provider_name="nvidia_nim",
+            display_name="NVIDIA NIM",
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key="nv-secret",
+            api_key_env="NVIDIA_NIM_API_KEY",
+        )
+    )
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
+        _ = request, kwargs
+        raise _http_error(
+            404,
+            (
+                '{"status":404,"title":"Not Found","detail":"Function '
+                "'abc': Not found for account 'account-id'\"}"
+            ),
+        )
+
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    with pytest.raises(RuntimeError) as exc:
+        provider._send_request(
+            LLMRequest(
+                task="generate_script",
+                prompt="{}",
+                model="deepseek-ai/deepseek-v4-flash",
+            ),
+            use_response_format=True,
+        )
+
+    message = str(exc.value)
+    assert "modelo selecionado nao esta disponivel" in message
+    assert "Modelo: deepseek-ai/deepseek-v4-flash" in message
+
+
+def test_openai_compatible_provider_retries_runtime_timeout_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenAICompatibleLLMProvider(
+        OpenAICompatibleLLMConfig(
+            provider_name="nvidia_nim",
+            display_name="NVIDIA NIM",
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key="nv-secret",
+            api_key_env="NVIDIA_NIM_API_KEY",
+        )
+    )
+    sleeps: list[float] = []
+    attempts = 0
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
+        nonlocal attempts
+        _ = request, kwargs
+        attempts += 1
+        if attempts == 1:
+            raise TimeoutError("slow")
+        return _JsonResponse({"choices": [{"message": {"content": '{"ok": true}'}}]})
+
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.urllib.request.urlopen",
+        fake_urlopen,
+    )
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.time.sleep",
+        lambda delay: sleeps.append(delay),
+    )
+
+    response = provider._send_request(
+        LLMRequest(task="generate_script", prompt="{}", model="nvidia/nemotron"),
+        use_response_format=True,
+    )
+
+    assert attempts == 2
+    assert sleeps == [4.0]
+    assert response["choices"][0]["message"]["content"] == '{"ok": true}'
 
 
 def test_openai_compatible_provider_reports_timeout(

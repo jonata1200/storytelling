@@ -1,8 +1,10 @@
 import asyncio
 import json
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from email.message import Message
 from typing import Any
 
 from app.config.provider_policy import ensure_provider_api_key, validate_model_name
@@ -12,7 +14,10 @@ from app.providers.llm.types import LLMRequest, LLMResult
 
 OPENAI_COMPATIBLE_LLM_HTTP_TIMEOUT_SECONDS = 300
 OPENAI_COMPATIBLE_LLM_MIN_HTTP_TIMEOUT_SECONDS = 15
+OPENAI_COMPATIBLE_LLM_MAX_RETRY_ATTEMPTS = 3
+OPENAI_COMPATIBLE_LLM_RETRY_DELAYS_SECONDS = (4.0, 12.0)
 SCRIPT_TEXT_RECOVERY_TASKS = {"generate_script", "revise_script"}
+TRANSIENT_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 @dataclass(frozen=True)
@@ -104,14 +109,62 @@ class OpenAICompatibleLLMProvider:
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
-        http_request = urllib.request.Request(
-            url,
-            data=json.dumps(body).encode("utf-8"),
-            headers=headers,
-            method="POST",
-        )
+        request_payload = json.dumps(body).encode("utf-8")
+        timeout_seconds = self._request_timeout_seconds(request)
+        last_http_error: urllib.error.HTTPError | None = None
+        last_http_detail = ""
+        for attempt in range(OPENAI_COMPATIBLE_LLM_MAX_RETRY_ATTEMPTS):
+            http_request = urllib.request.Request(
+                url,
+                data=request_payload,
+                headers=headers,
+                method="POST",
+            )
+            try:
+                parsed = self._send_http_request(http_request, timeout_seconds)
+            except urllib.error.HTTPError as exc:
+                last_http_error = exc
+                detail = exc.read().decode("utf-8", errors="replace")
+                last_http_detail = detail
+                if use_response_format and exc.code in {400, 422}:
+                    return self._send_request(request, False)
+                if self._should_retry_http_error(exc, detail, attempt):
+                    self._sleep_before_retry(exc.headers, attempt)
+                    continue
+                raise RuntimeError(
+                    self._http_error_message(config, exc.code, detail, request.model)
+                ) from exc
+            except RuntimeError as exc:
+                if use_response_format and "stream sem conte" in str(exc).lower():
+                    return self._send_request(request, False)
+                if self._should_retry_runtime_error(exc, attempt):
+                    self._sleep_before_retry(None, attempt)
+                    continue
+                raise
+            else:
+                break
+        else:
+            if last_http_error is not None:
+                raise RuntimeError(
+                    self._http_error_message(
+                        config,
+                        last_http_error.code,
+                        last_http_detail,
+                        request.model,
+                    )
+                ) from last_http_error
+            raise RuntimeError(f"{config.display_name} nao retornou resposta")
+
+        if not isinstance(parsed, dict):
+            raise RuntimeError(f"{config.display_name} retornou resposta fora do formato esperado")
+        return parsed
+
+    def _send_http_request(
+        self,
+        http_request: urllib.request.Request,
+        timeout_seconds: float,
+    ) -> dict[str, Any]:
         try:
-            timeout_seconds = self._request_timeout_seconds(request)
             with self._urlopen(http_request, timeout_seconds) as response:
                 raw_body = response.read()
                 content_type = str(
@@ -120,34 +173,108 @@ class OpenAICompatibleLLMProvider:
                 if "text/event-stream" in content_type:
                     try:
                         parsed = self._parse_event_stream_response(raw_body)
-                    except RuntimeError as exc:
-                        if use_response_format and "stream sem conte" in str(exc).lower():
-                            return self._send_request(request, False)
+                    except RuntimeError:
                         raise
                 else:
                     parsed = json.loads(raw_body.decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            if use_response_format and exc.code in {400, 422}:
-                return self._send_request(request, False)
-            raise RuntimeError(
-                f"{config.display_name} HTTP {exc.code}: {redact_secrets(detail)}"
-            ) from exc
+            raise exc
         except urllib.error.URLError as exc:
+            config = self._provider_config()
             raise RuntimeError(self._network_error_message(config, exc.reason)) from exc
         except TimeoutError as exc:
+            config = self._provider_config()
             raise RuntimeError(f"{config.display_name} timeout ao aguardar resposta") from exc
         except OSError as exc:
+            config = self._provider_config()
             raise RuntimeError(
                 f"{config.display_name} connection error: {redact_secrets(exc)}"
             ) from exc
         except json.JSONDecodeError as exc:
+            config = self._provider_config()
             raise RuntimeError(
                 f"{config.display_name} retornou resposta HTTP que nao e JSON valido"
             ) from exc
         if not isinstance(parsed, dict):
             raise RuntimeError(f"{config.display_name} retornou resposta fora do formato esperado")
         return parsed
+
+    def _should_retry_http_error(
+        self,
+        exc: urllib.error.HTTPError,
+        detail: str,
+        attempt: int,
+    ) -> bool:
+        if attempt >= OPENAI_COMPATIBLE_LLM_MAX_RETRY_ATTEMPTS - 1:
+            return False
+        if exc.code not in TRANSIENT_HTTP_STATUS_CODES:
+            return False
+        lower_detail = detail.casefold()
+        non_retryable_terms = ("invalid api key", "unauthorized", "forbidden")
+        return not any(term in lower_detail for term in non_retryable_terms)
+
+    def _should_retry_runtime_error(self, exc: RuntimeError, attempt: int) -> bool:
+        if attempt >= OPENAI_COMPATIBLE_LLM_MAX_RETRY_ATTEMPTS - 1:
+            return False
+        message = str(exc).casefold()
+        retryable_terms = (
+            "timeout",
+            "network",
+            "connection",
+            "temporarily unavailable",
+            "temporary failure",
+            "remote end closed",
+        )
+        return any(term in message for term in retryable_terms)
+
+    def _sleep_before_retry(self, headers: Message | None, attempt: int) -> None:
+        retry_after = self._retry_after_seconds(headers)
+        delay = (
+            retry_after
+            if retry_after is not None
+            else OPENAI_COMPATIBLE_LLM_RETRY_DELAYS_SECONDS[
+                min(attempt, len(OPENAI_COMPATIBLE_LLM_RETRY_DELAYS_SECONDS) - 1)
+            ]
+        )
+        time.sleep(delay)
+
+    @staticmethod
+    def _retry_after_seconds(headers: Message | None) -> float | None:
+        if headers is None:
+            return None
+        raw_value = headers.get("Retry-After")
+        if not raw_value:
+            return None
+        try:
+            return max(0.0, min(60.0, float(raw_value)))
+        except ValueError:
+            return None
+
+    def _http_error_message(
+        self,
+        config: OpenAICompatibleLLMConfig,
+        status_code: int,
+        detail: str,
+        model: str,
+    ) -> str:
+        redacted_detail = redact_secrets(detail)
+        model_detail = f" Modelo: {model}."
+        lower_detail = str(detail).casefold()
+        if "resourceexhausted" in str(detail).casefold():
+            return (
+                f"{config.display_name} HTTP {status_code}: limite temporario de capacidade "
+                f"atingido no provider. Tente novamente em alguns instantes ou escolha um "
+                f"modelo menor/mais estavel.{model_detail} Detalhe: {redacted_detail}"
+            )
+        if status_code == 404 and (
+            "not found for account" in lower_detail or "function" in lower_detail
+        ):
+            return (
+                f"{config.display_name} HTTP 404: o modelo selecionado nao esta disponivel "
+                f"para esta chave/conta NVIDIA NIM. Escolha outro modelo ou habilite o "
+                f"modelo no painel da NVIDIA.{model_detail} Detalhe: {redacted_detail}"
+            )
+        return f"{config.display_name} HTTP {status_code}:{model_detail} {redacted_detail}"
 
     def _api_key(self, config: OpenAICompatibleLLMConfig) -> str | None:
         if config.require_api_key:

@@ -24,7 +24,7 @@ from app.storytelling.service import (
 
 SAVED_IDEAS_PATH = Path(".runtime/idea_lab_saved.json")
 GENERATED_IDEAS_PATH = Path(".runtime/idea_lab_generated.json")
-IDEA_PROVIDER_TIMEOUT_SECONDS = 120
+IDEA_PROVIDER_TIMEOUT_SECONDS = 180
 
 
 def build_idea_lab_prompt(
