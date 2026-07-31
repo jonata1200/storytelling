@@ -8,12 +8,14 @@ from sqlalchemy import select
 
 from app.database.session import AsyncSessionLocal
 from app.jobs.service import enqueue_project_step
+from app.storytelling.models import Script
 from app.ui.shared.page_config import friendly_ai_error, show_ai_error_popup
 from app.ui.visual.helpers import visual_reference_views_for as _visual_reference_views_for
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (
     approve_visual_target_and_generate_views,
     default_views_for,
+    generate_visual_bible,
     regenerate_visual_reference,
     update_visual_target_prompt,
 )
@@ -147,6 +149,63 @@ async def _regenerate_visual_reference_from_ui(
 
 def _visual_library_cards_ready(summary: dict[str, Any]) -> bool:
     return bool(summary["characters"] or summary["locations"] or summary["props"])
+
+
+def _visual_prompts_need_generation(summary: dict[str, Any]) -> bool:
+    items = [*summary["characters"], *summary["locations"], *summary["props"]]
+    if not items:
+        return True
+    return any(
+        not str(
+            (getattr(item, "canonical_profile", {}) or {}).get("canonical_prompt") or ""
+        ).strip()
+        for item in items
+    )
+
+
+async def _generate_all_visual_prompts_from_ui(project_id: UUID) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            script_result = await session.execute(
+                select(Script)
+                .where(Script.project_id == project_id)
+                .order_by(Script.created_at.desc())
+                .limit(1)
+            )
+            script = script_result.scalars().first()
+            if script is None:
+                _notify_visual_action(
+                    "Gere ou salve um roteiro antes de criar prompts visuais.",
+                    color="warning",
+                )
+                return
+            result = await generate_visual_bible(session, project_id, script.id)
+        if result is None:
+            _notify_visual_action(
+                "Não encontrei o projeto ou roteiro para gerar prompts visuais.",
+                color="negative",
+            )
+            return
+        characters, locations, props = result
+        total = len(characters) + len(locations) + len(props)
+        if total:
+            _notify_visual_action(
+                (
+                    f"{total} prompt(s) visual(is) gerado(s): "
+                    f"{len(characters)} personagem(ns), {len(locations)} local(is) e "
+                    f"{len(props)} objeto(s)."
+                ),
+                color="positive",
+            )
+        else:
+            _notify_visual_action(
+                "Nenhum prompt visual novo foi necessário para este projeto.",
+                color="positive",
+            )
+        ui.navigate.reload()
+    except Exception as exc:
+        logger.exception("Não foi possível gerar prompts visuais no projeto %s", project_id)
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
 def _visual_batch_requests(summary: dict[str, Any]) -> list[tuple[str, UUID, list[str]]]:

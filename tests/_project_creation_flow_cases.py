@@ -936,6 +936,29 @@ def test_visual_library_cards_ready_when_any_card_type_exists() -> None:
     assert not pages._visual_library_cards_ready({"characters": [], "locations": [], "props": []})
 
 
+def test_visual_prompts_need_generation_before_visual_targets_exist() -> None:
+    assert pages._visual_prompts_need_generation(
+        {"characters": [], "locations": [], "props": []}
+    )
+
+
+def test_visual_prompts_are_ready_when_targets_have_canonical_prompts() -> None:
+    target = SimpleNamespace(canonical_profile={"canonical_prompt": "Retrato de Clara"})
+
+    assert not pages._visual_prompts_need_generation(
+        {"characters": [target], "locations": [], "props": []}
+    )
+
+
+def test_visual_prompts_need_generation_when_any_prompt_is_missing() -> None:
+    ready = SimpleNamespace(canonical_profile={"canonical_prompt": "Casa cinematografica"})
+    missing = SimpleNamespace(canonical_profile={})
+
+    assert pages._visual_prompts_need_generation(
+        {"characters": [], "locations": [ready], "props": [missing]}
+    )
+
+
 def test_visual_batch_requests_include_all_missing_views() -> None:
     character_id = uuid4()
     location_id = uuid4()

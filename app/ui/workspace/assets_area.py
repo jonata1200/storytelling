@@ -10,9 +10,11 @@ from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS
 from app.ui.visual.actions import (
     _approve_all_visual_targets_from_ui,
     _approve_visual_target_from_ui,
+    _generate_all_visual_prompts_from_ui,
     _regenerate_visual_reference_from_ui,
     _update_visual_prompt_from_ui,
     _visual_batch_requests,
+    _visual_prompts_need_generation,
 )
 from app.ui.visual.helpers import (
     asset_url,
@@ -392,9 +394,10 @@ def render_assets_area(
 ) -> None:
     del section_title
     asset_map = {asset.id: asset for asset in summary.get("assets", [])}
+    prompts_need_generation = _visual_prompts_need_generation(summary)
     batch_requests = _visual_batch_requests(summary)
     batch_prompt_dialog: Any | None = None
-    if batch_requests:
+    if batch_requests and not prompts_need_generation:
         target_lookup: dict[tuple[str, UUID], str] = {}
         target_profiles: dict[tuple[str, UUID], dict[str, Any]] = {}
         for target_kind, items in (
@@ -452,7 +455,25 @@ def render_assets_area(
             ui.label("Personagens, locais e objetos canônicos do seu universo.").classes(
                 "text-sm text-[#8e948f]"
             )
-        if batch_prompt_dialog is not None:
+        if prompts_need_generation:
+            prompt_loading_dialog = loading_dialog_factory(
+                "Gerando prompts visuais",
+                "A IA está criando prompts para personagens, locais e objetos.",
+            )
+
+            async def generate_all_visual_prompts() -> None:
+                prompt_loading_dialog.open()
+                try:
+                    await _generate_all_visual_prompts_from_ui(project_id)
+                finally:
+                    prompt_loading_dialog.close()
+
+            ui.button(
+                "Gerar todos os prompts",
+                icon="auto_awesome",
+                on_click=generate_all_visual_prompts,
+            ).props("unelevated no-caps").classes("acid-bg rounded-xl shrink-0")
+        elif batch_prompt_dialog is not None:
             pending_count = sum(len(view_types) for _kind, _id, view_types in batch_requests)
             ui.button(
                 f"Aprovar prompts pendentes ({pending_count})",

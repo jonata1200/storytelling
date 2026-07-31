@@ -231,6 +231,9 @@ from app.ui.visual.actions import (
     _visual_library_cards_ready as _visual_library_cards_ready,
 )
 from app.ui.visual.actions import (
+    _visual_prompts_need_generation as _visual_prompts_need_generation,
+)
+from app.ui.visual.actions import (
     _visual_reference_used_fallback as _visual_reference_used_fallback,
 )
 from app.ui.visual.helpers import (  # noqa: F401
