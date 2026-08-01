@@ -3,15 +3,13 @@ from typing import Any, Literal
 
 ProviderChannel = Literal["text", "image", "video", "speech"]
 
-DEFAULT_PROVIDER = "nvidia_nim"
+DEFAULT_PROVIDER = "ollama_cloud"
 LEGACY_AI_PROVIDERS = ("omniroute", "opencode")
-SUPPORTED_TEXT_PROVIDERS = ("nvidia_nim", "ollama_cloud")
-SUPPORTED_MEDIA_PROVIDERS = ("veo_ai_free", "google_ai")
+SUPPORTED_TEXT_PROVIDERS = ("ollama_cloud",)
+SUPPORTED_MEDIA_PROVIDERS = ("google_ai",)
 SUPPORTED_AI_PROVIDERS = (
-    "nvidia_nim",
     "ollama_cloud",
     "google_ai",
-    "veo_ai_free",
 )
 SUPPORTED_MODEL_PROVIDERS = frozenset(SUPPORTED_TEXT_PROVIDERS)
 MOCK_MODEL_IDS = {
@@ -52,21 +50,19 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
     configured_provider = channel_provider or getattr(settings, "ai_provider", DEFAULT_PROVIDER)
     configured_text = str(configured_provider or "").strip().casefold()
     if configured_text in LEGACY_AI_PROVIDERS:
-        return "veo_ai_free" if channel in {"image", "video"} else DEFAULT_PROVIDER
+        return "google_ai" if channel in {"image", "video"} else DEFAULT_PROVIDER
     if channel == "image" and not channel_provider:
-        return "veo_ai_free"
+        return "google_ai"
     if channel == "video" and not channel_provider:
-        return "veo_ai_free"
+        return "google_ai"
     return normalize_provider_name(configured_provider, f"{channel.upper()}_PROVIDER")
 
 
 def provider_display_name(provider: str) -> str:
     names = {
         "omniroute": "OmniRoute",
-        "nvidia_nim": "NVIDIA NIM",
         "ollama_cloud": "Ollama Cloud",
         "google_ai": "Google AI",
-        "veo_ai_free": "Veo AI Free",
     }
     return names.get(provider, provider)
 
@@ -98,20 +94,10 @@ def provider_channel_base_url(settings: Any, provider: str, channel: ProviderCha
 
 
 def provider_requires_api_key(settings: Any, provider: str) -> bool:
-    if provider == "nvidia_nim":
-        base_urls = (provider_base_url(settings, provider),)
-        hosted_hosts = ("integrate.api.nvidia.com", "ai.api.nvidia.com")
-        return any(
-            hosted_host in str(base_url or "").casefold()
-            for base_url in base_urls
-            for hosted_host in hosted_hosts
-        )
     if provider == "ollama_cloud":
         return True
     if provider == "google_ai":
         return True
-    if provider == "veo_ai_free":
-        return False
     return True
 
 

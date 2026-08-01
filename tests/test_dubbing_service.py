@@ -15,7 +15,12 @@ from app.dubbing.service import (
 )
 from app.finalization.models import Export
 from app.projects.models import Project
-from app.providers.dubbing.types import DubbingSubmitRequest, DubbingSubmitResult
+from app.providers.dubbing.types import (
+    DubbingDownloadResult,
+    DubbingStatusResult,
+    DubbingSubmitRequest,
+    DubbingSubmitResult,
+)
 
 
 class _FakeDubbingProvider:
@@ -31,6 +36,17 @@ class _FakeDubbingProvider:
             expected_duration_seconds=9,
             metadata={"ok": True},
         )
+
+    def status(self, external_job_id: str) -> DubbingStatusResult:
+        return DubbingStatusResult(
+            external_job_id=external_job_id,
+            status="processing",
+            target_languages=["en"],
+        )
+
+    def download(self, external_job_id: str, language_code: str) -> DubbingDownloadResult:
+        _ = external_job_id, language_code
+        return DubbingDownloadResult(content=b"", content_type="video/mp4")
 
 
 class _FakeSession:

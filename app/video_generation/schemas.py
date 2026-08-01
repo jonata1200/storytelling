@@ -11,7 +11,7 @@ from app.core.enums import ClipReviewDecision, GenerationJobStatus, GenerationJo
 class GenerateVideoClipsRequest(BaseModel):
     storyboard_frame_ids: list[UUID] | None = None
     variants_per_frame: int = Field(default=1, ge=1, le=4)
-    provider: Literal["auto", "veo_ai_free", "google_ai"] = "auto"
+    provider: Literal["auto", "google_ai"] = "auto"
     model: str | None = None
 
 

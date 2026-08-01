@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
@@ -15,7 +14,6 @@ from app.observability.redaction import redact_mapping, redact_secrets
 from app.observability.schemas import OperationalEventCreate
 from app.observability.service import (
     _provider_channel_readiness,
-    _veo_ai_free_session_readiness,
     emit_project_event,
     project_execution_summary,
 )
@@ -54,14 +52,15 @@ def test_redact_secrets_masks_omniroute_api_key_assignments() -> None:
 
 def test_provider_channel_readiness_reports_new_provider_components() -> None:
     settings = Settings(
-        ai_provider="nvidia_nim",
+        ai_provider="ollama_cloud",
         text_provider="",
-        image_provider="veo_ai_free",
-        video_provider="veo_ai_free",
-        nvidia_nim_api_key="nv-secret",
-        nvidia_nim_default_model="z-ai/glm-5.2",
-        veo_ai_free_image_model="veo-ai-free/image",
-        veo_ai_free_video_model="veo-ai-free/video",
+        image_provider="google_ai",
+        video_provider="google_ai",
+        ollama_cloud_api_key="ollama-secret",
+        ollama_cloud_default_model="gpt-oss:120b",
+        google_ai_api_key="google-secret",
+        google_ai_image_model="gemini-3.1-flash-image",
+        google_ai_video_model="veo-3.1-generate-preview",
     )
 
     text = _provider_channel_readiness(settings, "text")
@@ -72,58 +71,58 @@ def test_provider_channel_readiness_reports_new_provider_components() -> None:
     assert image.name == "image_provider"
     assert video.name == "video_provider"
     assert {text.status, image.status, video.status} == {"ready"}
-    assert text.details["provider"] == "nvidia_nim"
-    assert image.details["model"] == "veo-ai-free/image"
-    assert video.details["api_key_configured"] == "false"
+    assert text.details["provider"] == "ollama_cloud"
+    assert image.details["model"] == "gemini-3.1-flash-image"
+    assert video.details["api_key_configured"] == "true"
 
 
-def test_provider_channel_readiness_reports_missing_veo_model() -> None:
-    settings = Settings(image_provider="veo_ai_free", veo_ai_free_image_model="")
+def test_provider_channel_readiness_reports_missing_google_model() -> None:
+    settings = Settings(image_provider="google_ai", google_ai_image_model="")
 
     image = _provider_channel_readiness(settings, "image")
 
     assert image.name == "image_provider"
     assert image.status == "degraded"
-    assert image.details["provider"] == "veo_ai_free"
-    assert "VEO_AI_FREE_IMAGE_MODEL" in image.message
+    assert image.details["provider"] == "google_ai"
+    assert "GOOGLE_AI_IMAGE_MODEL" in image.message
 
 
 def test_provider_channel_readiness_reports_no_text_fallbacks() -> None:
     settings = Settings(
         ai_provider="omniroute",
-        text_provider="nvidia_nim",
+        text_provider="ollama_cloud",
         text_provider_fallbacks="",
-        nvidia_nim_api_key="nv-secret",
-        nvidia_nim_default_model="z-ai/glm-5.2",
+        ollama_cloud_api_key="ollama-secret",
+        ollama_cloud_default_model="gpt-oss:120b",
     )
 
     text = _provider_channel_readiness(settings, "text")
 
     assert text.status == "ready"
-    assert text.details["provider"] == "nvidia_nim"
+    assert text.details["provider"] == "ollama_cloud"
     assert text.details["fallbacks"] == ""
     assert text.details["api_key_configured"] == "true"
 
 
-def test_provider_channel_readiness_reports_missing_nvidia_key() -> None:
+def test_provider_channel_readiness_reports_missing_ollama_key() -> None:
     settings = Settings(
         ai_provider="omniroute",
-        text_provider="nvidia_nim",
-        nvidia_nim_api_key=None,
-        nvidia_nim_default_model="z-ai/glm-5.2",
+        text_provider="ollama_cloud",
+        ollama_cloud_api_key=None,
+        ollama_cloud_default_model="gpt-oss:120b",
     )
 
     text = _provider_channel_readiness(settings, "text")
 
     assert text.status == "degraded"
-    assert "NVIDIA_NIM_API_KEY" in text.message
+    assert "OLLAMA_CLOUD_API_KEY" in text.message
 
 
 def test_provider_channel_readiness_reports_ollama_cloud() -> None:
     settings = Settings(
         ai_provider="ollama_cloud",
         text_provider="ollama_cloud",
-        text_provider_fallbacks="nvidia_nim",
+        text_provider_fallbacks="",
         ollama_cloud_api_key="ollama-secret",
         ollama_cloud_default_model="gpt-oss:120b",
     )
@@ -133,7 +132,7 @@ def test_provider_channel_readiness_reports_ollama_cloud() -> None:
     assert text.status == "ready"
     assert text.details["provider"] == "ollama_cloud"
     assert text.details["model"] == "gpt-oss:120b"
-    assert text.details["fallbacks"] == "nvidia_nim"
+    assert text.details["fallbacks"] == ""
 
 
 def test_provider_channel_readiness_reports_google_ai_media() -> None:
@@ -178,20 +177,6 @@ def test_readiness_dashboard_helpers_report_elevenlabs_dubbing() -> None:
     assert speech_details == {"provider": "elevenlabs", "model": "eleven_multilingual_v2"}
     assert dubbing_ready is True
     assert dubbing_details == {"provider": "elevenlabs", "source": "pt", "target": "en"}
-
-
-def test_veo_ai_free_session_readiness_uses_local_validator(tmp_path: Path) -> None:
-    settings = Settings(
-        veo_ai_free_enabled=True,
-        veo_ai_free_session_path=tmp_path / "missing.json",
-    )
-
-    component = _veo_ai_free_session_readiness(settings)
-
-    assert component.name == "veo_ai_free_session"
-    assert component.status == "degraded"
-    assert component.details["enabled"] == "true"
-    assert component.details["session_status"] == "unknown"
 
 
 class _FakeEventSession:

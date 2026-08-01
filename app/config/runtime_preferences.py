@@ -5,15 +5,14 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from app.config.provider_policy import LEGACY_AI_PROVIDERS, SUPPORTED_AI_PROVIDERS
+
 PREFERENCE_KEYS = {
     "AI_PROVIDER",
     "TEXT_PROVIDER",
     "TEXT_PROVIDER_FALLBACKS",
     "IMAGE_PROVIDER",
     "VIDEO_PROVIDER",
-    "NVIDIA_NIM_BASE_URL",
-    "NVIDIA_NIM_DEFAULT_MODEL",
-    "NVIDIA_NIM_API_KEY",
     "OLLAMA_CLOUD_BASE_URL",
     "OLLAMA_CLOUD_DEFAULT_MODEL",
     "OLLAMA_CLOUD_API_KEY",
@@ -26,10 +25,6 @@ PREFERENCE_KEYS = {
     "GOOGLE_AI_VIDEO_DEFAULT_DURATION_SECONDS",
     "GOOGLE_AI_VIDEO_POLL_INTERVAL_SECONDS",
     "GOOGLE_AI_VIDEO_POLL_TIMEOUT_SECONDS",
-    "VEO_AI_FREE_ENABLED",
-    "VEO_AI_FREE_SESSION_PATH",
-    "VEO_AI_FREE_IMAGE_MODEL",
-    "VEO_AI_FREE_VIDEO_MODEL",
     "OMNIROUTE_BASE_URL",
     "OMNIROUTE_DEFAULT_MODEL",
     "OMNIROUTE_IMAGE_MODEL",
@@ -58,6 +53,13 @@ PREFERENCE_KEYS = {
 }
 PREFERENCES_PATH = Path(".runtime/preferences.json")
 logger = logging.getLogger(__name__)
+PROVIDER_PREFERENCE_KEYS = {"AI_PROVIDER", "TEXT_PROVIDER", "IMAGE_PROVIDER", "VIDEO_PROVIDER"}
+ALLOWED_PROVIDER_PREFERENCE_VALUES = {
+    *SUPPORTED_AI_PROVIDERS,
+    *LEGACY_AI_PROVIDERS,
+    "groq",
+    "ollama",
+}
 
 
 def load_runtime_preferences(path: Path = PREFERENCES_PATH) -> dict[str, str]:
@@ -69,11 +71,19 @@ def load_runtime_preferences(path: Path = PREFERENCES_PATH) -> dict[str, str]:
         return {}
     if not isinstance(payload, dict):
         return {}
-    return {
-        str(key).lower(): str(value)
-        for key, value in payload.items()
-        if str(key).upper() in PREFERENCE_KEYS
-    }
+    preferences: dict[str, str] = {}
+    for key, value in payload.items():
+        normalized_key = str(key).upper()
+        if normalized_key not in PREFERENCE_KEYS:
+            continue
+        normalized_value = str(value)
+        if (
+            normalized_key in PROVIDER_PREFERENCE_KEYS
+            and normalized_value.strip().casefold() not in ALLOWED_PROVIDER_PREFERENCE_VALUES
+        ):
+            continue
+        preferences[normalized_key.lower()] = normalized_value
+    return preferences
 
 
 def save_runtime_preferences(values: dict[str, str], path: Path = PREFERENCES_PATH) -> None:

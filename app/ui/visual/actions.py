@@ -8,7 +8,6 @@ from sqlalchemy import select
 
 from app.database.session import AsyncSessionLocal
 from app.jobs.service import enqueue_project_step
-from app.providers.veo_free.browser import VeoFreeGenerationUnavailableError
 from app.storytelling.models import Script
 from app.ui.shared.page_config import friendly_ai_error, show_ai_error_popup
 from app.ui.visual.helpers import visual_reference_views_for as _visual_reference_views_for
@@ -54,18 +53,6 @@ async def _approve_visual_target_from_ui(
                 "Ativo aprovado. Todas as vistas já estávam criadas.", color="positive"
             )
         ui.navigate.reload()
-    except VeoFreeGenerationUnavailableError as exc:
-        logger.warning(
-            "Veo AI Free ainda nao tem geracao real conectada para %s/%s no projeto %s",
-            target_kind,
-            target_id,
-            project_id,
-        )
-        show_ai_error_popup(
-            friendly_ai_error(exc),
-            title="Veo AI Free indisponível",
-            details=str(exc),
-        )
     except Exception as exc:
         logger.exception(
             "Não foi possível aprovar e gerar imagens do ativo visual %s/%s no projeto %s",
@@ -150,18 +137,6 @@ async def _regenerate_visual_reference_from_ui(
         else:
             _notify_visual_action("Imagem gerada novamente.", color="positive")
         ui.navigate.reload()
-    except VeoFreeGenerationUnavailableError as exc:
-        logger.warning(
-            "Veo AI Free ainda nao tem geracao real conectada para regenerar %s/%s no projeto %s",
-            target_kind,
-            target_id,
-            project_id,
-        )
-        show_ai_error_popup(
-            friendly_ai_error(exc),
-            title="Veo AI Free indisponível",
-            details=str(exc),
-        )
     except Exception as exc:
         logger.exception(
             "Não foi possível regenerar imagem do ativo visual %s/%s no projeto %s",
@@ -301,14 +276,6 @@ async def _approve_all_visual_targets_from_ui(
                             target_id,
                             view_types,
                         )
-            except VeoFreeGenerationUnavailableError as exc:
-                logger.warning(
-                    "Veo AI Free ainda nao tem geracao real conectada para %s/%s no projeto %s",
-                    target_kind,
-                    target_id,
-                    project_id,
-                )
-                return 0, False, f"{target_kind}/{target_id}: {friendly_ai_error(exc)}"
             except Exception as exc:
                 logger.exception(
                     "Não foi possível gerar imagens em lote para %s/%s no projeto %s",

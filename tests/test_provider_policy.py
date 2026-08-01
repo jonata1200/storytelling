@@ -28,15 +28,8 @@ def test_effective_provider_for_channel_uses_media_override() -> None:
         image_provider="omniroute",
     )
 
-    assert effective_provider_for_channel(settings, "text") == "nvidia_nim"
-    assert effective_provider_for_channel(settings, "image") == "veo_ai_free"
-
-
-def test_validate_model_name_allows_veo_ai_free_model() -> None:
-    assert (
-        validate_model_name("veo-ai-free/video", provider="veo_ai_free")
-        == "veo-ai-free/video"
-    )
+    assert effective_provider_for_channel(settings, "text") == "ollama_cloud"
+    assert effective_provider_for_channel(settings, "image") == "google_ai"
 
 
 def test_ensure_provider_api_key_keeps_omniroute_prefix_flexible() -> None:
@@ -53,23 +46,16 @@ def test_provider_policy_supports_new_text_providers() -> None:
         text_provider="ollama_cloud",
         ollama_cloud_base_url="https://ollama.com/api",
         ollama_cloud_default_model="gpt-oss:120b",
-        nvidia_nim_base_url="https://integrate.api.nvidia.com/v1",
-        nvidia_nim_default_model="z-ai/glm-5.2",
     )
 
     assert "omniroute" not in SUPPORTED_AI_PROVIDERS
     assert "ollama" not in SUPPORTED_AI_PROVIDERS
     assert "groq" not in SUPPORTED_AI_PROVIDERS
-    assert "nvidia_nim" in SUPPORTED_AI_PROVIDERS
     assert "ollama_cloud" in SUPPORTED_AI_PROVIDERS
     assert effective_provider_for_channel(settings, "text") == "ollama_cloud"
-    assert provider_display_name("nvidia_nim") == "NVIDIA NIM"
     assert provider_display_name("ollama_cloud") == "Ollama Cloud"
-    assert provider_base_url(settings, "nvidia_nim") == "https://integrate.api.nvidia.com/v1"
     assert provider_base_url(settings, "ollama_cloud") == "https://ollama.com/api"
-    assert provider_model(settings, "nvidia_nim", "text") == "z-ai/glm-5.2"
     assert provider_model(settings, "ollama_cloud", "text") == "gpt-oss:120b"
-    assert provider_requires_api_key(settings, "nvidia_nim") is True
     assert provider_requires_api_key(settings, "ollama_cloud") is True
 
 
@@ -93,13 +79,3 @@ def test_provider_policy_supports_google_ai_media_provider() -> None:
     assert provider_model(settings, "google_ai", "image") == "gemini-3.1-flash-image"
     assert provider_model(settings, "google_ai", "video") == "veo-3.1-generate-preview"
     assert provider_requires_api_key(settings, "google_ai") is True
-
-
-def test_nvidia_nim_requires_key_only_for_hosted_endpoint() -> None:
-    hosted = Settings(nvidia_nim_base_url="https://integrate.api.nvidia.com/v1")
-    local = Settings(
-        nvidia_nim_base_url="http://localhost:8000/v1",
-    )
-
-    assert provider_requires_api_key(hosted, "nvidia_nim") is True
-    assert provider_requires_api_key(local, "nvidia_nim") is False

@@ -29,7 +29,7 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 # Defaults loaded by Settings when runtime preferences/.env do not override them:
 # OMNIROUTE_DEFAULT_MODEL=ds-web/deepseek-v4-flash
 # OMNIROUTE_IMAGE_MODEL=chatgpt-web/gpt-5.5
-# OMNIROUTE_VIDEO_MODEL=veo-free/veo
+# OMNIROUTE_VIDEO_MODEL=veo-3.1-generate-preview
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

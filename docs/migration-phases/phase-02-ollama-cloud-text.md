@@ -8,13 +8,13 @@ aplicacao.
 ## Resultado Esperado
 
 Todas as tarefas narrativas e operacionais de texto devem passar por
-`TEXT_PROVIDER=ollama_cloud`, com fallback temporario para `nvidia_nim`.
+`TEXT_PROVIDER=ollama_cloud`, sem fallback para providers removidos.
 
 ## Variaveis Propostas
 
 ```env
 TEXT_PROVIDER=ollama_cloud
-TEXT_PROVIDER_FALLBACKS=nvidia_nim
+TEXT_PROVIDER_FALLBACKS=
 OLLAMA_CLOUD_BASE_URL=https://ollama.com/api
 OLLAMA_CLOUD_API_KEY=...
 OLLAMA_CLOUD_DEFAULT_MODEL=...

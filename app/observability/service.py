@@ -38,8 +38,6 @@ from app.observability.schemas import (
     ReadinessDashboardRead,
 )
 from app.providers.speech.service import speech_configuration_status
-from app.providers.veo_free.browser import veo_free_generation_available
-from app.providers.veo_free.session import validate_session as validate_veo_free_session
 from app.video_generation.models import GenerationJob
 
 logger = logging.getLogger(__name__)
@@ -342,43 +340,6 @@ def _provider_channel_readiness(
     )
 
 
-def _veo_ai_free_session_readiness(settings: Settings) -> ReadinessComponentRead:
-    validation = validate_veo_free_session(settings.veo_ai_free_session_path)
-    enabled = bool(settings.veo_ai_free_enabled)
-    if not enabled:
-        status = "degraded"
-        message = "Veo AI Free experimental desabilitado."
-    elif validation.status == "connected":
-        if veo_free_generation_available():
-            status = "ready"
-            message = validation.message
-        else:
-            status = "degraded"
-            message = (
-                "Sessao Veo AI Free salva, mas a geracao real ainda nao esta conectada "
-                "neste app."
-            )
-    elif validation.status in {"expired", "blocked"}:
-        status = "down"
-        message = validation.message
-    else:
-        status = "degraded"
-        message = validation.message
-    return ReadinessComponentRead(
-        name="veo_ai_free_session",
-        status=status,
-        message=message,
-        details={
-            "enabled": str(enabled).lower(),
-            "session_status": validation.status,
-            "generation_client": (
-                "available" if veo_free_generation_available() else "not_implemented"
-            ),
-            **validation.details,
-        },
-    )
-
-
 async def readiness_dashboard(
     session: AsyncSession,
     settings: Settings | None = None,
@@ -436,7 +397,6 @@ async def readiness_dashboard(
             details=dubbing_details,
         )
     )
-    components.append(_veo_ai_free_session_readiness(app_settings))
     overall = "ready" if all(item.status == "ready" for item in components) else "degraded"
     if any(item.status == "down" for item in components):
         overall = "down"

@@ -42,7 +42,6 @@ from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.providers.video.google_ai import GoogleAIVideoProvider
 from app.providers.video.types import VideoProvider, VideoRequest, VideoResult
-from app.providers.video.veo_ai_free import VeoAiFreeVideoProvider
 from app.storage.service import apply_asset_storage_metadata
 from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
@@ -198,15 +197,6 @@ async def _video_provider_for_project(
         model or production_settings.video_model,
         provider_model(app_settings, resolved_provider, "video"),
     )
-    if resolved_provider == "veo_ai_free":
-        return (
-            VeoAiFreeVideoProvider(),
-            "veo_ai_free",
-            requested_model,
-            "veo_ai_free_videos",
-            production_settings.aspect_ratio,
-            production_settings.video_resolution,
-        )
     if resolved_provider == "google_ai":
         return (
             GoogleAIVideoProvider(),
@@ -218,9 +208,7 @@ async def _video_provider_for_project(
         )
     if resolved_provider == "mock":
         raise ValueError("Provider mock bloqueado. Use um provider real de vídeo.")
-    raise ValueError(
-        f"Provider de vídeo não suportado: {provider_name}. Use Google AI ou Veo AI Free."
-    )
+    raise ValueError(f"Provider de vídeo não suportado: {provider_name}. Use Google AI.")
 
 
 async def _asset_storage_uri(session: AsyncSession, asset_id: UUID) -> str | None:

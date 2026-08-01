@@ -12,7 +12,6 @@ from app.config.settings import get_settings
 from app.production.service import get_or_create_production_settings, resolve_image_model
 from app.providers.image.google_ai import GoogleAIImageProvider
 from app.providers.image.types import ImageGenerationRequest, ImageProvider, ImageResult
-from app.providers.image.veo_ai_free import VeoAiFreeImageProvider
 
 
 def _service_attr(name: str, fallback: object) -> Any:
@@ -35,11 +34,9 @@ async def _image_provider_for_project(
         production_settings.image_model,
         provider_model(app_settings, provider, "image"),
     )
-    if provider == "veo_ai_free":
-        return VeoAiFreeImageProvider(), model, "veo_ai_free_images"
     if provider == "google_ai":
         return GoogleAIImageProvider(), model, "google_ai_images"
-    raise ValueError("Provider de imagem não suportado. Use Google AI ou Veo AI Free.")
+    raise ValueError("Provider de imagem não suportado. Use Google AI.")
 
 
 def _transient_image_provider_error(exc: Exception) -> bool:
@@ -64,15 +61,4 @@ async def _generate_image_with_provider_fallback(
     provider: ImageProvider,
     request: ImageGenerationRequest,
 ) -> tuple[ImageResult, dict]:
-    try:
-        return await provider.generate(request), {}
-    except RuntimeError as exc:
-        if getattr(provider, "provider_name", "") != "veo_ai_free" or not (
-            _transient_image_provider_error(exc)
-        ):
-            raise
-        provider_label = "Veo AI Free Images"
-        raise RuntimeError(
-            f"{provider_label} falhou ao gerar a imagem real. Nenhuma imagem mock foi criada "
-            f"automaticamente. Detalhes: {exc}"
-        ) from exc
+    return await provider.generate(request), {}

@@ -271,8 +271,8 @@ class OpenAICompatibleLLMProvider:
         ):
             return (
                 f"{config.display_name} HTTP 404: o modelo selecionado nao esta disponivel "
-                f"para esta chave/conta NVIDIA NIM. Escolha outro modelo ou habilite o "
-                f"modelo no painel da NVIDIA.{model_detail} Detalhe: {redacted_detail}"
+                f"para esta chave/conta do provider. Escolha outro modelo ou habilite o "
+                f"modelo no painel do provider.{model_detail} Detalhe: {redacted_detail}"
             )
         return f"{config.display_name} HTTP {status_code}:{model_detail} {redacted_detail}"
 

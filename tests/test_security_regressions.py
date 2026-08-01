@@ -87,7 +87,6 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     save_runtime_preferences(
         {
             "TEXT_PROVIDER_FALLBACKS": "",
-            "NVIDIA_NIM_API_KEY": "nv-secret",
             "OLLAMA_CLOUD_API_KEY": "ollama-secret",
             "OLLAMA_CLOUD_DEFAULT_MODEL": "gpt-oss:120b",
             "GOOGLE_AI_API_KEY": "google-secret",
@@ -97,14 +96,11 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
             "ELEVENLABS_VOICE_ID": "voice-1",
             "ELEVENLABS_SPEECH_MODEL": "eleven_multilingual_v2",
             "DUBBING_TARGET_LANG": "en",
-            "VEO_AI_FREE_ENABLED": "true",
-            "VEO_AI_FREE_SESSION_PATH": ".runtime/veo_free/session.json",
         },
         path,
     )
     preferences = load_runtime_preferences(path)
     assert preferences["text_provider_fallbacks"] == ""
-    assert preferences["nvidia_nim_api_key"] == "nv-secret"
     assert preferences["ollama_cloud_api_key"] == "ollama-secret"
     assert preferences["ollama_cloud_default_model"] == "gpt-oss:120b"
     assert preferences["google_ai_api_key"] == "google-secret"
@@ -114,7 +110,6 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     assert preferences["elevenlabs_voice_id"] == "voice-1"
     assert preferences["elevenlabs_speech_model"] == "eleven_multilingual_v2"
     assert preferences["dubbing_target_lang"] == "en"
-    assert preferences["veo_ai_free_enabled"] == "true"
     with pytest.raises(ValueError, match="not allowed"):
         save_runtime_preferences({"DATABASE_URL": "attacker"}, path)
     with pytest.raises(ValueError, match="control character"):

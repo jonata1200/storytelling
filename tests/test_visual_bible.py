@@ -45,24 +45,24 @@ def test_sourceful_502_is_treated_as_transient_image_provider_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_veo_ai_free_image_transient_error_is_reported_without_mock_fallback(
+async def test_image_generation_errors_are_reported_without_mock_fallback(
     tmp_path: Path,
 ) -> None:
-    class FailingVeoProvider:
-        provider_name = "veo_ai_free"
+    class FailingGoogleProvider:
+        provider_name = "google_ai"
 
         async def generate(self, request: ImageGenerationRequest) -> object:
-            raise RuntimeError("Veo AI Free Images HTTP 502: provider returned an internal error")
+            raise RuntimeError("Google AI Images HTTP 502: provider returned an internal error")
 
-    with pytest.raises(RuntimeError, match="Nenhuma imagem mock foi criada"):
+    with pytest.raises(RuntimeError, match="Google AI Images HTTP 502"):
         await _generate_image_with_provider_fallback(
-            FailingVeoProvider(),  # type: ignore[arg-type]
+            FailingGoogleProvider(),  # type: ignore[arg-type]
             ImageGenerationRequest(
                 prompt="Personagem em pe, vista frontal",
                 target_id="character-1",
                 view_type="character_reference_sheet",
                 output_dir=tmp_path,
-                model="sourceful/sourceful-v2.5",
+                model="gemini-3.1-flash-image",
             ),
         )
 
@@ -82,9 +82,9 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         visual_bible_service,
         "get_settings",
         lambda: SimpleNamespace(
-            ai_provider="nvidia_nim",
-            image_provider="veo_ai_free",
-            veo_ai_free_image_model="veo-ai-free/image",
+            ai_provider="ollama_cloud",
+            image_provider="google_ai",
+            google_ai_image_model="gemini-3.1-flash-image",
         ),
     )
     monkeypatch.setattr(
@@ -98,13 +98,13 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         project_id,
     )
 
-    assert getattr(provider, "provider_name", None) == "veo_ai_free"
-    assert model == "veo-ai-free/image"
-    assert directory == "veo_ai_free_images"
+    assert getattr(provider, "provider_name", None) == "google_ai"
+    assert model == "gemini-3.1-flash-image"
+    assert directory == "google_ai_images"
 
 
 @pytest.mark.asyncio
-async def test_image_provider_uses_veo_ai_free_when_configured(
+async def test_image_provider_uses_google_ai_when_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
@@ -116,9 +116,9 @@ async def test_image_provider_uses_veo_ai_free_when_configured(
         visual_bible_service,
         "get_settings",
         lambda: Settings(
-            ai_provider="nvidia_nim",
-            image_provider="veo_ai_free",
-            veo_ai_free_image_model="veo-ai-free/image",
+            ai_provider="ollama_cloud",
+            image_provider="google_ai",
+            google_ai_image_model="gemini-3.1-flash-image",
         ),
     )
     monkeypatch.setattr(
@@ -132,13 +132,13 @@ async def test_image_provider_uses_veo_ai_free_when_configured(
         project_id,
     )
 
-    assert getattr(provider, "provider_name", None) == "veo_ai_free"
-    assert model == "veo-ai-free/image"
-    assert directory == "veo_ai_free_images"
+    assert getattr(provider, "provider_name", None) == "google_ai"
+    assert model == "gemini-3.1-flash-image"
+    assert directory == "google_ai_images"
 
 
 @pytest.mark.asyncio
-async def test_image_provider_uses_legacy_omniroute_preference_as_veo_ai_free(
+async def test_image_provider_maps_legacy_omniroute_preference_to_google_ai(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_settings(*args: object, **kwargs: object) -> SimpleNamespace:
@@ -148,9 +148,9 @@ async def test_image_provider_uses_legacy_omniroute_preference_as_veo_ai_free(
         visual_bible_service,
         "get_settings",
         lambda: SimpleNamespace(
-                ai_provider="nvidia_nim",
-                image_provider="omniroute",
-                veo_ai_free_image_model="veo-ai-free/image",
+            ai_provider="ollama_cloud",
+            image_provider="omniroute",
+            google_ai_image_model="gemini-3.1-flash-image",
         ),
     )
     monkeypatch.setattr(
@@ -164,9 +164,9 @@ async def test_image_provider_uses_legacy_omniroute_preference_as_veo_ai_free(
         uuid4(),
     )
 
-    assert getattr(provider, "provider_name", None) == "veo_ai_free"
-    assert model == "veo-ai-free/image"
-    assert directory == "veo_ai_free_images"
+    assert getattr(provider, "provider_name", None) == "google_ai"
+    assert model == "gemini-3.1-flash-image"
+    assert directory == "google_ai_images"
 
 
 def test_initial_visual_reference_is_single_canonical_view() -> None:

@@ -151,19 +151,13 @@ def friendly_ai_error(exc: BaseException) -> str:
             "O provedor de IA recusou a chamada por limite de uso. Aguarde alguns minutos "
             "ou troque para um modelo com mais disponibilidade."
         )
-    if "veo ai free experimental" in normalized and "descoberta manual" in normalized:
-        return (
-            "A sessão do Veo AI Free foi configurada, mas a geração real ainda não está "
-            "conectada neste app. Falta implementar o cliente do Veo ou uma automação "
-            "assistida pelo usuário para enviar o prompt e baixar a mídia."
-        )
     if (
         "http 404" in normalized
         and ("not found for account" in normalized or "modelo selecionado" in normalized)
     ):
         return (
-            "O modelo escolhido não está disponível para a sua chave NVIDIA NIM. "
-            "Escolha outro modelo nas configurações ou habilite esse modelo na conta NVIDIA."
+            "O modelo escolhido não está disponível para a sua chave ou conta do provider. "
+            "Escolha outro modelo nas configurações ou habilite esse modelo no provider."
         )
     if "omniroute" in normalized and (
         "network" in normalized

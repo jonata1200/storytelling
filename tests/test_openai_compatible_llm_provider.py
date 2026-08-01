@@ -58,11 +58,11 @@ def test_openai_compatible_provider_sends_chat_completion_request(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="nvidia_nim",
-            display_name="NVIDIA NIM",
-            base_url="https://integrate.api.nvidia.com/v1",
+            provider_name="test_provider",
+            display_name="Provider Teste",
+            base_url="https://provider.test/v1",
             api_key="nv-secret",
-            api_key_env="NVIDIA_NIM_API_KEY",
+            api_key_env="TEST_PROVIDER_API_KEY",
         )
     )
     captured: dict[str, Any] = {}
@@ -84,7 +84,7 @@ def test_openai_compatible_provider_sends_chat_completion_request(
         use_response_format=True,
     )
 
-    assert captured["url"] == "https://integrate.api.nvidia.com/v1/chat/completions"
+    assert captured["url"] == "https://provider.test/v1/chat/completions"
     assert captured["authorization"] == "Bearer nv-secret"
     assert captured["body"]["response_format"] == {"type": "json_object"}
     assert captured["timeout"] == 300
@@ -96,8 +96,8 @@ def test_openai_compatible_provider_retries_without_response_format(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="nvidia_nim",
-            display_name="NVIDIA NIM",
+            provider_name="test_provider",
+            display_name="Provider Teste",
             base_url="http://localhost:8000/v1",
             api_key=None,
             require_api_key=False,
@@ -132,11 +132,11 @@ def test_openai_compatible_provider_redacts_http_error_secret(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="nvidia_nim",
-            display_name="NVIDIA NIM",
-            base_url="https://integrate.api.nvidia.com/v1",
+            provider_name="test_provider",
+            display_name="Provider Teste",
+            base_url="https://provider.test/v1",
             api_key="nv-secret",
-            api_key_env="NVIDIA_NIM_API_KEY",
+            api_key_env="TEST_PROVIDER_API_KEY",
         )
     )
 
@@ -156,7 +156,7 @@ def test_openai_compatible_provider_redacts_http_error_secret(
             use_response_format=True,
         )
 
-    assert "NVIDIA NIM HTTP 429" in str(exc.value)
+    assert "Provider Teste HTTP 429" in str(exc.value)
     assert "nv-secret" not in str(exc.value)
     assert "[REDACTED]" in str(exc.value)
 
@@ -166,11 +166,11 @@ def test_openai_compatible_provider_retries_transient_resource_exhausted(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="nvidia_nim",
-            display_name="NVIDIA NIM",
-            base_url="https://integrate.api.nvidia.com/v1",
+            provider_name="test_provider",
+            display_name="Provider Teste",
+            base_url="https://provider.test/v1",
             api_key="nv-secret",
-            api_key_env="NVIDIA_NIM_API_KEY",
+            api_key_env="TEST_PROVIDER_API_KEY",
         )
     )
     sleeps: list[float] = []
@@ -201,7 +201,7 @@ def test_openai_compatible_provider_retries_transient_resource_exhausted(
     )
 
     response = provider._send_request(
-        LLMRequest(task="generate_script", prompt="{}", model="nvidia/nemotron"),
+        LLMRequest(task="generate_script", prompt="{}", model="test/model"),
         use_response_format=True,
     )
 
@@ -215,11 +215,11 @@ def test_openai_compatible_provider_explains_resource_exhausted_after_retries(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="nvidia_nim",
-            display_name="NVIDIA NIM",
-            base_url="https://integrate.api.nvidia.com/v1",
+            provider_name="test_provider",
+            display_name="Provider Teste",
+            base_url="https://provider.test/v1",
             api_key="nv-secret",
-            api_key_env="NVIDIA_NIM_API_KEY",
+            api_key_env="TEST_PROVIDER_API_KEY",
         )
     )
 
@@ -241,25 +241,25 @@ def test_openai_compatible_provider_explains_resource_exhausted_after_retries(
 
     with pytest.raises(RuntimeError) as exc:
         provider._send_request(
-            LLMRequest(task="generate_script", prompt="{}", model="nvidia/nemotron"),
+            LLMRequest(task="generate_script", prompt="{}", model="test/model"),
             use_response_format=True,
         )
 
     assert "limite temporario de capacidade" in str(exc.value)
     assert "modelo menor/mais estavel" in str(exc.value)
-    assert "Modelo: nvidia/nemotron" in str(exc.value)
+    assert "Modelo: test/model" in str(exc.value)
 
 
-def test_openai_compatible_provider_explains_nvidia_model_not_available(
+def test_openai_compatible_provider_explains_model_not_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="nvidia_nim",
-            display_name="NVIDIA NIM",
-            base_url="https://integrate.api.nvidia.com/v1",
+            provider_name="test_provider",
+            display_name="Provider Teste",
+            base_url="https://provider.test/v1",
             api_key="nv-secret",
-            api_key_env="NVIDIA_NIM_API_KEY",
+            api_key_env="TEST_PROVIDER_API_KEY",
         )
     )
 
@@ -298,11 +298,11 @@ def test_openai_compatible_provider_retries_runtime_timeout_once(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="nvidia_nim",
-            display_name="NVIDIA NIM",
-            base_url="https://integrate.api.nvidia.com/v1",
+            provider_name="test_provider",
+            display_name="Provider Teste",
+            base_url="https://provider.test/v1",
             api_key="nv-secret",
-            api_key_env="NVIDIA_NIM_API_KEY",
+            api_key_env="TEST_PROVIDER_API_KEY",
         )
     )
     sleeps: list[float] = []
@@ -326,7 +326,7 @@ def test_openai_compatible_provider_retries_runtime_timeout_once(
     )
 
     response = provider._send_request(
-        LLMRequest(task="generate_script", prompt="{}", model="nvidia/nemotron"),
+        LLMRequest(task="generate_script", prompt="{}", model="test/model"),
         use_response_format=True,
     )
 
@@ -340,11 +340,11 @@ def test_openai_compatible_provider_reports_timeout(
 ) -> None:
     provider = OpenAICompatibleLLMProvider(
         OpenAICompatibleLLMConfig(
-            provider_name="nvidia_nim",
-            display_name="NVIDIA NIM",
-            base_url="https://integrate.api.nvidia.com/v1",
+            provider_name="test_provider",
+            display_name="Provider Teste",
+            base_url="https://provider.test/v1",
             api_key="nv-secret",
-            api_key_env="NVIDIA_NIM_API_KEY",
+            api_key_env="TEST_PROVIDER_API_KEY",
         )
     )
 
@@ -357,7 +357,7 @@ def test_openai_compatible_provider_reports_timeout(
         fake_urlopen,
     )
 
-    with pytest.raises(RuntimeError, match="NVIDIA NIM timeout"):
+    with pytest.raises(RuntimeError, match="Provider Teste timeout"):
         provider._send_request(
             LLMRequest(task="generate_story_ideas", prompt="{}", model="llama-3.3"),
             use_response_format=True,
@@ -366,28 +366,17 @@ def test_openai_compatible_provider_reports_timeout(
 
 def test_llm_provider_for_name_supports_text_providers() -> None:
     settings = Settings(
-        nvidia_nim_api_key="nv-secret",
+        ollama_cloud_api_key="ollama-secret",
     )
 
-    nvidia_provider = cast(Any, model_settings.llm_provider_for_name(settings, "nvidia_nim"))
+    ollama_provider = cast(Any, model_settings.llm_provider_for_name(settings, "ollama_cloud"))
 
-    assert nvidia_provider.provider_name == "nvidia_nim"
+    assert ollama_provider.provider_name == "ollama_cloud"
 
 
-def test_llm_provider_for_name_maps_removed_text_providers_to_nvidia() -> None:
-    settings = Settings(nvidia_nim_api_key="nv-secret")
+def test_llm_provider_for_name_maps_removed_text_providers_to_ollama_cloud() -> None:
+    settings = Settings(ollama_cloud_api_key="ollama-secret")
 
     provider = cast(Any, model_settings.llm_provider_for_name(settings, "groq"))
 
-    assert provider.provider_name == "nvidia_nim"
-
-
-def test_nvidia_nim_self_hosted_allows_missing_api_key() -> None:
-    settings = Settings(
-        nvidia_nim_api_key=None,
-        nvidia_nim_base_url="http://localhost:8000/v1",
-    )
-
-    provider = cast(Any, model_settings.llm_provider_for_name(settings, "nvidia_nim"))
-
-    assert provider.provider_name == "nvidia_nim"
+    assert provider.provider_name == "ollama_cloud"

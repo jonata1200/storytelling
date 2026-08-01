@@ -28,7 +28,7 @@ class VideoRequest(BaseModel):
     source_image_uri: str | None = None
     reference_uris: list[str] = Field(default_factory=list)
     output_dir: Path
-    model: str = "veo-free/veo"
+    model: str = "veo-3.1-generate-preview"
     seed: int | None = None
 
 

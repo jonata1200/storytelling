@@ -136,9 +136,9 @@ async def test_generate_freeform_ideas_returns_ten_ai_suggested_ideas(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="nvidia_nim",
-            text_provider="nvidia_nim",
-            nvidia_nim_api_key="nv-secret",
+            ai_provider="ollama_cloud",
+            text_provider="ollama_cloud",
+            ollama_cloud_api_key="ollama-secret",
         ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
@@ -160,9 +160,9 @@ async def test_generate_freeform_ideas_respects_selected_genre(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="nvidia_nim",
-            text_provider="nvidia_nim",
-            nvidia_nim_api_key="nv-secret",
+            ai_provider="ollama_cloud",
+            text_provider="ollama_cloud",
+            ollama_cloud_api_key="ollama-secret",
         ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
@@ -180,9 +180,9 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="nvidia_nim",
-            text_provider="nvidia_nim",
-            nvidia_nim_api_key="nv-secret",
+            ai_provider="ollama_cloud",
+            text_provider="ollama_cloud",
+            ollama_cloud_api_key="ollama-secret",
         ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
@@ -193,20 +193,20 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_requires_nvidia_key(
+async def test_generate_freeform_ideas_requires_ollama_cloud_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="nvidia_nim",
-            text_provider="nvidia_nim",
-            nvidia_nim_api_key=None,
+            ai_provider="ollama_cloud",
+            text_provider="ollama_cloud",
+            ollama_cloud_api_key=None,
         ),
     )
 
-    with pytest.raises(ValueError, match="NVIDIA_NIM_API_KEY"):
+    with pytest.raises(ValueError, match="OLLAMA_CLOUD_API_KEY"):
         await generate_freeform_ideas(count=3)
 
 
@@ -224,9 +224,9 @@ async def test_generate_freeform_ideas_reports_omniroute_failure(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="nvidia_nim",
-            text_provider="nvidia_nim",
-            nvidia_nim_api_key="nv-secret",
+            ai_provider="ollama_cloud",
+            text_provider="ollama_cloud",
+            ollama_cloud_api_key="ollama-secret",
         ),
     )
     monkeypatch.setattr(
@@ -254,9 +254,9 @@ async def test_generate_freeform_ideas_reports_omniroute_timeout(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="nvidia_nim",
-            text_provider="nvidia_nim",
-            nvidia_nim_api_key="nv-secret",
+            ai_provider="ollama_cloud",
+            text_provider="ollama_cloud",
+            ollama_cloud_api_key="ollama-secret",
         ),
     )
     monkeypatch.setattr(
@@ -335,9 +335,9 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="nvidia_nim",
-            text_provider="nvidia_nim",
-            nvidia_nim_api_key="nv-secret",
+            ai_provider="ollama_cloud",
+            text_provider="ollama_cloud",
+            ollama_cloud_api_key="ollama-secret",
         ),
     )
     monkeypatch.setattr(
@@ -398,9 +398,9 @@ async def test_generate_freeform_ideas_keeps_partial_valid_omniroute_response(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="nvidia_nim",
-            text_provider="nvidia_nim",
-            nvidia_nim_api_key="nv-secret",
+            ai_provider="ollama_cloud",
+            text_provider="ollama_cloud",
+            ollama_cloud_api_key="ollama-secret",
         ),
     )
     monkeypatch.setattr(

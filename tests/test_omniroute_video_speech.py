@@ -62,7 +62,7 @@ def test_omniroute_video_provider_downloads_completed_image_to_video(
             duration_seconds=5,
             source_image_uri=frame.as_posix(),
             output_dir=tmp_path,
-            model="veo-free/veo",
+            model="veo-3.1-generate-preview",
             size="1080x1920",
         ),
         image_to_video=True,
@@ -121,7 +121,7 @@ async def test_omniroute_video_provider_submits_image_job_without_polling(
             duration_seconds=5,
             source_image_uri=frame.as_posix(),
             output_dir=tmp_path,
-            model="veo-free/veo",
+            model="veo-3.1-generate-preview",
         )
     )
 
@@ -145,7 +145,7 @@ def test_omniroute_video_provider_reports_failed_task(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
-async def test_video_provider_for_project_maps_legacy_omniroute_to_veo_ai_free(
+async def test_video_provider_for_project_maps_legacy_omniroute_to_google_ai(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_production_settings(*args: object, **kwargs: object) -> SimpleNamespace:
@@ -166,7 +166,7 @@ async def test_video_provider_for_project_maps_legacy_omniroute_to_veo_ai_free(
         lambda: Settings(
             ai_provider="omniroute",
             video_provider="omniroute",
-            veo_ai_free_video_model="veo-ai-free/video",
+            google_ai_video_model="veo-3.1-generate-preview",
         ),
     )
 
@@ -179,10 +179,10 @@ async def test_video_provider_for_project_maps_legacy_omniroute_to_veo_ai_free(
         )
     )
 
-    assert getattr(provider, "provider_name", None) == "veo_ai_free"
-    assert provider_name == "veo_ai_free"
-    assert model == "veo-ai-free/video"
-    assert directory == "veo_ai_free_videos"
+    assert getattr(provider, "provider_name", None) == "google_ai"
+    assert provider_name == "google_ai"
+    assert model == "veo-3.1-generate-preview"
+    assert directory == "google_ai_videos"
     assert aspect_ratio == "9:16"
     assert resolution == "1080x1920"
 

@@ -3,7 +3,6 @@ from app.config.settings import (
     ELEVENLABS_SPEECH_MODELS,
     GOOGLE_AI_IMAGE_MODELS,
     GOOGLE_AI_VIDEO_MODELS,
-    NVIDIA_NIM_TEXT_MODELS,
     OLLAMA_CLOUD_TEXT_MODELS,
     Settings,
 )
@@ -12,13 +11,10 @@ from app.config.settings import (
 def test_settings_defaults_to_new_ai_providers() -> None:
     settings = Settings()
 
-    assert settings.ai_provider == "nvidia_nim"
-    assert effective_provider_for_channel(settings, "text") == "nvidia_nim"
-    assert effective_provider_for_channel(settings, "image") == "veo_ai_free"
-    assert effective_provider_for_channel(settings, "video") == "veo_ai_free"
-    assert settings.nvidia_nim_default_model == "z-ai/glm-5.2"
-    assert settings.veo_ai_free_image_model == "veo-ai-free/image"
-    assert settings.veo_ai_free_video_model == "veo-ai-free/video"
+    assert settings.ai_provider == "ollama_cloud"
+    assert effective_provider_for_channel(settings, "text") == "ollama_cloud"
+    assert effective_provider_for_channel(settings, "image") == "google_ai"
+    assert effective_provider_for_channel(settings, "video") == "google_ai"
     assert settings.google_ai_base_url == "https://generativelanguage.googleapis.com/v1beta"
     assert settings.google_ai_image_model == "gemini-3.1-flash-image"
     assert settings.google_ai_video_model == "veo-3.1-generate-preview"
@@ -34,20 +30,7 @@ def test_settings_maps_legacy_omniroute_provider_to_new_default() -> None:
         ai_provider="omniroute",
     )
 
-    assert settings.ai_provider == "nvidia_nim"
-
-
-def test_settings_reads_nvidia_nim_text_provider() -> None:
-    settings = Settings(
-        text_provider="nvidia_nim",
-        nvidia_nim_api_key="  nv-secret  ",
-        nvidia_nim_base_url="https://integrate.api.nvidia.com/v1",
-        nvidia_nim_default_model="z-ai/glm-5.2",
-    )
-
-    assert settings.text_provider == "nvidia_nim"
-    assert settings.nvidia_nim_api_key == "nv-secret"
-    assert settings.nvidia_nim_default_model == "z-ai/glm-5.2"
+    assert settings.ai_provider == "ollama_cloud"
 
 
 def test_settings_reads_ollama_cloud_text_provider() -> None:
@@ -114,22 +97,6 @@ def test_settings_reads_elevenlabs_voice_and_dubbing_provider() -> None:
 
 
 def test_new_text_model_lists_have_initial_defaults() -> None:
-    assert NVIDIA_NIM_TEXT_MODELS == (
-        "deepseek-ai/deepseek-v4-flash",
-        "deepseek-ai/deepseek-v4-pro",
-        "google/gemma-4-31b-it",
-        "meta/llama-3.1-70b-instruct",
-        "meta/llama-3.3-70b-instruct",
-        "minimaxai/minimax-m3",
-        "mistralai/mistral-medium-3.5-128b",
-        "moonshotai/kimi-k2.6",
-        "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-        "nvidia/nemotron-3-super-120b-a12b",
-        "nvidia/nemotron-3-ultra-550b-a55b",
-        "qwen/qwen3-next-80b-a3b-instruct",
-        "stepfun-ai/step-3.7-flash",
-        "z-ai/glm-5.2",
-    )
     assert OLLAMA_CLOUD_TEXT_MODELS == (
         "gpt-oss:120b",
         "gpt-oss:20b",

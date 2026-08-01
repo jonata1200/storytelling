@@ -57,7 +57,7 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
         "get_settings",
         lambda: SimpleNamespace(
             OmniRoute_image_model="chatgpt-web/gpt-5.5",
-            OmniRoute_video_model="veo-free/veo",
+            OmniRoute_video_model="veo-3.1-generate-preview",
         ),
     )
     idea = {

@@ -16,18 +16,8 @@ from app.config.settings import (
     ELEVENLABS_SPEECH_MODELS,
     GOOGLE_AI_IMAGE_MODELS,
     GOOGLE_AI_VIDEO_MODELS,
-    NVIDIA_NIM_TEXT_MODELS,
     OLLAMA_CLOUD_TEXT_MODELS,
     get_settings,
-)
-from app.providers.veo_free.session import (
-    clear_session as clear_veo_free_session,
-)
-from app.providers.veo_free.session import (
-    save_cookie_value as save_veo_free_cookie_value,
-)
-from app.providers.veo_free.session import (
-    validate_session as validate_veo_free_session,
 )
 from app.storytelling.idea_lab import load_generated_ideas, load_saved_ideas
 
@@ -185,52 +175,11 @@ def register_settings_page(
                                     ui.label("Escolha o provider que gera roteiros, prompts e textos.")
                                 text_provider_select = (
                                     ui.select(
-                                        {
-                                            "nvidia_nim": "NVIDIA NIM",
-                                            "ollama_cloud": "Ollama Cloud",
-                                        },
+                                        {"ollama_cloud": "Ollama Cloud"},
                                         label="Provider de texto",
-                                        value=current.text_provider or "nvidia_nim",
+                                        value=current.text_provider or "ollama_cloud",
                                     )
                                     .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                                with ui.grid().classes(
-                                    "w-full grid-cols-1 md:grid-cols-2 gap-3"
-                                ):
-                                    nvidia_nim_base_url = (
-                                        ui.input(
-                                            "URL base NVIDIA NIM",
-                                            value=current.nvidia_nim_base_url,
-                                            placeholder="https://integrate.api.nvidia.com/v1",
-                                        )
-                                        .props("outlined stack-label")
-                                        .classes("w-full")
-                                    )
-                                    nvidia_nim_api_key = (
-                                        ui.input(
-                                            "Chave NVIDIA NIM",
-                                            placeholder=(
-                                                "Chave configurada; digite para substituir"
-                                                if current.nvidia_nim_api_key
-                                                else "nvapi-..."
-                                            ),
-                                            password=True,
-                                            password_toggle_button=True,
-                                        )
-                                        .props("outlined stack-label")
-                                        .classes("w-full")
-                                    )
-                                nvidia_nim_text_model = (
-                                    ui.select(
-                                        model_options(
-                                            NVIDIA_NIM_TEXT_MODELS,
-                                            current.nvidia_nim_default_model,
-                                        ),
-                                        label="Modelo de texto NVIDIA NIM",
-                                        value=current.nvidia_nim_default_model,
-                                    )
-                                    .props("outlined stack-label options-dense")
                                     .classes("w-full")
                                 )
                                 with ui.grid().classes(
@@ -279,24 +228,18 @@ def register_settings_page(
                             with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
                                 image_provider_select = (
                                     ui.select(
-                                        {
-                                            "veo_ai_free": "Veo AI Free",
-                                            "google_ai": "Google AI",
-                                        },
+                                        {"google_ai": "Google AI"},
                                         label="Provider de imagem",
-                                        value=current.image_provider or "veo_ai_free",
+                                        value=current.image_provider or "google_ai",
                                     )
                                     .props("outlined stack-label")
                                     .classes("w-full")
                                 )
                                 video_provider_select = (
                                     ui.select(
-                                        {
-                                            "veo_ai_free": "Veo AI Free",
-                                            "google_ai": "Google AI",
-                                        },
+                                        {"google_ai": "Google AI"},
                                         label="Provider de video",
-                                        value=current.video_provider or "veo_ai_free",
+                                        value=current.video_provider or "google_ai",
                                     )
                                     .props("outlined stack-label")
                                     .classes("w-full")
@@ -359,97 +302,6 @@ def register_settings_page(
                                     .props("outlined stack-label options-dense")
                                     .classes("w-full")
                                 )
-                            with (
-                                ui.tabs()
-                                .classes("w-full mt-3 text-[#989e99]")
-                                .props("no-caps active-color=primary indicator-color=primary")
-                                as media_tabs
-                            ):
-                                veo_models_tab = ui.tab("Modelos Veo", icon="movie")
-                                veo_session_tab = ui.tab("Sessão", icon="vpn_key")
-                            with ui.tab_panels(media_tabs, value=veo_models_tab).classes(
-                                "w-full bg-transparent p-0"
-                            ):
-                                with ui.tab_panel(veo_models_tab).classes("px-0 py-4"):
-                                    with ui.column().classes("w-full gap-3"):
-                                        veo_enabled = ui.checkbox(
-                                            "Veo AI Free experimental",
-                                            value=current.veo_ai_free_enabled,
-                                        )
-                                        with ui.grid().classes(
-                                            "w-full grid-cols-1 md:grid-cols-2 gap-3"
-                                        ):
-                                            veo_image_model = (
-                                                ui.input(
-                                                    "Modelo de imagem Veo AI Free",
-                                                    value=current.veo_ai_free_image_model,
-                                                    placeholder="veo-ai-free/image",
-                                                )
-                                                .props("outlined stack-label")
-                                                .classes("w-full")
-                                            )
-                                            veo_video_model = (
-                                                ui.input(
-                                                    "Modelo de video Veo AI Free",
-                                                    value=current.veo_ai_free_video_model,
-                                                    placeholder="veo-ai-free/video",
-                                                )
-                                                .props("outlined stack-label")
-                                                .classes("w-full")
-                                            )
-                                with ui.tab_panel(veo_session_tab).classes("px-0 py-4"):
-                                    with ui.column().classes("w-full gap-3"):
-                                        veo_validation = validate_veo_free_session(
-                                            current.veo_ai_free_session_path
-                                        )
-                                        ui.label(veo_validation.message).classes(
-                                            "text-xs px-2 py-1 rounded-md bg-slate-900 "
-                                            "text-slate-300 border border-slate-800"
-                                        )
-                                        with ui.element("div").classes(
-                                            "border border-[#343934] rounded-xl p-4"
-                                        ):
-                                            ui.label("Como pegar o cookie").classes(
-                                                "text-sm font-semibold"
-                                            )
-                                            with ui.column().classes(
-                                                "gap-1 text-xs text-[#aeb4af] mt-2"
-                                            ):
-                                                ui.label(
-                                                    "1. Entre no Veo AI Free no mesmo navegador."
-                                                )
-                                                ui.label(
-                                                    "2. Abra as ferramentas do navegador com F12."
-                                                )
-                                                ui.label(
-                                                    "3. Em Application/Storage > Cookies, escolha o dominio do Veo AI Free."
-                                                )
-                                                ui.label(
-                                                    "4. Se a lista for como o seu print, use wordpress_logged_in_...; copie Nome e Valor no formato nome=valor."
-                                                )
-                                                ui.label(
-                                                    "5. Se wordpress_logged_in_... nao aparecer, tente fern_token=... ou cole o cabecalho Cookie completo de uma requisicao autenticada."
-                                                )
-                                                ui.label(
-                                                    "Nao use CookieConsent, FCCDCF, FCNEC, _ga, _gads, _gpi, _stripe_mid, ph_phc ou socialPopup; eles nao autenticam sua conta."
-                                                )
-                                            ui.label(
-                                                "Trate esse valor como senha: use apenas neste app local e nao compartilhe."
-                                            ).classes("text-xs text-amber-200 mt-3")
-                                            ui.label(
-                                                "Status atual: a aplicação salva a sessão, mas o cliente de geração real do Veo ainda precisa ser conectado."
-                                            ).classes("text-xs text-red-200 mt-2")
-                                        veo_cookie_value = (
-                                            ui.input(
-                                                "Cookie de login Veo AI Free",
-                                                placeholder="wordpress_logged_in_...=seu_valor",
-                                                password=True,
-                                                password_toggle_button=True,
-                                            )
-                                            .props("outlined stack-label")
-                                            .classes("w-full")
-                                        )
-
                             ui.separator().classes("my-5")
                             ui.label("Voz e dublagem").classes(
                                 "text-sm font-semibold uppercase tracking-wide acid"
@@ -556,32 +408,9 @@ def register_settings_page(
                                     .classes("w-full")
                                 )
 
-                            def save_veo_session() -> None:
-                                payload = str(veo_cookie_value.value or "").strip()
-                                if not payload:
-                                    ui.notify("Cole o cookie de login Veo AI Free.", color="warning")
-                                    return
-                                try:
-                                    validation = save_veo_free_cookie_value(
-                                        payload,
-                                        current.veo_ai_free_session_path,
-                                    )
-                                except ValueError as exc:
-                                    ui.notify(str(exc), color="negative")
-                                    return
-                                ui.notify(validation.message, color="positive")
-                                veo_cookie_value.value = ""
-
-                            def clear_veo_session() -> None:
-                                clear_veo_free_session(current.veo_ai_free_session_path)
-                                ui.notify("Sessão Veo AI Free removida.", color="positive")
-
                             def save_ai() -> None:
                                 selected_text_provider = str(
-                                    text_provider_select.value or "nvidia_nim"
-                                ).strip()
-                                typed_nvidia_nim_api_key = str(
-                                    nvidia_nim_api_key.value or ""
+                                    text_provider_select.value or "ollama_cloud"
                                 ).strip()
                                 typed_ollama_cloud_api_key = str(
                                     ollama_cloud_api_key.value or ""
@@ -591,10 +420,10 @@ def register_settings_page(
                                         "AI_PROVIDER": selected_text_provider,
                                         "TEXT_PROVIDER": selected_text_provider,
                                         "IMAGE_PROVIDER": str(
-                                            image_provider_select.value or "veo_ai_free"
+                                            image_provider_select.value or "google_ai"
                                         ),
                                         "VIDEO_PROVIDER": str(
-                                            video_provider_select.value or "veo_ai_free"
+                                            video_provider_select.value or "google_ai"
                                         ),
                                         "SPEECH_PROVIDER": str(
                                             speech_provider_select.value or "elevenlabs"
@@ -603,17 +432,7 @@ def register_settings_page(
                                             dubbing_provider_select.value or "elevenlabs"
                                         ),
                                         "TEXT_PROVIDER_FALLBACKS": (
-                                            "nvidia_nim"
-                                            if selected_text_provider == "ollama_cloud"
-                                            else ""
-                                        ),
-                                        "NVIDIA_NIM_BASE_URL": str(
-                                            nvidia_nim_base_url.value or ""
-                                        ).strip(),
-                                        "NVIDIA_NIM_DEFAULT_MODEL": validate_model_name(
-                                            nvidia_nim_text_model.value,
-                                            "Modelo de texto NVIDIA NIM",
-                                            provider="nvidia_nim",
+                                            ""
                                         ),
                                         "OLLAMA_CLOUD_BASE_URL": str(
                                             ollama_cloud_base_url.value or ""
@@ -639,19 +458,6 @@ def register_settings_page(
                                             "Modelo de vídeo Google AI",
                                             provider="google_ai",
                                         ),
-                                        "VEO_AI_FREE_IMAGE_MODEL": validate_model_name(
-                                            veo_image_model.value,
-                                            "Modelo de imagem Veo AI Free",
-                                            provider="veo_ai_free",
-                                        ),
-                                        "VEO_AI_FREE_VIDEO_MODEL": validate_model_name(
-                                            veo_video_model.value,
-                                            "Modelo de vídeo Veo AI Free",
-                                            provider="veo_ai_free",
-                                        ),
-                                        "VEO_AI_FREE_ENABLED": (
-                                            "true" if veo_enabled.value else "false"
-                                        ),
                                         "ELEVENLABS_BASE_URL": str(
                                             elevenlabs_base_url.value or ""
                                         ).strip(),
@@ -676,8 +482,6 @@ def register_settings_page(
                                 except ValueError as exc:
                                     ui.notify(str(exc), color="negative")
                                     return
-                                if typed_nvidia_nim_api_key:
-                                    values["NVIDIA_NIM_API_KEY"] = typed_nvidia_nim_api_key
                                 if typed_ollama_cloud_api_key:
                                     values["OLLAMA_CLOUD_API_KEY"] = typed_ollama_cloud_api_key
                                 typed_google_ai_api_key = str(
@@ -697,18 +501,6 @@ def register_settings_page(
                                 ui.button(
                                     "Salvar configurações", icon="save", on_click=save_ai
                                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-                                ui.button(
-                                    "Salvar sessão Veo",
-                                    icon="vpn_key",
-                                    on_click=save_veo_session,
-                                ).props("outline no-caps").classes("rounded-xl")
-                                ui.button(
-                                    "Apagar sessão Veo",
-                                    icon="delete",
-                                    on_click=clear_veo_session,
-                                ).props("outline no-caps").classes(
-                                    "text-red-300 border-red-900 rounded-xl"
-                                )
                     with ui.tab_panel(data_tab).classes("px-0"):
                         with ui.element("div").classes("entity-card rounded-2xl p-6"):
                             ui.label("Gerenciamento de dados").classes("text-xl font-semibold")
