@@ -50,7 +50,9 @@ def test_normalize_provider_name_rejects_mock_provider() -> None:
 
 def test_provider_policy_supports_new_text_providers() -> None:
     settings = Settings(
-        text_provider="nvidia_nim",
+        text_provider="ollama_cloud",
+        ollama_cloud_base_url="https://ollama.com/api",
+        ollama_cloud_default_model="gpt-oss:120b",
         nvidia_nim_base_url="https://integrate.api.nvidia.com/v1",
         nvidia_nim_default_model="z-ai/glm-5.2",
     )
@@ -59,11 +61,16 @@ def test_provider_policy_supports_new_text_providers() -> None:
     assert "ollama" not in SUPPORTED_AI_PROVIDERS
     assert "groq" not in SUPPORTED_AI_PROVIDERS
     assert "nvidia_nim" in SUPPORTED_AI_PROVIDERS
-    assert effective_provider_for_channel(settings, "text") == "nvidia_nim"
+    assert "ollama_cloud" in SUPPORTED_AI_PROVIDERS
+    assert effective_provider_for_channel(settings, "text") == "ollama_cloud"
     assert provider_display_name("nvidia_nim") == "NVIDIA NIM"
+    assert provider_display_name("ollama_cloud") == "Ollama Cloud"
     assert provider_base_url(settings, "nvidia_nim") == "https://integrate.api.nvidia.com/v1"
+    assert provider_base_url(settings, "ollama_cloud") == "https://ollama.com/api"
     assert provider_model(settings, "nvidia_nim", "text") == "z-ai/glm-5.2"
+    assert provider_model(settings, "ollama_cloud", "text") == "gpt-oss:120b"
     assert provider_requires_api_key(settings, "nvidia_nim") is True
+    assert provider_requires_api_key(settings, "ollama_cloud") is True
 
 
 def test_nvidia_nim_requires_key_only_for_hosted_endpoint() -> None:

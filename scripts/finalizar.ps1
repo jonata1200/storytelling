@@ -6,8 +6,11 @@ param(
     [switch]$Down
 )
 
-& "$PSScriptRoot\app.ps1" `
-    down `
-    -Port $Port `
-    -PortRangeEnd $PortRangeEnd `
-    -KeepDocker:$KeepDocker
+$storyOptions = @{
+    Command = "stop"
+    Port = $Port
+    PortRangeEnd = $PortRangeEnd
+}
+if ($KeepDocker) { $storyOptions.KeepDocker = $true }
+
+& "$PSScriptRoot\story.ps1" @storyOptions

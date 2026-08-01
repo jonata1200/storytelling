@@ -15,6 +15,7 @@ from app.config.provider_policy import (
 from app.config.settings import get_settings
 from app.generation.models import ProjectModelSetting
 from app.providers.llm.nvidia_nim import NvidiaNimLLMProvider
+from app.providers.llm.ollama_cloud import OllamaCloudLLMProvider
 from app.providers.llm.types import LLMProvider
 
 NARRATIVE_TASKS = [
@@ -45,6 +46,13 @@ def llm_provider_for_name(settings: Any, provider: str) -> LLMProvider:
                 "NVIDIA_NIM_API_KEY",
             )
         return NvidiaNimLLMProvider()
+    if provider == "ollama_cloud":
+        ensure_provider_api_key(
+            settings.ollama_cloud_api_key,
+            "ollama_cloud",
+            "OLLAMA_CLOUD_API_KEY",
+        )
+        return OllamaCloudLLMProvider()
     if provider == "mock":
         raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")
     raise ValueError("Provider de texto não suportado.")

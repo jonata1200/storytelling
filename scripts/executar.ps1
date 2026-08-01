@@ -10,12 +10,14 @@ param(
     [switch]$Dev
 )
 
-$command = if ($Dev) { "dev" } else { "up" }
+$storyOptions = @{
+    Command = "run"
+    HostAddress = $HostAddress
+    Port = $Port
+}
+if ($Dev) { $storyOptions.Dev = $true }
+if ($Background) { $storyOptions.Background = $true }
+if ($NoDocker) { $storyOptions.NoDocker = $true }
+if ($NoMigrate) { $storyOptions.NoMigrate = $true }
 
-& "$PSScriptRoot\app.ps1" `
-    $command `
-    -HostAddress $HostAddress `
-    -Port $Port `
-    -NoDocker:$NoDocker `
-    -NoMigrate:$NoMigrate `
-    -Background:$Background
+& "$PSScriptRoot\story.ps1" @storyOptions

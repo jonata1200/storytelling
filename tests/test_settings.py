@@ -1,6 +1,7 @@
 from app.config.provider_policy import effective_provider_for_channel
 from app.config.settings import (
     NVIDIA_NIM_TEXT_MODELS,
+    OLLAMA_CLOUD_TEXT_MODELS,
     Settings,
 )
 
@@ -38,6 +39,19 @@ def test_settings_reads_nvidia_nim_text_provider() -> None:
     assert settings.nvidia_nim_default_model == "z-ai/glm-5.2"
 
 
+def test_settings_reads_ollama_cloud_text_provider() -> None:
+    settings = Settings(
+        text_provider="ollama_cloud",
+        ollama_cloud_api_key="  ollama-secret  ",
+        ollama_cloud_base_url="https://ollama.com/api",
+        ollama_cloud_default_model="gpt-oss:120b",
+    )
+
+    assert settings.text_provider == "ollama_cloud"
+    assert settings.ollama_cloud_api_key == "ollama-secret"
+    assert settings.ollama_cloud_default_model == "gpt-oss:120b"
+
+
 def test_new_text_model_lists_have_initial_defaults() -> None:
     assert NVIDIA_NIM_TEXT_MODELS == (
         "deepseek-ai/deepseek-v4-flash",
@@ -54,6 +68,10 @@ def test_new_text_model_lists_have_initial_defaults() -> None:
         "qwen/qwen3-next-80b-a3b-instruct",
         "stepfun-ai/step-3.7-flash",
         "z-ai/glm-5.2",
+    )
+    assert OLLAMA_CLOUD_TEXT_MODELS == (
+        "gpt-oss:120b",
+        "gpt-oss:20b",
     )
 
 

@@ -14,6 +14,7 @@ from app.config.provider_policy import (
 )
 from app.config.settings import (
     NVIDIA_NIM_TEXT_MODELS,
+    OLLAMA_CLOUD_TEXT_MODELS,
     get_settings,
 )
 from app.providers.veo_free.session import (
@@ -178,7 +179,19 @@ def register_settings_page(
                                     "w-full items-center gap-2 text-xs text-[#8f9590]"
                                 ):
                                     ui.icon("memory").classes("text-base acid")
-                                    ui.label("NVIDIA NIM é o provider principal de texto.")
+                                    ui.label("Escolha o provider que gera roteiros, prompts e textos.")
+                                text_provider_select = (
+                                    ui.select(
+                                        {
+                                            "nvidia_nim": "NVIDIA NIM",
+                                            "ollama_cloud": "Ollama Cloud",
+                                        },
+                                        label="Provider de texto",
+                                        value=current.text_provider or "nvidia_nim",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
                                 with ui.grid().classes(
                                     "w-full grid-cols-1 md:grid-cols-2 gap-3"
                                 ):
@@ -213,6 +226,44 @@ def register_settings_page(
                                         ),
                                         label="Modelo de texto NVIDIA NIM",
                                         value=current.nvidia_nim_default_model,
+                                    )
+                                    .props("outlined stack-label options-dense")
+                                    .classes("w-full")
+                                )
+                                with ui.grid().classes(
+                                    "w-full grid-cols-1 md:grid-cols-2 gap-3"
+                                ):
+                                    ollama_cloud_base_url = (
+                                        ui.input(
+                                            "URL base Ollama Cloud",
+                                            value=current.ollama_cloud_base_url,
+                                            placeholder="https://ollama.com/api",
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
+                                    )
+                                    ollama_cloud_api_key = (
+                                        ui.input(
+                                            "Chave Ollama Cloud",
+                                            placeholder=(
+                                                "Chave configurada; digite para substituir"
+                                                if current.ollama_cloud_api_key
+                                                else "ollama-..."
+                                            ),
+                                            password=True,
+                                            password_toggle_button=True,
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
+                                    )
+                                ollama_cloud_text_model = (
+                                    ui.select(
+                                        model_options(
+                                            OLLAMA_CLOUD_TEXT_MODELS,
+                                            current.ollama_cloud_default_model,
+                                        ),
+                                        label="Modelo de texto Ollama Cloud",
+                                        value=current.ollama_cloud_default_model,
                                     )
                                     .props("outlined stack-label options-dense")
                                     .classes("w-full")
@@ -334,16 +385,26 @@ def register_settings_page(
                                 ui.notify("Sessão Veo AI Free removida.", color="positive")
 
                             def save_ai() -> None:
+                                selected_text_provider = str(
+                                    text_provider_select.value or "nvidia_nim"
+                                ).strip()
                                 typed_nvidia_nim_api_key = str(
                                     nvidia_nim_api_key.value or ""
                                 ).strip()
+                                typed_ollama_cloud_api_key = str(
+                                    ollama_cloud_api_key.value or ""
+                                ).strip()
                                 try:
                                     values = {
-                                        "AI_PROVIDER": "nvidia_nim",
-                                        "TEXT_PROVIDER": "nvidia_nim",
+                                        "AI_PROVIDER": selected_text_provider,
+                                        "TEXT_PROVIDER": selected_text_provider,
                                         "IMAGE_PROVIDER": "veo_ai_free",
                                         "VIDEO_PROVIDER": "veo_ai_free",
-                                        "TEXT_PROVIDER_FALLBACKS": "",
+                                        "TEXT_PROVIDER_FALLBACKS": (
+                                            "nvidia_nim"
+                                            if selected_text_provider == "ollama_cloud"
+                                            else ""
+                                        ),
                                         "NVIDIA_NIM_BASE_URL": str(
                                             nvidia_nim_base_url.value or ""
                                         ).strip(),
@@ -351,6 +412,14 @@ def register_settings_page(
                                             nvidia_nim_text_model.value,
                                             "Modelo de texto NVIDIA NIM",
                                             provider="nvidia_nim",
+                                        ),
+                                        "OLLAMA_CLOUD_BASE_URL": str(
+                                            ollama_cloud_base_url.value or ""
+                                        ).strip(),
+                                        "OLLAMA_CLOUD_DEFAULT_MODEL": validate_model_name(
+                                            ollama_cloud_text_model.value,
+                                            "Modelo de texto Ollama Cloud",
+                                            provider="ollama_cloud",
                                         ),
                                         "VEO_AI_FREE_IMAGE_MODEL": validate_model_name(
                                             veo_image_model.value,
@@ -371,6 +440,8 @@ def register_settings_page(
                                     return
                                 if typed_nvidia_nim_api_key:
                                     values["NVIDIA_NIM_API_KEY"] = typed_nvidia_nim_api_key
+                                if typed_ollama_cloud_api_key:
+                                    values["OLLAMA_CLOUD_API_KEY"] = typed_ollama_cloud_api_key
                                 save_preferences(values)
                                 ui.notify("Configurações de IA salvas.", color="positive")
 

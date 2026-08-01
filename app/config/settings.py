@@ -92,6 +92,11 @@ NVIDIA_NIM_TEXT_MODELS = (
     "z-ai/glm-5.2",
 )
 
+OLLAMA_CLOUD_TEXT_MODELS = (
+    "gpt-oss:120b",
+    "gpt-oss:20b",
+)
+
 
 class Settings(BaseSettings):
     app_name: str = "Storytelling"
@@ -126,6 +131,9 @@ class Settings(BaseSettings):
     nvidia_nim_api_key: str | None = Field(default=None, repr=False)
     nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
     nvidia_nim_default_model: str = "z-ai/glm-5.2"
+    ollama_cloud_api_key: str | None = Field(default=None, repr=False)
+    ollama_cloud_base_url: str = "https://ollama.com/api"
+    ollama_cloud_default_model: str = "gpt-oss:120b"
     veo_ai_free_enabled: bool = False
     veo_ai_free_session_path: Path = Path(".runtime/veo_free/session.json")
     veo_ai_free_image_model: str = "veo-ai-free/image"
@@ -151,6 +159,9 @@ class Settings(BaseSettings):
     def reject_insecure_non_local_defaults(self) -> "Settings":
         self.omniroute_api_key = normalize_omniroute_api_key(self.omniroute_api_key)
         self.nvidia_nim_api_key = normalize_api_key(self.nvidia_nim_api_key, "nvidia_nim")
+        self.ollama_cloud_api_key = normalize_api_key(
+            self.ollama_cloud_api_key, "ollama_cloud"
+        )
         self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
         self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")
         self.image_provider = self._optional_provider(

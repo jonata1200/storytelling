@@ -52,20 +52,24 @@ aprovação e controle sobre o resultado.
 
 ## Provedor De IA
 
-Texto usa `nvidia_nim` por API. Imagem e video usam o provider experimental
-`veo_ai_free`, que depende de sessao local do navegador e pode ser desabilitado.
-Os modelos padrao ficam no `.env`:
+Texto pode usar `nvidia_nim` ou `ollama_cloud` por API. Imagem e video usam o
+provider experimental `veo_ai_free`, que depende de sessao local do navegador e
+pode ser desabilitado. Os modelos padrao ficam no `.env`:
 
 ```env
 AI_PROVIDER=nvidia_nim
-TEXT_PROVIDER=nvidia_nim
-TEXT_PROVIDER_FALLBACKS=
+TEXT_PROVIDER=ollama_cloud
+TEXT_PROVIDER_FALLBACKS=nvidia_nim
 IMAGE_PROVIDER=veo_ai_free
 VIDEO_PROVIDER=veo_ai_free
 
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_API_KEY=sua_chave_nvidia
 NVIDIA_NIM_DEFAULT_MODEL=z-ai/glm-5.2
+
+OLLAMA_CLOUD_BASE_URL=https://ollama.com/api
+OLLAMA_CLOUD_API_KEY=sua_chave_ollama
+OLLAMA_CLOUD_DEFAULT_MODEL=gpt-oss:120b
 
 VEO_AI_FREE_ENABLED=false
 VEO_AI_FREE_SESSION_PATH=.runtime/veo_free/session.json
@@ -94,66 +98,50 @@ pip install -e . --no-deps
 Copy-Item .env.example .env
 ```
 
-Configure `NVIDIA_NIM_API_KEY` e a sessão
+Configure `OLLAMA_CLOUD_API_KEY` ou `NVIDIA_NIM_API_KEY` e a sessão
 experimental do Veo AI Free pela tela de Configurações de IA ou pelo `.env`.
 
 ## Executando
 
-O script principal fica em `scripts/app.ps1`. Para o uso diário, o comando mais
-simples é:
+O script principal fica em `scripts/story.ps1`. Para o uso diário, use apenas
+três comandos:
 
 ```powershell
-.\scripts\app.ps1 up
+.\scripts\story.ps1 run
+.\scripts\story.ps1 stop
+.\scripts\story.ps1 restart
 ```
 
-Esse comando inicia PostgreSQL, Redis, aplica migrations e sobe a aplicação em
+`run` inicia PostgreSQL, Redis, aplica migrations e sobe a aplicação em
 primeiro plano. Logs e erros ficam visíveis no terminal, o que facilita debug.
 Para finalizar, pressione `Ctrl+C`.
 
 Para executar em segundo plano:
 
 ```powershell
-.\scripts\app.ps1 start
-```
-
-Ou:
-
-```powershell
-.\scripts\app.ps1 up -Background
+.\scripts\story.ps1 run -Background
 ```
 
 Para desenvolver com reload automático:
 
 ```powershell
-.\scripts\app.ps1 dev
+.\scripts\story.ps1 run -Dev
 ```
 
-Para parar apenas a aplicação:
+Comandos técnicos ficam em `tools`:
 
 ```powershell
-.\scripts\app.ps1 stop
+.\scripts\story.ps1 tools status
+.\scripts\story.ps1 tools logs
+.\scripts\story.ps1 tools check
+.\scripts\story.ps1 tools test
+.\scripts\story.ps1 tools clean
 ```
 
-Para parar aplicação e containers:
+Scripts antigos continuam disponíveis como wrappers de compatibilidade:
 
 ```powershell
-.\scripts\app.ps1 down
-```
-
-Outros comandos úteis:
-
-```powershell
-.\scripts\app.ps1 restart
-.\scripts\app.ps1 status
-.\scripts\app.ps1 logs
-.\scripts\app.ps1 check
-.\scripts\app.ps1 test
-.\scripts\app.ps1 clean
-```
-
-Atalhos em português continuam disponíveis:
-
-```powershell
+.\scripts\app.ps1 up
 .\scripts\executar.ps1
 .\scripts\finalizar.ps1
 ```
@@ -173,7 +161,7 @@ http://127.0.0.1:8000/api/v1/health/live
 Se o PowerShell bloquear scripts locais:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\app.ps1 up
+powershell -ExecutionPolicy Bypass -File .\scripts\story.ps1 run
 ```
 
 ## Configuração Importante

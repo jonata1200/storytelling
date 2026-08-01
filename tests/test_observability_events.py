@@ -119,6 +119,23 @@ def test_provider_channel_readiness_reports_missing_nvidia_key() -> None:
     assert "NVIDIA_NIM_API_KEY" in text.message
 
 
+def test_provider_channel_readiness_reports_ollama_cloud() -> None:
+    settings = Settings(
+        ai_provider="ollama_cloud",
+        text_provider="ollama_cloud",
+        text_provider_fallbacks="nvidia_nim",
+        ollama_cloud_api_key="ollama-secret",
+        ollama_cloud_default_model="gpt-oss:120b",
+    )
+
+    text = _provider_channel_readiness(settings, "text")
+
+    assert text.status == "ready"
+    assert text.details["provider"] == "ollama_cloud"
+    assert text.details["model"] == "gpt-oss:120b"
+    assert text.details["fallbacks"] == "nvidia_nim"
+
+
 def test_veo_ai_free_session_readiness_uses_local_validator(tmp_path: Path) -> None:
     settings = Settings(
         veo_ai_free_enabled=True,

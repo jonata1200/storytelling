@@ -25,5 +25,5 @@ async def test_configured_text_provider_real_smoke() -> None:
         )
     )
 
-    assert provider_name == "nvidia_nim"
+    assert provider_name in {"nvidia_nim", "ollama_cloud"}
     assert result.content.get("ok") is True
