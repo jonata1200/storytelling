@@ -97,6 +97,26 @@ def test_google_ai_cost_policy_uses_model_overrides() -> None:
     assert video.estimated == Decimal("0.800000")
 
 
+def test_elevenlabs_cost_policy_uses_speech_and_dubbing_units() -> None:
+    speech = estimate_operation_cost(
+        "speech_generation",
+        Decimal("2"),
+        provider="elevenlabs",
+        model="eleven_flash_v2_5",
+    )
+    dubbing = estimate_operation_cost(
+        "dubbing",
+        Decimal("3"),
+        provider="elevenlabs",
+        model="dubbing-v1",
+    )
+
+    assert speech.unit == "1k_characters"
+    assert speech.estimated == Decimal("0.100000")
+    assert dubbing.unit == "minute"
+    assert dubbing.estimated == Decimal("0.990000")
+
+
 class _FakeBudgetSession:
     def __init__(self) -> None:
         self.added: list[Any] = []

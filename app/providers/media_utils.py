@@ -67,6 +67,12 @@ def _media_type_for_path(path: Path) -> str:
         ".mpeg": "video/mpeg",
         ".mpg": "video/mpeg",
         ".webm": "video/webm",
+        ".aac": "audio/aac",
+        ".flac": "audio/flac",
+        ".m4a": "audio/mp4",
+        ".mp3": "audio/mpeg",
+        ".ogg": "audio/ogg",
+        ".wav": "audio/wav",
     }
     return (
         explicit_media_types.get(path.suffix.lower())
@@ -111,6 +117,14 @@ def extension_from_media_type(media_type: str) -> str:
         "video/mpeg": ".mpeg",
         "video/quicktime": ".mov",
         "video/webm": ".webm",
+        "audio/aac": ".aac",
+        "audio/flac": ".flac",
+        "audio/mp4": ".m4a",
+        "audio/mpeg": ".mp3",
+        "audio/mp3": ".mp3",
+        "audio/ogg": ".ogg",
+        "audio/wav": ".wav",
+        "audio/x-wav": ".wav",
     }
     if normalized in explicit_extensions:
         return explicit_extensions[normalized]

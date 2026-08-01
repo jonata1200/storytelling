@@ -425,6 +425,17 @@ async def readiness_dashboard(
             details=speech_details,
         )
     )
+    from app.dubbing.service import dubbing_configuration_status
+
+    dubbing_ready, dubbing_message, dubbing_details = dubbing_configuration_status(app_settings)
+    components.append(
+        ReadinessComponentRead(
+            name="dubbing",
+            status="ready" if dubbing_ready else "degraded",
+            message=dubbing_message,
+            details=dubbing_details,
+        )
+    )
     components.append(_veo_ai_free_session_readiness(app_settings))
     overall = "ready" if all(item.status == "ready" for item in components) else "degraded"
     if any(item.status == "down" for item in components):

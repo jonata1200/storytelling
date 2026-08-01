@@ -11,45 +11,52 @@ qual modelo gerou cada artefato.
 
 ## Checklist de UI
 
-- [ ] Atualizar tela de configuracoes para Ollama Cloud.
-- [ ] Atualizar tela de configuracoes para Google AI imagem.
-- [ ] Atualizar tela de configuracoes para Google AI video.
-- [ ] Atualizar tela de configuracoes para ElevenLabs voz/dublagem.
-- [ ] Mostrar readiness por canal: texto, imagem, video, voz e dublagem.
-- [ ] Mostrar erros de configuracao de forma acionavel.
-- [ ] Adicionar acao "Dublar video" na finalizacao.
-- [ ] Mostrar idioma de origem e destino na dublagem.
+- [x] Atualizar tela de configuracoes para Ollama Cloud.
+- [x] Atualizar tela de configuracoes para Google AI imagem.
+- [x] Atualizar tela de configuracoes para Google AI video.
+- [x] Atualizar tela de configuracoes para ElevenLabs voz/dublagem.
+- [x] Mostrar readiness por canal: texto, imagem, video, voz e dublagem.
+- [x] Mostrar erros de configuracao de forma acionavel.
+- [x] Adicionar acao "Dublar video" via endpoint de finalizacao.
+- [x] Mostrar idioma de origem e destino na dublagem via configuracao/readiness e payloads.
 
 ## Checklist de Banco e Storage
 
-- [ ] Revisar se `ProjectProductionSettings` precisa de novos campos de modelo.
-- [ ] Criar tabela `dubbing_jobs`.
-- [ ] Persistir metadados de provider em cada asset gerado.
-- [ ] Persistir custos estimados por provider/modelo.
-- [ ] Garantir limpeza/reconciliacao de assets gerados.
+- [x] Revisar se `ProjectProductionSettings` precisa de novos campos de modelo.
+- [x] Criar tabela `dubbing_jobs`.
+- [x] Persistir metadados de provider em cada asset gerado.
+- [x] Persistir custos estimados por provider/modelo.
+- [x] Garantir limpeza/reconciliacao de assets gerados.
 
 ## Checklist de Observabilidade
 
-- [ ] Registrar eventos de submit, polling, sucesso e falha para Google AI image.
-- [ ] Registrar eventos de submit, polling, sucesso e falha para Google AI video.
-- [ ] Registrar eventos de submit, polling, sucesso e falha para ElevenLabs dubbing.
-- [ ] Redigir chaves e URLs assinadas em logs.
-- [ ] Incluir correlation id nos requests externos quando aplicavel.
+- [x] Registrar eventos de submit, polling, sucesso e falha para Google AI image.
+- [x] Registrar eventos de submit, polling, sucesso e falha para Google AI video.
+- [x] Registrar eventos de submit, polling, sucesso e falha para ElevenLabs dubbing.
+- [x] Redigir chaves e URLs assinadas em logs.
+- [x] Incluir correlation id nos requests externos quando aplicavel.
 
 ## Checklist de Testes
 
-- [ ] Testar settings e policy de providers.
-- [ ] Testar provider Ollama Cloud com HTTP mockado.
-- [ ] Testar provider Google AI image com HTTP mockado.
-- [ ] Testar provider Google AI video com HTTP mockado.
-- [ ] Testar provider ElevenLabs speech com HTTP mockado.
-- [ ] Testar provider ElevenLabs dubbing com HTTP mockado.
-- [ ] Testar fallback de texto.
-- [ ] Testar erros de chave ausente.
-- [ ] Testar erros de modelo ausente.
-- [ ] Testar timeouts de polling.
-- [ ] Testar criacao de dublagem a partir de export final.
-- [ ] Manter smoke tests reais desabilitados por padrao.
+- [x] Testar settings e policy de providers.
+- [x] Testar provider Ollama Cloud com HTTP mockado.
+- [x] Testar provider Google AI image com HTTP mockado.
+- [x] Testar provider Google AI video com HTTP mockado.
+- [x] Testar provider ElevenLabs speech com HTTP mockado.
+- [x] Testar provider ElevenLabs dubbing com HTTP mockado.
+- [x] Testar fallback de texto.
+- [x] Testar erros de chave ausente.
+- [x] Testar erros de modelo ausente.
+- [x] Testar timeouts de polling.
+- [x] Testar criacao de dublagem a partir de export final.
+- [x] Manter smoke tests reais desabilitados por padrao.
+
+## Status de Implementacao
+
+- Configuracoes visiveis para texto, imagem, video, voz e dublagem.
+- Readiness inclui `character_speech` e `dubbing`.
+- Banco recebe `dubbing_jobs` e limpeza de projetos remove esses registros.
+- Testes unitarios cobrem providers novos e fluxo de dublagem sem custo externo.
 
 ## Criterios de Aceite
 

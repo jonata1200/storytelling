@@ -157,6 +157,29 @@ def test_provider_channel_readiness_reports_google_ai_media() -> None:
     assert video.details["model"] == "veo-3.1-generate-preview"
 
 
+def test_readiness_dashboard_helpers_report_elevenlabs_dubbing() -> None:
+    from app.dubbing.service import dubbing_configuration_status
+    from app.providers.speech.service import speech_configuration_status
+
+    settings = Settings(
+        speech_provider="elevenlabs",
+        elevenlabs_api_key="eleven-secret",
+        elevenlabs_voice_id="voice-1",
+        elevenlabs_speech_model="eleven_multilingual_v2",
+        dubbing_provider="elevenlabs",
+        dubbing_source_lang="pt",
+        dubbing_target_lang="en",
+    )
+
+    speech_ready, _speech_message, speech_details = speech_configuration_status(settings)
+    dubbing_ready, _dubbing_message, dubbing_details = dubbing_configuration_status(settings)
+
+    assert speech_ready is True
+    assert speech_details == {"provider": "elevenlabs", "model": "eleven_multilingual_v2"}
+    assert dubbing_ready is True
+    assert dubbing_details == {"provider": "elevenlabs", "source": "pt", "target": "en"}
+
+
 def test_veo_ai_free_session_readiness_uses_local_validator(tmp_path: Path) -> None:
     settings = Settings(
         veo_ai_free_enabled=True,

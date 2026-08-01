@@ -104,6 +104,7 @@ def _render_director_cockpit(settings: ProjectProductionSettings, counts: dict[s
         ("Storyboard", counts["frames"]),
         ("Video", counts["clips"]),
         ("Timeline", counts["exports"]),
+        ("Dublagem", counts.get("dubbing_jobs", 0)),
     ]
     with ui.card().classes(_card_classes("w-full")):
         with ui.row().classes("items-center justify-between w-full"):
@@ -263,4 +264,3 @@ def _render_timeline_strip(timeline: Timeline | None, items: list[TimelineItem])
                 ui.label(label).classes(
                     f"{color} text-xs text-slate-100 rounded px-2 py-3 text-center"
                 ).style(f"width: {width}px")
-

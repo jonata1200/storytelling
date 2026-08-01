@@ -94,6 +94,7 @@ PROJECT_GRAPH_DELETE_STATEMENTS = (
     )
     """,
     "DELETE FROM operational_events WHERE project_id IN (SELECT id FROM target_projects)",
+    "DELETE FROM dubbing_jobs WHERE project_id IN (SELECT id FROM target_projects)",
     "DELETE FROM exports WHERE project_id IN (SELECT id FROM target_projects)",
     "DELETE FROM subtitle_tracks WHERE project_id IN (SELECT id FROM target_projects)",
     "DELETE FROM video_clips WHERE project_id IN (SELECT id FROM target_projects)",
@@ -207,6 +208,7 @@ PROJECT_GRAPH_DELETE_STATEMENTS = (
 
 IDEA_GRAPH_TRUNCATE_TABLES = (
     "clip_reviews",
+    "dubbing_jobs",
     "exports",
     "subtitle_tracks",
     "video_clips",

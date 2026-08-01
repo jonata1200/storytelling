@@ -6,6 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_session
+from app.dubbing.schemas import DubbingJobRead, DubbingStartRequest
+from app.dubbing.service import list_dubbing_jobs, refresh_dubbing_job, start_dubbing_job
 from app.finalization.schemas import (
     ExportRead,
     ExportRequest,
@@ -70,3 +72,67 @@ async def post_export(
             detail="Project, timeline, or subtitle track not found",
         )
     return ExportRead.model_validate(export)
+
+
+@router.post("/{project_id}/exports/{export_id}/dubbing", response_model=DubbingJobRead)
+async def post_export_dubbing(
+    project_id: UUID,
+    export_id: UUID,
+    payload: DubbingStartRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DubbingJobRead:
+    try:
+        job = await start_dubbing_job(
+            session,
+            project_id,
+            export_id,
+            source_language=payload.source_language,
+            target_language=payload.target_language,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+    return DubbingJobRead.model_validate(job)
+
+
+@router.get("/{project_id}/exports/{export_id}/dubbing", response_model=list[DubbingJobRead])
+async def get_export_dubbing_jobs(
+    project_id: UUID,
+    export_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[DubbingJobRead]:
+    jobs = await list_dubbing_jobs(session, project_id, export_id)
+    return [DubbingJobRead.model_validate(job) for job in jobs]
+
+
+@router.get("/{project_id}/dubbing/{job_id}", response_model=DubbingJobRead)
+async def get_dubbing_job(
+    project_id: UUID,
+    job_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DubbingJobRead:
+    job = await refresh_dubbing_job(
+        session,
+        project_id,
+        job_id,
+        download_when_ready=False,
+    )
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dubbing job not found")
+    return DubbingJobRead.model_validate(job)
+
+
+@router.post("/{project_id}/dubbing/{job_id}/poll", response_model=DubbingJobRead)
+async def post_dubbing_poll(
+    project_id: UUID,
+    job_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DubbingJobRead:
+    try:
+        job = await refresh_dubbing_job(session, project_id, job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dubbing job not found")
+    return DubbingJobRead.model_validate(job)

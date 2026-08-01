@@ -1,5 +1,6 @@
 from app.config.provider_policy import effective_provider_for_channel
 from app.config.settings import (
+    ELEVENLABS_SPEECH_MODELS,
     GOOGLE_AI_IMAGE_MODELS,
     GOOGLE_AI_VIDEO_MODELS,
     NVIDIA_NIM_TEXT_MODELS,
@@ -21,6 +22,11 @@ def test_settings_defaults_to_new_ai_providers() -> None:
     assert settings.google_ai_base_url == "https://generativelanguage.googleapis.com/v1beta"
     assert settings.google_ai_image_model == "gemini-3.1-flash-image"
     assert settings.google_ai_video_model == "veo-3.1-generate-preview"
+    assert settings.speech_provider == "elevenlabs"
+    assert settings.elevenlabs_speech_model == "eleven_multilingual_v2"
+    assert settings.dubbing_provider == "elevenlabs"
+    assert settings.dubbing_source_lang == "pt"
+    assert settings.dubbing_target_lang == "en"
 
 
 def test_settings_maps_legacy_omniroute_provider_to_new_default() -> None:
@@ -81,6 +87,32 @@ def test_settings_reads_google_ai_media_provider() -> None:
     assert settings.google_ai_video_poll_timeout_seconds == 30
 
 
+def test_settings_reads_elevenlabs_voice_and_dubbing_provider() -> None:
+    settings = Settings(
+        speech_provider="elevenlabs",
+        elevenlabs_api_key="  eleven-secret  ",
+        elevenlabs_voice_id="voice-1",
+        elevenlabs_speech_model="eleven_flash_v2_5",
+        elevenlabs_output_format="mp3_44100_128",
+        dubbing_provider="elevenlabs",
+        dubbing_source_lang="pt",
+        dubbing_target_lang="es",
+        dubbing_poll_interval_seconds=2,
+        dubbing_poll_timeout_seconds=30,
+    )
+
+    assert settings.speech_provider == "elevenlabs"
+    assert settings.elevenlabs_api_key == "eleven-secret"
+    assert settings.elevenlabs_voice_id == "voice-1"
+    assert settings.elevenlabs_speech_model == "eleven_flash_v2_5"
+    assert settings.elevenlabs_output_format == "mp3_44100_128"
+    assert settings.dubbing_provider == "elevenlabs"
+    assert settings.dubbing_source_lang == "pt"
+    assert settings.dubbing_target_lang == "es"
+    assert settings.dubbing_poll_interval_seconds == 2
+    assert settings.dubbing_poll_timeout_seconds == 30
+
+
 def test_new_text_model_lists_have_initial_defaults() -> None:
     assert NVIDIA_NIM_TEXT_MODELS == (
         "deepseek-ai/deepseek-v4-flash",
@@ -114,6 +146,12 @@ def test_new_text_model_lists_have_initial_defaults() -> None:
         "veo-3.1-lite-generate-preview",
         "veo-3.0-generate-001",
         "veo-3.0-fast-generate-001",
+    )
+    assert ELEVENLABS_SPEECH_MODELS == (
+        "eleven_multilingual_v2",
+        "eleven_turbo_v2_5",
+        "eleven_flash_v2_5",
+        "eleven_v3",
     )
 
 

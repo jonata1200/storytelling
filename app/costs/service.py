@@ -39,9 +39,14 @@ DEFAULT_OPERATION_COSTS_USD: dict[str, tuple[str, Decimal]] = {
     "image_to_video": ("second", Decimal("0.080000")),
     "text_to_video": ("second", Decimal("0.080000")),
     "speech_generation": ("1k_characters", Decimal("0.015000")),
+    "dubbing": ("minute", Decimal("0.330000")),
 }
 
 PROVIDER_OPERATION_COST_OVERRIDES_USD: dict[str, dict[str, tuple[str, Decimal]]] = {
+    "elevenlabs": {
+        "speech_generation": ("1k_characters", Decimal("0.100000")),
+        "dubbing": ("minute", Decimal("0.330000")),
+    },
     "google_ai": {
         "image_generation": ("image", Decimal("0.067000")),
         "image_edit": ("image", Decimal("0.067000")),
@@ -101,6 +106,22 @@ MODEL_OPERATION_COST_OVERRIDES_USD: dict[tuple[str, str, str], tuple[str, Decima
     ),
     ("google_ai", "veo-3.0-fast-generate-001", "text_to_video"): (
         "second",
+        Decimal("0.100000"),
+    ),
+    ("elevenlabs", "eleven_flash_v2_5", "speech_generation"): (
+        "1k_characters",
+        Decimal("0.050000"),
+    ),
+    ("elevenlabs", "eleven_turbo_v2_5", "speech_generation"): (
+        "1k_characters",
+        Decimal("0.050000"),
+    ),
+    ("elevenlabs", "eleven_multilingual_v2", "speech_generation"): (
+        "1k_characters",
+        Decimal("0.100000"),
+    ),
+    ("elevenlabs", "eleven_v3", "speech_generation"): (
+        "1k_characters",
         Decimal("0.100000"),
     ),
 }

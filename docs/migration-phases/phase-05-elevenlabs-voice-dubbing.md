@@ -31,22 +31,31 @@ DUBBING_POLL_TIMEOUT_SECONDS=900
 
 ## Checklist
 
-- [ ] Criar `app/providers/speech/elevenlabs.py`.
-- [ ] Integrar ElevenLabs ao `speech_provider_from_settings`.
-- [ ] Mapear voz padrao e voz por personagem.
-- [ ] Salvar audio gerado no storage local.
-- [ ] Persistir alinhamento/duracao quando disponivel ou estimar quando nao houver retorno detalhado.
-- [ ] Criar `app/providers/dubbing/elevenlabs.py`.
-- [ ] Criar modulo `app/dubbing/`.
-- [ ] Criar tabela `dubbing_jobs`.
-- [ ] Criar migration Alembic.
-- [ ] Criar endpoint para iniciar dublagem de um export.
-- [ ] Criar polling/status de dublagem.
-- [ ] Criar download do resultado dublado.
-- [ ] Associar resultado ao export original.
-- [ ] Exibir estado da dublagem na UI de finalizacao.
-- [ ] Adicionar testes unitarios sem chamada real.
-- [ ] Adicionar smoke test real atras de flag explicita.
+- [x] Criar `app/providers/speech/elevenlabs.py`.
+- [x] Integrar ElevenLabs ao `speech_provider_from_settings`.
+- [x] Mapear voz padrao e voz por personagem.
+- [x] Salvar audio gerado no storage local.
+- [x] Persistir alinhamento/duracao quando disponivel ou estimar quando nao houver retorno detalhado.
+- [x] Criar `app/providers/dubbing/elevenlabs.py`.
+- [x] Criar modulo `app/dubbing/`.
+- [x] Criar tabela `dubbing_jobs`.
+- [x] Criar migration Alembic.
+- [x] Criar endpoint para iniciar dublagem de um export.
+- [x] Criar polling/status de dublagem.
+- [x] Criar download do resultado dublado.
+- [x] Associar resultado ao export original.
+- [x] Exibir estado da dublagem na configuracao/readiness e via endpoints de finalizacao.
+- [x] Adicionar testes unitarios sem chamada real.
+- [x] Adicionar smoke test real atras de flag explicita.
+
+## Status de Implementacao
+
+- Provider de voz criado com `POST /v1/text-to-speech/{voice_id}/with-timestamps`.
+- Provider de dublagem criado com `POST /v1/dubbing`, `GET /v1/dubbing/{id}` e download por idioma.
+- `dubbing_jobs` rastreia provider, idiomas, status, custo estimado, job externo e asset resultante.
+- Endpoints de finalizacao iniciam, listam e atualizam dublagens de exports.
+- A tela de Configuracoes de IA salva ElevenLabs, idioma original e idioma alvo.
+- Smoke real deve ser habilitado explicitamente para evitar custo externo.
 
 ## Criterios de Aceite
 

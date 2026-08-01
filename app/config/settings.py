@@ -112,6 +112,13 @@ GOOGLE_AI_VIDEO_MODELS = (
     "veo-3.0-fast-generate-001",
 )
 
+ELEVENLABS_SPEECH_MODELS = (
+    "eleven_multilingual_v2",
+    "eleven_turbo_v2_5",
+    "eleven_flash_v2_5",
+    "eleven_v3",
+)
+
 
 class Settings(BaseSettings):
     app_name: str = "Storytelling"
@@ -166,12 +173,22 @@ class Settings(BaseSettings):
     video_provider: str | None = "veo_ai_free"
     storyboard_image_concurrency: int = 3
     video_generation_concurrency: int = Field(default=2, ge=1, le=4)
-    speech_provider: str = "openai_compatible"
+    speech_provider: str = "elevenlabs"
     speech_base_url: str = "https://api.openai.com/v1"
     speech_api_key: str | None = Field(default=None, repr=False)
     speech_model: str = ""
     speech_voice: str = "alloy"
     speech_timeout_seconds: int = 120
+    elevenlabs_api_key: str | None = Field(default=None, repr=False)
+    elevenlabs_base_url: str = "https://api.elevenlabs.io/v1"
+    elevenlabs_voice_id: str = ""
+    elevenlabs_speech_model: str = "eleven_multilingual_v2"
+    elevenlabs_output_format: str = "mp3_44100_128"
+    dubbing_provider: str = "elevenlabs"
+    dubbing_source_lang: str = "pt"
+    dubbing_target_lang: str = "en"
+    dubbing_poll_interval_seconds: int = 10
+    dubbing_poll_timeout_seconds: int = 900
     user_display_name: str = "Jonata"
     user_email: str = ""
     user_avatar_path: str = ""
@@ -187,6 +204,7 @@ class Settings(BaseSettings):
             self.ollama_cloud_api_key, "ollama_cloud"
         )
         self.google_ai_api_key = normalize_api_key(self.google_ai_api_key, "google_ai")
+        self.elevenlabs_api_key = normalize_api_key(self.elevenlabs_api_key, "elevenlabs")
         self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
         self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")
         self.image_provider = self._optional_provider(

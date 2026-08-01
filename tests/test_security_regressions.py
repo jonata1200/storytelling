@@ -93,6 +93,10 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
             "GOOGLE_AI_API_KEY": "google-secret",
             "GOOGLE_AI_IMAGE_MODEL": "gemini-3.1-flash-image",
             "GOOGLE_AI_VIDEO_MODEL": "veo-3.1-generate-preview",
+            "ELEVENLABS_API_KEY": "eleven-secret",
+            "ELEVENLABS_VOICE_ID": "voice-1",
+            "ELEVENLABS_SPEECH_MODEL": "eleven_multilingual_v2",
+            "DUBBING_TARGET_LANG": "en",
             "VEO_AI_FREE_ENABLED": "true",
             "VEO_AI_FREE_SESSION_PATH": ".runtime/veo_free/session.json",
         },
@@ -106,6 +110,10 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     assert preferences["google_ai_api_key"] == "google-secret"
     assert preferences["google_ai_image_model"] == "gemini-3.1-flash-image"
     assert preferences["google_ai_video_model"] == "veo-3.1-generate-preview"
+    assert preferences["elevenlabs_api_key"] == "eleven-secret"
+    assert preferences["elevenlabs_voice_id"] == "voice-1"
+    assert preferences["elevenlabs_speech_model"] == "eleven_multilingual_v2"
+    assert preferences["dubbing_target_lang"] == "en"
     assert preferences["veo_ai_free_enabled"] == "true"
     with pytest.raises(ValueError, match="not allowed"):
         save_runtime_preferences({"DATABASE_URL": "attacker"}, path)

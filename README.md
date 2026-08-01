@@ -53,8 +53,8 @@ aprovação e controle sobre o resultado.
 ## Provedor De IA
 
 Texto pode usar `nvidia_nim` ou `ollama_cloud` por API. Imagem e video podem usar
-`google_ai` pela Gemini API ou o provider experimental `veo_ai_free`. Os modelos
-padrao ficam no `.env`:
+`google_ai` pela Gemini API ou o provider experimental `veo_ai_free`. Voz dos
+personagens e dublagem final usam `elevenlabs`. Os modelos padrao ficam no `.env`:
 
 ```env
 AI_PROVIDER=nvidia_nim
@@ -62,6 +62,8 @@ TEXT_PROVIDER=ollama_cloud
 TEXT_PROVIDER_FALLBACKS=nvidia_nim
 IMAGE_PROVIDER=google_ai
 VIDEO_PROVIDER=google_ai
+SPEECH_PROVIDER=elevenlabs
+DUBBING_PROVIDER=elevenlabs
 
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_API_KEY=sua_chave_nvidia
@@ -85,10 +87,20 @@ VEO_AI_FREE_ENABLED=false
 VEO_AI_FREE_SESSION_PATH=.runtime/veo_free/session.json
 VEO_AI_FREE_IMAGE_MODEL=veo-ai-free/image
 VEO_AI_FREE_VIDEO_MODEL=veo-ai-free/video
+
+ELEVENLABS_BASE_URL=https://api.elevenlabs.io/v1
+ELEVENLABS_API_KEY=sua_chave_elevenlabs
+ELEVENLABS_VOICE_ID=voice_id_padrao
+ELEVENLABS_SPEECH_MODEL=eleven_multilingual_v2
+ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128
+DUBBING_SOURCE_LANG=pt
+DUBBING_TARGET_LANG=en
+DUBBING_POLL_INTERVAL_SECONDS=10
+DUBBING_POLL_TIMEOUT_SECONDS=900
 ```
 
-As chaves e modelos de texto tambem podem ser salvos pela tela de Configuracoes
-de IA em `.runtime/preferences.json`.
+As chaves e modelos tambem podem ser salvos pela tela de Configuracoes de IA em
+`.runtime/preferences.json`.
 
 ## Requisitos Locais
 
@@ -109,8 +121,9 @@ Copy-Item .env.example .env
 ```
 
 Configure `OLLAMA_CLOUD_API_KEY` ou `NVIDIA_NIM_API_KEY` para texto e
-`GOOGLE_AI_API_KEY` para imagem/video pela tela de Configurações de IA ou pelo
-`.env`. O Veo AI Free continua disponivel como fallback experimental local.
+`GOOGLE_AI_API_KEY` para imagem/video. Para voz e dublagem, configure
+`ELEVENLABS_API_KEY` e `ELEVENLABS_VOICE_ID` pela tela de Configurações de IA
+ou pelo `.env`. O Veo AI Free continua disponivel como fallback experimental local.
 
 ## Executando
 

@@ -9,6 +9,7 @@ from app.assets.models import Asset
 from app.core.enums import ArtifactStatus
 from app.costs.service import project_cost_summary
 from app.database.session import AsyncSessionLocal
+from app.dubbing.models import DubbingJob
 from app.finalization.models import Export
 from app.generation.model_settings import ensure_default_model_settings
 from app.generation.models import ProjectModelSetting
@@ -146,6 +147,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
         cost_summary = await project_cost_summary(session, project_id)
         latest_quality = await latest(session, QualityCheck, project_id)
         latest_export = await latest(session, Export, project_id)
+        latest_dubbing_job = await latest(session, DubbingJob, project_id)
         latest_timeline = await latest(session, Timeline, project_id) if load_video else None
         execution_summary = await project_execution_summary(session, project_id)
         timeline_items: list[TimelineItem] = []
@@ -263,6 +265,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
                 "animatics": await scalar_count(session, Animatic, project_id),
                 "clips": await scalar_count(session, VideoClip, project_id),
                 "exports": await scalar_count(session, Export, project_id),
+                "dubbing_jobs": await scalar_count(session, DubbingJob, project_id),
                 "qa_issues": await scalar_count(session, ContinuityIssue, project_id),
                 "stale_artifacts": int(
                     await session.scalar(
@@ -280,6 +283,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             "cost_summary": cost_summary,
             "quality": latest_quality,
             "export": latest_export,
+            "dubbing_job": latest_dubbing_job,
             "model_settings": list(model_result.scalars()),
             "script": script,
             "scenes": await active_many(session, Scene, project_id, 12)

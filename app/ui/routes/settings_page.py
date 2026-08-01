@@ -13,6 +13,7 @@ from app.config.provider_policy import (
     validate_model_name,
 )
 from app.config.settings import (
+    ELEVENLABS_SPEECH_MODELS,
     GOOGLE_AI_IMAGE_MODELS,
     GOOGLE_AI_VIDEO_MODELS,
     NVIDIA_NIM_TEXT_MODELS,
@@ -449,6 +450,112 @@ def register_settings_page(
                                             .classes("w-full")
                                         )
 
+                            ui.separator().classes("my-5")
+                            ui.label("Voz e dublagem").classes(
+                                "text-sm font-semibold uppercase tracking-wide acid"
+                            )
+                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
+                                speech_provider_select = (
+                                    ui.select(
+                                        {
+                                            "elevenlabs": "ElevenLabs",
+                                            "openai_compatible": "OpenAI compatível",
+                                            "omniroute": "OmniRoute",
+                                        },
+                                        label="Provider de voz",
+                                        value=current.speech_provider or "elevenlabs",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+                                dubbing_provider_select = (
+                                    ui.select(
+                                        {"elevenlabs": "ElevenLabs"},
+                                        label="Provider de dublagem",
+                                        value=current.dubbing_provider or "elevenlabs",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
+                                elevenlabs_base_url = (
+                                    ui.input(
+                                        "URL base ElevenLabs",
+                                        value=current.elevenlabs_base_url,
+                                        placeholder="https://api.elevenlabs.io/v1",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+                                elevenlabs_api_key = (
+                                    ui.input(
+                                        "Chave ElevenLabs",
+                                        placeholder=(
+                                            "Chave configurada; digite para substituir"
+                                            if current.elevenlabs_api_key
+                                            else "sk_..."
+                                        ),
+                                        password=True,
+                                        password_toggle_button=True,
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-3 gap-3 mt-3"):
+                                elevenlabs_voice_id = (
+                                    ui.input(
+                                        "Voice ID padrão",
+                                        value=current.elevenlabs_voice_id,
+                                        placeholder="JBFqnCBsd6RMkjVDRZzb",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+                                elevenlabs_speech_model = (
+                                    ui.select(
+                                        model_options(
+                                            ELEVENLABS_SPEECH_MODELS,
+                                            current.elevenlabs_speech_model,
+                                        ),
+                                        label="Modelo de voz ElevenLabs",
+                                        value=current.elevenlabs_speech_model,
+                                    )
+                                    .props("outlined stack-label options-dense")
+                                    .classes("w-full")
+                                )
+                                elevenlabs_output_format = (
+                                    ui.select(
+                                        [
+                                            "mp3_44100_128",
+                                            "mp3_44100_192",
+                                            "mp3_22050_32",
+                                        ],
+                                        label="Formato de áudio",
+                                        value=current.elevenlabs_output_format,
+                                    )
+                                    .props("outlined stack-label options-dense")
+                                    .classes("w-full")
+                                )
+                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
+                                dubbing_source_lang = (
+                                    ui.input(
+                                        "Idioma original",
+                                        value=current.dubbing_source_lang,
+                                        placeholder="pt",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+                                dubbing_target_lang = (
+                                    ui.input(
+                                        "Idioma da dublagem",
+                                        value=current.dubbing_target_lang,
+                                        placeholder="en",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+
                             def save_veo_session() -> None:
                                 payload = str(veo_cookie_value.value or "").strip()
                                 if not payload:
@@ -488,6 +595,12 @@ def register_settings_page(
                                         ),
                                         "VIDEO_PROVIDER": str(
                                             video_provider_select.value or "veo_ai_free"
+                                        ),
+                                        "SPEECH_PROVIDER": str(
+                                            speech_provider_select.value or "elevenlabs"
+                                        ),
+                                        "DUBBING_PROVIDER": str(
+                                            dubbing_provider_select.value or "elevenlabs"
                                         ),
                                         "TEXT_PROVIDER_FALLBACKS": (
                                             "nvidia_nim"
@@ -539,6 +652,26 @@ def register_settings_page(
                                         "VEO_AI_FREE_ENABLED": (
                                             "true" if veo_enabled.value else "false"
                                         ),
+                                        "ELEVENLABS_BASE_URL": str(
+                                            elevenlabs_base_url.value or ""
+                                        ).strip(),
+                                        "ELEVENLABS_VOICE_ID": str(
+                                            elevenlabs_voice_id.value or ""
+                                        ).strip(),
+                                        "ELEVENLABS_SPEECH_MODEL": validate_model_name(
+                                            elevenlabs_speech_model.value,
+                                            "Modelo de voz ElevenLabs",
+                                            provider="elevenlabs",
+                                        ),
+                                        "ELEVENLABS_OUTPUT_FORMAT": str(
+                                            elevenlabs_output_format.value or "mp3_44100_128"
+                                        ).strip(),
+                                        "DUBBING_SOURCE_LANG": str(
+                                            dubbing_source_lang.value or "pt"
+                                        ).strip(),
+                                        "DUBBING_TARGET_LANG": str(
+                                            dubbing_target_lang.value or "en"
+                                        ).strip(),
                                     }
                                 except ValueError as exc:
                                     ui.notify(str(exc), color="negative")
@@ -552,6 +685,11 @@ def register_settings_page(
                                 ).strip()
                                 if typed_google_ai_api_key:
                                     values["GOOGLE_AI_API_KEY"] = typed_google_ai_api_key
+                                typed_elevenlabs_api_key = str(
+                                    elevenlabs_api_key.value or ""
+                                ).strip()
+                                if typed_elevenlabs_api_key:
+                                    values["ELEVENLABS_API_KEY"] = typed_elevenlabs_api_key
                                 save_preferences(values)
                                 ui.notify("Configurações de IA salvas.", color="positive")
 

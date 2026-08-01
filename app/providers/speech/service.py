@@ -1,6 +1,7 @@
 from typing import Any
 
 from app.config.settings import get_settings
+from app.providers.speech.elevenlabs import ElevenLabsSpeechProvider
 from app.providers.speech.omniroute import OmniRouteSpeechProvider
 from app.providers.speech.openai_compatible import OpenAICompatibleSpeechProvider
 from app.providers.speech.types import SpeechProvider
@@ -12,6 +13,8 @@ def speech_provider_from_settings() -> SpeechProvider:
         return OpenAICompatibleSpeechProvider()
     if provider_name == "omniroute":
         return OmniRouteSpeechProvider()
+    if provider_name == "elevenlabs":
+        return ElevenLabsSpeechProvider()
     if provider_name == "mock":
         raise ValueError("Provider mock de voz está bloqueado no fluxo de audio real.")
     raise ValueError(f"Provider de voz não suportado: {provider_name}")
@@ -27,6 +30,8 @@ def speech_model_from_settings(settings: Any | None = None) -> str:
     provider_name = speech_provider_name(app_settings)
     if provider_name == "omniroute":
         return str(app_settings.omniroute_speech_model or app_settings.speech_model or "").strip()
+    if provider_name == "elevenlabs":
+        return str(app_settings.elevenlabs_speech_model or app_settings.speech_model or "").strip()
     return str(app_settings.speech_model or "").strip()
 
 
@@ -42,6 +47,14 @@ def speech_configuration_status(settings: Any | None = None) -> tuple[bool, str,
             else "OMNIROUTE_API_KEY e OMNIROUTE_SPEECH_MODEL/SPEECH_MODEL são necessários"
         )
         return ready, message, {"provider": "omniroute", "model": model}
+    if provider_name == "elevenlabs":
+        ready = bool(app_settings.elevenlabs_api_key and app_settings.elevenlabs_voice_id and model)
+        message = (
+            "Provider ElevenLabs de vozes e dublagem configurado"
+            if ready
+            else "ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID e ELEVENLABS_SPEECH_MODEL são necessários"
+        )
+        return ready, message, {"provider": "elevenlabs", "model": model}
     ready = bool(app_settings.speech_api_key and model)
     message = (
         "Provider de vozes dos personagens configurado"
