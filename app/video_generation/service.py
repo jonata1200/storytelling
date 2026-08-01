@@ -40,6 +40,7 @@ from app.observability.service import emit_project_event
 from app.production.service import get_or_create_production_settings, resolve_video_model
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
+from app.providers.video.google_ai import GoogleAIVideoProvider
 from app.providers.video.types import VideoProvider, VideoRequest, VideoResult
 from app.providers.video.veo_ai_free import VeoAiFreeVideoProvider
 from app.storage.service import apply_asset_storage_metadata
@@ -206,10 +207,19 @@ async def _video_provider_for_project(
             production_settings.aspect_ratio,
             production_settings.video_resolution,
         )
+    if resolved_provider == "google_ai":
+        return (
+            GoogleAIVideoProvider(),
+            "google_ai",
+            requested_model,
+            "google_ai_videos",
+            production_settings.aspect_ratio,
+            production_settings.video_resolution,
+        )
     if resolved_provider == "mock":
         raise ValueError("Provider mock bloqueado. Use um provider real de vídeo.")
     raise ValueError(
-        f"Provider de vídeo não suportado: {provider_name}. Use Veo AI Free experimental."
+        f"Provider de vídeo não suportado: {provider_name}. Use Google AI ou Veo AI Free."
     )
 
 

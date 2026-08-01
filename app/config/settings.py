@@ -97,6 +97,21 @@ OLLAMA_CLOUD_TEXT_MODELS = (
     "gpt-oss:20b",
 )
 
+GOOGLE_AI_IMAGE_MODELS = (
+    "gemini-3.1-flash-image",
+    "gemini-3.1-flash-lite-image",
+    "gemini-3-pro-image",
+    "gemini-2.5-flash-image",
+)
+
+GOOGLE_AI_VIDEO_MODELS = (
+    "veo-3.1-generate-preview",
+    "veo-3.1-fast-generate-preview",
+    "veo-3.1-lite-generate-preview",
+    "veo-3.0-generate-001",
+    "veo-3.0-fast-generate-001",
+)
+
 
 class Settings(BaseSettings):
     app_name: str = "Storytelling"
@@ -134,6 +149,15 @@ class Settings(BaseSettings):
     ollama_cloud_api_key: str | None = Field(default=None, repr=False)
     ollama_cloud_base_url: str = "https://ollama.com/api"
     ollama_cloud_default_model: str = "gpt-oss:120b"
+    google_ai_api_key: str | None = Field(default=None, repr=False)
+    google_ai_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    google_ai_image_model: str = "gemini-3.1-flash-image"
+    google_ai_image_size: str = "1K"
+    google_ai_video_model: str = "veo-3.1-generate-preview"
+    google_ai_video_fast_model: str = "veo-3.1-fast-generate-preview"
+    google_ai_video_default_duration_seconds: int = 8
+    google_ai_video_poll_interval_seconds: int = 10
+    google_ai_video_poll_timeout_seconds: int = 900
     veo_ai_free_enabled: bool = False
     veo_ai_free_session_path: Path = Path(".runtime/veo_free/session.json")
     veo_ai_free_image_model: str = "veo-ai-free/image"
@@ -162,6 +186,7 @@ class Settings(BaseSettings):
         self.ollama_cloud_api_key = normalize_api_key(
             self.ollama_cloud_api_key, "ollama_cloud"
         )
+        self.google_ai_api_key = normalize_api_key(self.google_ai_api_key, "google_ai")
         self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
         self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")
         self.image_provider = self._optional_provider(

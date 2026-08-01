@@ -73,6 +73,28 @@ def test_provider_policy_supports_new_text_providers() -> None:
     assert provider_requires_api_key(settings, "ollama_cloud") is True
 
 
+def test_provider_policy_supports_google_ai_media_provider() -> None:
+    settings = Settings(
+        image_provider="google_ai",
+        video_provider="google_ai",
+        google_ai_api_key="google-secret",
+        google_ai_base_url="https://generativelanguage.googleapis.com/v1beta",
+        google_ai_image_model="gemini-3.1-flash-image",
+        google_ai_video_model="veo-3.1-generate-preview",
+    )
+
+    assert "google_ai" in SUPPORTED_AI_PROVIDERS
+    assert effective_provider_for_channel(settings, "image") == "google_ai"
+    assert effective_provider_for_channel(settings, "video") == "google_ai"
+    assert provider_display_name("google_ai") == "Google AI"
+    assert provider_base_url(settings, "google_ai") == (
+        "https://generativelanguage.googleapis.com/v1beta"
+    )
+    assert provider_model(settings, "google_ai", "image") == "gemini-3.1-flash-image"
+    assert provider_model(settings, "google_ai", "video") == "veo-3.1-generate-preview"
+    assert provider_requires_api_key(settings, "google_ai") is True
+
+
 def test_nvidia_nim_requires_key_only_for_hosted_endpoint() -> None:
     hosted = Settings(nvidia_nim_base_url="https://integrate.api.nvidia.com/v1")
     local = Settings(

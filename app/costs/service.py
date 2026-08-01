@@ -42,13 +42,68 @@ DEFAULT_OPERATION_COSTS_USD: dict[str, tuple[str, Decimal]] = {
 }
 
 PROVIDER_OPERATION_COST_OVERRIDES_USD: dict[str, dict[str, tuple[str, Decimal]]] = {
+    "google_ai": {
+        "image_generation": ("image", Decimal("0.067000")),
+        "image_edit": ("image", Decimal("0.067000")),
+        "image_to_video": ("second", Decimal("0.400000")),
+        "text_to_video": ("second", Decimal("0.400000")),
+    },
     "mock": {
         operation: (unit, Decimal("0.000000"))
         for operation, (unit, _unit_cost) in DEFAULT_OPERATION_COSTS_USD.items()
     },
 }
 
-MODEL_OPERATION_COST_OVERRIDES_USD: dict[tuple[str, str, str], tuple[str, Decimal]] = {}
+MODEL_OPERATION_COST_OVERRIDES_USD: dict[tuple[str, str, str], tuple[str, Decimal]] = {
+    ("google_ai", "gemini-3.1-flash-lite-image", "image_generation"): (
+        "image",
+        Decimal("0.033600"),
+    ),
+    ("google_ai", "gemini-3.1-flash-lite-image", "image_edit"): (
+        "image",
+        Decimal("0.033600"),
+    ),
+    ("google_ai", "gemini-3.1-flash-image", "image_generation"): (
+        "image",
+        Decimal("0.067000"),
+    ),
+    ("google_ai", "gemini-3.1-flash-image", "image_edit"): (
+        "image",
+        Decimal("0.067000"),
+    ),
+    ("google_ai", "gemini-3-pro-image", "image_generation"): (
+        "image",
+        Decimal("0.134000"),
+    ),
+    ("google_ai", "gemini-3-pro-image", "image_edit"): (
+        "image",
+        Decimal("0.134000"),
+    ),
+    ("google_ai", "veo-3.1-fast-generate-preview", "image_to_video"): (
+        "second",
+        Decimal("0.100000"),
+    ),
+    ("google_ai", "veo-3.1-fast-generate-preview", "text_to_video"): (
+        "second",
+        Decimal("0.100000"),
+    ),
+    ("google_ai", "veo-3.1-lite-generate-preview", "image_to_video"): (
+        "second",
+        Decimal("0.050000"),
+    ),
+    ("google_ai", "veo-3.1-lite-generate-preview", "text_to_video"): (
+        "second",
+        Decimal("0.050000"),
+    ),
+    ("google_ai", "veo-3.0-fast-generate-001", "image_to_video"): (
+        "second",
+        Decimal("0.100000"),
+    ),
+    ("google_ai", "veo-3.0-fast-generate-001", "text_to_video"): (
+        "second",
+        Decimal("0.100000"),
+    ),
+}
 
 
 def _money(value: Decimal) -> Decimal:

@@ -52,16 +52,16 @@ aprovação e controle sobre o resultado.
 
 ## Provedor De IA
 
-Texto pode usar `nvidia_nim` ou `ollama_cloud` por API. Imagem e video usam o
-provider experimental `veo_ai_free`, que depende de sessao local do navegador e
-pode ser desabilitado. Os modelos padrao ficam no `.env`:
+Texto pode usar `nvidia_nim` ou `ollama_cloud` por API. Imagem e video podem usar
+`google_ai` pela Gemini API ou o provider experimental `veo_ai_free`. Os modelos
+padrao ficam no `.env`:
 
 ```env
 AI_PROVIDER=nvidia_nim
 TEXT_PROVIDER=ollama_cloud
 TEXT_PROVIDER_FALLBACKS=nvidia_nim
-IMAGE_PROVIDER=veo_ai_free
-VIDEO_PROVIDER=veo_ai_free
+IMAGE_PROVIDER=google_ai
+VIDEO_PROVIDER=google_ai
 
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_API_KEY=sua_chave_nvidia
@@ -70,6 +70,16 @@ NVIDIA_NIM_DEFAULT_MODEL=z-ai/glm-5.2
 OLLAMA_CLOUD_BASE_URL=https://ollama.com/api
 OLLAMA_CLOUD_API_KEY=sua_chave_ollama
 OLLAMA_CLOUD_DEFAULT_MODEL=gpt-oss:120b
+
+GOOGLE_AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+GOOGLE_AI_API_KEY=sua_chave_google_ai
+GOOGLE_AI_IMAGE_MODEL=gemini-3.1-flash-image
+GOOGLE_AI_IMAGE_SIZE=1K
+GOOGLE_AI_VIDEO_MODEL=veo-3.1-generate-preview
+GOOGLE_AI_VIDEO_FAST_MODEL=veo-3.1-fast-generate-preview
+GOOGLE_AI_VIDEO_DEFAULT_DURATION_SECONDS=8
+GOOGLE_AI_VIDEO_POLL_INTERVAL_SECONDS=10
+GOOGLE_AI_VIDEO_POLL_TIMEOUT_SECONDS=900
 
 VEO_AI_FREE_ENABLED=false
 VEO_AI_FREE_SESSION_PATH=.runtime/veo_free/session.json
@@ -98,8 +108,9 @@ pip install -e . --no-deps
 Copy-Item .env.example .env
 ```
 
-Configure `OLLAMA_CLOUD_API_KEY` ou `NVIDIA_NIM_API_KEY` e a sessão
-experimental do Veo AI Free pela tela de Configurações de IA ou pelo `.env`.
+Configure `OLLAMA_CLOUD_API_KEY` ou `NVIDIA_NIM_API_KEY` para texto e
+`GOOGLE_AI_API_KEY` para imagem/video pela tela de Configurações de IA ou pelo
+`.env`. O Veo AI Free continua disponivel como fallback experimental local.
 
 ## Executando
 

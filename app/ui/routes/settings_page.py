@@ -13,6 +13,8 @@ from app.config.provider_policy import (
     validate_model_name,
 )
 from app.config.settings import (
+    GOOGLE_AI_IMAGE_MODELS,
+    GOOGLE_AI_VIDEO_MODELS,
     NVIDIA_NIM_TEXT_MODELS,
     OLLAMA_CLOUD_TEXT_MODELS,
     get_settings,
@@ -273,6 +275,89 @@ def register_settings_page(
                             ui.label("Imagem e vídeo").classes(
                                 "text-sm font-semibold uppercase tracking-wide acid"
                             )
+                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
+                                image_provider_select = (
+                                    ui.select(
+                                        {
+                                            "veo_ai_free": "Veo AI Free",
+                                            "google_ai": "Google AI",
+                                        },
+                                        label="Provider de imagem",
+                                        value=current.image_provider or "veo_ai_free",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+                                video_provider_select = (
+                                    ui.select(
+                                        {
+                                            "veo_ai_free": "Veo AI Free",
+                                            "google_ai": "Google AI",
+                                        },
+                                        label="Provider de video",
+                                        value=current.video_provider or "veo_ai_free",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
+                                google_ai_base_url = (
+                                    ui.input(
+                                        "URL base Google AI",
+                                        value=current.google_ai_base_url,
+                                        placeholder="https://generativelanguage.googleapis.com/v1beta",
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+                                google_ai_api_key = (
+                                    ui.input(
+                                        "Chave Google AI",
+                                        placeholder=(
+                                            "Chave configurada; digite para substituir"
+                                            if current.google_ai_api_key
+                                            else "AIza..."
+                                        ),
+                                        password=True,
+                                        password_toggle_button=True,
+                                    )
+                                    .props("outlined stack-label")
+                                    .classes("w-full")
+                                )
+                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-3 gap-3 mt-3"):
+                                google_ai_image_model = (
+                                    ui.select(
+                                        model_options(
+                                            GOOGLE_AI_IMAGE_MODELS,
+                                            current.google_ai_image_model,
+                                        ),
+                                        label="Modelo de imagem Google AI",
+                                        value=current.google_ai_image_model,
+                                    )
+                                    .props("outlined stack-label options-dense")
+                                    .classes("w-full")
+                                )
+                                google_ai_image_size = (
+                                    ui.select(
+                                        ["512px", "1K", "2K", "4K"],
+                                        label="Tamanho de imagem Google AI",
+                                        value=current.google_ai_image_size,
+                                    )
+                                    .props("outlined stack-label options-dense")
+                                    .classes("w-full")
+                                )
+                                google_ai_video_model = (
+                                    ui.select(
+                                        model_options(
+                                            GOOGLE_AI_VIDEO_MODELS,
+                                            current.google_ai_video_model,
+                                        ),
+                                        label="Modelo de video Google AI",
+                                        value=current.google_ai_video_model,
+                                    )
+                                    .props("outlined stack-label options-dense")
+                                    .classes("w-full")
+                                )
                             with (
                                 ui.tabs()
                                 .classes("w-full mt-3 text-[#989e99]")
@@ -398,8 +483,12 @@ def register_settings_page(
                                     values = {
                                         "AI_PROVIDER": selected_text_provider,
                                         "TEXT_PROVIDER": selected_text_provider,
-                                        "IMAGE_PROVIDER": "veo_ai_free",
-                                        "VIDEO_PROVIDER": "veo_ai_free",
+                                        "IMAGE_PROVIDER": str(
+                                            image_provider_select.value or "veo_ai_free"
+                                        ),
+                                        "VIDEO_PROVIDER": str(
+                                            video_provider_select.value or "veo_ai_free"
+                                        ),
                                         "TEXT_PROVIDER_FALLBACKS": (
                                             "nvidia_nim"
                                             if selected_text_provider == "ollama_cloud"
@@ -420,6 +509,22 @@ def register_settings_page(
                                             ollama_cloud_text_model.value,
                                             "Modelo de texto Ollama Cloud",
                                             provider="ollama_cloud",
+                                        ),
+                                        "GOOGLE_AI_BASE_URL": str(
+                                            google_ai_base_url.value or ""
+                                        ).strip(),
+                                        "GOOGLE_AI_IMAGE_MODEL": validate_model_name(
+                                            google_ai_image_model.value,
+                                            "Modelo de imagem Google AI",
+                                            provider="google_ai",
+                                        ),
+                                        "GOOGLE_AI_IMAGE_SIZE": str(
+                                            google_ai_image_size.value or "1K"
+                                        ).strip(),
+                                        "GOOGLE_AI_VIDEO_MODEL": validate_model_name(
+                                            google_ai_video_model.value,
+                                            "Modelo de vídeo Google AI",
+                                            provider="google_ai",
                                         ),
                                         "VEO_AI_FREE_IMAGE_MODEL": validate_model_name(
                                             veo_image_model.value,
@@ -442,6 +547,11 @@ def register_settings_page(
                                     values["NVIDIA_NIM_API_KEY"] = typed_nvidia_nim_api_key
                                 if typed_ollama_cloud_api_key:
                                     values["OLLAMA_CLOUD_API_KEY"] = typed_ollama_cloud_api_key
+                                typed_google_ai_api_key = str(
+                                    google_ai_api_key.value or ""
+                                ).strip()
+                                if typed_google_ai_api_key:
+                                    values["GOOGLE_AI_API_KEY"] = typed_google_ai_api_key
                                 save_preferences(values)
                                 ui.notify("Configurações de IA salvas.", color="positive")
 

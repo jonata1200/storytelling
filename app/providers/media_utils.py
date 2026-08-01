@@ -62,6 +62,11 @@ def _media_type_for_path(path: Path) -> str:
         ".png": "image/png",
         ".svg": "image/svg+xml",
         ".webp": "image/webp",
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".mpeg": "video/mpeg",
+        ".mpg": "video/mpeg",
+        ".webm": "video/webm",
     }
     return (
         explicit_media_types.get(path.suffix.lower())
@@ -102,6 +107,10 @@ def extension_from_media_type(media_type: str) -> str:
         "image/svg+xml": ".svg",
         "image/webp": ".webp",
         "image/gif": ".gif",
+        "video/mp4": ".mp4",
+        "video/mpeg": ".mpeg",
+        "video/quicktime": ".mov",
+        "video/webm": ".webm",
     }
     if normalized in explicit_extensions:
         return explicit_extensions[normalized]
@@ -109,3 +118,14 @@ def extension_from_media_type(media_type: str) -> str:
         return ".svg"
     extension = mimetypes.guess_extension(normalized)
     return extension or ".bin"
+
+
+def data_url_parts(uri: str) -> tuple[str, str] | None:
+    data_url = local_uri_to_data_url(uri)
+    if not data_url.startswith("data:") or ";base64," not in data_url:
+        return None
+    header, encoded = data_url.split(",", 1)
+    media_type = header.removeprefix("data:").split(";", 1)[0]
+    if not media_type or not encoded:
+        return None
+    return media_type, encoded

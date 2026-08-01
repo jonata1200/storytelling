@@ -77,6 +77,26 @@ def test_mock_provider_cost_policy_is_zero() -> None:
     assert estimate.estimated == Decimal("0.000000")
 
 
+def test_google_ai_cost_policy_uses_model_overrides() -> None:
+    image = estimate_operation_cost(
+        "image_generation",
+        Decimal("1"),
+        provider="google_ai",
+        model="gemini-3.1-flash-lite-image",
+    )
+    video = estimate_operation_cost(
+        "image_to_video",
+        Decimal("8"),
+        provider="google_ai",
+        model="veo-3.1-fast-generate-preview",
+    )
+
+    assert image.unit == "image"
+    assert image.unit_cost == Decimal("0.033600")
+    assert video.unit == "second"
+    assert video.estimated == Decimal("0.800000")
+
+
 class _FakeBudgetSession:
     def __init__(self) -> None:
         self.added: list[Any] = []

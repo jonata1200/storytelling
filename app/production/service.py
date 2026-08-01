@@ -27,6 +27,7 @@ MOCK_IMAGE_MODEL = "mock-image"
 MOCK_VIDEO_MODEL = "mock-video"
 LEGACY_DEFAULT_IMAGE_MODELS = {
     ".......",
+    "chatgpt-web/gpt-5.5",
     "sourceful/riverflow-v2.5-pro",
     "sourceful/riverflow-v2-fast",
     "veo-ai-free/image",
@@ -35,6 +36,8 @@ LEGACY_DEFAULT_VIDEO_MODELS = {
     ".......",
     "bytedance/seedance-2.0-fast",
     "Kling-3.0-omni",
+    "veo-free/veo",
+    "veo-ai-free/video",
 }
 
 

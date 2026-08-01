@@ -6,10 +6,11 @@ ProviderChannel = Literal["text", "image", "video", "speech"]
 DEFAULT_PROVIDER = "nvidia_nim"
 LEGACY_AI_PROVIDERS = ("omniroute", "opencode")
 SUPPORTED_TEXT_PROVIDERS = ("nvidia_nim", "ollama_cloud")
-SUPPORTED_MEDIA_PROVIDERS = ("veo_ai_free",)
+SUPPORTED_MEDIA_PROVIDERS = ("veo_ai_free", "google_ai")
 SUPPORTED_AI_PROVIDERS = (
     "nvidia_nim",
     "ollama_cloud",
+    "google_ai",
     "veo_ai_free",
 )
 SUPPORTED_MODEL_PROVIDERS = frozenset(SUPPORTED_TEXT_PROVIDERS)
@@ -64,6 +65,7 @@ def provider_display_name(provider: str) -> str:
         "omniroute": "OmniRoute",
         "nvidia_nim": "NVIDIA NIM",
         "ollama_cloud": "Ollama Cloud",
+        "google_ai": "Google AI",
         "veo_ai_free": "Veo AI Free",
     }
     return names.get(provider, provider)
@@ -105,6 +107,8 @@ def provider_requires_api_key(settings: Any, provider: str) -> bool:
             for hosted_host in hosted_hosts
         )
     if provider == "ollama_cloud":
+        return True
+    if provider == "google_ai":
         return True
     if provider == "veo_ai_free":
         return False

@@ -34,30 +34,47 @@ GOOGLE_AI_VIDEO_POLL_TIMEOUT_SECONDS=900
 
 ## Checklist
 
-- [ ] Adicionar `google_ai` como provider de video suportado.
-- [ ] Adicionar settings de modelo, duracao, polling e timeout.
-- [ ] Criar `app/providers/video/google_ai.py`.
-- [ ] Implementar `generate_from_text`.
-- [ ] Implementar `generate_from_image`.
-- [ ] Implementar suporte a imagem inicial quando houver storyboard/keyframe.
-- [ ] Implementar suporte a imagens de referencia quando o modelo permitir.
-- [ ] Mapear `aspect_ratio` para `9:16` ou `16:9`.
-- [ ] Mapear `duration_seconds` para duracoes aceitas pelo modelo.
-- [ ] Mapear resolucao para `720p`, `1080p` ou `4k` quando aplicavel.
-- [ ] Implementar polling de operacao longa.
-- [ ] Baixar video final para storage local.
-- [ ] Persistir `external_job_id`, `provider`, `model`, prompt e metadados.
-- [ ] Atualizar `_video_provider_for_project`.
-- [ ] Atualizar estimativa de custo para video.
-- [ ] Adicionar testes unitarios para submit, polling, download e erro.
-- [ ] Adicionar smoke test real atras de flag explicita.
+- [x] Adicionar `google_ai` como provider de video suportado.
+- [x] Adicionar settings de modelo, duracao, polling e timeout.
+- [x] Criar `app/providers/video/google_ai.py`.
+- [x] Implementar `generate_from_text`.
+- [x] Implementar `generate_from_image`.
+- [x] Implementar suporte a imagem inicial quando houver storyboard/keyframe.
+- [x] Implementar suporte a imagens de referencia quando o modelo permitir.
+- [x] Mapear `aspect_ratio` para `9:16` ou `16:9`.
+- [x] Mapear `duration_seconds` para duracoes aceitas pelo modelo.
+- [x] Mapear resolucao para `720p`, `1080p` ou `4k` quando aplicavel.
+- [x] Implementar polling de operacao longa.
+- [x] Baixar video final para storage local.
+- [x] Persistir `external_job_id`, `provider`, `model`, prompt e metadados.
+- [x] Atualizar `_video_provider_for_project`.
+- [x] Atualizar estimativa de custo para video.
+- [x] Adicionar testes unitarios para submit, polling, download e erro.
+- [x] Adicionar smoke test real atras de flag explicita.
 
 ## Decisoes de Modelo
 
-- [ ] Definir se o default sera Gemini Omni Flash ou Veo.
-- [ ] Definir quando usar modelo rapido.
-- [ ] Definir quando gerar video com audio nativo.
-- [ ] Definir se audio nativo sera descartado quando houver dublagem posterior.
+- [x] Definir se o default sera Gemini Omni Flash ou Veo.
+- [x] Definir quando usar modelo rapido.
+- [x] Definir quando gerar video com audio nativo.
+- [x] Definir se audio nativo sera descartado quando houver dublagem posterior.
+
+## Decisoes Tomadas
+
+- Default inicial: `veo-3.1-generate-preview`, pois a fase prioriza keyframes/storyboard para video.
+- Modelo rapido: usar `GOOGLE_AI_VIDEO_FAST_MODEL` quando o operador optar por menor custo/latencia.
+- Audio nativo: mantido no arquivo retornado pelo Veo e registrado em metadados como `native_audio=true`.
+- Dublagem posterior: a etapa final pode substituir ou descartar o audio nativo sem alterar o provider de video.
+
+## Status de Implementacao
+
+- Provider REST criado em `app/providers/video/google_ai.py` usando `POST /models/{model}:predictLongRunning`.
+- Polling implementado via nome de operacao retornado pela API.
+- Resultado final aceita video inline base64 ou `uri` para download.
+- Configuracao exposta em `.env.example`, README, schema da API e tela de Configuracoes de IA.
+- Custos estimados adicionados para `google_ai` com overrides por modelo Veo.
+- Testes unitarios cobrem submit, polling, download por URI, video inline e persistencia.
+- Smoke real disponivel com `RUN_GOOGLE_AI_VIDEO_SMOKE=1` e `GOOGLE_AI_API_KEY`.
 
 ## Criterios de Aceite
 

@@ -136,6 +136,27 @@ def test_provider_channel_readiness_reports_ollama_cloud() -> None:
     assert text.details["fallbacks"] == "nvidia_nim"
 
 
+def test_provider_channel_readiness_reports_google_ai_media() -> None:
+    settings = Settings(
+        image_provider="google_ai",
+        video_provider="google_ai",
+        google_ai_api_key="google-secret",
+        google_ai_image_model="gemini-3.1-flash-image",
+        google_ai_video_model="veo-3.1-generate-preview",
+    )
+
+    image = _provider_channel_readiness(settings, "image")
+    video = _provider_channel_readiness(settings, "video")
+
+    assert image.status == "ready"
+    assert image.details["provider"] == "google_ai"
+    assert image.details["model"] == "gemini-3.1-flash-image"
+    assert image.details["api_key_configured"] == "true"
+    assert video.status == "ready"
+    assert video.details["provider"] == "google_ai"
+    assert video.details["model"] == "veo-3.1-generate-preview"
+
+
 def test_veo_ai_free_session_readiness_uses_local_validator(tmp_path: Path) -> None:
     settings = Settings(
         veo_ai_free_enabled=True,

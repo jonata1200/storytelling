@@ -1,5 +1,7 @@
 from app.config.provider_policy import effective_provider_for_channel
 from app.config.settings import (
+    GOOGLE_AI_IMAGE_MODELS,
+    GOOGLE_AI_VIDEO_MODELS,
     NVIDIA_NIM_TEXT_MODELS,
     OLLAMA_CLOUD_TEXT_MODELS,
     Settings,
@@ -16,6 +18,9 @@ def test_settings_defaults_to_new_ai_providers() -> None:
     assert settings.nvidia_nim_default_model == "z-ai/glm-5.2"
     assert settings.veo_ai_free_image_model == "veo-ai-free/image"
     assert settings.veo_ai_free_video_model == "veo-ai-free/video"
+    assert settings.google_ai_base_url == "https://generativelanguage.googleapis.com/v1beta"
+    assert settings.google_ai_image_model == "gemini-3.1-flash-image"
+    assert settings.google_ai_video_model == "veo-3.1-generate-preview"
 
 
 def test_settings_maps_legacy_omniroute_provider_to_new_default() -> None:
@@ -52,6 +57,30 @@ def test_settings_reads_ollama_cloud_text_provider() -> None:
     assert settings.ollama_cloud_default_model == "gpt-oss:120b"
 
 
+def test_settings_reads_google_ai_media_provider() -> None:
+    settings = Settings(
+        image_provider="google_ai",
+        video_provider="google_ai",
+        google_ai_api_key="  google-secret  ",
+        google_ai_image_model="gemini-3-pro-image",
+        google_ai_image_size="2K",
+        google_ai_video_model="veo-3.1-fast-generate-preview",
+        google_ai_video_default_duration_seconds=6,
+        google_ai_video_poll_interval_seconds=2,
+        google_ai_video_poll_timeout_seconds=30,
+    )
+
+    assert settings.image_provider == "google_ai"
+    assert settings.video_provider == "google_ai"
+    assert settings.google_ai_api_key == "google-secret"
+    assert settings.google_ai_image_model == "gemini-3-pro-image"
+    assert settings.google_ai_image_size == "2K"
+    assert settings.google_ai_video_model == "veo-3.1-fast-generate-preview"
+    assert settings.google_ai_video_default_duration_seconds == 6
+    assert settings.google_ai_video_poll_interval_seconds == 2
+    assert settings.google_ai_video_poll_timeout_seconds == 30
+
+
 def test_new_text_model_lists_have_initial_defaults() -> None:
     assert NVIDIA_NIM_TEXT_MODELS == (
         "deepseek-ai/deepseek-v4-flash",
@@ -72,6 +101,19 @@ def test_new_text_model_lists_have_initial_defaults() -> None:
     assert OLLAMA_CLOUD_TEXT_MODELS == (
         "gpt-oss:120b",
         "gpt-oss:20b",
+    )
+    assert GOOGLE_AI_IMAGE_MODELS == (
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3-pro-image",
+        "gemini-2.5-flash-image",
+    )
+    assert GOOGLE_AI_VIDEO_MODELS == (
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview",
+        "veo-3.0-generate-001",
+        "veo-3.0-fast-generate-001",
     )
 
 

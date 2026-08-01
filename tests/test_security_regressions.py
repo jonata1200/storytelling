@@ -90,6 +90,9 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
             "NVIDIA_NIM_API_KEY": "nv-secret",
             "OLLAMA_CLOUD_API_KEY": "ollama-secret",
             "OLLAMA_CLOUD_DEFAULT_MODEL": "gpt-oss:120b",
+            "GOOGLE_AI_API_KEY": "google-secret",
+            "GOOGLE_AI_IMAGE_MODEL": "gemini-3.1-flash-image",
+            "GOOGLE_AI_VIDEO_MODEL": "veo-3.1-generate-preview",
             "VEO_AI_FREE_ENABLED": "true",
             "VEO_AI_FREE_SESSION_PATH": ".runtime/veo_free/session.json",
         },
@@ -100,6 +103,9 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     assert preferences["nvidia_nim_api_key"] == "nv-secret"
     assert preferences["ollama_cloud_api_key"] == "ollama-secret"
     assert preferences["ollama_cloud_default_model"] == "gpt-oss:120b"
+    assert preferences["google_ai_api_key"] == "google-secret"
+    assert preferences["google_ai_image_model"] == "gemini-3.1-flash-image"
+    assert preferences["google_ai_video_model"] == "veo-3.1-generate-preview"
     assert preferences["veo_ai_free_enabled"] == "true"
     with pytest.raises(ValueError, match="not allowed"):
         save_runtime_preferences({"DATABASE_URL": "attacker"}, path)

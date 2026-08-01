@@ -58,13 +58,16 @@ def test_resolve_image_model_preserves_project_specific_real_model() -> None:
 
 def test_resolve_image_model_uses_global_default_for_legacy_project_default() -> None:
     assert (
-        resolve_image_model("sourceful/riverflow-v2-fast", "chatgpt-web/gpt-5.5")
-        == "chatgpt-web/gpt-5.5"
+        resolve_image_model("sourceful/riverflow-v2-fast", "gemini-3.1-flash-image")
+        == "gemini-3.1-flash-image"
     )
 
 
 def test_resolve_video_model_uses_global_default_for_legacy_project_default() -> None:
-    assert resolve_video_model("bytedance/seedance-2.0-fast", "veo-free/veo") == "veo-free/veo"
+    assert (
+        resolve_video_model("bytedance/seedance-2.0-fast", "veo-3.1-generate-preview")
+        == "veo-3.1-generate-preview"
+    )
 
 
 def test_resolve_image_model_requires_real_model_when_no_default_exists() -> None:

@@ -15,6 +15,7 @@ from app.core.enums import ArtifactStatus, ArtifactType, DependencyKind
 from app.production.service import get_or_create_production_settings, resolve_image_model
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.versioning import INACTIVE_DERIVED_STATUSES
+from app.providers.image.google_ai import GoogleAIImageProvider
 from app.providers.image.types import ImageProvider
 from app.providers.image.veo_ai_free import VeoAiFreeImageProvider
 from app.storytelling.models import Scene, Shot
@@ -38,7 +39,9 @@ async def _image_provider_for_project(
     )
     if provider == "veo_ai_free":
         return VeoAiFreeImageProvider(), model, "veo_ai_free_storyboards"
-    raise ValueError("Provider de storyboard não suportado. Use Veo AI Free.")
+    if provider == "google_ai":
+        return GoogleAIImageProvider(), model, "google_ai_storyboards"
+    raise ValueError("Provider de storyboard não suportado. Use Google AI ou Veo AI Free.")
 
 
 async def _create_artifact(
