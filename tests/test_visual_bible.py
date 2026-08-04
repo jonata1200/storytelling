@@ -500,7 +500,7 @@ def test_prop_reference_prompt_requires_white_background_and_object_focus() -> N
     assert "sem pessoas" in prompt
     assert "sem mãos" in prompt
     assert "sem texto" in prompt
-    assert "Proporcao: 1:1" in prompt
+    assert "Proporcao: 9:16" in prompt
     assert "detalhes legíveis" in prompt
     assert len(prompt) < 700
 
@@ -525,7 +525,7 @@ def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:
     assert visual_reference_aspect_ratio(character, "character_reference_sheet") == "16:9"
     assert visual_reference_aspect_ratio(character, "front_portrait") == "9:16"
     assert visual_reference_aspect_ratio(location, "establishing") == "16:9"
-    assert visual_reference_aspect_ratio(prop, "front") == "1:1"
+    assert visual_reference_aspect_ratio(prop, "front") == "9:16"
 
 
 def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:

@@ -20,8 +20,8 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     episode_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     content_type: Mapped[str] = mapped_column(String(80), default="short_drama", nullable=False)
     aspect_ratio: Mapped[str] = mapped_column(String(20), default="9:16", nullable=False)
-    image_resolution: Mapped[str] = mapped_column(String(40), default="1080x1920", nullable=False)
-    video_resolution: Mapped[str] = mapped_column(String(40), default="1080x1920", nullable=False)
+    image_resolution: Mapped[str] = mapped_column(String(40), default="720x1280", nullable=False)
+    video_resolution: Mapped[str] = mapped_column(String(40), default="720p", nullable=False)
     workflow_mode: Mapped[str] = mapped_column(String(80), default="keyframes_i2v", nullable=False)
     image_model: Mapped[str] = mapped_column(
         String(160),

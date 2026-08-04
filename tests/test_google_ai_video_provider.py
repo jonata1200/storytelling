@@ -1,6 +1,8 @@
 import base64
 import json
+import urllib.error
 from email.message import Message
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +43,17 @@ class _BytesResponse:
 
     def read(self) -> bytes:
         return self._payload
+
+
+def _http_error(status: int, payload: str) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        url="https://generativelanguage.googleapis.com/v1beta/models/"
+        "veo-3.1-fast-generate-preview:predictLongRunning",
+        code=status,
+        msg="Error",
+        hdrs={},
+        fp=BytesIO(payload.encode("utf-8")),
+    )
 
 
 @pytest.mark.asyncio
@@ -123,7 +136,7 @@ async def test_google_ai_video_provider_submits_polls_and_saves_inline_video(
         "aspectRatio": "16:9",
         "durationSeconds": "8",
         "numberOfVideos": 1,
-        "resolution": "1080p",
+        "resolution": "720p",
         "seed": 123,
     }
     assert captured["poll_urls"] == [
@@ -188,3 +201,233 @@ async def test_google_ai_video_provider_downloads_uri_payload(
     assert result.file_path is not None
     assert result.file_path.read_bytes() == downloaded
     assert result.metadata["delivery"] == "uri"
+
+
+def test_google_ai_video_request_coerces_legacy_resolution_to_720p() -> None:
+    body = GoogleAIVideoProvider()._request_body(
+        VideoRequest(
+            prompt="Cena ampla",
+            duration_seconds=4,
+            resolution="1920x1080",
+            output_dir=Path("videos"),
+            model="veo-3.1-fast-generate-preview",
+        ),
+        image_to_video=False,
+    )
+
+    assert body["parameters"]["durationSeconds"] == "4"
+    assert body["parameters"]["resolution"] == "720p"
+
+
+def test_google_ai_video_request_keeps_720p_image_input_duration(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "frame.png"
+    source.write_bytes(b"source-frame")
+    settings = Settings(local_storage_path=tmp_path)
+    monkeypatch.setattr(media_utils, "get_settings", lambda: settings)
+
+    body = GoogleAIVideoProvider()._request_body(
+        VideoRequest(
+            prompt="Animar frame",
+            duration_seconds=4,
+            resolution="720p",
+            source_image_uri=source.as_posix(),
+            output_dir=tmp_path,
+            model="veo-3.1-fast-generate-preview",
+        ),
+        image_to_video=True,
+    )
+
+    assert body["parameters"]["durationSeconds"] == "4"
+    assert body["parameters"]["resolution"] == "720p"
+
+
+@pytest.mark.asyncio
+async def test_google_ai_video_provider_retries_transient_submit_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    attempts = 0
+    sleeps: list[int] = []
+    video_bytes = b"video-after-retry"
+    encoded_video = base64.b64encode(video_bytes).decode("ascii")
+
+    def fake_urlopen(request: Any, timeout: int) -> _JsonResponse:
+        nonlocal attempts
+        if request.get_method() == "POST":
+            attempts += 1
+            if attempts == 1:
+                raise _http_error(
+                    500,
+                    '{"error":{"message":"Internal error encountered.","code":"api_error"}}',
+                )
+            return _JsonResponse({"name": "operations/video-retry"})
+        return _JsonResponse(
+            {
+                "done": True,
+                "response": {
+                    "generatedVideos": [
+                        {
+                            "video": {
+                                "inlineData": {
+                                    "mimeType": "video/mp4",
+                                    "data": encoded_video,
+                                }
+                            }
+                        }
+                    ]
+                },
+            }
+        )
+
+    settings = Settings(
+        google_ai_api_key="google-secret",
+        google_ai_video_poll_interval_seconds=1,
+        google_ai_video_poll_timeout_seconds=5,
+    )
+    monkeypatch.setattr("app.providers.video.google_ai.get_settings", lambda: settings)
+    monkeypatch.setattr("app.providers.video.google_ai.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "app.providers.video.google_ai.time.sleep",
+        lambda seconds: sleeps.append(seconds),
+    )
+
+    result = await GoogleAIVideoProvider().generate_from_text(
+        VideoRequest(
+            prompt="Cena ampla",
+            duration_seconds=4,
+            output_dir=tmp_path,
+            model="veo-3.1-fast-generate-preview",
+        )
+    )
+
+    assert attempts == 2
+    assert sleeps == [1]
+    assert result.file_path is not None
+    assert result.file_path.read_bytes() == video_bytes
+
+
+@pytest.mark.asyncio
+async def test_google_ai_video_provider_retries_transient_poll_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    poll_attempts = 0
+    sleeps: list[int] = []
+    video_bytes = b"video-after-poll-retry"
+    encoded_video = base64.b64encode(video_bytes).decode("ascii")
+
+    def fake_urlopen(request: Any, timeout: int) -> _JsonResponse:
+        nonlocal poll_attempts
+        if request.get_method() == "POST":
+            return _JsonResponse({"name": "operations/video-poll-retry"})
+        poll_attempts += 1
+        if poll_attempts == 1:
+            raise _http_error(503, '{"error":{"message":"temporarily unavailable"}}')
+        return _JsonResponse(
+            {
+                "done": True,
+                "response": {
+                    "generatedVideos": [
+                        {
+                            "video": {
+                                "inlineData": {
+                                    "mimeType": "video/mp4",
+                                    "data": encoded_video,
+                                }
+                            }
+                        }
+                    ]
+                },
+            }
+        )
+
+    settings = Settings(
+        google_ai_api_key="google-secret",
+        google_ai_video_poll_interval_seconds=1,
+        google_ai_video_poll_timeout_seconds=5,
+    )
+    monkeypatch.setattr("app.providers.video.google_ai.get_settings", lambda: settings)
+    monkeypatch.setattr("app.providers.video.google_ai.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "app.providers.video.google_ai.time.sleep",
+        lambda seconds: sleeps.append(seconds),
+    )
+
+    result = await GoogleAIVideoProvider().generate_from_text(
+        VideoRequest(
+            prompt="Cena ampla",
+            duration_seconds=4,
+            output_dir=tmp_path,
+            model="veo-3.1-fast-generate-preview",
+        )
+    )
+
+    assert poll_attempts == 2
+    assert sleeps == [1]
+    assert result.file_path is not None
+    assert result.file_path.read_bytes() == video_bytes
+
+
+@pytest.mark.asyncio
+async def test_google_ai_video_provider_retries_transient_download_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    download_attempts = 0
+    sleeps: list[int] = []
+    downloaded = b"download-after-retry"
+
+    def fake_urlopen(request: Any, timeout: int) -> _JsonResponse | _BytesResponse:
+        nonlocal download_attempts
+        if request.get_method() == "POST":
+            return _JsonResponse({"name": "operations/video-download-retry"})
+        if request.full_url.endswith("/operations/video-download-retry"):
+            return _JsonResponse(
+                {
+                    "done": True,
+                    "response": {
+                        "generateVideoResponse": {
+                            "generatedSamples": [
+                                {
+                                    "video": {
+                                        "uri": "https://generativelanguage.googleapis.com/v1beta/files/video"
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                }
+            )
+        download_attempts += 1
+        if download_attempts == 1:
+            raise _http_error(502, '{"error":{"message":"bad gateway"}}')
+        return _BytesResponse(downloaded)
+
+    settings = Settings(
+        google_ai_api_key="google-secret",
+        google_ai_video_poll_interval_seconds=1,
+        google_ai_video_poll_timeout_seconds=5,
+    )
+    monkeypatch.setattr("app.providers.video.google_ai.get_settings", lambda: settings)
+    monkeypatch.setattr("app.providers.video.google_ai.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "app.providers.video.google_ai.time.sleep",
+        lambda seconds: sleeps.append(seconds),
+    )
+
+    result = await GoogleAIVideoProvider().generate_from_text(
+        VideoRequest(
+            prompt="Cena ampla",
+            duration_seconds=4,
+            output_dir=tmp_path,
+            model="veo-3.1-fast-generate-preview",
+        )
+    )
+
+    assert download_attempts == 2
+    assert sleeps == [1]
+    assert result.file_path is not None
+    assert result.file_path.read_bytes() == downloaded

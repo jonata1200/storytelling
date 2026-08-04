@@ -26,8 +26,12 @@ from app.production.models import ProjectProductionSettings
 from app.production.service import (
     ASPECT_RATIOS,
     CONTENT_TYPES,
-    RESOLUTIONS,
+    IMAGE_RESOLUTIONS,
+    VIDEO_RESOLUTIONS,
     WORKFLOW_MODES,
+    normalize_image_aspect_ratio,
+    normalize_image_resolution,
+    normalize_video_resolution,
     resolve_image_model,
     resolve_video_model,
 )
@@ -172,17 +176,17 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
             aspect_ratio = ui.select(
                 ASPECT_RATIOS,
                 label="Aspect ratio",
-                value=settings.aspect_ratio,
+                value=normalize_image_aspect_ratio(settings.aspect_ratio),
             )
             image_resolution = ui.select(
-                RESOLUTIONS,
+                IMAGE_RESOLUTIONS,
                 label="Imagem",
-                value=settings.image_resolution,
+                value=normalize_image_resolution(settings.image_resolution, settings.aspect_ratio),
             )
             video_resolution = ui.select(
-                RESOLUTIONS,
+                VIDEO_RESOLUTIONS,
                 label="Video",
-                value=settings.video_resolution,
+                value=normalize_video_resolution(settings.video_resolution),
             )
             workflow_mode = ui.select(
                 WORKFLOW_MODES,

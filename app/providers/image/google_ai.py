@@ -3,6 +3,7 @@ import base64
 import binascii
 import hashlib
 import json
+import time
 import urllib.error
 import urllib.request
 from typing import Any, cast
@@ -12,11 +13,14 @@ from app.config.provider_policy import ensure_provider_api_key, validate_model_n
 from app.config.settings import get_settings
 from app.observability.middleware import current_correlation_id
 from app.observability.redaction import redact_secrets
+from app.production.service import normalize_image_aspect_ratio, normalize_image_resolution
 from app.providers.image.types import ImageEditRequest, ImageGenerationRequest, ImageResult
 from app.providers.media_utils import data_url_parts, extension_from_media_type
 
 DEFAULT_GOOGLE_AI_IMAGE_TIMEOUT_SECONDS = 360
+DEFAULT_GOOGLE_AI_IMAGE_MAX_ATTEMPTS = 3
 GOOGLE_AI_IMAGE_RESPONSE_MIME_TYPE = "image/jpeg"
+TRANSIENT_GOOGLE_AI_HTTP_STATUS = {429, 500, 502, 503, 504}
 
 
 class GoogleAIImageProvider:
@@ -84,11 +88,13 @@ class GoogleAIImageProvider:
                     "data": encoded,
                 }
             )
+        aspect_ratio = normalize_image_aspect_ratio(request.aspect_ratio)
+        resolution = normalize_image_resolution(request.resolution, aspect_ratio)
         response_format: dict[str, Any] = {
             "type": "image",
             "mime_type": GOOGLE_AI_IMAGE_RESPONSE_MIME_TYPE,
-            "aspect_ratio": self._normalized_aspect_ratio(request.aspect_ratio),
-            "image_size": self._image_size(request.resolution),
+            "aspect_ratio": aspect_ratio,
+            "image_size": self._image_size(resolution),
         }
         return {
             "model": request.model,
@@ -98,6 +104,8 @@ class GoogleAIImageProvider:
 
     def _image_size(self, resolution: str | None) -> str:
         settings = get_settings()
+        if getattr(settings, "google_ai_image_model", "") == "gemini-3.1-flash-lite-image":
+            return "1K"
         value = str(resolution or settings.google_ai_image_size or "1K").strip()
         if "x" in value.lower():
             dimensions = [int(part) for part in value.lower().split("x") if part.isdigit()]
@@ -114,20 +122,7 @@ class GoogleAIImageProvider:
 
     @staticmethod
     def _normalized_aspect_ratio(value: str) -> str:
-        normalized = str(value or "").strip()
-        supported = {
-            "1:1",
-            "3:2",
-            "2:3",
-            "3:4",
-            "4:3",
-            "4:5",
-            "5:4",
-            "9:16",
-            "16:9",
-            "21:9",
-        }
-        return normalized if normalized in supported else "9:16"
+        return normalize_image_aspect_ratio(value)
 
     def _post_json(
         self,
@@ -136,61 +131,98 @@ class GoogleAIImageProvider:
         path: str,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        request = urllib.request.Request(
-            f"{base_url.rstrip('/')}{path}",
-            data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": api_key,
-                "X-Correlation-ID": current_correlation_id() or "",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(
-                request,
-                timeout=DEFAULT_GOOGLE_AI_IMAGE_TIMEOUT_SECONDS,
-            ) as response:
-                parsed = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"{self.display_name} HTTP {exc.code}: {redact_secrets(detail)}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(
-                f"{self.display_name} network error: {redact_secrets(exc.reason)}"
-            ) from exc
-        except TimeoutError as exc:
-            raise RuntimeError(f"{self.display_name} timeout ao aguardar resposta") from exc
-        except OSError as exc:
-            raise RuntimeError(
-                f"{self.display_name} connection error: {redact_secrets(exc)}"
-            ) from exc
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"{self.display_name} retornou JSON invalido") from exc
+        parsed: object
+        for attempt in range(DEFAULT_GOOGLE_AI_IMAGE_MAX_ATTEMPTS):
+            request = urllib.request.Request(
+                f"{base_url.rstrip('/')}{path}",
+                data=json.dumps(body).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": api_key,
+                    "X-Correlation-ID": current_correlation_id() or "",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(
+                    request,
+                    timeout=DEFAULT_GOOGLE_AI_IMAGE_TIMEOUT_SECONDS,
+                ) as response:
+                    parsed = json.loads(response.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                if self._should_retry(attempt, exc.code):
+                    self._sleep_before_retry(attempt, exc)
+                    continue
+                raise RuntimeError(
+                    f"{self.display_name} HTTP {exc.code}: {redact_secrets(detail)}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                if self._should_retry(attempt):
+                    self._sleep_before_retry(attempt)
+                    continue
+                raise RuntimeError(
+                    f"{self.display_name} network error: {redact_secrets(exc.reason)}"
+                ) from exc
+            except TimeoutError as exc:
+                if self._should_retry(attempt):
+                    self._sleep_before_retry(attempt)
+                    continue
+                raise RuntimeError(f"{self.display_name} timeout ao aguardar resposta") from exc
+            except OSError as exc:
+                if self._should_retry(attempt):
+                    self._sleep_before_retry(attempt)
+                    continue
+                raise RuntimeError(
+                    f"{self.display_name} connection error: {redact_secrets(exc)}"
+                ) from exc
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"{self.display_name} retornou JSON invalido") from exc
+        else:
+            raise RuntimeError(f"{self.display_name} excedeu tentativas de geracao")
         if not isinstance(parsed, dict):
             raise RuntimeError(f"{self.display_name} retornou resposta fora do formato esperado")
         if error := parsed.get("error"):
             raise RuntimeError(f"{self.display_name} retornou erro: {redact_secrets(error)}")
         return parsed
 
+    @staticmethod
+    def _should_retry(attempt: int, status_code: int | None = None) -> bool:
+        has_attempts_left = attempt < DEFAULT_GOOGLE_AI_IMAGE_MAX_ATTEMPTS - 1
+        if not has_attempts_left:
+            return False
+        return status_code is None or status_code in TRANSIENT_GOOGLE_AI_HTTP_STATUS
+
+    @staticmethod
+    def _sleep_before_retry(
+        attempt: int,
+        exc: urllib.error.HTTPError | None = None,
+    ) -> None:
+        retry_after = ""
+        if exc is not None and exc.headers is not None:
+            retry_after = str(exc.headers.get("Retry-After") or "")
+        if retry_after.isdigit():
+            delay_seconds = min(int(retry_after), 8)
+        else:
+            delay_seconds = min(2**attempt, 8)
+        time.sleep(delay_seconds)
+
     def _image_bytes(self, response: dict[str, Any]) -> tuple[bytes, str]:
         candidates = self._image_candidates(response)
         for candidate in candidates:
             if not isinstance(candidate, dict):
                 continue
-            encoded = (
-                candidate.get("data")
-                or candidate.get("b64_json")
-                or candidate.get("bytesBase64Encoded")
-            )
+            inline_data = self._inline_data(candidate)
+            encoded = self._encoded_image(candidate, inline_data)
             if not isinstance(encoded, str) or not encoded.strip():
                 continue
             media_type = str(
                 candidate.get("mime_type")
                 or candidate.get("mimeType")
                 or candidate.get("media_type")
+                or inline_data.get("mime_type")
+                or inline_data.get("mimeType")
                 or GOOGLE_AI_IMAGE_RESPONSE_MIME_TYPE
             )
             try:
@@ -199,20 +231,46 @@ class GoogleAIImageProvider:
                 raise RuntimeError(f"{self.display_name} retornou imagem base64 invalida") from exc
         raise RuntimeError(f"{self.display_name} nao retornou imagem gerada")
 
+    @staticmethod
+    def _inline_data(candidate: dict[str, Any]) -> dict[str, Any]:
+        for key in ("inlineData", "inline_data"):
+            value = candidate.get(key)
+            if isinstance(value, dict):
+                return cast(dict[str, Any], value)
+        return {}
+
+    @staticmethod
+    def _encoded_image(candidate: dict[str, Any], inline_data: dict[str, Any]) -> object:
+        return (
+            candidate.get("data")
+            or candidate.get("b64_json")
+            or candidate.get("bytesBase64Encoded")
+            or inline_data.get("data")
+            or inline_data.get("bytesBase64Encoded")
+        )
+
     def _image_candidates(self, response: dict[str, Any]) -> list[Any]:
         candidates: list[Any] = []
         for key in ("output_image", "image"):
             if key in response:
                 candidates.append(response[key])
-        output = response.get("output")
-        if isinstance(output, list):
-            candidates.extend(output)
-        if isinstance(output, dict):
-            candidates.append(output)
+        for key in ("output", "outputs"):
+            output = response.get(key)
+            if isinstance(output, list):
+                candidates.extend(output)
+            if isinstance(output, dict):
+                candidates.append(output)
         for step in response.get("steps", []) if isinstance(response.get("steps"), list) else []:
             if not isinstance(step, dict):
                 continue
+            content = step.get("content")
+            if isinstance(content, list):
+                candidates.extend(content)
+            if isinstance(content, dict):
+                candidates.append(content)
             summary = step.get("summary")
             if isinstance(summary, list):
                 candidates.extend(summary)
+            if isinstance(summary, dict):
+                candidates.append(summary)
         return candidates

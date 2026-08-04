@@ -265,6 +265,7 @@ async def test_generate_storyboard_plan_images_respects_concurrency_limit(
         plans,
         output_dir=tmp_path,
         image_resolution="1K",
+        image_aspect_ratio="9:16",
         image_model="fake-model",
         concurrency=2,
     )

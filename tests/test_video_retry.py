@@ -29,6 +29,8 @@ def test_video_generation_concurrency_is_clamped_to_operational_bounds() -> None
 
 def test_video_transient_error_detection_identifies_retryable_provider_failures() -> None:
     assert _is_transient_video_error("Video provider timeout ao consultar status")
+    assert _is_transient_video_error("Google AI Videos submit HTTP 500: api_error")
+    assert _is_transient_video_error("Internal error encountered")
     assert _is_transient_video_error("HTTP 503 service unavailable")
     assert not _is_transient_video_error("quota exceeded for this account")
 

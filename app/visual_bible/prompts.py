@@ -168,7 +168,7 @@ def visual_reference_aspect_ratio(profile: dict, view_type: str) -> str:
     if asset_kind == "location":
         return "16:9"
     if asset_kind == "prop":
-        return "1:1"
+        return "9:16"
     if asset_kind == "character" and view_type != "front_portrait":
         return "16:9"
     return "9:16"

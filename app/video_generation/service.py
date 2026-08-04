@@ -37,7 +37,11 @@ from app.costs.service import (
 )
 from app.observability.schemas import OperationalEventCreate
 from app.observability.service import emit_project_event
-from app.production.service import get_or_create_production_settings, resolve_video_model
+from app.production.service import (
+    get_or_create_production_settings,
+    normalize_video_resolution,
+    resolve_video_model,
+)
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.providers.video.google_ai import GoogleAIVideoProvider
@@ -204,7 +208,7 @@ async def _video_provider_for_project(
             requested_model,
             "google_ai_videos",
             production_settings.aspect_ratio,
-            production_settings.video_resolution,
+            normalize_video_resolution(production_settings.video_resolution),
         )
     if resolved_provider == "mock":
         raise ValueError("Provider mock bloqueado. Use um provider real de vídeo.")
@@ -452,8 +456,11 @@ def _is_transient_video_error(error: str) -> bool:
         "timeout",
         "network",
         "connection",
+        "internal error",
+        "api_error",
         "rate limit",
         "429",
+        "500",
         "502",
         "503",
         "504",

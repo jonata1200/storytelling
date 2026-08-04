@@ -21,7 +21,11 @@ from app.costs.service import cost_audit_metadata, estimate_operation_cost, fina
 from app.generation.model_settings import llm_provider_for_task
 from app.generation.models import PromptExecution
 from app.generation.service import run_structured_generation
-from app.production.service import get_or_create_production_settings
+from app.production.service import (
+    get_or_create_production_settings,
+    normalize_image_aspect_ratio,
+    normalize_image_resolution,
+)
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
@@ -476,7 +480,7 @@ async def generate_visual_references(
     profile, target_artifact_id = target
     production_settings = await get_or_create_production_settings(session, project_id)
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
-    image_resolution = production_settings.image_resolution
+    configured_image_resolution = production_settings.image_resolution
     requested_views = validated_visual_reference_views(target_kind, view_types)
     if force:
         views = requested_views
@@ -492,7 +496,10 @@ async def generate_visual_references(
 
     for view_type in views:
         prompt = visual_reference_prompt(profile, view_type)
-        aspect_ratio = visual_reference_aspect_ratio(profile, view_type)
+        aspect_ratio = normalize_image_aspect_ratio(
+            visual_reference_aspect_ratio(profile, view_type)
+        )
+        image_resolution = normalize_image_resolution(configured_image_resolution, aspect_ratio)
         reference_uris = await _visual_generation_reference_uris(
             session,
             project_id,

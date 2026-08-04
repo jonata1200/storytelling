@@ -1,5 +1,7 @@
 import base64
 import json
+import urllib.error
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -24,6 +26,16 @@ class _JsonResponse:
 
     def read(self) -> bytes:
         return json.dumps(self._payload).encode("utf-8")
+
+
+def _http_error(status: int, payload: str) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        url="https://generativelanguage.googleapis.com/v1beta/interactions",
+        code=status,
+        msg="Error",
+        hdrs={},
+        fp=BytesIO(payload.encode("utf-8")),
+    )
 
 
 @pytest.mark.asyncio
@@ -84,7 +96,7 @@ async def test_google_ai_image_provider_generates_and_saves_image(
         "type": "image",
         "mime_type": "image/jpeg",
         "aspect_ratio": "16:9",
-        "image_size": "4K",
+        "image_size": "1K",
     }
     assert result.file_path.read_bytes() == image_bytes
     assert result.file_path.suffix == ".jpg"
@@ -103,5 +115,179 @@ def test_google_ai_image_size_normalization(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert provider._image_size(None) == "512px"
     assert provider._image_size("2048x2048") == "2K"
-    assert provider._normalized_aspect_ratio("21:9") == "21:9"
+    assert provider._normalized_aspect_ratio("21:9") == "9:16"
     assert provider._normalized_aspect_ratio("2:1") == "9:16"
+
+
+def test_google_ai_flash_lite_image_size_is_limited_to_1k(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.providers.image.google_ai.get_settings",
+        lambda: SimpleNamespace(
+            google_ai_image_model="gemini-3.1-flash-lite-image",
+            google_ai_image_size="4K",
+        ),
+    )
+
+    provider = GoogleAIImageProvider()
+
+    assert provider._image_size(None) == "1K"
+    assert provider._image_size("3840x2160") == "1K"
+
+
+@pytest.mark.asyncio
+async def test_google_ai_image_provider_coerces_unsupported_aspect_and_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, Any] = {}
+    image_bytes = b"coerced-image"
+    encoded_image = base64.b64encode(image_bytes).decode("ascii")
+
+    def fake_urlopen(request: Any, timeout: int) -> _JsonResponse:
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return _JsonResponse(
+            {
+                "output_image": {
+                    "data": encoded_image,
+                    "mime_type": "image/jpeg",
+                },
+            }
+        )
+
+    settings = Settings(
+        google_ai_api_key="google-secret",
+        google_ai_image_size="4K",
+        local_storage_path=tmp_path,
+    )
+    monkeypatch.setattr("app.providers.image.google_ai.get_settings", lambda: settings)
+    monkeypatch.setattr("app.providers.image.google_ai.urllib.request.urlopen", fake_urlopen)
+
+    await GoogleAIImageProvider().generate(
+        ImageGenerationRequest(
+            prompt="Objeto isolado",
+            target_id="prop-1",
+            view_type="front",
+            output_dir=tmp_path / "out",
+            aspect_ratio="1:1",
+            resolution="3840x2160",
+            model="gemini-3.1-flash-lite-image",
+        )
+    )
+
+    assert captured["body"]["response_format"]["aspect_ratio"] == "9:16"
+    assert captured["body"]["response_format"]["image_size"] == "1K"
+
+
+def test_google_ai_image_bytes_reads_steps_content() -> None:
+    image_bytes = b"steps-image"
+    encoded_image = base64.b64encode(image_bytes).decode("ascii")
+    response = {
+        "id": "interaction-1",
+        "steps": [
+            {
+                "type": "model_output",
+                "content": [
+                    {"type": "text", "text": "Imagem gerada."},
+                    {
+                        "type": "image",
+                        "data": encoded_image,
+                        "mime_type": "image/jpeg",
+                    },
+                ],
+            }
+        ],
+    }
+
+    decoded, media_type = GoogleAIImageProvider()._image_bytes(response)
+
+    assert decoded == image_bytes
+    assert media_type == "image/jpeg"
+
+
+def test_google_ai_image_bytes_reads_inline_data_content() -> None:
+    image_bytes = b"inline-image"
+    encoded_image = base64.b64encode(image_bytes).decode("ascii")
+    response = {
+        "steps": [
+            {
+                "type": "model_output",
+                "content": [
+                    {
+                        "type": "image",
+                        "inlineData": {
+                            "data": encoded_image,
+                            "mimeType": "image/jpeg",
+                        },
+                    },
+                ],
+            }
+        ],
+    }
+
+    decoded, media_type = GoogleAIImageProvider()._image_bytes(response)
+
+    assert decoded == image_bytes
+    assert media_type == "image/jpeg"
+
+
+def test_google_ai_image_provider_retries_transient_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    attempts = 0
+    sleeps: list[int] = []
+    image_bytes = b"retried-image"
+    encoded_image = base64.b64encode(image_bytes).decode("ascii")
+
+    def fake_urlopen(request: Any, timeout: int) -> _JsonResponse:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise _http_error(
+                500,
+                '{"error":{"message":"Internal error encountered.","code":"api_error"}}',
+            )
+        return _JsonResponse(
+            {
+                "steps": [
+                    {
+                        "content": [
+                            {
+                                "inlineData": {
+                                    "data": encoded_image,
+                                    "mimeType": "image/jpeg",
+                                },
+                            },
+                        ],
+                    },
+                ]
+            }
+        )
+
+    settings = Settings(
+        google_ai_api_key="google-secret",
+        google_ai_image_size="1K",
+        local_storage_path=tmp_path,
+    )
+    monkeypatch.setattr("app.providers.image.google_ai.get_settings", lambda: settings)
+    monkeypatch.setattr("app.providers.image.google_ai.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "app.providers.image.google_ai.time.sleep",
+        lambda seconds: sleeps.append(seconds),
+    )
+
+    result = GoogleAIImageProvider()._generate(
+        ImageGenerationRequest(
+            prompt="Storyboard frame",
+            target_id="shot-1",
+            view_type="storyboard_001",
+            output_dir=tmp_path / "out",
+            model="gemini-3.1-flash-lite-image",
+        )
+    )
+
+    assert attempts == 2
+    assert sleeps == [1]
+    assert result.file_path.read_bytes() == image_bytes

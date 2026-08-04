@@ -10,7 +10,11 @@ from app.core.enums import ArtifactType, AssetKind, CostEntryType, ProjectStatus
 from app.costs.models import CostEntry
 from app.costs.service import cost_audit_metadata, estimate_operation_cost, final_budget_cost
 from app.generation.models import PromptExecution
-from app.production.service import get_or_create_production_settings
+from app.production.service import (
+    get_or_create_production_settings,
+    normalize_image_aspect_ratio,
+    normalize_image_resolution,
+)
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
@@ -113,7 +117,11 @@ async def generate_storyboard_frames(
     )
 
     production_settings = await get_or_create_production_settings(session, project_id)
-    image_resolution = production_settings.image_resolution
+    image_aspect_ratio = normalize_image_aspect_ratio(production_settings.aspect_ratio)
+    image_resolution = normalize_image_resolution(
+        production_settings.image_resolution,
+        image_aspect_ratio,
+    )
     visual_context = await _storyboard_visual_context(session, project_id)
     if approved_only:
         metadata = production_settings.metadata_json or {}
@@ -189,6 +197,7 @@ async def generate_storyboard_frames(
         frame_plans,
         output_dir=output_dir,
         image_resolution=image_resolution,
+        image_aspect_ratio=image_aspect_ratio,
         image_model=image_model,
         concurrency=storyboard_image_concurrency(
             getattr(app_settings, "storyboard_image_concurrency", None)
@@ -210,6 +219,7 @@ async def generate_storyboard_frames(
             duration_ms = plan.duration_ms or 1
             generation_metadata = {
                 "resolution": image_resolution,
+                "aspect_ratio": image_aspect_ratio,
                 "duration_ms": duration_ms,
                 **(plan.fallback_metadata or {}),
             }

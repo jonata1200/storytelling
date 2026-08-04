@@ -6,7 +6,12 @@ from nicegui import ui
 from app.config.provider_policy import normalize_provider_name, validate_model_name
 from app.database.session import AsyncSessionLocal
 from app.generation.model_settings import ensure_default_model_settings, set_model_setting
-from app.production.service import get_or_create_production_settings, update_production_settings
+from app.production.service import (
+    get_or_create_production_settings,
+    normalize_image_resolution,
+    normalize_video_resolution,
+    update_production_settings,
+)
 from app.projects.repository import ProjectRepository
 from app.projects.schemas import ProjectCreate
 from app.projects.service import (
@@ -175,8 +180,11 @@ async def _create_next_episode(project_id: UUID) -> None:
                     "episode_number": settings.episode_number + 1,
                     "content_type": settings.content_type,
                     "aspect_ratio": settings.aspect_ratio,
-                    "image_resolution": settings.image_resolution,
-                    "video_resolution": settings.video_resolution,
+                    "image_resolution": normalize_image_resolution(
+                        settings.image_resolution,
+                        settings.aspect_ratio,
+                    ),
+                    "video_resolution": normalize_video_resolution(settings.video_resolution),
                     "workflow_mode": settings.workflow_mode,
                     "image_model": settings.image_model,
                     "video_model": settings.video_model,

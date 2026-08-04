@@ -16,6 +16,11 @@ from app.observability.redaction import redact_secrets
 from app.providers.media_utils import data_url_parts
 from app.providers.video.types import ProviderCapabilities, VideoRequest, VideoResult
 
+DEFAULT_GOOGLE_AI_VIDEO_HTTP_TIMEOUT_SECONDS = 120
+DEFAULT_GOOGLE_AI_VIDEO_DOWNLOAD_TIMEOUT_SECONDS = 300
+DEFAULT_GOOGLE_AI_VIDEO_MAX_ATTEMPTS = 3
+TRANSIENT_GOOGLE_AI_VIDEO_HTTP_STATUS = {429, 500, 502, 503, 504}
+
 
 class GoogleAIVideoProvider:
     provider_name = "google_ai"
@@ -121,7 +126,12 @@ class GoogleAIVideoProvider:
                 "operation_name": external_job_id,
                 "native_audio": True,
                 "aspect_ratio": self._normalized_aspect_ratio(request.aspect_ratio),
-                "duration_seconds": self._duration_seconds(request.duration_seconds),
+                "duration_seconds": self._duration_seconds(
+                    request.duration_seconds,
+                    resolution=self._resolution(request.resolution or request.size),
+                    has_image_input=bool(request.source_image_uri),
+                    has_references=bool(request.reference_uris),
+                ),
                 "resolution": self._resolution(request.resolution or request.size),
             },
         )
@@ -151,13 +161,20 @@ class GoogleAIVideoProvider:
                 references.append({"image": inline_image, "referenceType": "asset"})
         if references:
             instance["referenceImages"] = references
+        resolution = self._resolution(request.resolution or request.size)
+        duration_seconds = self._duration_seconds(
+            request.duration_seconds,
+            resolution=resolution,
+            has_image_input=image_to_video and bool(request.source_image_uri),
+            has_references=bool(references),
+        )
         return {
             "instances": [instance],
             "parameters": {
                 "aspectRatio": self._normalized_aspect_ratio(request.aspect_ratio),
-                "durationSeconds": str(self._duration_seconds(request.duration_seconds)),
+                "durationSeconds": str(duration_seconds),
                 "numberOfVideos": 1,
-                "resolution": self._resolution(request.resolution or request.size),
+                "resolution": resolution,
                 **({"seed": request.seed} if request.seed is not None else {}),
             },
         }
@@ -175,7 +192,16 @@ class GoogleAIVideoProvider:
         return "16:9" if str(value or "").strip() == "16:9" else "9:16"
 
     @staticmethod
-    def _duration_seconds(value: int) -> int:
+    def _duration_seconds(
+        value: int,
+        *,
+        resolution: str = "720p",
+        has_image_input: bool = False,
+        has_references: bool = False,
+    ) -> int:
+        _ = has_image_input
+        if resolution in {"1080p", "4k"} or has_references:
+            return 8
         if value <= 4:
             return 4
         if value <= 6:
@@ -184,11 +210,7 @@ class GoogleAIVideoProvider:
 
     @staticmethod
     def _resolution(value: str | None) -> str:
-        text = str(value or "").strip().lower()
-        if "4k" in text or "3840" in text:
-            return "4k"
-        if "1080" in text:
-            return "1080p"
+        _ = value
         return "720p"
 
     def _post_json(
@@ -223,29 +245,75 @@ class GoogleAIVideoProvider:
         }
 
     def _send_json(self, request: urllib.request.Request, operation: str) -> dict[str, Any]:
-        try:
-            with urllib.request.urlopen(request, timeout=120) as response:
-                parsed = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"{self.display_name} {operation} HTTP {exc.code}: {redact_secrets(detail)}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(
-                f"{self.display_name} {operation} network error: {redact_secrets(exc.reason)}"
-            ) from exc
-        except TimeoutError as exc:
-            raise RuntimeError(f"{self.display_name} {operation} timeout") from exc
-        except OSError as exc:
-            raise RuntimeError(
-                f"{self.display_name} {operation} connection error: {redact_secrets(exc)}"
-            ) from exc
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"{self.display_name} {operation} retornou JSON invalido") from exc
+        parsed: object
+        for attempt in range(DEFAULT_GOOGLE_AI_VIDEO_MAX_ATTEMPTS):
+            try:
+                with urllib.request.urlopen(
+                    request,
+                    timeout=DEFAULT_GOOGLE_AI_VIDEO_HTTP_TIMEOUT_SECONDS,
+                ) as response:
+                    parsed = json.loads(response.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                if self._should_retry(attempt, exc.code):
+                    self._sleep_before_retry(attempt, exc)
+                    continue
+                raise RuntimeError(
+                    f"{self.display_name} {operation} HTTP {exc.code}: "
+                    f"{redact_secrets(detail)}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                if self._should_retry(attempt):
+                    self._sleep_before_retry(attempt)
+                    continue
+                raise RuntimeError(
+                    f"{self.display_name} {operation} network error: "
+                    f"{redact_secrets(exc.reason)}"
+                ) from exc
+            except TimeoutError as exc:
+                if self._should_retry(attempt):
+                    self._sleep_before_retry(attempt)
+                    continue
+                raise RuntimeError(f"{self.display_name} {operation} timeout") from exc
+            except OSError as exc:
+                if self._should_retry(attempt):
+                    self._sleep_before_retry(attempt)
+                    continue
+                raise RuntimeError(
+                    f"{self.display_name} {operation} connection error: "
+                    f"{redact_secrets(exc)}"
+                ) from exc
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    f"{self.display_name} {operation} retornou JSON invalido"
+                ) from exc
+        else:
+            raise RuntimeError(f"{self.display_name} {operation} excedeu tentativas")
         if not isinstance(parsed, dict):
             raise RuntimeError(f"{self.display_name} retornou resposta fora do formato esperado")
         return parsed
+
+    @staticmethod
+    def _should_retry(attempt: int, status_code: int | None = None) -> bool:
+        has_attempts_left = attempt < DEFAULT_GOOGLE_AI_VIDEO_MAX_ATTEMPTS - 1
+        if not has_attempts_left:
+            return False
+        return status_code is None or status_code in TRANSIENT_GOOGLE_AI_VIDEO_HTTP_STATUS
+
+    @staticmethod
+    def _sleep_before_retry(
+        attempt: int,
+        exc: urllib.error.HTTPError | None = None,
+    ) -> None:
+        retry_after = ""
+        if exc is not None and exc.headers is not None:
+            retry_after = str(exc.headers.get("Retry-After") or "")
+        if retry_after.isdigit():
+            delay_seconds = min(int(retry_after), 8)
+        else:
+            delay_seconds = min(2**attempt, 8)
+        time.sleep(delay_seconds)
 
     def _video_bytes(self, operation: dict[str, Any]) -> tuple[bytes, str, dict[str, Any]]:
         video = self._first_video_payload(operation)
@@ -293,17 +361,30 @@ class GoogleAIVideoProvider:
             "GOOGLE_AI_API_KEY",
         )
         request = urllib.request.Request(uri, headers={"x-goog-api-key": api_key}, method="GET")
-        try:
-            with urllib.request.urlopen(request, timeout=300) as response:
-                content: bytes = response.read()
-                content_type = response.headers.get_content_type() or "video/mp4"
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"{self.display_name} download HTTP {exc.code}: {redact_secrets(detail)}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(
-                f"{self.display_name} download network error: {redact_secrets(exc.reason)}"
-            ) from exc
+        for attempt in range(DEFAULT_GOOGLE_AI_VIDEO_MAX_ATTEMPTS):
+            try:
+                with urllib.request.urlopen(
+                    request,
+                    timeout=DEFAULT_GOOGLE_AI_VIDEO_DOWNLOAD_TIMEOUT_SECONDS,
+                ) as response:
+                    content: bytes = response.read()
+                    content_type = response.headers.get_content_type() or "video/mp4"
+                break
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                if self._should_retry(attempt, exc.code):
+                    self._sleep_before_retry(attempt, exc)
+                    continue
+                raise RuntimeError(
+                    f"{self.display_name} download HTTP {exc.code}: {redact_secrets(detail)}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                if self._should_retry(attempt):
+                    self._sleep_before_retry(attempt)
+                    continue
+                raise RuntimeError(
+                    f"{self.display_name} download network error: {redact_secrets(exc.reason)}"
+                ) from exc
+        else:
+            raise RuntimeError(f"{self.display_name} download excedeu tentativas")
         return content, content_type

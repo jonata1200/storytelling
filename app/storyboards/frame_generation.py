@@ -48,6 +48,7 @@ async def generate_storyboard_plan_images(
     *,
     output_dir: Path,
     image_resolution: str | None,
+    image_aspect_ratio: str,
     image_model: str,
     concurrency: int,
 ) -> None:
@@ -65,6 +66,7 @@ async def generate_storyboard_plan_images(
                     target_id=str(plan.shot.id),
                     view_type=f"storyboard_{plan.frame_number:03d}",
                     output_dir=output_dir,
+                    aspect_ratio=image_aspect_ratio,
                     resolution=image_resolution,
                     model=image_model,
                 ),

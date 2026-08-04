@@ -21,8 +21,14 @@ CONTENT_TYPES = {
     "explainer": "Explicativo",
 }
 
-ASPECT_RATIOS = ["9:16", "16:9", "1:1", "3:4", "4:3"]
-RESOLUTIONS = ["720x1280", "1080x1920", "1920x1080", "3840x2160"]
+ASPECT_RATIOS = ["9:16", "16:9"]
+IMAGE_RESOLUTIONS = ["720x1280", "1280x720"]
+IMAGE_RESOLUTION_BY_ASPECT_RATIO = {
+    "9:16": "720x1280",
+    "16:9": "1280x720",
+}
+VIDEO_RESOLUTIONS = ["720p"]
+RESOLUTIONS = IMAGE_RESOLUTIONS
 AUDIO_MODES = {"dialogue_only"}
 MOCK_IMAGE_MODEL = "mock-image"
 MOCK_VIDEO_MODEL = "mock-video"
@@ -51,16 +57,53 @@ def _validate_allowed_model(value: object, field_name: str, allowed_models: tupl
     return model
 
 
+def normalize_video_resolution(value: object) -> str:
+    _ = value
+    return VIDEO_RESOLUTIONS[0]
+
+
+def normalize_image_aspect_ratio(value: object) -> str:
+    aspect_ratio = str(value or "").strip()
+    return aspect_ratio if aspect_ratio in IMAGE_RESOLUTION_BY_ASPECT_RATIO else "9:16"
+
+
+def normalize_image_resolution(value: object, aspect_ratio: object | None = "9:16") -> str:
+    has_explicit_aspect_ratio = bool(str(aspect_ratio or "").strip())
+    normalized_aspect_ratio = normalize_image_aspect_ratio(aspect_ratio)
+    expected_resolution = IMAGE_RESOLUTION_BY_ASPECT_RATIO[normalized_aspect_ratio]
+    text = str(value or "").strip().lower()
+    if text in {expected_resolution.lower(), expected_resolution.replace("x", " x ").lower()}:
+        return expected_resolution
+    if not has_explicit_aspect_ratio and text in {
+        "1920x1080",
+        "1920 x 1080",
+        "1280x720",
+        "1280 x 720",
+    }:
+        return IMAGE_RESOLUTION_BY_ASPECT_RATIO["16:9"]
+    return expected_resolution
+
+
 def _validated_production_payload(payload: dict) -> dict:
     validators = {
         "content_type": set(CONTENT_TYPES),
         "aspect_ratio": set(ASPECT_RATIOS),
-        "image_resolution": set(RESOLUTIONS),
-        "video_resolution": set(RESOLUTIONS),
+        "image_resolution": set(IMAGE_RESOLUTIONS),
         "workflow_mode": set(WORKFLOW_MODES),
         "audio_mode": AUDIO_MODES,
     }
     validated = dict(payload)
+    if "aspect_ratio" in validated:
+        validated["aspect_ratio"] = normalize_image_aspect_ratio(validated["aspect_ratio"])
+    if "image_resolution" in validated:
+        validated["image_resolution"] = normalize_image_resolution(
+            validated["image_resolution"],
+            validated.get("aspect_ratio"),
+        )
+    if "video_resolution" in validated:
+        validated["video_resolution"] = normalize_video_resolution(
+            validated["video_resolution"]
+        )
     for key, allowed_values in validators.items():
         if key in validated and validated[key] not in allowed_values:
             allowed = ", ".join(sorted(allowed_values))
