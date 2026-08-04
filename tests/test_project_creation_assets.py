@@ -21,6 +21,6 @@ test_character_reference_sheet_asset_is_available_only_for_characters = (
 test_visual_library_cards_ready_when_any_card_type_exists = (
     cases.test_visual_library_cards_ready_when_any_card_type_exists
 )
-test_visual_batch_requests_include_all_missing_views = (
-    cases.test_visual_batch_requests_include_all_missing_views
+test_visual_batch_requests_include_only_required_missing_views = (
+    cases.test_visual_batch_requests_include_only_required_missing_views
 )

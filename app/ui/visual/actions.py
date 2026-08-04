@@ -1,5 +1,7 @@
-﻿import asyncio
+import asyncio
+import inspect
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
@@ -21,6 +23,21 @@ from app.visual_bible.service import (
 )
 
 logger = logging.getLogger(__name__)
+VisualBatchProgressCallback = Callable[[int, int, str], Awaitable[None] | None]
+
+
+async def _emit_visual_batch_progress(
+    callback: VisualBatchProgressCallback | None,
+    completed: int,
+    total: int,
+    detail: str,
+) -> None:
+    if callback is None:
+        return
+    result = callback(completed, total, detail)
+    if inspect.isawaitable(result):
+        await result
+
 
 async def _approve_visual_target_from_ui(
     project_id: UUID,
@@ -250,6 +267,8 @@ async def _current_visual_batch_requests(project_id: UUID) -> list[tuple[str, UU
 async def _approve_all_visual_targets_from_ui(
     project_id: UUID,
     requests: list[tuple[str, UUID, list[str]]] | None = None,
+    *,
+    progress_callback: VisualBatchProgressCallback | None = None,
 ) -> None:
     try:
         current_requests = requests or await _current_visual_batch_requests(project_id)
@@ -260,12 +279,25 @@ async def _approve_all_visual_targets_from_ui(
             ui.navigate.reload()
             return
         semaphore = asyncio.Semaphore(2)
+        progress_lock = asyncio.Lock()
+        total_images = sum(len(view_types) for _kind, _id, view_types in current_requests)
+        completed_images = 0
+        await _emit_visual_batch_progress(
+            progress_callback,
+            0,
+            total_images,
+            f"{total_images} imagem(ns) aguardando geração.",
+        )
 
         async def generate_request(
             target_kind: str,
             target_id: UUID,
             view_types: list[str],
         ) -> tuple[int, bool, str | None]:
+            nonlocal completed_images
+            created_count = 0
+            failure: str | None = None
+            used_fallback = False
             try:
                 async with semaphore:
                     async with AsyncSessionLocal() as session:
@@ -283,14 +315,30 @@ async def _approve_all_visual_targets_from_ui(
                     target_id,
                     project_id,
                 )
-                return 0, False, f"{target_kind}/{target_id}: {exc}"
-
-            if references is None:
-                return 0, False, f"{target_kind}/{target_id}: ativo visual não encontrado"
-            used_fallback = any(
-                _visual_reference_used_fallback(reference) for reference in references
-            )
-            return len(references), used_fallback, None
+                failure = f"{target_kind}/{target_id}: {exc}"
+            else:
+                if references is None:
+                    failure = f"{target_kind}/{target_id}: ativo visual não encontrado"
+                else:
+                    created_count = len(references)
+                    used_fallback = any(
+                        _visual_reference_used_fallback(reference) for reference in references
+                    )
+            async with progress_lock:
+                completed_images += len(view_types)
+                pending_images = max(total_images - completed_images, 0)
+                detail = (
+                    f"{pending_images} imagem(ns) ainda faltam."
+                    if pending_images
+                    else "Todas as imagens solicitadas foram processadas."
+                )
+                await _emit_visual_batch_progress(
+                    progress_callback,
+                    completed_images,
+                    total_images,
+                    detail,
+                )
+            return created_count, used_fallback, failure
 
         results = await asyncio.gather(
             *(

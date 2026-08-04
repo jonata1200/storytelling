@@ -13,6 +13,9 @@ class StoryboardVideoViewModel:
     generated_count: int
     total_frames: int
     total_duration: int
+    queued_video_jobs: int
+    running_video_jobs: int
+    failed_video_jobs: int
 
 
 def build_storyboard_video_view_model(summary: dict[str, Any]) -> StoryboardVideoViewModel:
@@ -29,6 +32,12 @@ def build_storyboard_video_view_model(summary: dict[str, Any]) -> StoryboardVide
     total_duration = sum(
         int(getattr(frame, "duration_seconds", 0) or 0) for frame in sorted_frames
     )
+    video_jobs = list(summary.get("video_jobs", []))
+    status_counts: dict[str, int] = {}
+    for job in video_jobs:
+        raw_status = getattr(job, "status", "")
+        status = str(getattr(raw_status, "value", raw_status)).lower()
+        status_counts[status] = status_counts.get(status, 0) + 1
     return StoryboardVideoViewModel(
         sorted_frames=sorted_frames,
         pending_frames=pending_frames,
@@ -38,4 +47,7 @@ def build_storyboard_video_view_model(summary: dict[str, Any]) -> StoryboardVide
         generated_count=len(summary["clips"]),
         total_frames=len(sorted_frames),
         total_duration=total_duration,
+        queued_video_jobs=status_counts.get("pending", 0),
+        running_video_jobs=status_counts.get("running", 0),
+        failed_video_jobs=status_counts.get("failed", 0),
     )

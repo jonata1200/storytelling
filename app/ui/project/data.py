@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset
-from app.core.enums import ArtifactStatus
+from app.core.enums import ArtifactStatus, GenerationJobType
 from app.costs.service import project_cost_summary
 from app.database.session import AsyncSessionLocal
 from app.dubbing.models import DubbingJob
@@ -150,6 +150,18 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
         latest_dubbing_job = await latest(session, DubbingJob, project_id)
         latest_timeline = await latest(session, Timeline, project_id) if load_video else None
         execution_summary = await project_execution_summary(session, project_id)
+        video_jobs = []
+        if load_video:
+            video_jobs_result = await session.execute(
+                select(GenerationJob)
+                .where(
+                    GenerationJob.project_id == project_id,
+                    GenerationJob.job_type == GenerationJobType.VIDEO,
+                )
+                .order_by(GenerationJob.created_at.desc())
+                .limit(20)
+            )
+            video_jobs = list(video_jobs_result.scalars())
         timeline_items: list[TimelineItem] = []
         if latest_timeline is not None:
             item_result = await session.execute(
@@ -304,6 +316,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             "frames": frames,
             "storyboard_prompt_previews": storyboard_prompt_previews,
             "video_prompt_previews": video_prompt_previews,
+            "video_jobs": video_jobs,
             "clips": clips,
             "timeline": latest_timeline,
             "timeline_items": timeline_items,

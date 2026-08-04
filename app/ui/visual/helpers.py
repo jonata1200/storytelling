@@ -6,7 +6,7 @@ from uuid import UUID
 from app.assets.models import Asset
 from app.config.settings import get_settings
 from app.visual_bible.models import VisualReference
-from app.visual_bible.service import default_views_for
+from app.visual_bible.prompts import allowed_views_for
 
 
 def visual_reference_views_for(
@@ -22,7 +22,7 @@ def visual_reference_views_for(
 def visual_references_for(
     summary: dict[str, Any], target_kind: str, target_id: UUID
 ) -> list[VisualReference]:
-    view_order = {view: index for index, view in enumerate(default_views_for(target_kind))}
+    view_order = {view: index for index, view in enumerate(allowed_views_for(target_kind))}
     references = [
         reference
         for reference in summary["visual_refs"]

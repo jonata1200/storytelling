@@ -1,6 +1,8 @@
-﻿from app.visual_bible.profiles import _clean_prompt_fragment, _prompt_text
+from app.visual_bible.profiles import _clean_prompt_fragment, _prompt_text
 
-CHARACTER_VIEWS = ["front_portrait", "character_reference_sheet"]
+CHARACTER_REQUIRED_VIEWS = ["front_portrait"]
+CHARACTER_OPTIONAL_VIEWS = ["character_reference_sheet"]
+CHARACTER_VIEWS = CHARACTER_REQUIRED_VIEWS + CHARACTER_OPTIONAL_VIEWS
 LOCATION_VIEWS = ["establishing"]
 PROP_VIEWS = ["front"]
 VIEW_PROMPT_DETAILS = {
@@ -72,6 +74,14 @@ VIEW_PROMPT_DETAILS = {
 
 def default_views_for(target_kind: str) -> list[str]:
     return {
+        "character": CHARACTER_REQUIRED_VIEWS,
+        "location": LOCATION_VIEWS,
+        "prop": PROP_VIEWS,
+    }[target_kind]
+
+
+def allowed_views_for(target_kind: str) -> list[str]:
+    return {
         "character": CHARACTER_VIEWS,
         "location": LOCATION_VIEWS,
         "prop": PROP_VIEWS,
@@ -79,9 +89,9 @@ def default_views_for(target_kind: str) -> list[str]:
 
 
 def validated_visual_reference_views(target_kind: str, view_types: list[str] | None) -> list[str]:
-    allowed = default_views_for(target_kind)
+    allowed = allowed_views_for(target_kind)
     if view_types is None:
-        return allowed
+        return default_views_for(target_kind)
     invalid = [view for view in view_types if view not in allowed]
     if invalid:
         raise ValueError(

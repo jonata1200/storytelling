@@ -41,7 +41,81 @@ from app.visual_bible.service import (
 
 VISUAL_LIBRARY_TAB_DEFAULT = "characters"
 VISUAL_LIBRARY_TAB_KEYS = {"characters", "locations", "props"}
+CHARACTER_REFERENCE_SHEET_VIEW = "character_reference_sheet"
 ReferenceAsset = tuple[VisualReference, Asset, str]
+
+
+def _progress_ratio(done: int, total: int) -> float:
+    return min(max(done / total, 0.0), 1.0) if total else 0.0
+
+
+def _visual_reference_progress_for(
+    summary: dict[str, Any],
+    target_kind: str,
+    items: list[Any],
+) -> dict[str, int]:
+    required_views = default_views_for(target_kind)
+    expected = len(items) * len(required_views)
+    generated = 0
+    for item in items:
+        existing_views = _visual_reference_views_for(summary, target_kind, item.id)
+        generated += sum(1 for view in required_views if view in existing_views)
+    return {
+        "generated": generated,
+        "expected": expected,
+        "missing": max(expected - generated, 0),
+    }
+
+
+def _visual_reference_progress_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    by_kind = {
+        "characters": _visual_reference_progress_for(
+            summary, "character", summary["characters"]
+        ),
+        "locations": _visual_reference_progress_for(summary, "location", summary["locations"]),
+        "props": _visual_reference_progress_for(summary, "prop", summary["props"]),
+    }
+    generated = sum(item["generated"] for item in by_kind.values())
+    expected = sum(item["expected"] for item in by_kind.values())
+    return {
+        "generated": generated,
+        "expected": expected,
+        "missing": max(expected - generated, 0),
+        "by_kind": by_kind,
+    }
+
+
+def _render_visual_progress_summary(summary: dict[str, Any]) -> None:
+    progress = _visual_reference_progress_summary(summary)
+    expected = progress["expected"]
+    generated = progress["generated"]
+    missing = progress["missing"]
+    labels = {
+        "characters": "Personagens",
+        "locations": "Locais",
+        "props": "Objetos",
+    }
+    with ui.element("div").classes(
+        "w-full border border-[#2d332e] rounded-xl px-4 py-3 bg-[#111511] mb-2"
+    ):
+        with ui.row().classes("w-full items-center justify-between gap-3"):
+            with ui.column().classes("gap-0"):
+                ui.label(f"Referências obrigatórias: {generated}/{expected}").classes(
+                    "text-sm font-semibold text-[#d8dbd8]"
+                )
+                ui.label(f"Faltam {missing} imagem(ns).").classes("text-xs text-[#8d938e]")
+            ui.badge("pronto" if missing == 0 and expected else "pendente").classes(
+                "bg-[#26301f] text-[#eaf878]" if missing == 0 and expected else "bg-[#243342]"
+            )
+        ui.linear_progress(value=_progress_ratio(generated, expected)).classes(
+            "w-full mt-3"
+        ).props("instant-feedback rounded")
+        with ui.row().classes("w-full gap-2 mt-3"):
+            for key, label in labels.items():
+                item = progress["by_kind"][key]
+                ui.badge(f"{label}: {item['generated']}/{item['expected']}").classes(
+                    "bg-[#20251f] text-[#c9cec9]"
+                )
 
 
 def _visual_library_tab_storage_key(project_id: UUID) -> str:
@@ -153,9 +227,23 @@ def _entity_card(
             view for view in default_views_for(target_kind) if view not in existing_views
         ]
         approval_label = "Aprovar vistas"
+    required_views = default_views_for(target_kind)
+    required_generated = sum(1 for view in required_views if view in existing_views)
+    required_expected = len(required_views)
+    optional_sheet_views = (
+        [CHARACTER_REFERENCE_SHEET_VIEW]
+        if target_kind == "character"
+        and initial_view_for(target_kind) in existing_views
+        and CHARACTER_REFERENCE_SHEET_VIEW not in existing_views
+        else []
+    )
     prompt_previews = [
         (view_type, visual_reference_prompt(profile, view_type))
         for view_type in requested_views
+    ]
+    optional_sheet_prompt_previews = [
+        (view_type, visual_reference_prompt(profile, view_type))
+        for view_type in optional_sheet_views
     ]
     current_prompt = str(profile.get("canonical_prompt") or title).strip()
     reference_assets: list[ReferenceAsset] = [
@@ -273,6 +361,20 @@ def _entity_card(
         with ui.column().classes("p-4 gap-2"):
             ui.label(title).classes("brand-type text-xl font-bold")
             ui.label(subtitle).classes("text-xs acid uppercase tracking-wide")
+            with ui.row().classes("w-full items-center justify-between gap-2"):
+                ui.label(
+                    f"Referência obrigatória: {required_generated}/{required_expected}"
+                ).classes("text-xs text-[#c6cbc6]")
+                if target_kind == "character":
+                    sheet_status = (
+                        "múltiplas vistas pronta"
+                        if CHARACTER_REFERENCE_SHEET_VIEW in existing_views
+                        else "múltiplas vistas opcional"
+                    )
+                    ui.badge(sheet_status).classes("bg-[#20251f] text-[#c9cec9]")
+            ui.linear_progress(
+                value=_progress_ratio(required_generated, required_expected)
+            ).classes("w-full").props("instant-feedback rounded")
             ui.label(detail).classes("text-sm text-[#999f9a] line-clamp-2")
             with ui.dialog().props(BLOCKING_DIALOG_PROPS) as prompt_dialog, ui.card().classes(
                 "entity-card rounded-2xl p-6 w-[min(760px,92vw)] max-h-[82vh]"
@@ -320,6 +422,52 @@ def _entity_card(
                     ).props("unelevated no-caps").classes("acid-bg rounded-xl")
                     if not prompt_previews:
                         confirm_button.props("disable")
+            with (
+                ui.dialog().props(BLOCKING_DIALOG_PROPS) as optional_sheet_dialog,
+                ui.card().classes("entity-card rounded-2xl p-6 w-[min(760px,92vw)] max-h-[82vh]"),
+            ):
+                ui.label("Gerar múltiplas vistas").classes("brand-type text-2xl font-bold")
+                with ui.scroll_area().classes("w-full max-h-[52vh] pr-2"):
+                    with ui.column().classes("w-full gap-3"):
+                        for view_type, prompt in optional_sheet_prompt_previews:
+                            with ui.element("div").classes(
+                                "border border-[#343934] rounded-xl p-4"
+                            ):
+                                ui.label(view_type).classes("text-xs acid uppercase")
+                                ui.label(prompt).classes(
+                                    "text-sm text-[#d8dbd8] whitespace-pre-wrap"
+                                )
+                        if not optional_sheet_prompt_previews:
+                            ui.label("A folha de múltiplas vistas já foi criada.").classes(
+                                "text-sm text-[#8d938e]"
+                            )
+
+                async def confirm_optional_sheet(
+                    views: list[str] = optional_sheet_views,
+                ) -> None:
+                    optional_sheet_dialog.close()
+                    loading_dialog.open()
+                    try:
+                        await _approve_visual_target_from_ui(
+                            project_id,
+                            target_kind,
+                            target_id,
+                            views,
+                        )
+                    finally:
+                        loading_dialog.close()
+
+                with ui.row().classes("w-full justify-end gap-2 mt-3"):
+                    ui.button("Cancelar", on_click=optional_sheet_dialog.close).props(
+                        "flat no-caps"
+                    )
+                    optional_button = ui.button(
+                        "Gerar imagem",
+                        icon="view_carousel",
+                        on_click=confirm_optional_sheet,
+                    ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                    if not optional_sheet_prompt_previews:
+                        optional_button.props("disable")
             with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_prompt_dialog, ui.card().classes(
                 "entity-card rounded-2xl p-6 w-[min(760px,92vw)]"
             ):
@@ -383,6 +531,12 @@ def _entity_card(
                         icon="refresh",
                         on_click=regenerate_hero_reference,
                     ).props("flat dense no-caps").classes("text-[#d8dbd8]")
+                if optional_sheet_prompt_previews:
+                    ui.button(
+                        "Múltiplas vistas",
+                        icon="view_carousel",
+                        on_click=optional_sheet_dialog.open,
+                    ).props("flat dense no-caps").classes("text-[#d8dbd8]")
 
 
 def render_assets_area(
@@ -410,10 +564,20 @@ def render_assets_area(
                 target_profiles[(target_kind, item.id)] = getattr(
                     item, "canonical_profile", {}
                 ) or {}
-        batch_loading_dialog = loading_dialog_factory(
-            "Gerando imagens",
-            "A IA está criando as imagens aprovadas da Biblioteca Visual.",
-        )
+        batch_total = sum(len(view_types) for _kind, _id, view_types in batch_requests)
+        with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_loading_dialog, ui.card().classes(
+            "entity-card rounded-2xl p-6 w-[min(520px,92vw)]"
+        ):
+            with ui.column().classes("w-full items-center gap-4"):
+                ui.spinner(size="lg").classes("acid")
+                ui.label("Gerando imagens").classes("brand-type text-2xl font-bold")
+                batch_progress_label = ui.label(f"0/{batch_total} imagem(ns) processada(s)")
+                batch_progress_label.classes("text-sm text-[#d8dbd8]")
+                batch_progress_bar = ui.linear_progress(value=0).classes("w-full")
+                batch_progress_bar.props("instant-feedback rounded")
+                batch_progress_detail = ui.label(
+                    "A IA está criando as imagens aprovadas da Biblioteca Visual."
+                ).classes("text-xs text-[#8d938e] text-center")
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_prompt_dialog, ui.card().classes(
             "entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"
         ):
@@ -437,8 +601,20 @@ def render_assets_area(
             async def confirm_batch_prompts() -> None:
                 batch_prompt_dialog.close()
                 batch_loading_dialog.open()
+
+                def update_batch_progress(completed: int, total: int, detail: str) -> None:
+                    safe_total = max(total, 1)
+                    batch_progress_label.set_text(
+                        f"{completed}/{total} imagem(ns) processada(s)"
+                    )
+                    batch_progress_bar.set_value(_progress_ratio(completed, safe_total))
+                    batch_progress_detail.set_text(detail)
+
                 try:
-                    await _approve_all_visual_targets_from_ui(project_id)
+                    await _approve_all_visual_targets_from_ui(
+                        project_id,
+                        progress_callback=update_batch_progress,
+                    )
                 finally:
                     batch_loading_dialog.close()
 
@@ -480,6 +656,8 @@ def render_assets_area(
                 icon="check_circle",
                 on_click=batch_prompt_dialog.open,
             ).props("unelevated no-caps").classes("acid-bg rounded-xl shrink-0")
+    if not prompts_need_generation:
+        _render_visual_progress_summary(summary)
     active_tab = _read_visual_library_active_tab(project_id)
     with ui.tabs(value=cast(Any, active_tab)).classes("text-[#8d938e] mt-1") as tabs:
         people = ui.tab("characters", "Personagens")

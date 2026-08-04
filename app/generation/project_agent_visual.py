@@ -15,6 +15,7 @@ from app.generation.project_agent_types import (
     _emit_progress,
 )
 from app.visual_bible.models import Character, Location, Prop, VisualReference
+from app.visual_bible.prompts import allowed_views_for
 from app.visual_bible.service import (
     approve_visual_target_and_generate_views,
     default_views_for,
@@ -190,7 +191,7 @@ async def _approve_visual_prompt_from_chat(
         existing_views = await visual_reference_views_for_target(session, project_id, target)
         if _requests_all_visual_views(message):
             view_types = [
-                view for view in default_views_for(target.kind) if view not in existing_views
+                view for view in allowed_views_for(target.kind) if view not in existing_views
             ]
         elif not existing_views:
             view_types = [initial_view_for(target.kind)]

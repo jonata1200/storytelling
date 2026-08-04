@@ -32,10 +32,13 @@ from app.visual_bible.service import (
 )
 
 
-def test_default_character_views_include_required_reference_sheet_items() -> None:
+def test_default_character_views_include_only_required_initial_reference() -> None:
     views = default_views_for("character")
 
-    assert views == ["front_portrait", "character_reference_sheet"]
+    assert views == ["front_portrait"]
+    assert validated_visual_reference_views("character", ["character_reference_sheet"]) == [
+        "character_reference_sheet"
+    ]
 
 
 def test_provider_502_is_treated_as_transient_image_provider_error() -> None:

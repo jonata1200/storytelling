@@ -959,7 +959,7 @@ def test_visual_prompts_need_generation_when_any_prompt_is_missing() -> None:
     )
 
 
-def test_visual_batch_requests_include_all_missing_views() -> None:
+def test_visual_batch_requests_include_only_required_missing_views() -> None:
     character_id = uuid4()
     location_id = uuid4()
     prop_id = uuid4()
@@ -979,11 +979,6 @@ def test_visual_batch_requests_include_all_missing_views() -> None:
     requests = pages._visual_batch_requests(summary)
 
     assert requests == [
-        (
-            "character",
-            character_id,
-            ["character_reference_sheet"],
-        ),
         ("location", location_id, ["establishing"]),
         ("prop", prop_id, ["front"]),
     ]
@@ -1137,7 +1132,7 @@ def test_storyboard_section_waits_for_all_visual_references() -> None:
         "characters": 2,
         "locations": 1,
         "props": 1,
-        "visual_refs": 5,
+        "visual_refs": 3,
         "frames": 0,
         "animatics": 0,
         "clips": 0,
@@ -1162,7 +1157,7 @@ def test_storyboard_section_waits_for_scenes_and_shots() -> None:
         "characters": 2,
         "locations": 1,
         "props": 1,
-        "visual_refs": 6,
+        "visual_refs": 4,
         "frames": 0,
         "animatics": 0,
         "clips": 0,
@@ -1187,7 +1182,7 @@ def test_storyboard_section_unlocks_after_visual_references_are_complete() -> No
         "characters": 2,
         "locations": 1,
         "props": 1,
-        "visual_refs": 6,
+        "visual_refs": 4,
         "frames": 0,
         "animatics": 0,
         "clips": 0,

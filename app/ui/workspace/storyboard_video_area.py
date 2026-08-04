@@ -167,6 +167,36 @@ def _video_clip_asset_url(clip: Any) -> str:
     return f"/api/v1/assets/{asset_id}/content"
 
 
+def _progress_ratio(done: int, total: int) -> float:
+    return min(max(done / total, 0.0), 1.0) if total else 0.0
+
+
+def _render_generation_progress_summary(
+    title: str,
+    generated: int,
+    total: int,
+    missing: int,
+    detail: str,
+    *,
+    badge: str | None = None,
+) -> None:
+    with ui.element("div").classes(
+        "w-full border border-[#2d332e] rounded-xl px-4 py-3 bg-[#111511] mb-3"
+    ):
+        with ui.row().classes("w-full items-center justify-between gap-3"):
+            with ui.column().classes("gap-0"):
+                ui.label(f"{title}: {generated}/{total}").classes(
+                    "text-sm font-semibold text-[#d8dbd8]"
+                )
+                ui.label(f"Faltam {missing}. {detail}").classes("text-xs text-[#8d938e]")
+            ui.badge(badge or ("pronto" if missing == 0 and total else "pendente")).classes(
+                "bg-[#26301f] text-[#eaf878]" if missing == 0 and total else "bg-[#243342]"
+            )
+        ui.linear_progress(value=_progress_ratio(generated, total)).classes(
+            "w-full mt-3"
+        ).props("instant-feedback rounded")
+
+
 def render_storyboard_area(
     project_id: UUID,
     summary: dict[str, Any],
@@ -263,6 +293,21 @@ def render_storyboard_area(
             "Planeje enquadramentos e ritmo antes de gerar os clipes.",
             None,
             None,
+        )
+    storyboard_total = len(prompt_previews) or len(summary["frames"])
+    storyboard_generated = (
+        sum(1 for preview in prompt_previews if bool(preview.get("generated")))
+        if prompt_previews
+        else len(summary["frames"])
+    )
+    storyboard_missing = max(storyboard_total - storyboard_generated, 0)
+    if storyboard_total:
+        _render_generation_progress_summary(
+            "Quadros do storyboard",
+            storyboard_generated,
+            storyboard_total,
+            storyboard_missing,
+            f"{len(pending_prompt_previews)} prompt(s) pendente(s).",
         )
     if script_id is not None and prompt_previews and not pending_prompt_previews:
         with ui.row().classes("w-full items-center justify-end gap-2 mb-2"):
@@ -485,6 +530,7 @@ def render_video_area(
     frame_by_id = view_model.frame_by_id
     generated_count = view_model.generated_count
     total_frames = view_model.total_frames
+    active_video_job_count = view_model.queued_video_jobs + view_model.running_video_jobs
     timeline = summary["timeline"]
     total_duration = view_model.total_duration
     loading_dialog = (
@@ -495,6 +541,26 @@ def render_video_area(
         if loading_dialog_factory is not None
         else None
     )
+    video_missing = max(total_frames - generated_count, 0)
+    if total_frames:
+        video_detail = "Saída padronizada em 720p."
+        if active_video_job_count:
+            video_detail = (
+                f"{active_video_job_count} job(s) em fila/processando. "
+                "Saída padronizada em 720p."
+            )
+        if view_model.failed_video_jobs:
+            video_detail = (
+                f"{video_detail} {view_model.failed_video_jobs} job(s) com falha recente."
+            )
+        _render_generation_progress_summary(
+            "Clipes de vídeo",
+            generated_count,
+            total_frames,
+            video_missing,
+            video_detail,
+            badge="720p",
+        )
 
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
