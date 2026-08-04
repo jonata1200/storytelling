@@ -30,7 +30,6 @@ def _log_ai_background_failure(message: str, identifier: UUID, exc: Exception) -
         "demorou mais",
         "timeout",
         "timed out",
-        "omniroute",
         "rate limit",
         "429",
         "network",

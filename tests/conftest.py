@@ -19,20 +19,12 @@ PROVIDER_TEST_FILES = {
     "test_mock_llm_provider.py",
     "test_mock_speech_provider.py",
     "test_mock_video_provider.py",
-    "test_omniroute_provider.py",
-    "test_omniroute_smoke.py",
-    "test_omniroute_video_speech_smoke.py",
-    "test_omniroute_video_speech.py",
     "test_prompt_compiler.py",
-    "test_speech_provider.py",
     "test_visual_bible.py",
     "test_visual_bible_script_profiles.py",
 }
 
-SMOKE_TEST_FILES = {
-    "test_omniroute_smoke.py",
-    "test_omniroute_video_speech_smoke.py",
-}
+SMOKE_TEST_FILES: set[str] = set()
 
 UI_TEST_FILES = {
     "test_auth.py",

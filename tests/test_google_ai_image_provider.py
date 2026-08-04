@@ -46,7 +46,7 @@ async def test_google_ai_image_provider_generates_and_saves_image(
             {
                 "output_image": {
                     "data": encoded_image,
-                    "mime_type": "image/png",
+                    "mime_type": "image/jpeg",
                 },
                 "usage": {"cost": "0.03"},
             }
@@ -82,12 +82,13 @@ async def test_google_ai_image_provider_generates_and_saves_image(
     assert captured["body"]["input"][1]["mime_type"] == "image/png"
     assert captured["body"]["response_format"] == {
         "type": "image",
-        "mime_type": "image/png",
+        "mime_type": "image/jpeg",
         "aspect_ratio": "16:9",
         "image_size": "4K",
     }
     assert result.file_path.read_bytes() == image_bytes
-    assert result.content_type == "image/png"
+    assert result.file_path.suffix == ".jpg"
+    assert result.content_type == "image/jpeg"
     assert result.provider == "google_ai"
     assert result.estimated_cost == "0.03"
 

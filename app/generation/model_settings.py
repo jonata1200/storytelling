@@ -34,8 +34,6 @@ TASK_LABELS = {
 
 
 def llm_provider_for_name(settings: Any, provider: str) -> LLMProvider:
-    if provider in {"omniroute", "opencode", "ollama", "groq"}:
-        provider = "ollama_cloud"
     if provider == "ollama_cloud":
         ensure_provider_api_key(
             settings.ollama_cloud_api_key,

@@ -40,12 +40,12 @@ def test_redact_mapping_masks_nested_secret_values() -> None:
     assert "secret" not in redacted["nested"]["message"]
 
 
-def test_redact_secrets_masks_omniroute_api_key_assignments() -> None:
-    text = "Authorization: Bearer omni-secret-token OMNIROUTE_API_KEY=another-secret"
+def test_redact_secrets_masks_provider_api_key_assignments() -> None:
+    text = "Authorization: Bearer provider-secret-token PROVIDER_API_KEY=another-secret"
 
     redacted = redact_secrets(text)
 
-    assert "omni-secret-token" not in redacted
+    assert "provider-secret-token" not in redacted
     assert "another-secret" not in redacted
     assert "[REDACTED]" in redacted
 
@@ -90,7 +90,7 @@ def test_provider_channel_readiness_uses_standard_google_model_when_config_is_em
 
 def test_provider_channel_readiness_reports_no_text_fallbacks() -> None:
     settings = Settings(
-        ai_provider="omniroute",
+        ai_provider="ollama_cloud",
         text_provider="ollama_cloud",
         text_provider_fallbacks="",
         ollama_cloud_api_key="ollama-secret",
@@ -107,7 +107,7 @@ def test_provider_channel_readiness_reports_no_text_fallbacks() -> None:
 
 def test_provider_channel_readiness_reports_missing_ollama_key() -> None:
     settings = Settings(
-        ai_provider="omniroute",
+        ai_provider="ollama_cloud",
         text_provider="ollama_cloud",
         ollama_cloud_api_key=None,
         ollama_cloud_default_model="deepseek-v4-flash:cloud",
@@ -230,7 +230,7 @@ async def test_emit_project_event_persists_redacted_correlation_context(
                 project_id=uuid4(),
                 event_type="provider_call",
                 status="failed",
-                provider="omniroute",
+                provider="ollama_cloud",
                 model="vendor/model",
                 operation="text_generation",
                 estimated_cost=Decimal("0.25"),
@@ -243,14 +243,14 @@ async def test_emit_project_event_persists_redacted_correlation_context(
 
     assert session.added == [event]
     assert event.correlation_id == "cid-test"
-    assert event.provider == "omniroute"
+    assert event.provider == "ollama_cloud"
     assert event.model == "vendor/model"
     assert event.operation == "text_generation"
     assert "sk-or-secret-token" not in event.message
     assert event.details["api_key"] == "[REDACTED]"
     assert "hidden" not in event.details["reason"]
     record = next(item for item in caplog.records if item.message == "operational_event")
-    assert record.__dict__["provider"] == "omniroute"
+    assert record.__dict__["provider"] == "ollama_cloud"
     assert record.__dict__["model"] == "vendor/model"
     assert record.__dict__["operation"] == "text_generation"
 
@@ -262,7 +262,7 @@ async def test_project_execution_summary_groups_prompts_and_redacts_jobs() -> No
     first = PromptExecution(
         id=uuid4(),
         project_id=project_id,
-        provider="omniroute",
+        provider="ollama_cloud",
         model="writer/model",
         prompt="prompt",
         variables={},
@@ -275,7 +275,7 @@ async def test_project_execution_summary_groups_prompts_and_redacts_jobs() -> No
     second = PromptExecution(
         id=uuid4(),
         project_id=project_id,
-        provider="omniroute",
+        provider="ollama_cloud",
         model="writer/model",
         prompt="prompt",
         variables={},
@@ -293,7 +293,7 @@ async def test_project_execution_summary_groups_prompts_and_redacts_jobs() -> No
         progress=100,
         attempts=1,
         max_attempts=3,
-        provider="omniroute",
+        provider="ollama_cloud",
         model="writer/model",
         idempotency_key="job-key",
         request_payload={"step": "script", "payload": {"api_key": "secret-token"}},

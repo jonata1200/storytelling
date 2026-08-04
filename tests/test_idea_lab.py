@@ -124,7 +124,7 @@ async def _fake_idea_generation(provider: object, request: LLMRequest) -> LLMRes
             ]
         },
         model=request.model,
-        provider="omniroute",
+        provider="ollama_cloud",
     )
 
 
@@ -211,14 +211,14 @@ async def test_generate_freeform_ideas_requires_ollama_cloud_key(
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_reports_omniroute_failure(
+async def test_generate_freeform_ideas_reports_provider_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class FailingOmniRouteProvider:
-        provider_name = "omniroute"
+    class FailingProvider:
+        provider_name = "ollama_cloud"
 
         async def generate_structured(self, request: object) -> NoReturn:
-            raise RuntimeError("OmniRoute HTTP 429: rate limit")
+            raise RuntimeError("Provider HTTP 429: rate limit")
 
     monkeypatch.setattr(
         idea_lab,
@@ -232,7 +232,7 @@ async def test_generate_freeform_ideas_reports_omniroute_failure(
     monkeypatch.setattr(
         idea_lab,
         "configured_text_llm_provider",
-        lambda settings: (FailingOmniRouteProvider(), "provider/text-model", "omniroute"),
+        lambda settings: (FailingProvider(), "provider/text-model", "ollama_cloud"),
     )
 
     with pytest.raises(RuntimeError, match="Não foi possível gerar ideias"):
@@ -240,11 +240,11 @@ async def test_generate_freeform_ideas_reports_omniroute_failure(
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_reports_omniroute_timeout(
+async def test_generate_freeform_ideas_reports_provider_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class SlowOmniRouteProvider:
-        provider_name = "omniroute"
+    class SlowProvider:
+        provider_name = "ollama_cloud"
 
         async def generate_structured(self, request: LLMRequest) -> LLMResult:
             await asyncio.sleep(0.05)
@@ -262,7 +262,7 @@ async def test_generate_freeform_ideas_reports_omniroute_timeout(
     monkeypatch.setattr(
         idea_lab,
         "configured_text_llm_provider",
-        lambda settings: (SlowOmniRouteProvider(), "provider/text-model", "omniroute"),
+        lambda settings: (SlowProvider(), "provider/text-model", "ollama_cloud"),
     )
     monkeypatch.setattr(idea_lab, "IDEA_PROVIDER_TIMEOUT_SECONDS", 0.001)
 
@@ -275,7 +275,7 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class InvalidThenValidProvider:
-        provider_name = "omniroute"
+        provider_name = "ollama_cloud"
 
         def __init__(self) -> None:
             self.prompts: list[str] = []
@@ -343,7 +343,7 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     monkeypatch.setattr(
         idea_lab,
         "configured_text_llm_provider",
-        lambda settings: (provider, "provider/text-model", "omniroute"),
+        lambda settings: (provider, "provider/text-model", "ollama_cloud"),
     )
 
     ideas = await generate_freeform_ideas(count=1, genre="Suspense")
@@ -355,11 +355,11 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_keeps_partial_valid_omniroute_response(
+async def test_generate_freeform_ideas_keeps_partial_valid_provider_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class PartialProvider:
-        provider_name = "omniroute"
+        provider_name = "ollama_cloud"
 
         async def generate_structured(self, request: LLMRequest) -> LLMResult:
             return LLMResult(
@@ -406,7 +406,7 @@ async def test_generate_freeform_ideas_keeps_partial_valid_omniroute_response(
     monkeypatch.setattr(
         idea_lab,
         "configured_text_llm_provider",
-        lambda settings: (PartialProvider(), "provider/text-model", "omniroute"),
+        lambda settings: (PartialProvider(), "provider/text-model", "ollama_cloud"),
     )
 
     ideas = await generate_freeform_ideas(count=3, genre="Drama")

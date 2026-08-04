@@ -159,7 +159,7 @@ def friendly_ai_error(exc: BaseException) -> str:
             "O modelo escolhido não está disponível para a sua chave ou conta do provider. "
             "Escolha outro modelo nas configurações ou habilite esse modelo no provider."
         )
-    if "omniroute" in normalized and (
+    if (
         "network" in normalized
         or "connection" in normalized
         or "dns" in normalized

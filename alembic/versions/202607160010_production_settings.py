@@ -1,7 +1,7 @@
 """production settings
 
 Revision ID: 202607160010
-Revises: 202607160009
+Revises: 202607160008
 Create Date: 2026-07-16
 """
 
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "202607160010"
-down_revision: str | None = "202607160009"
+down_revision: str | None = "202607160008"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -29,8 +29,18 @@ def upgrade() -> None:
         sa.Column("image_resolution", sa.String(length=40), nullable=False),
         sa.Column("video_resolution", sa.String(length=40), nullable=False),
         sa.Column("workflow_mode", sa.String(length=80), nullable=False),
-        sa.Column("image_model", sa.String(length=160), nullable=False),
-        sa.Column("video_model", sa.String(length=160), nullable=False),
+        sa.Column(
+            "image_model",
+            sa.String(length=160),
+            server_default="gemini-3.1-flash-lite-image",
+            nullable=False,
+        ),
+        sa.Column(
+            "video_model",
+            sa.String(length=160),
+            server_default="veo-3.1-fast-generate-preview",
+            nullable=False,
+        ),
         sa.Column("audio_mode", sa.String(length=80), nullable=False),
         sa.Column("motion_intensity", sa.Integer(), nullable=False),
         sa.Column("metadata_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False),

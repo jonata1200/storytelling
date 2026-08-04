@@ -16,6 +16,7 @@ from app.providers.image.types import ImageEditRequest, ImageGenerationRequest, 
 from app.providers.media_utils import data_url_parts, extension_from_media_type
 
 DEFAULT_GOOGLE_AI_IMAGE_TIMEOUT_SECONDS = 360
+GOOGLE_AI_IMAGE_RESPONSE_MIME_TYPE = "image/jpeg"
 
 
 class GoogleAIImageProvider:
@@ -85,7 +86,7 @@ class GoogleAIImageProvider:
             )
         response_format: dict[str, Any] = {
             "type": "image",
-            "mime_type": "image/png",
+            "mime_type": GOOGLE_AI_IMAGE_RESPONSE_MIME_TYPE,
             "aspect_ratio": self._normalized_aspect_ratio(request.aspect_ratio),
             "image_size": self._image_size(request.resolution),
         }
@@ -190,7 +191,7 @@ class GoogleAIImageProvider:
                 candidate.get("mime_type")
                 or candidate.get("mimeType")
                 or candidate.get("media_type")
-                or "image/png"
+                or GOOGLE_AI_IMAGE_RESPONSE_MIME_TYPE
             )
             try:
                 return base64.b64decode(encoded.encode("ascii"), validate=True), media_type

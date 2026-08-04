@@ -187,7 +187,11 @@ Variáveis principais:
 APP_ENV=local
 APP_DEBUG=true
 APP_SECRET_KEY=change-me-in-development
-DATABASE_URL=postgresql+asyncpg://storytelling:storytelling@localhost:5432/storytelling
+POSTGRES_HOST=127.0.0.1
+POSTGRES_PORT=5433
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+DATABASE_URL=postgresql+asyncpg://storytelling:storytelling@localhost:5433/storytelling
 REDIS_URL=redis://localhost:6379/0
 ALLOW_USER_REGISTRATION=true
 SINGLE_USER_MODE=true

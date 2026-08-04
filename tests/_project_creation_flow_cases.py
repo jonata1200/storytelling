@@ -559,8 +559,8 @@ def test_asset_url_maps_storage_prefixed_relative_path(
         lambda: SimpleNamespace(local_storage_path=storage_root),
     )
 
-    assert _asset_url("storage/OmniRoute_images/project-1/front view.png") == (
-        "/storage/OmniRoute_images/project-1/front%20view.png"
+    assert _asset_url("storage/google_ai_images/project-1/front view.png") == (
+        "/storage/google_ai_images/project-1/front%20view.png"
     )
 
 

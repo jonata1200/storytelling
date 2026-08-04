@@ -36,7 +36,7 @@ async def test_readiness_dashboard_degrades_without_redis_and_providers(
 
     dashboard = await observability_service.readiness_dashboard(
         _ReadySession(),  # type: ignore[arg-type]
-        Settings(ai_provider="omniroute", omniroute_api_key=None, speech_api_key=None),
+        Settings(ai_provider="ollama_cloud", ollama_cloud_api_key=None),
     )
 
     statuses = {component.name: component.status for component in dashboard.components}

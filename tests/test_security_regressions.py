@@ -69,21 +69,8 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     path = tmp_path / "preferences.json"
     save_runtime_preferences({"USER_THEME": "light"}, path)
     assert load_runtime_preferences(path) == {"user_theme": "light"}
-    save_runtime_preferences(
-        {
-            "AI_PROVIDER": "omniroute",
-            "OMNIROUTE_BASE_URL": "http://localhost:20128/v1",
-            "OMNIROUTE_SPEECH_MODEL": "tts-model",
-        },
-        path,
-    )
-    preferences = load_runtime_preferences(path)
-    assert preferences["ai_provider"] == "omniroute"
-    assert preferences["omniroute_base_url"] == "http://localhost:20128/v1"
-    assert preferences["omniroute_speech_model"] == "tts-model"
-
-    save_runtime_preferences({"OMNIROUTE_API_KEY": "secret"}, path)
-    assert load_runtime_preferences(path)["omniroute_api_key"] == "secret"
+    save_runtime_preferences({"AI_PROVIDER": "ollama_cloud"}, path)
+    assert load_runtime_preferences(path)["ai_provider"] == "ollama_cloud"
     save_runtime_preferences(
         {
             "TEXT_PROVIDER_FALLBACKS": "",
@@ -92,6 +79,8 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
             "GOOGLE_AI_API_KEY": "google-secret",
             "GOOGLE_AI_IMAGE_MODEL": "gemini-3.1-flash-lite-image",
             "GOOGLE_AI_VIDEO_MODEL": "veo-3.1-fast-generate-preview",
+            "SPEECH_PROVIDER": "elevenlabs",
+            "SPEECH_TIMEOUT_SECONDS": "120",
             "ELEVENLABS_API_KEY": "eleven-secret",
             "ELEVENLABS_VOICE_ID": "voice-1",
             "ELEVENLABS_SPEECH_MODEL": "eleven_multilingual_v2",
@@ -106,6 +95,8 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     assert preferences["google_ai_api_key"] == "google-secret"
     assert preferences["google_ai_image_model"] == "gemini-3.1-flash-lite-image"
     assert preferences["google_ai_video_model"] == "veo-3.1-fast-generate-preview"
+    assert preferences["speech_provider"] == "elevenlabs"
+    assert preferences["speech_timeout_seconds"] == "120"
     assert preferences["elevenlabs_api_key"] == "eleven-secret"
     assert preferences["elevenlabs_voice_id"] == "voice-1"
     assert preferences["elevenlabs_speech_model"] == "eleven_multilingual_v2"
@@ -113,7 +104,7 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     with pytest.raises(ValueError, match="not allowed"):
         save_runtime_preferences({"DATABASE_URL": "attacker"}, path)
     with pytest.raises(ValueError, match="control character"):
-        save_runtime_preferences({"OmniRoute_DEFAULT_MODEL": "mock\nAPP_DEBUG=true"}, path)
+        save_runtime_preferences({"OLLAMA_CLOUD_DEFAULT_MODEL": "mock\nAPP_DEBUG=true"}, path)
 
 
 def test_runtime_json_corruption_falls_back_safely(tmp_path: Path) -> None:

@@ -31,7 +31,7 @@ class CostEstimateRead(BaseModel):
 class OperationCostEstimateRequest(BaseModel):
     operation: str = Field(min_length=1, max_length=120)
     quantity: Decimal = Field(gt=0)
-    provider: str = Field(default="omniroute", min_length=1, max_length=120)
+    provider: str = Field(default="google_ai", min_length=1, max_length=120)
     model: str | None = Field(default=None, max_length=180)
     uncertainty_ratio: Decimal = Field(default=Decimal("0.15"), ge=0)
 

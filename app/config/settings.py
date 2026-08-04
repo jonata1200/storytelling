@@ -7,74 +7,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.provider_policy import normalize_api_key, normalize_provider_name
 
-
-def normalize_omniroute_api_key(value: str | None) -> str | None:
-    return normalize_api_key(value, "omniroute")
-
-
-OMNIROUTE_TEXT_MODELS = (
-    "opencode-zen/big-pickle",
-    "opencode-zen/deepseek-v4-flash",
-    "opencode-zen/deepseek-v4-flash-free",
-    "opencode-zen/deepseek-v4-pro",
-    "opencode-zen/gpt-5",
-    "opencode-zen/gpt-5-nano",
-    "opencode-zen/gpt-5-codex",
-    "opencode-zen/gpt-5.1",
-    "opencode-zen/gpt-5.1-codex",
-    "opencode-zen/gpt-5.1-codex-max",
-    "opencode-zen/gpt-5.1-codex-mini",
-    "opencode-zen/gpt-5.2",
-    "opencode-zen/gpt-5.2-codex",
-    "opencode-zen/gpt-5.3-codex",
-    "opencode-zen/gpt-5.3-codex-spark",
-    "opencode-zen/gpt-5.4",
-    "opencode-zen/gpt-5.4-pro",
-    "opencode-zen/gpt-5.4-mini",
-    "opencode-zen/gpt-5.4-nano",
-    "opencode-zen/gpt-5.5",
-    "opencode-zen/gpt-5.5-pro",
-    "opencode-zen/gpt-5.6-sol",
-    "opencode-zen/gpt-5.6-terra",
-    "opencode-zen/gpt-5.6-luna",
-    "opencode-zen/claude-fable-5",
-    "opencode-zen/claude-haiku-4-5",
-    "opencode-zen/claude-sonnet-4",
-    "opencode-zen/claude-sonnet-4-5",
-    "opencode-zen/claude-sonnet-4-6",
-    "opencode-zen/claude-sonnet-5",
-    "opencode-zen/claude-opus-4-1",
-    "opencode-zen/claude-opus-4-5",
-    "opencode-zen/claude-opus-4-6",
-    "opencode-zen/claude-opus-4-7",
-    "opencode-zen/claude-opus-4-8",
-    "opencode-zen/claude-opus-5",
-    "opencode-zen/gemini-3-flash",
-    "opencode-zen/gemini-3.1-pro",
-    "opencode-zen/gemini-3.5-flash",
-    "opencode-zen/gemini-3.5-flash-lite",
-    "opencode-zen/gemini-3.6-flash",
-    "opencode-zen/grok-build-0.1",
-    "opencode-zen/grok-4.5",
-    "opencode-zen/glm-5",
-    "opencode-zen/glm-5.1",
-    "opencode-zen/glm-5.2",
-    "opencode-zen/minimax-m3",
-    "opencode-zen/minimax-m2.7",
-    "opencode-zen/minimax-m2.5",
-    "opencode-zen/mimo-v2.5-free",
-    "opencode-zen/kimi-k2.5",
-    "opencode-zen/kimi-k2.6",
-    "opencode-zen/kimi-k2.7-code",
-    "opencode-zen/kimi-k3",
-    "opencode-zen/qwen3.6-plus",
-    "opencode-zen/qwen3.5-plus",
-    "opencode-zen/ling-3.0-flash-free",
-    "opencode-zen/nemotron-3-ultra-free",
-    "opencode-zen/north-mini-code-free",
-    "opencode-zen/laguna-s-2.1-free",
-)
-
 OLLAMA_CLOUD_TEXT_MODELS = (
     "deepseek-v4-flash:cloud",
     "gemma4:cloud",
@@ -116,17 +48,6 @@ class Settings(BaseSettings):
     allow_user_registration: bool = True
     single_user_mode: bool = True
 
-    omniroute_api_key: str | None = Field(default=None, repr=False)
-    omniroute_base_url: str = "https://omnirouters.com/v1"
-    omniroute_default_model: str = "opencode-zen/deepseek-v4-flash"
-    omniroute_image_model: str = "chatgpt-web/gpt-5.5"
-    omniroute_video_model: str = "veo-3.1-fast-generate-preview"
-    omniroute_speech_model: str = ""
-    omniroute_image_timeout_seconds: int = 360
-    omniroute_video_submit_timeout_seconds: int = 180
-    omniroute_video_poll_interval_seconds: int = 8
-    omniroute_video_poll_timeout_seconds: int = 900
-    omniroute_video_download_timeout_seconds: int = 300
     ai_provider: str = "ollama_cloud"
     text_provider: str | None = "ollama_cloud"
     text_provider_fallbacks: str = ""
@@ -147,10 +68,6 @@ class Settings(BaseSettings):
     storyboard_image_concurrency: int = 3
     video_generation_concurrency: int = Field(default=2, ge=1, le=4)
     speech_provider: str = "elevenlabs"
-    speech_base_url: str = "https://api.openai.com/v1"
-    speech_api_key: str | None = Field(default=None, repr=False)
-    speech_model: str = ""
-    speech_voice: str = "alloy"
     speech_timeout_seconds: int = 120
     elevenlabs_api_key: str | None = Field(default=None, repr=False)
     elevenlabs_base_url: str = "https://api.elevenlabs.io/v1"
@@ -171,7 +88,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def reject_insecure_non_local_defaults(self) -> "Settings":
-        self.omniroute_api_key = normalize_omniroute_api_key(self.omniroute_api_key)
         self.ollama_cloud_api_key = normalize_api_key(
             self.ollama_cloud_api_key, "ollama_cloud"
         )
@@ -213,9 +129,7 @@ class Settings(BaseSettings):
     ) -> str | None:
         if not str(value or "").strip():
             return None
-        text = str(value or "").strip().casefold()
-        if text in {"omniroute", "opencode"}:
-            return legacy_default
+        _ = legacy_default
         return normalize_provider_name(value, field_name)
 
 

@@ -38,8 +38,8 @@ def test_default_character_views_include_required_reference_sheet_items() -> Non
     assert views == ["front_portrait", "character_reference_sheet"]
 
 
-def test_sourceful_502_is_treated_as_transient_image_provider_error() -> None:
-    error = RuntimeError("OmniRoute Images HTTP 502: provider returned an internal error")
+def test_provider_502_is_treated_as_transient_image_provider_error() -> None:
+    error = RuntimeError("Image provider HTTP 502: provider returned an internal error")
 
     assert _transient_image_provider_error(error) is True
 
@@ -130,38 +130,6 @@ async def test_image_provider_uses_google_ai_when_configured(
     provider, model, directory = await _image_provider_for_project(
         object(),  # type: ignore[arg-type]
         project_id,
-    )
-
-    assert getattr(provider, "provider_name", None) == "google_ai"
-    assert model == "gemini-3.1-flash-lite-image"
-    assert directory == "google_ai_images"
-
-
-@pytest.mark.asyncio
-async def test_image_provider_maps_legacy_omniroute_preference_to_google_ai(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def fake_settings(*args: object, **kwargs: object) -> SimpleNamespace:
-        return SimpleNamespace(image_model="mock-image")
-
-    monkeypatch.setattr(
-        visual_bible_service,
-        "get_settings",
-        lambda: SimpleNamespace(
-            ai_provider="ollama_cloud",
-            image_provider="omniroute",
-            google_ai_image_model="gemini-3.1-flash-lite-image",
-        ),
-    )
-    monkeypatch.setattr(
-        visual_bible_service,
-        "get_or_create_production_settings",
-        fake_settings,
-    )
-
-    provider, model, directory = await _image_provider_for_project(
-        object(),  # type: ignore[arg-type]
-        uuid4(),
     )
 
     assert getattr(provider, "provider_name", None) == "google_ai"

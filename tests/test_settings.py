@@ -25,14 +25,6 @@ def test_settings_defaults_to_new_ai_providers() -> None:
     assert settings.dubbing_target_lang == "en"
 
 
-def test_settings_maps_legacy_omniroute_provider_to_new_default() -> None:
-    settings = Settings(
-        ai_provider="omniroute",
-    )
-
-    assert settings.ai_provider == "ollama_cloud"
-
-
 def test_settings_reads_ollama_cloud_text_provider() -> None:
     settings = Settings(
         text_provider="ollama_cloud",

@@ -118,7 +118,7 @@ def estimate_batch_cost(
     }
 
 
-def operation_cost_policies(provider: str = "omniroute") -> list[OperationCostPolicyRead]:
+def operation_cost_policies(provider: str = "google_ai") -> list[OperationCostPolicyRead]:
     return [
         OperationCostPolicyRead(
             provider=provider,
@@ -187,7 +187,7 @@ def final_budget_cost(
 def estimate_operation_cost(
     operation: str,
     quantity: Decimal,
-    provider: str = "omniroute",
+    provider: str = "google_ai",
     model: str | None = None,
     uncertainty_ratio: Decimal = Decimal("0.15"),
 ) -> OperationCostEstimateRead:

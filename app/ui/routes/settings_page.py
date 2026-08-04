@@ -327,13 +327,9 @@ def register_settings_page(
                             with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
                                 speech_provider_select = (
                                     ui.select(
-                                        {
-                                            "elevenlabs": "ElevenLabs",
-                                            "openai_compatible": "OpenAI compatível",
-                                            "omniroute": "OmniRoute",
-                                        },
+                                        {"elevenlabs": "ElevenLabs"},
                                         label="Provider de voz",
-                                        value=current.speech_provider or "elevenlabs",
+                                        value="elevenlabs",
                                     )
                                     .props("outlined stack-label")
                                     .classes("w-full")

@@ -34,7 +34,7 @@ def test_production_payload_normalizes_model_and_intensity() -> None:
     assert payload["motion_intensity"] == 7
 
 
-def test_production_payload_rejects_mock_and_OmniRoute_free_models() -> None:
+def test_production_payload_rejects_mock_and_free_models() -> None:
     with pytest.raises(ValueError, match="mock"):
         _validated_production_payload({"image_model": "mock-image"})
 

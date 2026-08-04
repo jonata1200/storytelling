@@ -74,17 +74,17 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
     assert "contrato narrativo" in compiled["generate_script"]
 
 
-def test_generation_fallback_detects_OmniRoute_resource_exhaustion() -> None:
+def test_generation_fallback_detects_provider_resource_exhaustion() -> None:
     error = RuntimeError(
-        "OmniRoute retornou erro: Upstream error from Nvidia: "
+        "Provider retornou erro: upstream service: "
         "ResourceExhausted: Worker local total request limit reached (32/32)"
     )
 
     assert should_fallback_to_mock(error) is True
 
 
-def test_generation_fallback_detects_OmniRoute_malformed_model_response() -> None:
-    error = RuntimeError("OmniRoute retornou conteúdo que não é JSON válido")
+def test_generation_fallback_detects_provider_malformed_model_response() -> None:
+    error = RuntimeError("Provider retornou conteúdo que não é JSON válido")
 
     assert should_fallback_to_mock(error) is True
 
@@ -102,14 +102,14 @@ def test_creative_narrative_tasks_do_not_allow_runtime_mock_fallback() -> None:
 
 
 @pytest.mark.asyncio
-async def test_director_generation_reports_OmniRoute_runtime_error_without_mock_fallback(
+async def test_director_generation_reports_provider_runtime_error_without_mock_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FailingProvider:
-        provider_name = "OmniRoute"
+        provider_name = "Provider"
 
         async def generate_structured(self, request: LLMRequest) -> NoReturn:
-            raise RuntimeError("OmniRoute retornou conteúdo que não é JSON válido")
+            raise RuntimeError("Provider retornou conteúdo que não é JSON válido")
 
     class FakeSession:
         def __init__(self) -> None:
@@ -148,7 +148,7 @@ async def test_structured_generation_reports_timeout_without_mock_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class SlowProvider:
-        provider_name = "OmniRoute"
+        provider_name = "Provider"
 
         async def generate_structured(self, request: LLMRequest) -> object:
             await asyncio.sleep(0.05)
@@ -189,13 +189,13 @@ async def test_structured_generation_records_recovered_raw_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class RecoveringProvider:
-        provider_name = "OmniRoute"
+        provider_name = "Provider"
 
         async def generate_structured(self, request: LLMRequest) -> LLMResult:
             return LLMResult(
                 content={"content": "FADE IN:\n\nCENA 01\nINT. CASA - DIA\n\nA porta abre."},
                 model=request.model,
-                provider="omniroute",
+                provider="ollama_cloud",
                 raw_content="FADE IN:\n\nCENA 01\nINT. CASA - DIA\n\nA porta abre.",
                 recovery_strategy="screenplay_text",
             )
@@ -236,7 +236,7 @@ async def test_creative_structured_generation_reports_timeout_without_mock_fallb
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class SlowProvider:
-        provider_name = "OmniRoute"
+        provider_name = "Provider"
 
         async def generate_structured(self, request: LLMRequest) -> object:
             await asyncio.sleep(0.05)
@@ -272,7 +272,7 @@ async def test_structured_generation_keeps_schema_errors_without_chat_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FailingProvider:
-        provider_name = "OmniRoute"
+        provider_name = "Provider"
 
         async def generate_structured(self, request: LLMRequest) -> NoReturn:
             raise RuntimeError("generate_script: empty field 'content'")

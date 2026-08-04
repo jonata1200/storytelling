@@ -56,8 +56,10 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
         pages,
         "get_settings",
         lambda: SimpleNamespace(
-            OmniRoute_image_model="chatgpt-web/gpt-5.5",
-            OmniRoute_video_model="veo-3.1-fast-generate-preview",
+            image_provider="google_ai",
+            video_provider="google_ai",
+            google_ai_image_model="gemini-3.1-flash-lite-image",
+            google_ai_video_model="veo-3.1-fast-generate-preview",
         ),
     )
     idea = {
@@ -160,7 +162,7 @@ async def test_generate_script_does_not_save_mock_when_provider_fails_before_jso
         return object(), "unstable-model"
 
     async def fake_run_structured_generation(*args: object, **kwargs: object) -> NoReturn:
-        raise RuntimeError("OmniRoute retornou conteúdo que não é JSON válido")
+        raise RuntimeError("Provider retornou conteúdo que não é JSON válido")
 
     async def fake_create_artifact(*args: object, **kwargs: object) -> object:
         raise AssertionError("roteiro mock/local não deve ser salvo como geração real")
@@ -180,7 +182,7 @@ async def test_generate_script_does_not_save_mock_when_provider_fails_before_jso
     monkeypatch.setattr(storytelling_service, "_add_dependency", fake_add_dependency)
     monkeypatch.setattr(storytelling_service, "advance_project_status", lambda *args: None)
 
-    with pytest.raises(RuntimeError, match="OmniRoute retornou"):
+    with pytest.raises(RuntimeError, match="Provider retornou"):
         await storytelling_service.generate_script(
             cast(AsyncSession, FakeSession()),
             project_id,

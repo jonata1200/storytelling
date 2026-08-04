@@ -396,7 +396,7 @@ def test_local_storage_file_exists_checks_storage_root(
     tmp_path: Path,
 ) -> None:
     storage_root = tmp_path / "storage"
-    storyboard_dir = storage_root / "OmniRoute_storyboards"
+    storyboard_dir = storage_root / "google_ai_storyboards"
     storyboard_dir.mkdir(parents=True)
     frame_file = storyboard_dir / "frame.png"
     frame_file.write_bytes(b"image")
@@ -406,8 +406,8 @@ def test_local_storage_file_exists_checks_storage_root(
         lambda: type("Settings", (), {"local_storage_path": storage_root})(),
     )
 
-    assert _local_storage_file_exists("OmniRoute_storyboards/frame.png")
-    assert not _local_storage_file_exists("OmniRoute_storyboards/missing.png")
+    assert _local_storage_file_exists("google_ai_storyboards/frame.png")
+    assert not _local_storage_file_exists("google_ai_storyboards/missing.png")
 
 
 @pytest.mark.asyncio

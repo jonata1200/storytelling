@@ -4,7 +4,6 @@ from typing import Any, Literal
 ProviderChannel = Literal["text", "image", "video", "speech"]
 
 DEFAULT_PROVIDER = "ollama_cloud"
-LEGACY_AI_PROVIDERS = ("omniroute", "opencode")
 SUPPORTED_TEXT_PROVIDERS = ("ollama_cloud",)
 SUPPORTED_MEDIA_PROVIDERS = ("google_ai",)
 SUPPORTED_AI_PROVIDERS = (
@@ -36,8 +35,6 @@ def normalize_provider_name(
     allowed: Iterable[str] = SUPPORTED_AI_PROVIDERS,
 ) -> str:
     provider = str(value or "").strip().casefold()
-    if provider in LEGACY_AI_PROVIDERS:
-        return DEFAULT_PROVIDER
     allowed_values = tuple(allowed)
     if provider not in allowed_values:
         allowed_text = ", ".join(allowed_values)
@@ -48,9 +45,6 @@ def normalize_provider_name(
 def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> str:
     channel_provider = getattr(settings, f"{channel}_provider", None)
     configured_provider = channel_provider or getattr(settings, "ai_provider", DEFAULT_PROVIDER)
-    configured_text = str(configured_provider or "").strip().casefold()
-    if configured_text in LEGACY_AI_PROVIDERS:
-        return "google_ai" if channel in {"image", "video"} else DEFAULT_PROVIDER
     if channel == "image" and not channel_provider:
         return "google_ai"
     if channel == "video" and not channel_provider:
@@ -60,7 +54,6 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
 
 def provider_display_name(provider: str) -> str:
     names = {
-        "omniroute": "OmniRoute",
         "ollama_cloud": "Ollama Cloud",
         "google_ai": "Google AI",
     }

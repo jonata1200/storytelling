@@ -16,24 +16,23 @@ from app.config.settings import Settings
 
 def test_validate_model_name_blocks_free_and_mock_models() -> None:
     with pytest.raises(ValueError, match="free"):
-        validate_model_name("google/gemini-flash:free", provider="omniroute")
+        validate_model_name("google/gemini-flash:free", provider="google_ai")
 
     with pytest.raises(ValueError, match="mock"):
-        validate_model_name("mock-video", provider="omniroute")
+        validate_model_name("mock-video", provider="google_ai")
 
 
 def test_effective_provider_for_channel_uses_media_override() -> None:
     settings = Settings(
-        ai_provider="omniroute",
-        image_provider="omniroute",
+        ai_provider="ollama_cloud",
+        image_provider="google_ai",
     )
 
-    assert effective_provider_for_channel(settings, "text") == "ollama_cloud"
     assert effective_provider_for_channel(settings, "image") == "google_ai"
 
 
-def test_ensure_provider_api_key_keeps_omniroute_prefix_flexible() -> None:
-    assert ensure_provider_api_key("  omni-secret  ", "omniroute") == "omni-secret"
+def test_ensure_provider_api_key_trims_secret() -> None:
+    assert ensure_provider_api_key("  provider-secret  ", "google_ai") == "provider-secret"
 
 
 def test_normalize_provider_name_rejects_mock_provider() -> None:
@@ -48,7 +47,6 @@ def test_provider_policy_supports_new_text_providers() -> None:
         ollama_cloud_default_model="gemma4:cloud",
     )
 
-    assert "omniroute" not in SUPPORTED_AI_PROVIDERS
     assert "ollama" not in SUPPORTED_AI_PROVIDERS
     assert "groq" not in SUPPORTED_AI_PROVIDERS
     assert "ollama_cloud" in SUPPORTED_AI_PROVIDERS
