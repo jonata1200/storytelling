@@ -156,6 +156,17 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "A partir do roteiro em {script} e da ideia aprovada em {idea}, crie uma "
         "biblioteca visual objetiva para produção: personagens, locais e objetos. "
         "Extraia apenas itens que aparecem ou são claramente necessários no roteiro. "
+        "Não transforme marcadores estruturais em entidades: FIM, EPÍLOGO, PRÓLOGO, "
+        "ATO, CENA, IMAGEM FINAL, FADE IN/OUT e transições nunca são personagens, "
+        "locais nem objetos. "
+        "Personagens devem ser pessoas, criaturas ou vozes com presença dramática; "
+        "inclua apenas nomes que aparecem como fala, apresentação em ação ou elenco "
+        "da ideia aprovada. Locais devem vir de sluglines ou ambientes filmáveis reais. "
+        "Objetos devem ser props narrativos manipulados, lidos, entregues, escondidos, "
+        "revelados, recorrentes ou ligados ao payoff; não liste decoração comum como "
+        "almofada, abajur, parede, cama, porta ou mesa sem função dramática explícita. "
+        "Para cada item, preencha scene_numbers e evidence_text com um trecho curto "
+        "literal do roteiro que comprove a extração. "
         "Para cada personagem, descreva identidade visual consistente, idade aparente, "
         "gênero visual, corpo, rosto, pele, olhos, cabelo, figurino base exclusivo, "
         "paleta, papel narrativo, personalidade e arco. Para cada local, descreva "
@@ -168,13 +179,13 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         '{{"characters":[{{"name":"...","role":"...","gender":"personagem feminino",'
         '"apparent_age":"...","body_type":"...","face_shape":"...","skin_tone":"...",'
         '"eyes":"...","hair":"...","base_outfit":"...","palette":["..."],'
-        '"personality":"...","arc":"...","scene_numbers":[1]}}],'
+        '"personality":"...","arc":"...","scene_numbers":[1],"evidence_text":["..."]}}],'
         '"locations":[{{"name":"...","description":"...","layout":"...",'
         '"materials":["..."],"palette":["..."],"lighting":"...",'
-        '"scene_numbers":[1]}}],'
+        '"scene_numbers":[1],"evidence_text":["..."]}}],'
         '"props":[{{"name":"...","narrative_importance":"...","dimensions":"...",'
         '"material":"...","color":"...","state":"...","owner":"...",'
-        '"scene_numbers":[1]}}]}}'
+        '"scene_numbers":[1],"evidence_text":["..."]}}]}}'
     ),
     "generate_storyboard_prompts": (
         "Você é diretor de arte cinematográfico e prompt designer para IA de imagem. "

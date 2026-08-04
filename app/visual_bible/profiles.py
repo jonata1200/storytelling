@@ -489,6 +489,155 @@ GENERIC_VISUAL_NAMES = {
     "prop": {"", "item", "objeto", "objeto 1", "objeto de revelacao", "objeto de revelação"},
 }
 
+SCREENPLAY_MARKER_NAMES = {
+    "abertura",
+    "ato",
+    "ato i",
+    "ato ii",
+    "ato iii",
+    "capitulo",
+    "capítulo",
+    "cena",
+    "corte para",
+    "creditos",
+    "créditos",
+    "detalhes",
+    "epilogo",
+    "epílogo",
+    "fade in",
+    "fade out",
+    "fim",
+    "flashback",
+    "imagem",
+    "imagem final",
+    "prologo",
+    "prólogo",
+    "volta ao presente",
+}
+
+WEAK_SET_DRESSING_PROP_NAMES = {
+    "abajur",
+    "almofada",
+    "cama",
+    "cadeira",
+    "cortina",
+    "janela",
+    "lencol",
+    "lençol",
+    "mesa",
+    "parede",
+    "porta",
+    "sofa",
+    "sofá",
+    "tapete",
+    "travesseiro",
+}
+
+VISUAL_CHARACTER_HONORIFIC_PREFIXES = {
+    "dona",
+    "dom",
+    "dr",
+    "dra",
+    "doutor",
+    "doutora",
+    "madame",
+    "senhor",
+    "senhora",
+    "seu",
+    "sr",
+    "sra",
+}
+
+
+def _visual_item_name(item: dict) -> str:
+    return str(
+        item.get("name")
+        or item.get("nome")
+        or item.get("title")
+        or item.get("titulo")
+        or ""
+    ).strip()
+
+
+def _looks_like_screenplay_marker_name(value: object) -> bool:
+    normalized = re.sub(r"\s+", " ", _ascii_lower(value)).strip()
+    normalized = re.sub(r"\s*\([^)]*\)\s*", " ", normalized).strip()
+    if normalized in SCREENPLAY_MARKER_NAMES:
+        return True
+    return normalized.startswith(
+        (
+            "ato ",
+            "capitulo ",
+            "capítulo ",
+            "cena ",
+            "creditos",
+            "créditos",
+            "epilogo",
+            "epílogo",
+            "fim",
+            "prologo",
+            "prólogo",
+        )
+    )
+
+
+def _has_strong_prop_evidence(item: dict) -> bool:
+    evidence = _prompt_text(
+        item.get("evidence_text")
+        or item.get("evidencia")
+        or item.get("evidência")
+        or item.get("narrative_importance")
+        or item.get("importance")
+        or item.get("importancia")
+        or item.get("importância")
+        or ""
+    )
+    normalized = _ascii_lower(evidence)
+    return bool(
+        re.search(
+            r"\b("
+            r"pega|segura|entrega|recebe|abre|fecha|le|lê|esconde|revela|"
+            r"encontra|guarda|carrega|mostra|usa|quebra|rasga|queima|"
+            r"prova|pista|payoff|segredo|revelacao|revelação|chave"
+            r")\b",
+            normalized,
+        )
+    )
+
+
+def _invalid_visual_item(target_kind: str, item: dict) -> bool:
+    name = _visual_item_name(item)
+    if _looks_like_screenplay_marker_name(name):
+        return True
+    if target_kind == "prop":
+        normalized_name = re.sub(r"\s+", " ", _ascii_lower(name)).strip()
+        if normalized_name in WEAK_SET_DRESSING_PROP_NAMES and not _has_strong_prop_evidence(
+            item
+        ):
+            return True
+    return False
+
+
+def _visual_merge_key(target_kind: str, item: dict) -> str:
+    key = _visual_key(item.get("id") or item.get("permanent_id"))
+    if key:
+        return key
+    name = _visual_item_name(item)
+    if target_kind != "character":
+        return _visual_key(name)
+    tokens = _ascii_lower(name).split()
+    while len(tokens) > 1 and tokens[0].strip(".") in VISUAL_CHARACTER_HONORIFIC_PREFIXES:
+        tokens.pop(0)
+    return _visual_key(" ".join(tokens) or name)
+
+
+def _prefer_visual_item(candidate: dict, existing: dict) -> bool:
+    candidate_name = _visual_item_name(candidate)
+    existing_name = _visual_item_name(existing)
+    candidate_score = len(candidate_name) + (10 if candidate.get("evidence_text") else 0)
+    existing_score = len(existing_name) + (10 if existing.get("evidence_text") else 0)
+    return candidate_score > existing_score
+
 
 def visual_profile_validation_errors(target_kind: str, profile: dict) -> list[str]:
     errors: list[str] = []
@@ -498,6 +647,8 @@ def visual_profile_validation_errors(target_kind: str, profile: dict) -> list[st
         errors.append("name vazio")
     elif normalized_name in GENERIC_VISUAL_NAMES.get(target_kind, set()):
         errors.append(f"name generico: {name}")
+    elif _looks_like_screenplay_marker_name(name):
+        errors.append(f"name marcador de roteiro: {name}")
     if profile.get("asset_kind") != target_kind:
         errors.append(f"asset_kind deve ser {target_kind}")
     if not str(profile.get("canonical_prompt") or "").strip():
@@ -533,21 +684,29 @@ def _generic_visual_item(target_kind: str, item: dict) -> bool:
 
 
 def _merge_profile_items(target_kind: str, primary: list[dict], fallback: list[dict]) -> list[dict]:
-    merged = [
-        item
-        for item in primary
-        if not fallback or not _generic_visual_item(target_kind, item)
-    ]
-    seen = {
-        _visual_key(item.get("id") or item.get("permanent_id") or item.get("name"))
-        for item in merged
-    }
-    for item in fallback:
-        key = _visual_key(item.get("id") or item.get("permanent_id") or item.get("name"))
-        if not key or key in seen:
-            continue
+    merged: list[dict] = []
+    seen: dict[str, int] = {}
+
+    def append(item: dict) -> None:
+        if _invalid_visual_item(target_kind, item):
+            return
+        key = _visual_merge_key(target_kind, item)
+        if not key:
+            return
+        if key in seen:
+            existing_index = seen[key]
+            if _prefer_visual_item(item, merged[existing_index]):
+                merged[existing_index] = item
+            return
         merged.append(item)
-        seen.add(key)
+        seen[key] = len(merged) - 1
+
+    for item in primary:
+        if fallback and _generic_visual_item(target_kind, item):
+            continue
+        append(item)
+    for item in fallback:
+        append(item)
     return merged
 
 

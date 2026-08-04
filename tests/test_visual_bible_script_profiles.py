@@ -127,6 +127,56 @@ def test_script_fallback_does_not_turn_screenplay_markers_into_characters() -> N
     assert _script_character_names(script) == ["Ian", "Pai", "Mae", "Passaro", "Avô De Ian"]
 
 
+def test_script_fallback_ignores_end_and_epilogue_markers_as_characters() -> None:
+    script = """
+    CENA 01
+    INT. RECEPCAO DO HOTEL - NOITE
+    SR. OLIVEIRA (50 anos, terno) entrega uma chave.
+
+    OLIVEIRA
+    Ninguem entra no quarto.
+
+    EPÍLOGO (IMAGEM)
+    O corredor fica vazio.
+
+    FIM.
+    """
+
+    assert _script_character_names(script) == ["Sr. Oliveira"]
+    assert [item["name"] for item in _script_character_profiles(script)] == ["Sr. Oliveira"]
+
+
+def test_visual_profile_merge_filters_markers_and_deduplicates_honorifics() -> None:
+    primary = [
+        {"name": "Sr. Oliveira", "role": "gerente"},
+        {"name": "Epílogo", "role": "personagem extraido do roteiro"},
+    ]
+    fallback = [
+        {
+            "name": "Oliveira",
+            "role": "personagem extraido do roteiro",
+            "evidence_text": ["OLIVEIRA"],
+        },
+        {"name": "Fim", "role": "personagem extraido do roteiro"},
+    ]
+
+    merged = _merge_profile_items("character", primary, fallback)
+
+    assert [item["name"] for item in merged] == ["Oliveira"]
+
+
+def test_visual_profile_merge_filters_weak_set_dressing_props_without_evidence() -> None:
+    items = [
+        {"name": "Abajur", "narrative_importance": "objeto no quarto"},
+        {"name": "Diário Preto", "narrative_importance": "Marta entrega o diário ao gerente."},
+        {"name": "Travesseiro", "evidence_text": ["Ela esconde a chave no travesseiro."]},
+    ]
+
+    merged = _merge_profile_items("prop", items, [])
+
+    assert [item["name"] for item in merged] == ["Diário Preto", "Travesseiro"]
+
+
 def test_script_fallback_trims_action_phrases_from_props() -> None:
     script = """
     O desenho e tosco, mas cheio de vida.

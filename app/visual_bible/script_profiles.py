@@ -362,8 +362,18 @@ from app.visual_bible.script_prop_profiles import (  # noqa: E402,F401
 )
 
 SCRIPT_CHARACTER_EXCLUSIONS = {
+    "ABERTURA",
+    "ATO",
+    "ATO I",
+    "ATO II",
+    "ATO III",
+    "CAPITULO",
+    "CAPÍTULO",
+    "CREDITOS",
+    "CRÉDITOS",
     "FADE IN",
     "FADE OUT",
+    "FIM",
     "CORTE PARA",
     "INT",
     "EXT",
@@ -379,6 +389,10 @@ SCRIPT_CHARACTER_EXCLUSIONS = {
     "FLASHBACK",
     "VOLTA AO PRESENTE",
     "IMAGEM FINAL",
+    "EPILOGO",
+    "EPÍLOGO",
+    "PROLOGO",
+    "PRÓLOGO",
     "CENA",
     "MENINO",
     "MENINA",
@@ -407,9 +421,31 @@ TEMPORAL_CHARACTER_MARKERS = {
     "passada",
 }
 
+CHARACTER_HONORIFIC_PREFIXES = {
+    "dona",
+    "dom",
+    "dr",
+    "dra",
+    "doutor",
+    "doutora",
+    "madame",
+    "senhor",
+    "senhora",
+    "seu",
+    "sr",
+    "sra",
+}
+
 
 def _character_exclusion_key(value: object) -> str:
     return re.sub(r"\s+", " ", _ascii_lower(value)).strip().upper()
+
+
+def _strip_character_honorifics(value: object) -> str:
+    tokens = _ascii_lower(value).split()
+    while len(tokens) > 1 and tokens[0].strip(".") in CHARACTER_HONORIFIC_PREFIXES:
+        tokens.pop(0)
+    return " ".join(tokens)
 
 
 def _looks_like_non_character_name(name: str) -> bool:
@@ -418,7 +454,26 @@ def _looks_like_non_character_name(name: str) -> bool:
     if key in exclusion_keys:
         return True
     normalized = _ascii_lower(name)
-    if normalized.startswith(("cena ", "volta ", "int ", "ext ")):
+    if normalized.startswith(
+        (
+            "ato ",
+            "capitulo ",
+            "capítulo ",
+            "cena ",
+            "creditos",
+            "créditos",
+            "epilogo",
+            "epílogo",
+            "fim",
+            "prologo",
+            "prólogo",
+            "volta ",
+            "int ",
+            "ext ",
+        )
+    ):
+        return True
+    if re.fullmatch(r"(?:imagem|sequencia|sequência|montagem)(?:\s+\w+){0,3}", normalized):
         return True
     if re.fullmatch(r"(?:os |as )?pais(?: de .+)?", normalized):
         return True
@@ -430,12 +485,16 @@ def _same_character_name(candidate: str, existing: str) -> bool:
     existing_norm = _ascii_lower(existing)
     if candidate_norm == existing_norm:
         return True
+    candidate_identity = _strip_character_honorifics(candidate)
+    existing_identity = _strip_character_honorifics(existing)
+    if candidate_identity and candidate_identity == existing_identity:
+        return True
     candidate_temporal = bool(set(candidate_norm.split()) & TEMPORAL_CHARACTER_MARKERS)
     existing_temporal = bool(set(existing_norm.split()) & TEMPORAL_CHARACTER_MARKERS)
     if candidate_temporal != existing_temporal:
         return False
-    candidate_tokens = candidate_norm.split()
-    existing_tokens = existing_norm.split()
+    candidate_tokens = candidate_identity.split() or candidate_norm.split()
+    existing_tokens = existing_identity.split() or existing_norm.split()
     if not candidate_tokens or not existing_tokens:
         return False
     if candidate_tokens[0] != existing_tokens[0]:
@@ -472,7 +531,8 @@ def _script_character_names(script_content: str) -> list[str]:
     )
     for raw_line in lines:
         for match in re.finditer(
-            r"\b(?P<name>[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{1,48})\s*\(",
+            r"\b(?P<name>(?:(?:SR|SRA|DR|DRA)\.\s*)?"
+            r"[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{1,48})\s*\(",
             raw_line,
         ):
             _append_script_character_name(names, seen, match.group("name"))
@@ -524,7 +584,8 @@ def _script_character_candidate_profiles(script_content: str) -> list[dict]:
             for raw_line in scene.block.splitlines():
                 line = raw_line.strip()
                 for match in re.finditer(
-                    r"\b(?P<name>[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{1,48})\s*\(",
+                    r"\b(?P<name>(?:(?:SR|SRA|DR|DRA)\.\s*)?"
+                    r"[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{1,48})\s*\(",
                     line,
                 ):
                     append(match.group("name"), scene.scene_number, line)
@@ -535,7 +596,8 @@ def _script_character_candidate_profiles(script_content: str) -> list[dict]:
     for raw_line in script_content.splitlines():
         line = raw_line.strip()
         for match in re.finditer(
-            r"\b(?P<name>[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{1,48})\s*\(",
+            r"\b(?P<name>(?:(?:SR|SRA|DR|DRA)\.\s*)?"
+            r"[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{1,48})\s*\(",
             line,
         ):
             append(match.group("name"), None, line)

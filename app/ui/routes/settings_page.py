@@ -14,8 +14,6 @@ from app.config.provider_policy import (
 )
 from app.config.settings import (
     ELEVENLABS_SPEECH_MODELS,
-    GOOGLE_AI_IMAGE_MODELS,
-    GOOGLE_AI_VIDEO_MODELS,
     OLLAMA_CLOUD_TEXT_MODELS,
     get_settings,
     normalize_google_ai_image_model,
@@ -160,8 +158,9 @@ def register_settings_page(
                         with ui.element("div").classes("entity-card rounded-2xl p-6"):
                             ui.label("Provedores de IA").classes("text-xl font-semibold")
                             ui.label(
-                                "Conecte sua conta e escolha modelos diferentes para cada mídia."
+                                "Organize as chaves e os modelos usados pelo fluxo de produção."
                             ).classes("text-sm text-[#858b86] mb-4")
+
                             def model_options(
                                 options: tuple[str, ...],
                                 current_model: str,
@@ -178,25 +177,27 @@ def register_settings_page(
                             def selected_google_ai_video_model(current_model: str) -> str:
                                 return normalize_google_ai_video_model(current_model)
 
-                            ui.label("Texto").classes("text-sm font-semibold uppercase tracking-wide acid mt-5")
-                            with ui.column().classes("w-full gap-3 mt-3"):
-                                with ui.row().classes(
-                                    "w-full items-center gap-2 text-xs text-[#8f9590]"
-                                ):
-                                    ui.icon("memory").classes("text-base acid")
-                                    ui.label("Escolha o provider que gera roteiros, prompts e textos.")
-                                text_provider_select = (
-                                    ui.select(
-                                        {"ollama_cloud": "Ollama Cloud"},
-                                        label="Provider de texto",
-                                        value=current.text_provider or "ollama_cloud",
+                            def provider_header(icon: str, title: str, provider: str) -> None:
+                                with ui.row().classes("w-full items-center justify-between gap-3"):
+                                    with ui.row().classes("items-center gap-2"):
+                                        ui.icon(icon).classes("text-lg acid")
+                                        ui.label(title).classes("font-semibold")
+                                    ui.label(provider).classes(
+                                        "text-xs uppercase tracking-wide text-[#8f9590]"
                                     )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                                with ui.grid().classes(
-                                    "w-full grid-cols-1 md:grid-cols-2 gap-3"
+
+                            google_ai_image_model_value = selected_google_ai_image_model(
+                                current.google_ai_image_model
+                            )
+                            google_ai_video_model_value = selected_google_ai_video_model(
+                                current.google_ai_video_model
+                            )
+
+                            with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-2 gap-4 mt-5"):
+                                with ui.element("div").classes(
+                                    "border border-[#2d332e] rounded-lg p-4 flex flex-col gap-3"
                                 ):
+                                    provider_header("edit_note", "Texto", "Ollama Cloud")
                                     ollama_cloud_base_url = (
                                         ui.input(
                                             "URL base Ollama Cloud",
@@ -220,234 +221,186 @@ def register_settings_page(
                                         .props("outlined stack-label")
                                         .classes("w-full")
                                     )
-                                ollama_cloud_text_model = (
-                                    ui.select(
-                                        model_options(
-                                            OLLAMA_CLOUD_TEXT_MODELS,
-                                            current.ollama_cloud_default_model,
-                                        ),
-                                        label="Modelo de texto Ollama Cloud",
-                                        value=selected_ollama_cloud_model(
-                                            current.ollama_cloud_default_model
-                                        ),
+                                    ollama_cloud_text_model = (
+                                        ui.select(
+                                            model_options(
+                                                OLLAMA_CLOUD_TEXT_MODELS,
+                                                current.ollama_cloud_default_model,
+                                            ),
+                                            label="Modelo de texto",
+                                            value=selected_ollama_cloud_model(
+                                                current.ollama_cloud_default_model
+                                            ),
+                                        )
+                                        .props("outlined stack-label options-dense")
+                                        .classes("w-full")
                                     )
-                                    .props("outlined stack-label options-dense")
-                                    .classes("w-full")
-                                )
+
+                                with ui.element("div").classes(
+                                    "border border-[#2d332e] rounded-lg p-4 flex flex-col gap-3"
+                                ):
+                                    provider_header("movie", "Imagem e vídeo", "Google AI")
+                                    with ui.grid().classes(
+                                        "w-full grid-cols-1 md:grid-cols-2 gap-3"
+                                    ):
+                                        google_ai_base_url = (
+                                            ui.input(
+                                                "URL base Google AI",
+                                                value=current.google_ai_base_url,
+                                                placeholder="https://generativelanguage.googleapis.com/v1beta",
+                                            )
+                                            .props("outlined stack-label")
+                                            .classes("w-full")
+                                        )
+                                        google_ai_api_key = (
+                                            ui.input(
+                                                "Chave Google AI",
+                                                placeholder=(
+                                                    "Chave configurada; digite para substituir"
+                                                    if current.google_ai_api_key
+                                                    else "AIza..."
+                                                ),
+                                                password=True,
+                                                password_toggle_button=True,
+                                            )
+                                            .props("outlined stack-label")
+                                            .classes("w-full")
+                                        )
+                                    with ui.grid().classes(
+                                        "w-full grid-cols-1 md:grid-cols-2 gap-3"
+                                    ):
+                                        (
+                                            ui.input(
+                                                "Modelo de imagem",
+                                                value=google_ai_image_model_value,
+                                            )
+                                            .props("outlined stack-label readonly")
+                                            .classes("w-full")
+                                        )
+                                        (
+                                            ui.input(
+                                                "Modelo de vídeo",
+                                                value=google_ai_video_model_value,
+                                            )
+                                            .props("outlined stack-label readonly")
+                                            .classes("w-full")
+                                        )
+                                    with ui.grid().classes(
+                                        "w-full grid-cols-1 md:grid-cols-3 gap-3"
+                                    ):
+                                        (
+                                            ui.input("Imagem 9:16", value="720 x 1280 px")
+                                            .props("outlined stack-label readonly")
+                                            .classes("w-full")
+                                        )
+                                        (
+                                            ui.input("Imagem 16:9", value="1280 x 720 px")
+                                            .props("outlined stack-label readonly")
+                                            .classes("w-full")
+                                        )
+                                        (
+                                            ui.input("Resolução de vídeo", value="720p")
+                                            .props("outlined stack-label readonly")
+                                            .classes("w-full")
+                                        )
 
                             ui.separator().classes("my-5")
-                            ui.label("Imagem e vídeo").classes(
-                                "text-sm font-semibold uppercase tracking-wide acid"
-                            )
-                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
-                                image_provider_select = (
-                                    ui.select(
-                                        {"google_ai": "Google AI"},
-                                        label="Provider de imagem",
-                                        value=current.image_provider or "google_ai",
+                            with ui.element("div").classes(
+                                "border border-[#2d332e] rounded-lg p-4 flex flex-col gap-3"
+                            ):
+                                provider_header("graphic_eq", "Voz e dublagem", "ElevenLabs")
+                                with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3"):
+                                    elevenlabs_base_url = (
+                                        ui.input(
+                                            "URL base ElevenLabs",
+                                            value=current.elevenlabs_base_url,
+                                            placeholder="https://api.elevenlabs.io/v1",
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
                                     )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                                video_provider_select = (
-                                    ui.select(
-                                        {"google_ai": "Google AI"},
-                                        label="Provider de video",
-                                        value=current.video_provider or "google_ai",
+                                    elevenlabs_api_key = (
+                                        ui.input(
+                                            "Chave ElevenLabs",
+                                            placeholder=(
+                                                "Chave configurada; digite para substituir"
+                                                if current.elevenlabs_api_key
+                                                else "sk_..."
+                                            ),
+                                            password=True,
+                                            password_toggle_button=True,
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
                                     )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
-                                google_ai_base_url = (
-                                    ui.input(
-                                        "URL base Google AI",
-                                        value=current.google_ai_base_url,
-                                        placeholder="https://generativelanguage.googleapis.com/v1beta",
+                                with ui.grid().classes("w-full grid-cols-1 md:grid-cols-3 gap-3"):
+                                    elevenlabs_voice_id = (
+                                        ui.input(
+                                            "Voice ID padrão",
+                                            value=current.elevenlabs_voice_id,
+                                            placeholder="JBFqnCBsd6RMkjVDRZzb",
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
                                     )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                                google_ai_api_key = (
-                                    ui.input(
-                                        "Chave Google AI",
-                                        placeholder=(
-                                            "Chave configurada; digite para substituir"
-                                            if current.google_ai_api_key
-                                            else "AIza..."
-                                        ),
-                                        password=True,
-                                        password_toggle_button=True,
+                                    elevenlabs_speech_model = (
+                                        ui.select(
+                                            model_options(
+                                                ELEVENLABS_SPEECH_MODELS,
+                                                current.elevenlabs_speech_model,
+                                            ),
+                                            label="Modelo de voz",
+                                            value=current.elevenlabs_speech_model,
+                                        )
+                                        .props("outlined stack-label options-dense")
+                                        .classes("w-full")
                                     )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-3 gap-3 mt-3"):
-                                google_ai_image_model = (
-                                    ui.select(
-                                        model_options(
-                                            GOOGLE_AI_IMAGE_MODELS,
-                                            current.google_ai_image_model,
-                                        ),
-                                        label="Modelo de imagem Google AI",
-                                        value=selected_google_ai_image_model(
-                                            current.google_ai_image_model
-                                        ),
+                                    elevenlabs_output_format = (
+                                        ui.select(
+                                            [
+                                                "mp3_44100_128",
+                                                "mp3_44100_192",
+                                                "mp3_22050_32",
+                                            ],
+                                            label="Formato de áudio",
+                                            value=current.elevenlabs_output_format,
+                                        )
+                                        .props("outlined stack-label options-dense")
+                                        .classes("w-full")
                                     )
-                                    .props("outlined stack-label options-dense")
-                                    .classes("w-full")
-                                )
-                                google_ai_image_size = (
-                                    ui.select(
-                                        ["512px", "1K", "2K", "4K"],
-                                        label="Tamanho de imagem Google AI",
-                                        value=current.google_ai_image_size,
+                                with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3"):
+                                    dubbing_source_lang = (
+                                        ui.input(
+                                            "Idioma original",
+                                            value=current.dubbing_source_lang,
+                                            placeholder="pt",
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
                                     )
-                                    .props("outlined stack-label options-dense")
-                                    .classes("w-full")
-                                )
-                                google_ai_video_model = (
-                                    ui.select(
-                                        model_options(
-                                            GOOGLE_AI_VIDEO_MODELS,
-                                            current.google_ai_video_model,
-                                        ),
-                                        label="Modelo de video Google AI",
-                                        value=selected_google_ai_video_model(
-                                            current.google_ai_video_model
-                                        ),
+                                    dubbing_target_lang = (
+                                        ui.input(
+                                            "Idioma da dublagem",
+                                            value=current.dubbing_target_lang,
+                                            placeholder="en",
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
                                     )
-                                    .props("outlined stack-label options-dense")
-                                    .classes("w-full")
-                                )
-                            ui.separator().classes("my-5")
-                            ui.label("Voz e dublagem").classes(
-                                "text-sm font-semibold uppercase tracking-wide acid"
-                            )
-                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
-                                speech_provider_select = (
-                                    ui.select(
-                                        {"elevenlabs": "ElevenLabs"},
-                                        label="Provider de voz",
-                                        value="elevenlabs",
-                                    )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                                dubbing_provider_select = (
-                                    ui.select(
-                                        {"elevenlabs": "ElevenLabs"},
-                                        label="Provider de dublagem",
-                                        value=current.dubbing_provider or "elevenlabs",
-                                    )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
-                                elevenlabs_base_url = (
-                                    ui.input(
-                                        "URL base ElevenLabs",
-                                        value=current.elevenlabs_base_url,
-                                        placeholder="https://api.elevenlabs.io/v1",
-                                    )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                                elevenlabs_api_key = (
-                                    ui.input(
-                                        "Chave ElevenLabs",
-                                        placeholder=(
-                                            "Chave configurada; digite para substituir"
-                                            if current.elevenlabs_api_key
-                                            else "sk_..."
-                                        ),
-                                        password=True,
-                                        password_toggle_button=True,
-                                    )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-3 gap-3 mt-3"):
-                                elevenlabs_voice_id = (
-                                    ui.input(
-                                        "Voice ID padrão",
-                                        value=current.elevenlabs_voice_id,
-                                        placeholder="JBFqnCBsd6RMkjVDRZzb",
-                                    )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                                elevenlabs_speech_model = (
-                                    ui.select(
-                                        model_options(
-                                            ELEVENLABS_SPEECH_MODELS,
-                                            current.elevenlabs_speech_model,
-                                        ),
-                                        label="Modelo de voz ElevenLabs",
-                                        value=current.elevenlabs_speech_model,
-                                    )
-                                    .props("outlined stack-label options-dense")
-                                    .classes("w-full")
-                                )
-                                elevenlabs_output_format = (
-                                    ui.select(
-                                        [
-                                            "mp3_44100_128",
-                                            "mp3_44100_192",
-                                            "mp3_22050_32",
-                                        ],
-                                        label="Formato de áudio",
-                                        value=current.elevenlabs_output_format,
-                                    )
-                                    .props("outlined stack-label options-dense")
-                                    .classes("w-full")
-                                )
-                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3 mt-3"):
-                                dubbing_source_lang = (
-                                    ui.input(
-                                        "Idioma original",
-                                        value=current.dubbing_source_lang,
-                                        placeholder="pt",
-                                    )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
-                                dubbing_target_lang = (
-                                    ui.input(
-                                        "Idioma da dublagem",
-                                        value=current.dubbing_target_lang,
-                                        placeholder="en",
-                                    )
-                                    .props("outlined stack-label")
-                                    .classes("w-full")
-                                )
 
                             def save_ai() -> None:
-                                selected_text_provider = str(
-                                    text_provider_select.value or "ollama_cloud"
-                                ).strip()
                                 typed_ollama_cloud_api_key = str(
                                     ollama_cloud_api_key.value or ""
                                 ).strip()
                                 try:
                                     values = {
-                                        "AI_PROVIDER": selected_text_provider,
-                                        "TEXT_PROVIDER": selected_text_provider,
-                                        "IMAGE_PROVIDER": str(
-                                            image_provider_select.value or "google_ai"
-                                        ),
-                                        "VIDEO_PROVIDER": str(
-                                            video_provider_select.value or "google_ai"
-                                        ),
-                                        "SPEECH_PROVIDER": str(
-                                            speech_provider_select.value or "elevenlabs"
-                                        ),
-                                        "DUBBING_PROVIDER": str(
-                                            dubbing_provider_select.value or "elevenlabs"
-                                        ),
-                                        "TEXT_PROVIDER_FALLBACKS": (
-                                            ""
-                                        ),
+                                        "AI_PROVIDER": "ollama_cloud",
+                                        "TEXT_PROVIDER": "ollama_cloud",
+                                        "IMAGE_PROVIDER": "google_ai",
+                                        "VIDEO_PROVIDER": "google_ai",
+                                        "SPEECH_PROVIDER": "elevenlabs",
+                                        "DUBBING_PROVIDER": "elevenlabs",
+                                        "TEXT_PROVIDER_FALLBACKS": "",
                                         "OLLAMA_CLOUD_BASE_URL": str(
                                             ollama_cloud_base_url.value or ""
                                         ).strip(),
@@ -460,16 +413,19 @@ def register_settings_page(
                                             google_ai_base_url.value or ""
                                         ).strip(),
                                         "GOOGLE_AI_IMAGE_MODEL": validate_model_name(
-                                            google_ai_image_model.value,
+                                            google_ai_image_model_value,
                                             "Modelo de imagem Google AI",
                                             provider="google_ai",
                                         ),
-                                        "GOOGLE_AI_IMAGE_SIZE": str(
-                                            google_ai_image_size.value or "1K"
-                                        ).strip(),
+                                        "GOOGLE_AI_IMAGE_SIZE": "1K",
                                         "GOOGLE_AI_VIDEO_MODEL": validate_model_name(
-                                            google_ai_video_model.value,
+                                            google_ai_video_model_value,
                                             "Modelo de vídeo Google AI",
+                                            provider="google_ai",
+                                        ),
+                                        "GOOGLE_AI_VIDEO_FAST_MODEL": validate_model_name(
+                                            google_ai_video_model_value,
+                                            "Modelo rápido de vídeo Google AI",
                                             provider="google_ai",
                                         ),
                                         "ELEVENLABS_BASE_URL": str(
