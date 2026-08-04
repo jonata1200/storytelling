@@ -78,6 +78,11 @@ def apply_body_style() -> None:
           .workspace-export-button .q-btn__content span {
             color:#ffffff!important;
           }
+          .blue-status-badge,
+          .blue-status-badge .q-badge__content,
+          .blue-status-badge span {
+            color:#ffffff!important;
+          }
           .glass,
           .entity-card,
           .q-card {

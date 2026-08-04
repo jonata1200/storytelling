@@ -96,7 +96,7 @@ def _render_visual_progress_summary(summary: dict[str, Any]) -> None:
         "props": "Objetos",
     }
     with ui.element("div").classes(
-        "w-full border border-[#2d332e] rounded-xl px-4 py-3 bg-[#111511] mb-2"
+        "w-full border border-[#343934] rounded-xl px-4 py-3 bg-[#0d100e] mb-2"
     ):
         with ui.row().classes("w-full items-center justify-between gap-3"):
             with ui.column().classes("gap-0"):
@@ -105,7 +105,9 @@ def _render_visual_progress_summary(summary: dict[str, Any]) -> None:
                 )
                 ui.label(f"Faltam {missing} imagem(ns).").classes("text-xs text-[#8d938e]")
             ui.badge("pronto" if missing == 0 and expected else "pendente").classes(
-                "bg-[#26301f] text-[#eaf878]" if missing == 0 and expected else "bg-[#243342]"
+                "bg-[#26301f] text-[#eaf878]"
+                if missing == 0 and expected
+                else "blue-status-badge bg-[#243342]"
             )
         ui.linear_progress(value=_progress_ratio(generated, expected)).classes(
             "w-full mt-3"
@@ -114,7 +116,7 @@ def _render_visual_progress_summary(summary: dict[str, Any]) -> None:
             for key, label in labels.items():
                 item = progress["by_kind"][key]
                 ui.badge(f"{label}: {item['generated']}/{item['expected']}").classes(
-                    "bg-[#20251f] text-[#c9cec9]"
+                    "blue-status-badge bg-[#243342]"
                 )
 
 

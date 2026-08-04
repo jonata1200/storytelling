@@ -65,6 +65,9 @@ THEME_HEAD_HTML = r"""
           .glass { background:rgba(17,20,18,.88); border:1px solid var(--line); }
           .acid { color:var(--acid); }
           .acid-bg { background:var(--acid)!important; color:#10120d!important; }
+          .blue-status-badge,
+          .blue-status-badge .q-badge__content,
+          .blue-status-badge span { color:#ffffff!important; }
           .workspace-header {
             display:grid;
             grid-template-columns:minmax(260px,.75fr) minmax(420px,1.25fr) auto;

@@ -181,7 +181,7 @@ def _render_generation_progress_summary(
     badge: str | None = None,
 ) -> None:
     with ui.element("div").classes(
-        "w-full border border-[#2d332e] rounded-xl px-4 py-3 bg-[#111511] mb-3"
+        "w-full border border-[#343934] rounded-xl px-4 py-3 bg-[#0d100e] mb-3"
     ):
         with ui.row().classes("w-full items-center justify-between gap-3"):
             with ui.column().classes("gap-0"):
@@ -190,7 +190,9 @@ def _render_generation_progress_summary(
                 )
                 ui.label(f"Faltam {missing}. {detail}").classes("text-xs text-[#8d938e]")
             ui.badge(badge or ("pronto" if missing == 0 and total else "pendente")).classes(
-                "bg-[#26301f] text-[#eaf878]" if missing == 0 and total else "bg-[#243342]"
+                "bg-[#26301f] text-[#eaf878]"
+                if missing == 0 and total
+                else "blue-status-badge bg-[#243342]"
             )
         ui.linear_progress(value=_progress_ratio(generated, total)).classes(
             "w-full mt-3"
@@ -587,7 +589,7 @@ def render_video_area(
                                     "text-sm font-semibold"
                                 )
                                 ui.badge(f"{frame.duration_seconds}s").classes(
-                                    "bg-[#243342] text-[#bfe2ff]"
+                                    "blue-status-badge bg-[#243342]"
                                 )
                             ui.label(str(preview.get("prompt") or frame.prompt)).classes(
                                 "text-sm text-[#d8dbd8] whitespace-pre-wrap mt-2 leading-6"
@@ -716,7 +718,7 @@ def render_video_area(
                             ui.badge("custom" if custom_prompt else "automático").classes(
                                 "bg-[#30362b] text-[#eaf878]"
                                 if custom_prompt
-                                else "bg-[#243342] text-[#bfe2ff]"
+                                else "blue-status-badge bg-[#243342]"
                             )
                         ui.label(f"{frame.duration_seconds}s").classes("text-xs acid")
                         ui.label(video_prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
@@ -884,7 +886,7 @@ def render_video_area(
                                     ui.badge("custom" if custom_prompt else "automático").classes(
                                         "bg-[#30362b] text-[#eaf878]"
                                         if custom_prompt
-                                        else "bg-[#243342] text-[#bfe2ff]"
+                                        else "blue-status-badge bg-[#243342]"
                                     )
                                 else:
                                     ui.space()
@@ -933,5 +935,5 @@ def render_video_area(
                     else "A timeline organiza os clipes na ordem dos planos."
                 ).classes("text-sm text-[#8d938e]")
             if timeline is None:
-                ui.badge("timeline pendente").classes("bg-[#243342] text-[#bfe2ff]")
+                ui.badge("timeline pendente").classes("blue-status-badge bg-[#243342]")
         _render_timeline_strip(timeline, summary["timeline_items"])
