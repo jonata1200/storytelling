@@ -76,23 +76,20 @@ OMNIROUTE_TEXT_MODELS = (
 )
 
 OLLAMA_CLOUD_TEXT_MODELS = (
-    "gpt-oss:120b",
-    "gpt-oss:20b",
+    "deepseek-v4-flash:cloud",
+    "gemma4:cloud",
+    "minimax-m2.7:cloud",
+    "mistral-large-3:675b-cloud",
+    "nemotron-3-nano:30b-cloud",
+    "nemotron-3-super:cloud",
 )
 
 GOOGLE_AI_IMAGE_MODELS = (
-    "gemini-3.1-flash-image",
     "gemini-3.1-flash-lite-image",
-    "gemini-3-pro-image",
-    "gemini-2.5-flash-image",
 )
 
 GOOGLE_AI_VIDEO_MODELS = (
-    "veo-3.1-generate-preview",
     "veo-3.1-fast-generate-preview",
-    "veo-3.1-lite-generate-preview",
-    "veo-3.0-generate-001",
-    "veo-3.0-fast-generate-001",
 )
 
 ELEVENLABS_SPEECH_MODELS = (
@@ -123,7 +120,7 @@ class Settings(BaseSettings):
     omniroute_base_url: str = "https://omnirouters.com/v1"
     omniroute_default_model: str = "opencode-zen/deepseek-v4-flash"
     omniroute_image_model: str = "chatgpt-web/gpt-5.5"
-    omniroute_video_model: str = "veo-3.1-generate-preview"
+    omniroute_video_model: str = "veo-3.1-fast-generate-preview"
     omniroute_speech_model: str = ""
     omniroute_image_timeout_seconds: int = 360
     omniroute_video_submit_timeout_seconds: int = 180
@@ -135,13 +132,13 @@ class Settings(BaseSettings):
     text_provider_fallbacks: str = ""
     ollama_cloud_api_key: str | None = Field(default=None, repr=False)
     ollama_cloud_base_url: str = "https://ollama.com/api"
-    ollama_cloud_default_model: str = "gpt-oss:120b"
+    ollama_cloud_default_model: str = OLLAMA_CLOUD_TEXT_MODELS[0]
     google_ai_api_key: str | None = Field(default=None, repr=False)
     google_ai_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
-    google_ai_image_model: str = "gemini-3.1-flash-image"
+    google_ai_image_model: str = GOOGLE_AI_IMAGE_MODELS[0]
     google_ai_image_size: str = "1K"
-    google_ai_video_model: str = "veo-3.1-generate-preview"
-    google_ai_video_fast_model: str = "veo-3.1-fast-generate-preview"
+    google_ai_video_model: str = GOOGLE_AI_VIDEO_MODELS[0]
+    google_ai_video_fast_model: str = GOOGLE_AI_VIDEO_MODELS[0]
     google_ai_video_default_duration_seconds: int = 8
     google_ai_video_poll_interval_seconds: int = 10
     google_ai_video_poll_timeout_seconds: int = 900
@@ -178,7 +175,15 @@ class Settings(BaseSettings):
         self.ollama_cloud_api_key = normalize_api_key(
             self.ollama_cloud_api_key, "ollama_cloud"
         )
+        self.ollama_cloud_default_model = normalize_ollama_cloud_text_model(
+            self.ollama_cloud_default_model
+        )
         self.google_ai_api_key = normalize_api_key(self.google_ai_api_key, "google_ai")
+        self.google_ai_image_model = normalize_google_ai_image_model(self.google_ai_image_model)
+        self.google_ai_video_model = normalize_google_ai_video_model(self.google_ai_video_model)
+        self.google_ai_video_fast_model = normalize_google_ai_video_model(
+            self.google_ai_video_fast_model
+        )
         self.elevenlabs_api_key = normalize_api_key(self.elevenlabs_api_key, "elevenlabs")
         self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
         self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")
@@ -212,6 +217,27 @@ class Settings(BaseSettings):
         if text in {"omniroute", "opencode"}:
             return legacy_default
         return normalize_provider_name(value, field_name)
+
+
+def normalize_ollama_cloud_text_model(value: object) -> str:
+    model = str(value or "").strip()
+    if model in OLLAMA_CLOUD_TEXT_MODELS:
+        return model
+    return OLLAMA_CLOUD_TEXT_MODELS[0]
+
+
+def normalize_google_ai_image_model(value: object) -> str:
+    model = str(value or "").strip()
+    if model in GOOGLE_AI_IMAGE_MODELS:
+        return model
+    return GOOGLE_AI_IMAGE_MODELS[0]
+
+
+def normalize_google_ai_video_model(value: object) -> str:
+    model = str(value or "").strip()
+    if model in GOOGLE_AI_VIDEO_MODELS:
+        return model
+    return GOOGLE_AI_VIDEO_MODELS[0]
 
 
 @lru_cache

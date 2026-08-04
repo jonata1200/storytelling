@@ -38,7 +38,7 @@ async def test_ollama_cloud_provider_sends_native_chat_request(
         text_provider="ollama_cloud",
         ollama_cloud_api_key="ollama-secret",
         ollama_cloud_base_url="https://ollama.com/api",
-        ollama_cloud_default_model="gpt-oss:120b",
+        ollama_cloud_default_model="deepseek-v4-flash:cloud",
     )
     monkeypatch.setattr("app.providers.llm.ollama_cloud.get_settings", lambda: settings)
     captured: dict[str, Any] = {}
@@ -50,7 +50,7 @@ async def test_ollama_cloud_provider_sends_native_chat_request(
         captured["timeout"] = kwargs.get("timeout")
         return _JsonResponse(
             {
-                "model": "gpt-oss:120b",
+                "model": "deepseek-v4-flash:cloud",
                 "message": {"role": "assistant", "content": '{"ok": true}'},
                 "done": True,
                 "prompt_eval_count": 12,
@@ -67,7 +67,7 @@ async def test_ollama_cloud_provider_sends_native_chat_request(
         LLMRequest(
             task="generate_story_ideas",
             prompt='Retorne {"ok": true}',
-            model="gpt-oss:120b",
+            model="deepseek-v4-flash:cloud",
             timeout_seconds=60,
         )
     )
@@ -78,7 +78,7 @@ async def test_ollama_cloud_provider_sends_native_chat_request(
     assert "format" not in captured["body"]
     assert captured["timeout"] == 60
     assert result.provider == "ollama_cloud"
-    assert result.model == "gpt-oss:120b"
+    assert result.model == "deepseek-v4-flash:cloud"
     assert result.content == {"ok": True}
     assert result.prompt_tokens == 12
     assert result.completion_tokens == 4

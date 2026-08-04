@@ -88,10 +88,10 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
         {
             "TEXT_PROVIDER_FALLBACKS": "",
             "OLLAMA_CLOUD_API_KEY": "ollama-secret",
-            "OLLAMA_CLOUD_DEFAULT_MODEL": "gpt-oss:120b",
+            "OLLAMA_CLOUD_DEFAULT_MODEL": "deepseek-v4-flash:cloud",
             "GOOGLE_AI_API_KEY": "google-secret",
-            "GOOGLE_AI_IMAGE_MODEL": "gemini-3.1-flash-image",
-            "GOOGLE_AI_VIDEO_MODEL": "veo-3.1-generate-preview",
+            "GOOGLE_AI_IMAGE_MODEL": "gemini-3.1-flash-lite-image",
+            "GOOGLE_AI_VIDEO_MODEL": "veo-3.1-fast-generate-preview",
             "ELEVENLABS_API_KEY": "eleven-secret",
             "ELEVENLABS_VOICE_ID": "voice-1",
             "ELEVENLABS_SPEECH_MODEL": "eleven_multilingual_v2",
@@ -102,10 +102,10 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     preferences = load_runtime_preferences(path)
     assert preferences["text_provider_fallbacks"] == ""
     assert preferences["ollama_cloud_api_key"] == "ollama-secret"
-    assert preferences["ollama_cloud_default_model"] == "gpt-oss:120b"
+    assert preferences["ollama_cloud_default_model"] == "deepseek-v4-flash:cloud"
     assert preferences["google_ai_api_key"] == "google-secret"
-    assert preferences["google_ai_image_model"] == "gemini-3.1-flash-image"
-    assert preferences["google_ai_video_model"] == "veo-3.1-generate-preview"
+    assert preferences["google_ai_image_model"] == "gemini-3.1-flash-lite-image"
+    assert preferences["google_ai_video_model"] == "veo-3.1-fast-generate-preview"
     assert preferences["elevenlabs_api_key"] == "eleven-secret"
     assert preferences["elevenlabs_voice_id"] == "voice-1"
     assert preferences["elevenlabs_speech_model"] == "eleven_multilingual_v2"

@@ -45,7 +45,7 @@ def test_provider_policy_supports_new_text_providers() -> None:
     settings = Settings(
         text_provider="ollama_cloud",
         ollama_cloud_base_url="https://ollama.com/api",
-        ollama_cloud_default_model="gpt-oss:120b",
+        ollama_cloud_default_model="gemma4:cloud",
     )
 
     assert "omniroute" not in SUPPORTED_AI_PROVIDERS
@@ -55,7 +55,7 @@ def test_provider_policy_supports_new_text_providers() -> None:
     assert effective_provider_for_channel(settings, "text") == "ollama_cloud"
     assert provider_display_name("ollama_cloud") == "Ollama Cloud"
     assert provider_base_url(settings, "ollama_cloud") == "https://ollama.com/api"
-    assert provider_model(settings, "ollama_cloud", "text") == "gpt-oss:120b"
+    assert provider_model(settings, "ollama_cloud", "text") == "gemma4:cloud"
     assert provider_requires_api_key(settings, "ollama_cloud") is True
 
 
@@ -65,8 +65,8 @@ def test_provider_policy_supports_google_ai_media_provider() -> None:
         video_provider="google_ai",
         google_ai_api_key="google-secret",
         google_ai_base_url="https://generativelanguage.googleapis.com/v1beta",
-        google_ai_image_model="gemini-3.1-flash-image",
-        google_ai_video_model="veo-3.1-generate-preview",
+        google_ai_image_model="gemini-3.1-flash-lite-image",
+        google_ai_video_model="veo-3.1-fast-generate-preview",
     )
 
     assert "google_ai" in SUPPORTED_AI_PROVIDERS
@@ -76,6 +76,6 @@ def test_provider_policy_supports_google_ai_media_provider() -> None:
     assert provider_base_url(settings, "google_ai") == (
         "https://generativelanguage.googleapis.com/v1beta"
     )
-    assert provider_model(settings, "google_ai", "image") == "gemini-3.1-flash-image"
-    assert provider_model(settings, "google_ai", "video") == "veo-3.1-generate-preview"
+    assert provider_model(settings, "google_ai", "image") == "gemini-3.1-flash-lite-image"
+    assert provider_model(settings, "google_ai", "video") == "veo-3.1-fast-generate-preview"
     assert provider_requires_api_key(settings, "google_ai") is True

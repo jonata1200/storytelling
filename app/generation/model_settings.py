@@ -11,7 +11,7 @@ from app.config.provider_policy import (
     provider_model,
     validate_model_name,
 )
-from app.config.settings import get_settings
+from app.config.settings import OLLAMA_CLOUD_TEXT_MODELS, get_settings
 from app.generation.models import ProjectModelSetting
 from app.providers.llm.ollama_cloud import OllamaCloudLLMProvider
 from app.providers.llm.types import LLMProvider
@@ -51,11 +51,19 @@ def llm_provider_for_name(settings: Any, provider: str) -> LLMProvider:
 def configured_text_llm_provider(settings: Any) -> tuple[LLMProvider, str, str]:
     provider = effective_provider_for_channel(settings, "text")
     llm_provider = llm_provider_for_name(settings, provider)
-    model = validate_model_name(
+    model = validate_text_provider_model(
+        provider,
         provider_model(settings, provider, "text"),
-        provider=provider,
     )
     return llm_provider, model, provider
+
+
+def validate_text_provider_model(provider: str, value: object) -> str:
+    model = validate_model_name(value, provider=provider)
+    if provider == "ollama_cloud" and model not in OLLAMA_CLOUD_TEXT_MODELS:
+        allowed_models = ", ".join(OLLAMA_CLOUD_TEXT_MODELS)
+        raise ValueError(f"Modelo Ollama Cloud não permitido. Use: {allowed_models}")
+    return model
 
 
 async def get_model_setting(
@@ -81,7 +89,7 @@ async def set_model_setting(
     provider = provider.strip().casefold()
     if provider not in SUPPORTED_MODEL_PROVIDERS:
         raise ValueError("Use um provider de IA real. Providers mock estão bloqueados.")
-    model = validate_model_name(model, provider=provider)
+    model = validate_text_provider_model(provider, model)
     result = await session.execute(
         select(ProjectModelSetting).where(
             ProjectModelSetting.project_id == project_id,
@@ -115,7 +123,7 @@ async def ensure_default_model_settings(
     created: list[ProjectModelSetting] = []
     provider = effective_provider_for_channel(settings, "text")
     try:
-        model = validate_model_name(provider_model(settings, provider, "text"), provider=provider)
+        model = validate_text_provider_model(provider, provider_model(settings, provider, "text"))
     except ValueError:
         return created
     for task in NARRATIVE_TASKS:
@@ -131,9 +139,10 @@ async def llm_provider_for_task(
     setting = await get_model_setting(session, project_id, task)
     settings = get_settings()
     if setting is not None and setting.provider in SUPPORTED_MODEL_PROVIDERS:
-        return llm_provider_for_name(settings, setting.provider), validate_model_name(
-            setting.model,
-            provider=setting.provider,
-        )
+        try:
+            model = validate_text_provider_model(setting.provider, setting.model)
+        except ValueError:
+            return configured_text_llm_provider(settings)[:2]
+        return llm_provider_for_name(settings, setting.provider), model
     llm_provider, model, _provider = configured_text_llm_provider(settings)
     return llm_provider, model

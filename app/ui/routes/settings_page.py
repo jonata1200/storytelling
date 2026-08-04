@@ -18,6 +18,9 @@ from app.config.settings import (
     GOOGLE_AI_VIDEO_MODELS,
     OLLAMA_CLOUD_TEXT_MODELS,
     get_settings,
+    normalize_google_ai_image_model,
+    normalize_google_ai_video_model,
+    normalize_ollama_cloud_text_model,
 )
 from app.storytelling.idea_lab import load_generated_ideas, load_saved_ideas
 
@@ -166,6 +169,15 @@ def register_settings_page(
                                 _ = current_model
                                 return list(options)
 
+                            def selected_ollama_cloud_model(current_model: str) -> str:
+                                return normalize_ollama_cloud_text_model(current_model)
+
+                            def selected_google_ai_image_model(current_model: str) -> str:
+                                return normalize_google_ai_image_model(current_model)
+
+                            def selected_google_ai_video_model(current_model: str) -> str:
+                                return normalize_google_ai_video_model(current_model)
+
                             ui.label("Texto").classes("text-sm font-semibold uppercase tracking-wide acid mt-5")
                             with ui.column().classes("w-full gap-3 mt-3"):
                                 with ui.row().classes(
@@ -215,7 +227,9 @@ def register_settings_page(
                                             current.ollama_cloud_default_model,
                                         ),
                                         label="Modelo de texto Ollama Cloud",
-                                        value=current.ollama_cloud_default_model,
+                                        value=selected_ollama_cloud_model(
+                                            current.ollama_cloud_default_model
+                                        ),
                                     )
                                     .props("outlined stack-label options-dense")
                                     .classes("w-full")
@@ -276,7 +290,9 @@ def register_settings_page(
                                             current.google_ai_image_model,
                                         ),
                                         label="Modelo de imagem Google AI",
-                                        value=current.google_ai_image_model,
+                                        value=selected_google_ai_image_model(
+                                            current.google_ai_image_model
+                                        ),
                                     )
                                     .props("outlined stack-label options-dense")
                                     .classes("w-full")
@@ -297,7 +313,9 @@ def register_settings_page(
                                             current.google_ai_video_model,
                                         ),
                                         label="Modelo de video Google AI",
-                                        value=current.google_ai_video_model,
+                                        value=selected_google_ai_video_model(
+                                            current.google_ai_video_model
+                                        ),
                                     )
                                     .props("outlined stack-label options-dense")
                                     .classes("w-full")

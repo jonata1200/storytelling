@@ -71,13 +71,13 @@ async def test_google_ai_image_provider_generates_and_saves_image(
             aspect_ratio="16:9",
             resolution="3840x2160",
             references=[source.as_posix()],
-            model="gemini-3.1-flash-image",
+            model="gemini-3.1-flash-lite-image",
         )
     )
 
     assert captured["url"] == "https://generativelanguage.googleapis.com/v1beta/interactions"
     assert captured["headers"]["X-goog-api-key"] == "google-secret"
-    assert captured["body"]["model"] == "gemini-3.1-flash-image"
+    assert captured["body"]["model"] == "gemini-3.1-flash-lite-image"
     assert captured["body"]["input"][0]["text"].startswith("Frame cinematico")
     assert captured["body"]["input"][1]["mime_type"] == "image/png"
     assert captured["body"]["response_format"] == {

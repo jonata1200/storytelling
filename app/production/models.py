@@ -25,12 +25,12 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     workflow_mode: Mapped[str] = mapped_column(String(80), default="keyframes_i2v", nullable=False)
     image_model: Mapped[str] = mapped_column(
         String(160),
-        default="gemini-3.1-flash-image",
+        default="gemini-3.1-flash-lite-image",
         nullable=False,
     )
     video_model: Mapped[str] = mapped_column(
         String(160),
-        default="veo-3.1-generate-preview",
+        default="veo-3.1-fast-generate-preview",
         nullable=False,
     )
     audio_mode: Mapped[str] = mapped_column(

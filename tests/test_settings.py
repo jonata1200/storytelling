@@ -16,8 +16,8 @@ def test_settings_defaults_to_new_ai_providers() -> None:
     assert effective_provider_for_channel(settings, "image") == "google_ai"
     assert effective_provider_for_channel(settings, "video") == "google_ai"
     assert settings.google_ai_base_url == "https://generativelanguage.googleapis.com/v1beta"
-    assert settings.google_ai_image_model == "gemini-3.1-flash-image"
-    assert settings.google_ai_video_model == "veo-3.1-generate-preview"
+    assert settings.google_ai_image_model == "gemini-3.1-flash-lite-image"
+    assert settings.google_ai_video_model == "veo-3.1-fast-generate-preview"
     assert settings.speech_provider == "elevenlabs"
     assert settings.elevenlabs_speech_model == "eleven_multilingual_v2"
     assert settings.dubbing_provider == "elevenlabs"
@@ -38,12 +38,28 @@ def test_settings_reads_ollama_cloud_text_provider() -> None:
         text_provider="ollama_cloud",
         ollama_cloud_api_key="  ollama-secret  ",
         ollama_cloud_base_url="https://ollama.com/api",
-        ollama_cloud_default_model="gpt-oss:120b",
+        ollama_cloud_default_model="minimax-m2.7:cloud",
     )
 
     assert settings.text_provider == "ollama_cloud"
     assert settings.ollama_cloud_api_key == "ollama-secret"
-    assert settings.ollama_cloud_default_model == "gpt-oss:120b"
+    assert settings.ollama_cloud_default_model == "minimax-m2.7:cloud"
+
+
+def test_settings_replaces_removed_ollama_cloud_model_with_default() -> None:
+    settings = Settings(ollama_cloud_default_model="gpt-oss:120b")
+
+    assert settings.ollama_cloud_default_model == "deepseek-v4-flash:cloud"
+
+
+def test_settings_replaces_removed_google_ai_models_with_defaults() -> None:
+    settings = Settings(
+        google_ai_image_model="gemini-3.1-flash-image",
+        google_ai_video_model="veo-3.1-generate-preview",
+    )
+
+    assert settings.google_ai_image_model == "gemini-3.1-flash-lite-image"
+    assert settings.google_ai_video_model == "veo-3.1-fast-generate-preview"
 
 
 def test_settings_reads_google_ai_media_provider() -> None:
@@ -51,7 +67,7 @@ def test_settings_reads_google_ai_media_provider() -> None:
         image_provider="google_ai",
         video_provider="google_ai",
         google_ai_api_key="  google-secret  ",
-        google_ai_image_model="gemini-3-pro-image",
+        google_ai_image_model="gemini-3.1-flash-lite-image",
         google_ai_image_size="2K",
         google_ai_video_model="veo-3.1-fast-generate-preview",
         google_ai_video_default_duration_seconds=6,
@@ -62,7 +78,7 @@ def test_settings_reads_google_ai_media_provider() -> None:
     assert settings.image_provider == "google_ai"
     assert settings.video_provider == "google_ai"
     assert settings.google_ai_api_key == "google-secret"
-    assert settings.google_ai_image_model == "gemini-3-pro-image"
+    assert settings.google_ai_image_model == "gemini-3.1-flash-lite-image"
     assert settings.google_ai_image_size == "2K"
     assert settings.google_ai_video_model == "veo-3.1-fast-generate-preview"
     assert settings.google_ai_video_default_duration_seconds == 6
@@ -98,21 +114,18 @@ def test_settings_reads_elevenlabs_voice_and_dubbing_provider() -> None:
 
 def test_new_text_model_lists_have_initial_defaults() -> None:
     assert OLLAMA_CLOUD_TEXT_MODELS == (
-        "gpt-oss:120b",
-        "gpt-oss:20b",
+        "deepseek-v4-flash:cloud",
+        "gemma4:cloud",
+        "minimax-m2.7:cloud",
+        "mistral-large-3:675b-cloud",
+        "nemotron-3-nano:30b-cloud",
+        "nemotron-3-super:cloud",
     )
     assert GOOGLE_AI_IMAGE_MODELS == (
-        "gemini-3.1-flash-image",
         "gemini-3.1-flash-lite-image",
-        "gemini-3-pro-image",
-        "gemini-2.5-flash-image",
     )
     assert GOOGLE_AI_VIDEO_MODELS == (
-        "veo-3.1-generate-preview",
         "veo-3.1-fast-generate-preview",
-        "veo-3.1-lite-generate-preview",
-        "veo-3.0-generate-001",
-        "veo-3.0-fast-generate-001",
     )
     assert ELEVENLABS_SPEECH_MODELS == (
         "eleven_multilingual_v2",

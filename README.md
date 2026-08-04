@@ -67,13 +67,13 @@ DUBBING_PROVIDER=elevenlabs
 
 OLLAMA_CLOUD_BASE_URL=https://ollama.com/api
 OLLAMA_CLOUD_API_KEY=sua_chave_ollama
-OLLAMA_CLOUD_DEFAULT_MODEL=gpt-oss:120b
+OLLAMA_CLOUD_DEFAULT_MODEL=deepseek-v4-flash:cloud
 
 GOOGLE_AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 GOOGLE_AI_API_KEY=sua_chave_google_ai
-GOOGLE_AI_IMAGE_MODEL=gemini-3.1-flash-image
+GOOGLE_AI_IMAGE_MODEL=gemini-3.1-flash-lite-image
 GOOGLE_AI_IMAGE_SIZE=1K
-GOOGLE_AI_VIDEO_MODEL=veo-3.1-generate-preview
+GOOGLE_AI_VIDEO_MODEL=veo-3.1-fast-generate-preview
 GOOGLE_AI_VIDEO_FAST_MODEL=veo-3.1-fast-generate-preview
 GOOGLE_AI_VIDEO_DEFAULT_DURATION_SECONDS=8
 GOOGLE_AI_VIDEO_POLL_INTERVAL_SECONDS=10

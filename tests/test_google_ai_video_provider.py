@@ -105,14 +105,14 @@ async def test_google_ai_video_provider_submits_polls_and_saves_inline_video(
             resolution="1920x1080",
             source_image_uri=source.as_posix(),
             output_dir=tmp_path / "videos",
-            model="veo-3.1-generate-preview",
+            model="veo-3.1-fast-generate-preview",
             seed=123,
         )
     )
 
     assert captured["submit_url"] == (
         "https://generativelanguage.googleapis.com/v1beta/"
-        "models/veo-3.1-generate-preview:predictLongRunning"
+        "models/veo-3.1-fast-generate-preview:predictLongRunning"
     )
     assert captured["submit_headers"]["X-goog-api-key"] == "google-secret"
     assert captured["submit_body"]["instances"][0]["prompt"] == "Animar a cena"
@@ -181,7 +181,7 @@ async def test_google_ai_video_provider_downloads_uri_payload(
             prompt="Cena ampla",
             duration_seconds=4,
             output_dir=tmp_path,
-            model="veo-3.1-generate-preview",
+            model="veo-3.1-fast-generate-preview",
         )
     )
 

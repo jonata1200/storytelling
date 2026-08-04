@@ -27,10 +27,10 @@ def test_production_payload_rejects_invalid_domain_values() -> None:
 
 def test_production_payload_normalizes_model_and_intensity() -> None:
     payload = _validated_production_payload(
-        {"image_model": " sourceful/riverflow-v2.5-pro ", "motion_intensity": "7"}
+        {"image_model": " gemini-3.1-flash-lite-image ", "motion_intensity": "7"}
     )
 
-    assert payload["image_model"] == "sourceful/riverflow-v2.5-pro"
+    assert payload["image_model"] == "gemini-3.1-flash-lite-image"
     assert payload["motion_intensity"] == 7
 
 
@@ -41,32 +41,35 @@ def test_production_payload_rejects_mock_and_OmniRoute_free_models() -> None:
     with pytest.raises(ValueError, match="free"):
         _validated_production_payload({"video_model": "google/gemini-flash-1.5:free"})
 
+    with pytest.raises(ValueError, match="Modelo inválido"):
+        _validated_production_payload({"image_model": "gemini-3.1-flash-image"})
+
 
 def test_resolve_image_model_uses_global_default_when_project_is_mock() -> None:
     assert (
-        resolve_image_model("mock-image", "krea/krea-2-medium-turbo")
-        == "krea/krea-2-medium-turbo"
+        resolve_image_model("mock-image", "gemini-3.1-flash-lite-image")
+        == "gemini-3.1-flash-lite-image"
     )
 
 
-def test_resolve_image_model_preserves_project_specific_real_model() -> None:
+def test_resolve_image_model_preserves_project_specific_allowed_model() -> None:
     assert (
-        resolve_image_model("krea/krea-2-medium-turbo", "sourceful/riverflow-v2-fast")
-        == "krea/krea-2-medium-turbo"
+        resolve_image_model("gemini-3.1-flash-lite-image", "gemini-3.1-flash-image")
+        == "gemini-3.1-flash-lite-image"
     )
 
 
 def test_resolve_image_model_uses_global_default_for_legacy_project_default() -> None:
     assert (
         resolve_image_model("sourceful/riverflow-v2-fast", "gemini-3.1-flash-image")
-        == "gemini-3.1-flash-image"
+        == "gemini-3.1-flash-lite-image"
     )
 
 
 def test_resolve_video_model_uses_global_default_for_legacy_project_default() -> None:
     assert (
         resolve_video_model("bytedance/seedance-2.0-fast", "veo-3.1-generate-preview")
-        == "veo-3.1-generate-preview"
+        == "veo-3.1-fast-generate-preview"
     )
 
 

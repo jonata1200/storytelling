@@ -13,14 +13,14 @@ class ImageGenerationRequest(BaseModel):
     resolution: str | None = None
     negative_prompt: str | None = None
     references: list[str] = Field(default_factory=list)
-    model: str = "chatgpt-web/gpt-5.5"
+    model: str = "gemini-3.1-flash-lite-image"
 
 
 class ImageEditRequest(BaseModel):
     prompt: str
     source_uri: str
     output_dir: Path
-    model: str = "chatgpt-web/gpt-5.5"
+    model: str = "gemini-3.1-flash-lite-image"
 
 
 class ImageResult(BaseModel):

@@ -26,7 +26,10 @@ async def test_google_ai_image_smoke(
             "GOOGLE_AI_BASE_URL",
             "https://generativelanguage.googleapis.com/v1beta",
         ),
-        google_ai_image_model=os.getenv("GOOGLE_AI_IMAGE_MODEL", "gemini-3.1-flash-image"),
+        google_ai_image_model=os.getenv(
+            "GOOGLE_AI_IMAGE_MODEL",
+            "gemini-3.1-flash-lite-image",
+        ),
         local_storage_path=tmp_path,
     )
     monkeypatch.setattr("app.providers.image.google_ai.get_settings", lambda: settings)

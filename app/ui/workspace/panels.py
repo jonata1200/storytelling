@@ -5,13 +5,21 @@ from nicegui import ui
 
 from app.config.model_policy import is_mock_model
 from app.config.provider_policy import (
-    SUPPORTED_AI_PROVIDERS,
+    SUPPORTED_MODEL_PROVIDERS,
     effective_provider_for_channel,
     provider_api_key,
     provider_display_name,
     provider_model,
 )
-from app.config.settings import get_settings
+from app.config.settings import (
+    GOOGLE_AI_IMAGE_MODELS,
+    GOOGLE_AI_VIDEO_MODELS,
+    OLLAMA_CLOUD_TEXT_MODELS,
+    get_settings,
+    normalize_google_ai_image_model,
+    normalize_google_ai_video_model,
+    normalize_ollama_cloud_text_model,
+)
 from app.generation.model_settings import NARRATIVE_TASKS, TASK_LABELS
 from app.generation.models import ProjectModelSetting
 from app.production.models import ProjectProductionSettings
@@ -62,7 +70,7 @@ def _render_model_settings(project_id: UUID, settings_list: list[ProjectModelSet
             setting = settings_by_task.get(task)
             provider_value = (
                 setting.provider
-                if setting and setting.provider in SUPPORTED_AI_PROVIDERS
+                if setting and setting.provider in SUPPORTED_MODEL_PROVIDERS
                 else configured_text_provider
             )
             model_value = (
@@ -70,26 +78,32 @@ def _render_model_settings(project_id: UUID, settings_list: list[ProjectModelSet
                 if setting and not is_mock_model(setting.model)
                 else provider_model(app_settings, provider_value, "text")
             )
+            if provider_value == "ollama_cloud":
+                model_value = normalize_ollama_cloud_text_model(model_value)
             with ui.row().classes("w-full items-end gap-2"):
                 ui.label(TASK_LABELS[task]).classes("w-28 text-sm text-slate-300")
                 provider_select = ui.select(
-                    list(SUPPORTED_AI_PROVIDERS),
+                    list(SUPPORTED_MODEL_PROVIDERS),
                     label="Provedor",
                     value=provider_value,
                 ).classes("w-36")
-                model_input = ui.input("Modelo", value=model_value).classes("flex-1")
+                model_select = ui.select(
+                    list(OLLAMA_CLOUD_TEXT_MODELS),
+                    label="Modelo",
+                    value=model_value,
+                ).props("options-dense").classes("flex-1")
                 ui.button(
                     "Salvar",
                     icon="save",
                     on_click=(
                         lambda task=task,
                         provider_select=provider_select,
-                        model_input=model_input: (
+                        model_select=model_select: (
                             _save_model_setting(
                                 project_id,
                                 task,
                                 provider_select.value,
-                                model_input.value,
+                                model_select.value,
                             )
                         )
                     ),
@@ -138,10 +152,12 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
         settings.image_model,
         provider_model(app_settings, configured_image_provider, "image"),
     )
+    effective_image_model = normalize_google_ai_image_model(effective_image_model)
     effective_video_model = resolve_video_model(
         settings.video_model,
         provider_model(app_settings, configured_video_provider, "video"),
     )
+    effective_video_model = normalize_google_ai_video_model(effective_video_model)
     with ui.card().classes(_card_classes("w-full")):
         with ui.row().classes("items-center gap-2"):
             ui.icon("tune").classes("text-cyan-300")
@@ -179,8 +195,16 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
                 min=1,
                 max=10,
             )
-            image_model = ui.input("Modelo de imagem", value=effective_image_model)
-            video_model = ui.input("Modelo de vídeo", value=effective_video_model)
+            image_model = ui.select(
+                list(GOOGLE_AI_IMAGE_MODELS),
+                label="Modelo de imagem",
+                value=effective_image_model,
+            ).props("options-dense")
+            video_model = ui.select(
+                list(GOOGLE_AI_VIDEO_MODELS),
+                label="Modelo de vídeo",
+                value=effective_video_model,
+            ).props("options-dense")
 
         async def save() -> None:
             await _save_production_setup(

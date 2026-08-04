@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.provider_policy import is_mock_model, validate_model_name
+from app.config.settings import GOOGLE_AI_IMAGE_MODELS, GOOGLE_AI_VIDEO_MODELS
 from app.production.models import ProjectProductionSettings
 from app.projects.repository import ProjectRepository
 
@@ -42,6 +43,14 @@ def _validate_model_name(value: object, field_name: str) -> str:
     return validate_model_name(value, field_name)
 
 
+def _validate_allowed_model(value: object, field_name: str, allowed_models: tuple[str, ...]) -> str:
+    model = _validate_model_name(value, field_name)
+    if model not in allowed_models:
+        allowed = ", ".join(allowed_models)
+        raise ValueError(f"Modelo inválido para {field_name}: {model}. Use: {allowed}")
+    return model
+
+
 def _validated_production_payload(payload: dict) -> dict:
     validators = {
         "content_type": set(CONTENT_TYPES),
@@ -56,9 +65,18 @@ def _validated_production_payload(payload: dict) -> dict:
         if key in validated and validated[key] not in allowed_values:
             allowed = ", ".join(sorted(allowed_values))
             raise ValueError(f"Valor inválido para {key}: {validated[key]}. Use: {allowed}")
-    for key in ("image_model", "video_model"):
-        if key in validated:
-            validated[key] = _validate_model_name(validated[key], key)
+    if "image_model" in validated:
+        validated["image_model"] = _validate_allowed_model(
+            validated["image_model"],
+            "image_model",
+            GOOGLE_AI_IMAGE_MODELS,
+        )
+    if "video_model" in validated:
+        validated["video_model"] = _validate_allowed_model(
+            validated["video_model"],
+            "video_model",
+            GOOGLE_AI_VIDEO_MODELS,
+        )
     if "motion_intensity" in validated:
         intensity = int(validated["motion_intensity"])
         if intensity < 1 or intensity > 10:
@@ -82,9 +100,14 @@ def resolve_image_model(project_image_model: str | None, default_image_model: st
         and not is_mock_model(project_model)
         and project_model not in LEGACY_DEFAULT_IMAGE_MODELS
     ):
-        return validate_model_name(project_model, "image_model")
+        model = validate_model_name(project_model, "image_model")
+        if model in GOOGLE_AI_IMAGE_MODELS:
+            return model
     if default_model and not is_mock_model(default_model):
-        return validate_model_name(default_model, "IMAGE_MODEL")
+        model = validate_model_name(default_model, "IMAGE_MODEL")
+        if model in GOOGLE_AI_IMAGE_MODELS:
+            return model
+        return GOOGLE_AI_IMAGE_MODELS[0]
     raise ValueError("Configure um modelo real de imagem antes de gerar imagens.")
 
 
@@ -96,9 +119,14 @@ def resolve_video_model(project_video_model: str | None, default_video_model: st
         and not is_mock_model(project_model)
         and project_model not in LEGACY_DEFAULT_VIDEO_MODELS
     ):
-        return validate_model_name(project_model, "video_model")
+        model = validate_model_name(project_model, "video_model")
+        if model in GOOGLE_AI_VIDEO_MODELS:
+            return model
     if default_model and not is_mock_model(default_model):
-        return validate_model_name(default_model, "VIDEO_MODEL")
+        model = validate_model_name(default_model, "VIDEO_MODEL")
+        if model in GOOGLE_AI_VIDEO_MODELS:
+            return model
+        return GOOGLE_AI_VIDEO_MODELS[0]
     raise ValueError("Configure um modelo real de vídeo antes de gerar clipes.")
 
 

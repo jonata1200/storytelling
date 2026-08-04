@@ -62,7 +62,7 @@ async def test_image_generation_errors_are_reported_without_mock_fallback(
                 target_id="character-1",
                 view_type="character_reference_sheet",
                 output_dir=tmp_path,
-                model="gemini-3.1-flash-image",
+                model="gemini-3.1-flash-lite-image",
             ),
         )
 
@@ -84,7 +84,7 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
         lambda: SimpleNamespace(
             ai_provider="ollama_cloud",
             image_provider="google_ai",
-            google_ai_image_model="gemini-3.1-flash-image",
+            google_ai_image_model="gemini-3.1-flash-lite-image",
         ),
     )
     monkeypatch.setattr(
@@ -99,7 +99,7 @@ async def test_image_provider_uses_real_default_model_instead_of_project_mock(
     )
 
     assert getattr(provider, "provider_name", None) == "google_ai"
-    assert model == "gemini-3.1-flash-image"
+    assert model == "gemini-3.1-flash-lite-image"
     assert directory == "google_ai_images"
 
 
@@ -118,7 +118,7 @@ async def test_image_provider_uses_google_ai_when_configured(
         lambda: Settings(
             ai_provider="ollama_cloud",
             image_provider="google_ai",
-            google_ai_image_model="gemini-3.1-flash-image",
+            google_ai_image_model="gemini-3.1-flash-lite-image",
         ),
     )
     monkeypatch.setattr(
@@ -133,7 +133,7 @@ async def test_image_provider_uses_google_ai_when_configured(
     )
 
     assert getattr(provider, "provider_name", None) == "google_ai"
-    assert model == "gemini-3.1-flash-image"
+    assert model == "gemini-3.1-flash-lite-image"
     assert directory == "google_ai_images"
 
 
@@ -150,7 +150,7 @@ async def test_image_provider_maps_legacy_omniroute_preference_to_google_ai(
         lambda: SimpleNamespace(
             ai_provider="ollama_cloud",
             image_provider="omniroute",
-            google_ai_image_model="gemini-3.1-flash-image",
+            google_ai_image_model="gemini-3.1-flash-lite-image",
         ),
     )
     monkeypatch.setattr(
@@ -165,7 +165,7 @@ async def test_image_provider_maps_legacy_omniroute_preference_to_google_ai(
     )
 
     assert getattr(provider, "provider_name", None) == "google_ai"
-    assert model == "gemini-3.1-flash-image"
+    assert model == "gemini-3.1-flash-lite-image"
     assert directory == "google_ai_images"
 
 

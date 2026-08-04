@@ -57,10 +57,10 @@ def test_provider_channel_readiness_reports_new_provider_components() -> None:
         image_provider="google_ai",
         video_provider="google_ai",
         ollama_cloud_api_key="ollama-secret",
-        ollama_cloud_default_model="gpt-oss:120b",
+        ollama_cloud_default_model="deepseek-v4-flash:cloud",
         google_ai_api_key="google-secret",
-        google_ai_image_model="gemini-3.1-flash-image",
-        google_ai_video_model="veo-3.1-generate-preview",
+        google_ai_image_model="gemini-3.1-flash-lite-image",
+        google_ai_video_model="veo-3.1-fast-generate-preview",
     )
 
     text = _provider_channel_readiness(settings, "text")
@@ -72,11 +72,11 @@ def test_provider_channel_readiness_reports_new_provider_components() -> None:
     assert video.name == "video_provider"
     assert {text.status, image.status, video.status} == {"ready"}
     assert text.details["provider"] == "ollama_cloud"
-    assert image.details["model"] == "gemini-3.1-flash-image"
+    assert image.details["model"] == "gemini-3.1-flash-lite-image"
     assert video.details["api_key_configured"] == "true"
 
 
-def test_provider_channel_readiness_reports_missing_google_model() -> None:
+def test_provider_channel_readiness_uses_standard_google_model_when_config_is_empty() -> None:
     settings = Settings(image_provider="google_ai", google_ai_image_model="")
 
     image = _provider_channel_readiness(settings, "image")
@@ -84,7 +84,8 @@ def test_provider_channel_readiness_reports_missing_google_model() -> None:
     assert image.name == "image_provider"
     assert image.status == "degraded"
     assert image.details["provider"] == "google_ai"
-    assert "GOOGLE_AI_IMAGE_MODEL" in image.message
+    assert image.details["model"] == "gemini-3.1-flash-lite-image"
+    assert "GOOGLE_AI_API_KEY" in image.message
 
 
 def test_provider_channel_readiness_reports_no_text_fallbacks() -> None:
@@ -93,7 +94,7 @@ def test_provider_channel_readiness_reports_no_text_fallbacks() -> None:
         text_provider="ollama_cloud",
         text_provider_fallbacks="",
         ollama_cloud_api_key="ollama-secret",
-        ollama_cloud_default_model="gpt-oss:120b",
+        ollama_cloud_default_model="deepseek-v4-flash:cloud",
     )
 
     text = _provider_channel_readiness(settings, "text")
@@ -109,7 +110,7 @@ def test_provider_channel_readiness_reports_missing_ollama_key() -> None:
         ai_provider="omniroute",
         text_provider="ollama_cloud",
         ollama_cloud_api_key=None,
-        ollama_cloud_default_model="gpt-oss:120b",
+        ollama_cloud_default_model="deepseek-v4-flash:cloud",
     )
 
     text = _provider_channel_readiness(settings, "text")
@@ -124,14 +125,14 @@ def test_provider_channel_readiness_reports_ollama_cloud() -> None:
         text_provider="ollama_cloud",
         text_provider_fallbacks="",
         ollama_cloud_api_key="ollama-secret",
-        ollama_cloud_default_model="gpt-oss:120b",
+        ollama_cloud_default_model="deepseek-v4-flash:cloud",
     )
 
     text = _provider_channel_readiness(settings, "text")
 
     assert text.status == "ready"
     assert text.details["provider"] == "ollama_cloud"
-    assert text.details["model"] == "gpt-oss:120b"
+    assert text.details["model"] == "deepseek-v4-flash:cloud"
     assert text.details["fallbacks"] == ""
 
 
@@ -140,8 +141,8 @@ def test_provider_channel_readiness_reports_google_ai_media() -> None:
         image_provider="google_ai",
         video_provider="google_ai",
         google_ai_api_key="google-secret",
-        google_ai_image_model="gemini-3.1-flash-image",
-        google_ai_video_model="veo-3.1-generate-preview",
+        google_ai_image_model="gemini-3.1-flash-lite-image",
+        google_ai_video_model="veo-3.1-fast-generate-preview",
     )
 
     image = _provider_channel_readiness(settings, "image")
@@ -149,11 +150,11 @@ def test_provider_channel_readiness_reports_google_ai_media() -> None:
 
     assert image.status == "ready"
     assert image.details["provider"] == "google_ai"
-    assert image.details["model"] == "gemini-3.1-flash-image"
+    assert image.details["model"] == "gemini-3.1-flash-lite-image"
     assert image.details["api_key_configured"] == "true"
     assert video.status == "ready"
     assert video.details["provider"] == "google_ai"
-    assert video.details["model"] == "veo-3.1-generate-preview"
+    assert video.details["model"] == "veo-3.1-fast-generate-preview"
 
 
 def test_readiness_dashboard_helpers_report_elevenlabs_dubbing() -> None:
