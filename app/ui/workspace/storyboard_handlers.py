@@ -163,6 +163,7 @@ async def generate_storyboards_from_ui(
     shot_id: UUID | None = None,
     approved_only: bool = False,
     force: bool = False,
+    sample_limit: int | None = None,
     loading_dialog: Any | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> None:
@@ -176,6 +177,8 @@ async def generate_storyboards_from_ui(
                 "force": force,
                 "approved_only": approved_only,
             }
+            if sample_limit is not None:
+                kwargs["sample_limit"] = sample_limit
             if progress_callback is not None:
                 kwargs["progress_callback"] = progress_callback
             frames = await generate_storyboard_frames(session, project_id, script_id, **kwargs)
@@ -188,7 +191,14 @@ async def generate_storyboards_from_ui(
                 script_id,
             ):
                 await generate_animatic_bundle(session, project_id, script_id)
-        ui.notify("Storyboards gerados.", color="positive")
+        ui.notify(
+            (
+                f"Amostra de {len(frames)} storyboard(s) gerada."
+                if sample_limit is not None
+                else "Storyboards gerados."
+            ),
+            color="positive",
+        )
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))

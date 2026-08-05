@@ -55,6 +55,7 @@ async def post_generate_video_clips(
             payload.variants_per_frame,
             payload.provider,
             payload.model,
+            payload.include_canonical_references,
         )
     except CostBudgetExceededError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc

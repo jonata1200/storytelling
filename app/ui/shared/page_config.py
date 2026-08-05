@@ -46,7 +46,7 @@ PRODUCTION_STEPS = [
     ProductionStep(
         "ideas",
         "Ideias",
-        "Gere três caminhos narrativos e escolha a melhor promessa emocional.",
+        "Gere duas opções fortes e escolha a melhor promessa emocional.",
         "Gerar ideias",
         "tips_and_updates",
     ),

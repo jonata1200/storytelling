@@ -20,9 +20,11 @@ from app.storyboards.prompts import (
     _store_storyboard_prompt_approval,
     _store_storyboard_prompt_override,
     _storyboard_effective_prompt,
+    _storyboard_generation_fingerprint,
     _storyboard_generation_prompt,
     _storyboard_prompt,
     _storyboard_prompt_is_approved,
+    storyboard_continuity_checklist,
 )
 from app.storyboards.service import (
     _animatic_fingerprint,
@@ -218,6 +220,26 @@ def test_storyboard_generation_prompt_adds_style_contract_once() -> None:
     assert "live-action" in prompt
     assert "Biblioteca Visual" in prompt
     assert prompt == repeated_prompt
+
+
+def test_storyboard_generation_fingerprint_changes_when_references_change() -> None:
+    first = _storyboard_generation_fingerprint("Prompt consistente.", ["storage/clara.png"])
+    second = _storyboard_generation_fingerprint(
+        "Prompt consistente.",
+        ["storage/clara.png", "storage/sala.png"],
+    )
+
+    assert first != second
+
+
+def test_storyboard_continuity_checklist_reports_reference_status() -> None:
+    checks = storyboard_continuity_checklist(
+        "Quadro fotorrealista live-action vertical 9:16 sem animação.",
+        ["storage/clara.png"],
+    )
+
+    assert all(bool(check["ok"]) for check in checks)
+    assert checks[2]["detail"] == "1 referência(s)"
 
 
 def test_storyboard_image_concurrency_is_bounded() -> None:

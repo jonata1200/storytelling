@@ -287,7 +287,10 @@ def _storyboard_frame_payload(
     shot: Shot,
     asset_id: UUID,
     prompt: str,
+    reference_uris: list[str] | None = None,
 ) -> dict:
+    references = list(reference_uris or [])
+    generation_fingerprint = _storyboard_generation_fingerprint(prompt, references)
     return {
         "scene_number": scene.scene_number,
         "shot_number": shot.shot_number,
@@ -296,6 +299,9 @@ def _storyboard_frame_payload(
         "duration_seconds": shot.duration_seconds,
         "prompt": prompt,
         "prompt_hash": _prompt_hash(prompt),
+        "reference_uris": references,
+        "reference_count": len(references),
+        "generation_fingerprint": generation_fingerprint,
         "frame_fingerprint": _prompt_hash(
             json.dumps(
                 {
@@ -304,12 +310,29 @@ def _storyboard_frame_payload(
                     "narration_text": shot.narration_text,
                     "dialogue_text": shot.dialogue_text,
                     "prompt": prompt,
+                    "reference_uris": references,
                 },
                 sort_keys=True,
                 ensure_ascii=True,
             )
         ),
     }
+
+
+def _storyboard_generation_fingerprint(
+    prompt: str,
+    reference_uris: list[str] | None = None,
+) -> str:
+    return _prompt_hash(
+        json.dumps(
+            {
+                "prompt": prompt,
+                "reference_uris": list(reference_uris or []),
+            },
+            sort_keys=True,
+            ensure_ascii=True,
+        )
+    )
 
 
 def _storyboard_prompt_approval_map(metadata: dict, script_id: UUID) -> dict[str, str]:
@@ -402,6 +425,33 @@ def _storyboard_generation_prompt(prompt: str) -> str:
         if section not in text
     ]
     return f"{text}\n\n" + "\n".join(additions)
+
+
+def storyboard_continuity_checklist(
+    prompt: str,
+    reference_uris: list[str] | None = None,
+) -> list[dict[str, str | bool]]:
+    text = str(prompt or "").casefold()
+    references = list(reference_uris or [])
+    return [
+        {
+            "label": "Estilo fotorrealista/live-action fixado",
+            "ok": "fotorreal" in text and "live-action" in text,
+        },
+        {
+            "label": "Anti-cartoon/animação explícito",
+            "ok": any(term in text for term in ("animação", "cartoon", "anime", "desenho")),
+        },
+        {
+            "label": "Referências canônicas anexadas",
+            "ok": bool(references),
+            "detail": f"{len(references)} referência(s)",
+        },
+        {
+            "label": "Proporção 9:16 orientada",
+            "ok": "9:16" in text or "vertical" in text,
+        },
+    ]
 
 
 def _storyboard_prompt_is_approved(

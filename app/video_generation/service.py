@@ -220,6 +220,25 @@ async def _asset_storage_uri(session: AsyncSession, asset_id: UUID) -> str | Non
     return asset.storage_uri if asset is not None else None
 
 
+def _storyboard_canonical_reference_uris(frame: StoryboardFrame) -> list[str]:
+    # O Veo exige clipes de 8s quando referenceImages são usadas; para manter a
+    # duração planejada, só anexamos referências extras em planos já compatíveis.
+    if frame.duration_seconds < 8:
+        return []
+    metadata = frame.metadata_json if isinstance(frame.metadata_json, dict) else {}
+    raw_references = metadata.get("reference_uris")
+    if not isinstance(raw_references, list):
+        return []
+    seen: set[str] = set()
+    references: list[str] = []
+    for reference in raw_references:
+        storage_uri = str(reference or "").strip()
+        if storage_uri and storage_uri not in seen:
+            seen.add(storage_uri)
+            references.append(storage_uri)
+    return references[:3]
+
+
 async def _emit_video_job_event(
     session: AsyncSession,
     *,
@@ -475,6 +494,7 @@ async def _generate_video_clips_concurrent(
     variants_per_frame: int = 1,
     provider_name: str = "auto",
     model: str | None = None,
+    include_canonical_references: bool = False,
 ) -> tuple[list[GenerationJob], list[VideoClip]] | None:
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
@@ -493,6 +513,11 @@ async def _generate_video_clips_concurrent(
     billable_seconds = 0
     for frame in frames:
         source_image_uri = await _asset_storage_uri(session, frame.asset_id)
+        reference_uris = (
+            _storyboard_canonical_reference_uris(frame)
+            if include_canonical_references
+            else []
+        )
         shot, scene = shot_context.get(frame.shot_id, (None, None))
         video_prompt = _video_effective_prompt(production_metadata, frame, shot, scene)
         for variant_index in range(1, variants_per_frame + 1):
@@ -504,6 +529,7 @@ async def _generate_video_clips_concurrent(
                 aspect_ratio,
                 video_size,
                 video_prompt,
+                reference_uris,
             )
             idempotency_key = video_idempotency_key(
                 frame.id,
@@ -551,6 +577,11 @@ async def _generate_video_clips_concurrent(
 
     for frame in frames:
         source_image_uri = await _asset_storage_uri(session, frame.asset_id)
+        reference_uris = (
+            _storyboard_canonical_reference_uris(frame)
+            if include_canonical_references
+            else []
+        )
         shot, scene = shot_context.get(frame.shot_id, (None, None))
         video_prompt = _video_effective_prompt(production_metadata, frame, shot, scene)
         for variant_index in range(1, variants_per_frame + 1):
@@ -562,6 +593,7 @@ async def _generate_video_clips_concurrent(
                 aspect_ratio,
                 video_size,
                 video_prompt,
+                reference_uris,
             )
             idempotency_key = video_idempotency_key(
                 frame.id,
@@ -625,6 +657,8 @@ async def _generate_video_clips_concurrent(
                 "variant_index": variant_index,
                 "source_image_asset_id": str(frame.asset_id),
                 "source_image_uri": source_image_uri,
+                "reference_uris": reference_uris,
+                "reference_count": len(reference_uris),
                 "provider": resolved_provider,
                 "model": resolved_model,
                 "aspect_ratio": aspect_ratio,
@@ -653,6 +687,7 @@ async def _generate_video_clips_concurrent(
                 aspect_ratio=aspect_ratio,
                 size=video_size,
                 source_image_uri=source_image_uri,
+                reference_uris=reference_uris,
                 output_dir=video_dir,
                 model=resolved_model,
             )
@@ -771,6 +806,7 @@ async def generate_video_clips(
     variants_per_frame: int = 1,
     provider_name: str = "auto",
     model: str | None = None,
+    include_canonical_references: bool = False,
 ) -> tuple[list[GenerationJob], list[VideoClip]] | None:
     return await _generate_video_clips_concurrent(
         session,
@@ -779,6 +815,7 @@ async def generate_video_clips(
         variants_per_frame=variants_per_frame,
         provider_name=provider_name,
         model=model,
+        include_canonical_references=include_canonical_references,
     )
 
 async def list_video_clips(session: AsyncSession, project_id: UUID) -> list[VideoClip]:

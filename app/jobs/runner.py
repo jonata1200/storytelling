@@ -159,7 +159,12 @@ async def _run_video(
         if isinstance(raw_frame_ids, list)
         else None
     )
-    result = await generate_video_clips(session, project_id, frame_ids=frame_ids)
+    result = await generate_video_clips(
+        session,
+        project_id,
+        frame_ids=frame_ids,
+        include_canonical_references=bool(payload.get("include_canonical_references")),
+    )
     if result is None:
         raise ValueError("não encontrei o projeto para gerar os clipes")
     jobs, clips = result

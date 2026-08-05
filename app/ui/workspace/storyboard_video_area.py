@@ -1,6 +1,7 @@
 ﻿# ruff: noqa: E501
 
 from collections.abc import Callable
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -8,6 +9,7 @@ from uuid import UUID
 from nicegui import ui
 
 from app.config.settings import get_settings
+from app.costs.service import estimate_operation_cost
 from app.database.session import AsyncSessionLocal
 from app.storyboards.service import (
     approve_storyboard_prompt,
@@ -113,6 +115,7 @@ async def _generate_storyboards_from_ui(
     shot_id: UUID | None = None,
     approved_only: bool = False,
     force: bool = False,
+    sample_limit: int | None = None,
     loading_dialog: Any | None = None,
     progress_callback: Any | None = None,
 ) -> None:
@@ -123,6 +126,7 @@ async def _generate_storyboards_from_ui(
         shot_id=shot_id,
         approved_only=approved_only,
         force=force,
+        sample_limit=sample_limit,
         loading_dialog=loading_dialog,
         progress_callback=progress_callback,
     )
@@ -208,6 +212,54 @@ def _render_generation_progress_summary(
         ).props("instant-feedback rounded")
 
 
+def _render_continuity_checks(checks: list[dict[str, Any]]) -> None:
+    if not checks:
+        return
+    with ui.row().classes("w-full flex-wrap gap-2 mt-2"):
+        for check in checks:
+            ok = bool(check.get("ok"))
+            label = str(check.get("label") or "")
+            detail = str(check.get("detail") or "").strip()
+            text = f"{label}: {detail}" if detail else label
+            with ui.element("div").classes(
+                (
+                    "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs "
+                    "bg-[#26301f] text-[#eaf878]"
+                )
+                if ok
+                else (
+                    "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs "
+                    "bg-[#4b2a2a] text-[#ffd4d4]"
+                )
+            ):
+                ui.icon("check_circle" if ok else "error_outline").classes("text-sm")
+                ui.label(text)
+
+
+def _video_cost_text(frame_count: int, duration_seconds: int) -> str:
+    if frame_count <= 0 or duration_seconds <= 0:
+        return "Nenhum custo previsto agora."
+    estimate = estimate_operation_cost(
+        "image_to_video",
+        Decimal(duration_seconds),
+        provider="google_ai",
+        model="veo-3.1-fast-generate-preview",
+    )
+    return f"Estimativa: US$ {estimate.estimated} para {frame_count} clipe(s)."
+
+
+def _image_cost_text(image_count: int) -> str:
+    if image_count <= 0:
+        return "Nenhum custo previsto agora."
+    estimate = estimate_operation_cost(
+        "image_generation",
+        Decimal(image_count),
+        provider="google_ai",
+        model="gemini-3.1-flash-lite-image",
+    )
+    return f"Estimativa: US$ {estimate.estimated} para {image_count} imagem(ns)."
+
+
 def _generation_progress_dialog(
     title: str,
     total: int,
@@ -258,6 +310,13 @@ def render_storyboard_area(
     approved_missing_prompt_previews = [
         preview for preview in missing_frame_previews if bool(preview.get("approved"))
     ]
+    storyboard_total = len(prompt_previews) or len(summary["frames"])
+    storyboard_generated = (
+        sum(1 for preview in prompt_previews if bool(preview.get("generated")))
+        if prompt_previews
+        else len(summary["frames"])
+    )
+    storyboard_missing = max(storyboard_total - storyboard_generated, 0)
     generation_dialog, storyboard_progress_callback = _generation_progress_dialog(
         "Gerando storyboards",
         len(missing_frame_previews),
@@ -275,6 +334,9 @@ def render_storyboard_area(
             ui.label(
                 "Revise os prompts por cena e plano antes de liberar a geração das imagens."
             ).classes("text-sm text-[#8d938e]")
+            ui.label(
+                f"Agora: gerar {len(missing_frame_previews)} e reaproveitar {storyboard_generated}."
+            ).classes("text-xs text-[#8d938e]")
             with ui.scroll_area().classes("w-full max-h-[58vh] pr-2"):
                 with ui.column().classes("w-full gap-3"):
                     for preview in prompt_previews:
@@ -292,6 +354,9 @@ def render_storyboard_area(
                                 )
                             ui.label(str(preview.get("prompt") or "")).classes(
                                 "text-xs text-[#aeb4af] whitespace-pre-wrap mt-2"
+                            )
+                            _render_continuity_checks(
+                                list(preview.get("continuity_checks") or [])
                             )
 
             async def confirm_storyboard_prompts() -> None:
@@ -335,24 +400,32 @@ def render_storyboard_area(
             None,
             None,
         )
-    storyboard_total = len(prompt_previews) or len(summary["frames"])
-    storyboard_generated = (
-        sum(1 for preview in prompt_previews if bool(preview.get("generated")))
-        if prompt_previews
-        else len(summary["frames"])
-    )
-    storyboard_missing = max(storyboard_total - storyboard_generated, 0)
     if storyboard_total:
         _render_generation_progress_summary(
             "Quadros do storyboard",
             storyboard_generated,
             storyboard_total,
             storyboard_missing,
-            f"{len(pending_prompt_previews)} prompt(s) pendente(s).",
+            (
+                f"{len(pending_prompt_previews)} prompt(s) pendente(s). "
+                f"{_image_cost_text(storyboard_missing)}"
+            ),
         )
     if script_id is not None and prompt_previews and not pending_prompt_previews:
         with ui.row().classes("w-full items-center justify-end gap-2 mb-2"):
             if not pending_prompt_previews and missing_frame_previews:
+                if len(missing_frame_previews) > 3:
+                    ui.button(
+                        "Gerar teste (3)",
+                        icon="science",
+                        on_click=lambda: _generate_storyboards_from_ui(
+                            project_id,
+                            script_id,
+                            sample_limit=3,
+                            loading_dialog=generation_dialog,
+                            progress_callback=storyboard_progress_callback,
+                        ),
+                    ).props("flat no-caps").classes("rounded-xl")
                 ui.button(
                     f"Gerar storyboards aprovados ({len(missing_frame_previews)})",
                     icon="auto_awesome",
@@ -460,6 +533,7 @@ def render_storyboard_area(
                         ui.label(str(preview.get("prompt") or "")).classes(
                             "text-xs text-[#aeb4af] whitespace-pre-wrap mt-3 line-clamp-6"
                         )
+                        _render_continuity_checks(list(preview.get("continuity_checks") or []))
                         with ui.row().classes("w-full items-center justify-between gap-2 mt-2"):
                             if script_id is not None and not approved:
                                 approve_button = (
@@ -609,6 +683,7 @@ def render_video_area(
 
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
+        pending_duration = sum(int(getattr(frame, "duration_seconds", 0) or 0) for frame in pending_frames)
         with (
             ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_dialog,
             ui.card().classes(
@@ -620,6 +695,20 @@ def render_video_area(
                 "Confira os planos que ainda n\u00e3o possuem v\u00eddeo. Ao confirmar, "
                 "a IA gera um clipe para cada plano listado."
             ).classes("text-sm text-[#8d938e]")
+            ui.label(
+                f"Agora: gerar {len(pending_frames)} e reaproveitar {generated_count}."
+            ).classes("text-xs text-[#8d938e]")
+            ui.label(_video_cost_text(len(pending_frames), pending_duration)).classes(
+                "text-xs text-[#8d938e]"
+            )
+            high_consistency_toggle = ui.checkbox(
+                "Alta consistência visual",
+                value=False,
+            ).props("dense")
+            ui.label(
+                "Usa referências canônicas extras somente em planos de 8s; deixe desligado "
+                "para o fluxo mais barato e rápido."
+            ).classes("text-xs text-[#8d938e]")
             with ui.scroll_area().classes("w-full max-h-[52vh] pr-2"):
                 with ui.column().classes("w-full gap-3"):
                     for frame in pending_frames:
@@ -643,6 +732,7 @@ def render_video_area(
                 await _approve_video_prompts_from_ui(
                     project_id,
                     frame_ids,
+                    include_canonical_references=bool(high_consistency_toggle.value),
                     loading_dialog=loading_dialog,
                     progress_callback=video_progress_callback,
                 )

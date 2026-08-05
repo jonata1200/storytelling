@@ -17,7 +17,9 @@ from app.storyboards.prompts import (
     _storyboard_generated_prompt_source_hash_map,
     _storyboard_prompt,
     _storyboard_prompt_is_approved,
+    _storyboard_reference_uris_for_shot,
     _storyboard_visual_context,
+    storyboard_continuity_checklist,
 )
 from app.storyboards.queries import list_storyboard_frames
 from app.storyboards.workflow import _selected_storyboard_shots
@@ -185,6 +187,12 @@ async def list_storyboard_prompt_previews(
             default_prompt,
         )
         prompt_hash = _prompt_hash(prompt)
+        reference_uris = await _storyboard_reference_uris_for_shot(
+            session,
+            project_id,
+            shot,
+            scene,
+        )
         previews.append(
             {
                 "shot_id": shot.id,
@@ -196,6 +204,8 @@ async def list_storyboard_prompt_previews(
                 "prompt": prompt,
                 "default_prompt": default_prompt,
                 "prompt_hash": prompt_hash,
+                "reference_count": len(reference_uris),
+                "continuity_checks": storyboard_continuity_checklist(prompt, reference_uris),
                 "custom_prompt": prompt != default_prompt,
                 "approved": _storyboard_prompt_is_approved(
                     metadata,

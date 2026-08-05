@@ -13,6 +13,7 @@ class GenerateVideoClipsRequest(BaseModel):
     variants_per_frame: int = Field(default=1, ge=1, le=4)
     provider: Literal["auto", "google_ai"] = "auto"
     model: str | None = None
+    include_canonical_references: bool = False
 
 
 class VideoCostEstimateRequest(BaseModel):

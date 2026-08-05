@@ -244,6 +244,36 @@ def test_google_ai_video_request_keeps_720p_image_input_duration(
     assert body["parameters"]["resolution"] == "720p"
 
 
+def test_google_ai_video_request_sends_reference_images(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "frame.png"
+    reference = tmp_path / "clara.png"
+    source.write_bytes(b"source-frame")
+    reference.write_bytes(b"reference-frame")
+    settings = Settings(local_storage_path=tmp_path)
+    monkeypatch.setattr(media_utils, "get_settings", lambda: settings)
+
+    body = GoogleAIVideoProvider()._request_body(
+        VideoRequest(
+            prompt="Animar frame",
+            duration_seconds=8,
+            resolution="720p",
+            source_image_uri=source.as_posix(),
+            reference_uris=[reference.as_posix()],
+            output_dir=tmp_path,
+            model="veo-3.1-fast-generate-preview",
+        ),
+        image_to_video=True,
+    )
+
+    reference_images = body["instances"][0]["referenceImages"]
+    assert len(reference_images) == 1
+    assert reference_images[0]["referenceType"] == "asset"
+    assert body["parameters"]["durationSeconds"] == "8"
+
+
 @pytest.mark.asyncio
 async def test_google_ai_video_provider_retries_transient_submit_error(
     monkeypatch: pytest.MonkeyPatch,

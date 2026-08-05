@@ -113,6 +113,39 @@ def test_video_fingerprint_changes_when_video_prompt_changes() -> None:
     assert first_fingerprint != second_fingerprint
 
 
+def test_video_fingerprint_changes_when_reference_uris_change() -> None:
+    frame = StoryboardFrame(
+        id=uuid4(),
+        asset_id=uuid4(),
+        duration_seconds=8,
+        prompt="Prompt de storyboard completo para video vertical.",
+        metadata_json={"frame_fingerprint": "frame-a"},
+    )
+
+    first_fingerprint = _video_request_fingerprint(
+        frame,
+        "asset://frame-a",
+        "google_ai",
+        "veo-3.1-fast-generate-preview",
+        "9:16",
+        "720p",
+        "Movimento suave.",
+        ["storage/clara.png"],
+    )
+    second_fingerprint = _video_request_fingerprint(
+        frame,
+        "asset://frame-a",
+        "google_ai",
+        "veo-3.1-fast-generate-preview",
+        "9:16",
+        "720p",
+        "Movimento suave.",
+        ["storage/clara.png", "storage/sala.png"],
+    )
+
+    assert first_fingerprint != second_fingerprint
+
+
 def test_video_motion_prompt_guides_image_to_video_continuity() -> None:
     frame = StoryboardFrame(
         id=uuid4(),

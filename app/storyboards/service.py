@@ -64,6 +64,7 @@ from app.storyboards.prompts import (
     _prompt_hash,
     _storyboard_effective_prompt,
     _storyboard_frame_payload,
+    _storyboard_generation_fingerprint,
     _storyboard_prompt,
     _storyboard_prompt_is_approved,
     _storyboard_reference_uris_for_shot,
@@ -100,6 +101,7 @@ async def generate_storyboard_frames(
     shot_id: UUID | None = None,
     force: bool = False,
     approved_only: bool = False,
+    sample_limit: int | None = None,
     progress_callback: StoryboardProgressCallback | None = None,
 ) -> list[StoryboardFrame] | None:
     project = await ProjectRepository(session).get_project(project_id)
@@ -158,6 +160,9 @@ async def generate_storyboard_frames(
             shot_rows,
             visual_context,
         )
+    if sample_limit is not None:
+        safe_limit = max(1, int(sample_limit))
+        shot_rows = shot_rows[:safe_limit]
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
     app_settings = get_settings()
     output_dir = app_settings.local_storage_path / image_dir_name / str(project_id)
@@ -167,17 +172,30 @@ async def generate_storyboard_frames(
     for shot, scene in shot_rows:
         frame_number = frame_number_by_shot[shot.id]
         prompt = prompt_by_shot[shot.id]
+        reference_uris = await _storyboard_reference_uris_for_shot(
+            session,
+            project_id,
+            shot,
+            scene,
+        )
         existing_frame = existing_by_shot.get(shot.id)
         existing_prompt_hash = (
             (existing_frame.metadata_json or {}).get("prompt_hash")
             if existing_frame is not None
             else None
         )
+        existing_generation_fingerprint = (
+            (existing_frame.metadata_json or {}).get("generation_fingerprint")
+            if existing_frame is not None
+            else None
+        )
+        generation_fingerprint = _storyboard_generation_fingerprint(prompt, reference_uris)
         existing_asset_available = await _storyboard_frame_asset_available(session, existing_frame)
         needs_image = (
             force
             or existing_frame is None
             or existing_prompt_hash != _prompt_hash(prompt)
+            or existing_generation_fingerprint != generation_fingerprint
             or not existing_asset_available
         )
         asset_artifact_id = (
@@ -192,16 +210,7 @@ async def generate_storyboard_frames(
                 existing_frame=existing_frame,
                 needs_image=needs_image,
                 asset_artifact_id=asset_artifact_id,
-                reference_uris=(
-                    await _storyboard_reference_uris_for_shot(
-                        session,
-                        project_id,
-                        shot,
-                        scene,
-                    )
-                    if needs_image
-                    else []
-                ),
+                reference_uris=reference_uris,
             )
         )
 
@@ -274,7 +283,7 @@ async def generate_storyboard_frames(
             duration_ms = None
             generation_metadata = {"reused": True}
 
-        payload = _storyboard_frame_payload(scene, shot, asset_id, prompt)
+        payload = _storyboard_frame_payload(scene, shot, asset_id, prompt, plan.reference_uris)
         if existing_frame is not None:
             previous_fingerprint = (existing_frame.metadata_json or {}).get("frame_fingerprint")
             existing_frame.frame_number = frame_number
@@ -488,8 +497,22 @@ async def storyboard_frames_need_generation(
             shot.id,
             default_prompt,
         )
+        reference_uris = await _storyboard_reference_uris_for_shot(
+            session,
+            project_id,
+            shot,
+            scene,
+        )
         existing_prompt_hash = (frame.metadata_json or {}).get("prompt_hash")
         if existing_prompt_hash != _prompt_hash(prompt):
+            return True
+        existing_generation_fingerprint = (frame.metadata_json or {}).get(
+            "generation_fingerprint"
+        )
+        if existing_generation_fingerprint != _storyboard_generation_fingerprint(
+            prompt,
+            reference_uris,
+        ):
             return True
         if not await _storyboard_frame_asset_available(session, frame):
             return True

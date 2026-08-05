@@ -396,6 +396,7 @@ async def _approve_video_prompts_from_ui(
     project_id: UUID,
     frame_ids: list[UUID],
     *,
+    include_canonical_references: bool = False,
     loading_dialog: Any | None = None,
     progress_callback: VisualBatchProgressCallback | None = None,
 ) -> None:
@@ -413,7 +414,10 @@ async def _approve_video_prompts_from_ui(
                 session,
                 project_id,
                 "video",
-                {"frame_ids": [str(frame_id) for frame_id in frame_ids]},
+                {
+                    "frame_ids": [str(frame_id) for frame_id in frame_ids],
+                    "include_canonical_references": include_canonical_references,
+                },
             )
         await _emit_visual_batch_progress(
             progress_callback,
@@ -444,6 +448,5 @@ async def _approve_video_prompts_from_ui(
     finally:
         if loading_dialog is not None:
             loading_dialog.close()
-
 
 

@@ -38,6 +38,7 @@ def _video_request_fingerprint(
     aspect_ratio: str,
     size: str,
     video_prompt: str | None = None,
+    reference_uris: list[str] | None = None,
 ) -> str:
     frame_metadata = frame.metadata_json if isinstance(frame.metadata_json, dict) else {}
     payload = {
@@ -47,6 +48,7 @@ def _video_request_fingerprint(
         "source_image_uri": source_image_uri,
         "storyboard_prompt": frame.prompt,
         "video_prompt": video_prompt or frame.prompt,
+        "reference_uris": list(reference_uris or []),
         "duration_seconds": frame.duration_seconds,
         "provider": provider,
         "model": model,
