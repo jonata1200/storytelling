@@ -131,8 +131,8 @@ DEFAULT_TEMPLATES: dict[str, str] = {
     "generate_scenes_and_shots": (
         "Divida o roteiro em {script} em cenas e planos prontos para geração de video "
         "vertical 9:16. A duração total obrigatoria e {target_duration_seconds}s. "
-        "A etapa de video usa Veo Free: cada plano deve ter entre "
-        "{clip_min_seconds}s e {clip_max_seconds}s. Use exatamente {expected_clip_count} "
+        "A etapa de video usa Veo 3.1 Lite: cada plano deve ter exatamente 4s, 6s "
+        "ou 8s. Use exatamente {expected_clip_count} "
         "planos com está distribuicao de duração, na ordem: {clip_durations}. "
         "A soma dos planos precisa ser exatamente {target_duration_seconds}s. "
         "Priorize menos planos e ações mais claras quando houver escolha; não divida uma "
@@ -153,7 +153,7 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "diálogo. Se o plano não tiver fala, dialogue_text pode ser string vazia. "
         "Responda somente JSON neste formato exato: "
         '{{"scenes":[{{"scene_number":1,"title":"...","summary":"...",'
-        '"duration_seconds":45,"shots":[{{"shot_number":1,"duration_seconds":15,'
+        '"duration_seconds":24,"shots":[{{"shot_number":1,"duration_seconds":8,'
         '"narration_text":"...","dialogue_text":"","action":"...","emotion":"...",'
         '"visual_composition":"...","camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}}]}}]}}'
     ),

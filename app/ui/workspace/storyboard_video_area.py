@@ -305,6 +305,21 @@ def _video_cost_text(frame_count: int, duration_seconds: int) -> str:
     return f"Estimativa: US$ {estimate.estimated} para {frame_count} clipe(s)."
 
 
+def _video_clip_cost_text(
+    duration_seconds: int,
+    model: str = "veo-3.1-lite-generate-preview",
+) -> str:
+    if duration_seconds <= 0:
+        return "Custo deste vídeo: indisponível."
+    estimate = estimate_operation_cost(
+        "image_to_video",
+        Decimal(duration_seconds),
+        provider="google_ai",
+        model=model,
+    )
+    return f"Custo deste vídeo: US$ {estimate.estimated} ({duration_seconds}s)."
+
+
 def _dubbing_cost_text(duration_seconds: int) -> str:
     if duration_seconds <= 0:
         return "Nenhum custo previsto agora."
@@ -327,6 +342,16 @@ def _image_cost_text(image_count: int) -> str:
         model="gemini-3.1-flash-lite-image",
     )
     return f"Estimativa: US$ {estimate.estimated} para {image_count} imagem(ns)."
+
+
+def _storyboard_frame_cost_text() -> str:
+    estimate = estimate_operation_cost(
+        "image_generation",
+        Decimal("1"),
+        provider="google_ai",
+        model="gemini-3.1-flash-lite-image",
+    )
+    return f"Custo por storyboard: US$ {estimate.estimated}."
 
 
 def render_storyboard_area(
@@ -565,6 +590,9 @@ def render_storyboard_area(
                                 ui.label(f"{int(preview.get('duration_seconds') or 0)}s").classes(
                                     "text-xs acid"
                                 )
+                                ui.label(_storyboard_frame_cost_text()).classes(
+                                    "text-xs text-[#8d938e]"
+                                )
                             ui.badge("aprovado" if approved else "pendente").classes(
                                 "bg-[#26301f] text-white" if approved else "bg-[#5aa3f0]"
                             )
@@ -648,6 +676,7 @@ def render_storyboard_area(
                     ui.label(f"PLANO {frame.frame_number:02d} · {frame.duration_seconds}s").classes(
                         "text-xs acid font-semibold"
                     )
+                    ui.label(_storyboard_frame_cost_text()).classes("text-xs text-[#8d938e]")
                     ui.label(frame.prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
                     if script_id is not None:
                         ui.button(
@@ -830,6 +859,9 @@ def render_video_area(
                                 ui.badge(f"{frame.duration_seconds}s").classes(
                                     "blue-status-badge bg-[#243342]"
                                 )
+                            ui.label(_video_clip_cost_text(frame.duration_seconds)).classes(
+                                "text-xs text-[#8d938e] mt-1"
+                            )
                             ui.label(str(preview.get("prompt") or frame.prompt)).classes(
                                 "text-sm text-[#d8dbd8] whitespace-pre-wrap mt-2 leading-6"
                             )
@@ -963,6 +995,9 @@ def render_video_area(
                                 else "blue-status-badge bg-[#243342]"
                             )
                         ui.label(f"{frame.duration_seconds}s").classes("text-xs acid")
+                        ui.label(_video_clip_cost_text(frame.duration_seconds)).classes(
+                            "text-xs text-[#8d938e]"
+                        )
                         ui.label(video_prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
                         with ui.row().classes("w-full justify-end mt-1"):
                             open_button = (
@@ -1122,6 +1157,9 @@ def render_video_area(
                         ui.label(f"{clip.duration_seconds}s \u00b7 {clip.model}").classes(
                             "text-xs text-[#878d88]"
                         )
+                        ui.label(
+                            _video_clip_cost_text(clip.duration_seconds, str(clip.model or ""))
+                        ).classes("text-xs text-[#8d938e]")
                         ui.label(video_prompt).classes("text-sm text-[#d1d4d1] line-clamp-3")
                         if frame is not None or clip_url:
                             with ui.row().classes("w-full items-center justify-between gap-2"):

@@ -39,11 +39,11 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
         "project_context": {"project": "A carta"},
         "current_script": "Roteiro atual",
         "clip_min_seconds": 4,
-        "clip_max_seconds": 15,
-        "clip_target_seconds": 15,
-        "expected_clip_count": 20,
+        "clip_max_seconds": 8,
+        "clip_target_seconds": 8,
+        "expected_clip_count": 38,
         "expected_scene_count": 5,
-        "clip_durations": "15s, 15s",
+        "clip_durations": "8s, 8s",
         "retry_guidance": "",
     }
 
@@ -63,7 +63,7 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
     assert "protagonista ativo" in compiled["generate_script"]
     assert "Nenhuma cena deve parecer preenchimento" in compiled["generate_script"]
     assert "Responda somente JSON válido" in compiled["generate_script"]
-    assert "entre 4s e 15s" in compiled["generate_scenes_and_shots"]
+    assert "exatamente 4s, 6s ou 8s" in compiled["generate_scenes_and_shots"]
     assert "ROTEIRO CINEMATOGRAFICO REVISADO COMPLETO AQUI" in compiled["revise_script"]
     assert '"scenes"' in compiled["generate_scenes_and_shots"]
     assert '"ideas"' in compiled["generate_story_ideas"]

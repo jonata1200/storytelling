@@ -27,8 +27,8 @@ test_script_payload_retries_compacted_inline_numbered_sluglines = (
 test_script_payload_preserves_embedded_production_plan_separately = (
     cases.test_script_payload_preserves_embedded_production_plan_separately
 )
-test_scene_plan_payload_normalizes_shots_to_seedance_duration_range = (
-    cases.test_scene_plan_payload_normalizes_shots_to_seedance_duration_range
+test_scene_plan_payload_normalizes_shots_to_veo_duration_values = (
+    cases.test_scene_plan_payload_normalizes_shots_to_veo_duration_values
 )
 test_scene_plan_payload_uses_script_scene_markers_when_ai_returns_one_scene = (
     cases.test_scene_plan_payload_uses_script_scene_markers_when_ai_returns_one_scene

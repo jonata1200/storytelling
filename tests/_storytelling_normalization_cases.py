@@ -33,6 +33,7 @@ from app.ui import pages
 from app.ui.pages import DEFAULT_STORY_DURATION_MINUTES, _asset_url, _compact_project_title
 from app.ui.workspace import storyboard_video_area
 from app.ui.workspace.assets_area import _character_reference_sheet_asset
+from app.video_generation.durations import VIDEO_CLIP_ALLOWED_SECONDS
 
 
 def test_idea_lab_duration_and_count_options_match_generation_controls() -> None:
@@ -458,11 +459,11 @@ FADE OUT.
         target_duration_seconds=60,
     )
 
-    assert payload["production_plan"]["scenes"][0]["shots"][0]["duration_seconds"] == 15
+    assert payload["production_plan"]["scenes"][0]["shots"][0]["duration_seconds"] == 4
     assert "production_plan" not in payload["content"]
 
 
-def test_scene_plan_payload_normalizes_shots_to_seedance_duration_range() -> None:
+def test_scene_plan_payload_normalizes_shots_to_veo_duration_values() -> None:
     payload = normalize_scene_plan_payload(
         {
             "scenes": [
@@ -492,7 +493,7 @@ def test_scene_plan_payload_normalizes_shots_to_seedance_duration_range() -> Non
 
     shots = [shot for scene in payload["scenes"] for shot in scene["shots"]]
     assert sum(shot["duration_seconds"] for shot in shots) == 60
-    assert all(4 <= shot["duration_seconds"] <= 15 for shot in shots)
+    assert all(shot["duration_seconds"] in VIDEO_CLIP_ALLOWED_SECONDS for shot in shots)
     assert payload["scenes"][0]["duration_seconds"] == 60
 
 
@@ -568,7 +569,7 @@ FADE OUT.
     ]
     assert sum(scene["duration_seconds"] for scene in payload["scenes"]) == 120
     assert all(
-        4 <= shot["duration_seconds"] <= 15
+        shot["duration_seconds"] in VIDEO_CLIP_ALLOWED_SECONDS
         for scene in payload["scenes"]
         for shot in scene["shots"]
     )

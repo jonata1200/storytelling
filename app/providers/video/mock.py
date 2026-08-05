@@ -6,8 +6,7 @@ from uuid import uuid4
 from app.core.enums import GenerationJobStatus
 from app.providers.video.types import ProviderCapabilities, VideoRequest, VideoResult
 from app.video_generation.durations import (
-    VIDEO_CLIP_MAX_SECONDS,
-    VIDEO_CLIP_MIN_SECONDS,
+    VIDEO_CLIP_ALLOWED_SECONDS,
     validate_video_clip_duration,
 )
 
@@ -22,7 +21,7 @@ class MockVideoProvider:
             image_to_video=True,
             reference_images=True,
             first_frame=True,
-            supported_durations=list(range(VIDEO_CLIP_MIN_SECONDS, VIDEO_CLIP_MAX_SECONDS + 1)),
+            supported_durations=list(VIDEO_CLIP_ALLOWED_SECONDS),
             supported_aspect_ratios=["9:16"],
             max_reference_images=4,
         )

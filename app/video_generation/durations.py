@@ -1,18 +1,19 @@
-﻿import math
+import math
 
 VIDEO_CLIP_MIN_SECONDS = 4
-VIDEO_CLIP_MAX_SECONDS = 15
-VIDEO_CLIP_TARGET_SECONDS = 15
+VIDEO_CLIP_ALLOWED_SECONDS = (4, 6, 8)
+VIDEO_CLIP_MAX_SECONDS = max(VIDEO_CLIP_ALLOWED_SECONDS)
+VIDEO_CLIP_TARGET_SECONDS = VIDEO_CLIP_MAX_SECONDS
 VIDEO_FRAME_RATE = 24
 
 
 def validate_video_clip_duration(duration_seconds: int) -> int:
     duration = int(duration_seconds)
-    if duration < VIDEO_CLIP_MIN_SECONDS or duration > VIDEO_CLIP_MAX_SECONDS:
+    if duration not in VIDEO_CLIP_ALLOWED_SECONDS:
+        allowed = ", ".join(f"{value}s" for value in VIDEO_CLIP_ALLOWED_SECONDS)
         raise ValueError(
-            "Seedance 2.0 Fast aceita clipes de "
-            f"{VIDEO_CLIP_MIN_SECONDS} a {VIDEO_CLIP_MAX_SECONDS} segundos; "
-            f"recebido {duration}s."
+            "Veo 3.1 Lite aceita somente clipes de "
+            f"{allowed}; recebido {duration}s."
         )
     return duration
 
@@ -27,18 +28,27 @@ def video_clip_durations(
         raise ValueError(
             f"A duração total precisa ter pelo menos {VIDEO_CLIP_MIN_SECONDS}s."
         )
+    if total % 2 != 0:
+        raise ValueError("A duração total precisa ser par para usar clipes Veo 3.1 Lite.")
 
     max_duration = min(max_duration_seconds, VIDEO_CLIP_MAX_SECONDS)
     if total <= max_duration:
         return [validate_video_clip_duration(total)]
 
     clip_count = math.ceil(total / max_duration)
-    base_duration = total // clip_count
-    remainder = total % clip_count
-    durations = [
-        base_duration + 1 if index < remainder else base_duration
-        for index in range(clip_count)
-    ]
+    while total < VIDEO_CLIP_MIN_SECONDS * clip_count:
+        clip_count += 1
+
+    durations = [max_duration] * clip_count
+    overage = (max_duration * clip_count) - total
+    index = 0
+    while overage >= 4 and index < len(durations):
+        durations[index] -= 4
+        overage -= 4
+        index += 1
+    if overage == 2:
+        durations[index] -= 2
+
     for duration in durations:
         validate_video_clip_duration(duration)
     return durations
