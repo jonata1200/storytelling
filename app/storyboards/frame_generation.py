@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
 from uuid import UUID
@@ -38,6 +38,7 @@ class StoryboardFrameGenerationPlan:
     existing_frame: StoryboardFrame | None
     needs_image: bool
     asset_artifact_id: UUID
+    reference_uris: list[str] = field(default_factory=list)
     image: ImageResult | None = None
     fallback_metadata: dict | None = None
     duration_ms: int | None = None
@@ -97,6 +98,13 @@ async def generate_storyboard_plan_images(
                         output_dir=output_dir,
                         aspect_ratio=image_aspect_ratio,
                         resolution=image_resolution,
+                        negative_prompt=(
+                            "animação, cartoon, desenho, ilustração, 3D render, anime, "
+                            "quadrinhos, pintura, concept art, personagem diferente, rosto "
+                            "diferente, figurino diferente, cenário diferente, objeto diferente, "
+                            "texto, legenda, marca d'agua, UI"
+                        ),
+                        references=plan.reference_uris,
                         model=image_model,
                     ),
                 )

@@ -1,12 +1,30 @@
-﻿import hashlib
+import hashlib
 import json
+import re
+import unicodedata
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.assets.models import Asset
 from app.storytelling.models import Scene, Shot
 from app.visual_bible.models import Character, Location, Prop, VisualReference
+
+STORYBOARD_REFERENCE_LIMIT = 6
+STORYBOARD_STYLE_CONTRACT = (
+    "Contrato visual global: fotorrealista, live-action cinematográfico, mesma linguagem "
+    "visual da Biblioteca Visual; não usar desenho, animação, cartoon, anime, quadrinhos, "
+    "3D render, pintura ou concept art. As imagens de referência anexadas são autoridade "
+    "visual para rosto, idade, cabelo, figurino, paleta, objetos, materiais e cenário."
+)
+STORYBOARD_STYLE_RULES = (
+    "Regras finais obrigatórias: gerar somente fotorrealismo live-action cinematográfico; "
+    "preservar fielmente personagens, locais e objetos da Biblioteca Visual e das imagens de "
+    "referência anexadas; manter rosto, idade, cabelo, figurino, materiais, escala, paleta, "
+    "luz e geografia espacial; não converter para animação, desenho, cartoon, anime, "
+    "quadrinhos, 3D render, pintura, concept art ou estética ilustrada."
+)
 
 
 def _prompt_hash(value: str) -> str:
@@ -28,6 +46,41 @@ def _compact_prompt_value(value: object, max_length: int = 140) -> str:
     if len(text) <= max_length:
         return text
     return f"{text[: max_length - 3].rstrip()}..."
+
+
+def _normalize_reference_match_text(value: str) -> str:
+    without_accents = "".join(
+        char for char in unicodedata.normalize("NFKD", value) if not unicodedata.combining(char)
+    )
+    return re.sub(r"[^a-z0-9]+", " ", without_accents.lower()).strip()
+
+
+def _storyboard_match_text(shot: Shot, scene: Scene) -> str:
+    return _normalize_reference_match_text(
+        " ".join(
+            str(part or "")
+            for part in (
+                scene.title,
+                scene.summary,
+                shot.action,
+                shot.visual_composition,
+                shot.narration_text,
+                shot.dialogue_text,
+            )
+        )
+    )
+
+
+def _name_is_mentioned(name: str, normalized_text: str) -> bool:
+    normalized_name = _normalize_reference_match_text(name)
+    if not normalized_name:
+        return False
+    if f" {normalized_name} " in f" {normalized_text} ":
+        return True
+    name_parts = [part for part in normalized_name.split() if len(part) >= 3]
+    return bool(name_parts) and all(
+        f" {part} " in f" {normalized_text} " for part in name_parts[:3]
+    )
 
 
 def _visual_context_items(items: list[Character] | list[Location] | list[Prop]) -> list[dict]:
@@ -86,6 +139,84 @@ async def _storyboard_visual_context(session: AsyncSession, project_id: UUID) ->
     return context
 
 
+def _storyboard_reference_view_priority(target_kind: str, view_type: str) -> int:
+    priorities = {
+        "character": {"front_portrait": 0, "character_reference_sheet": 1},
+        "location": {"establishing": 0},
+        "prop": {"front": 0},
+    }
+    return priorities.get(target_kind, {}).get(view_type, 99)
+
+
+async def _storyboard_reference_uris_for_shot(
+    session: AsyncSession,
+    project_id: UUID,
+    shot: Shot,
+    scene: Scene,
+    *,
+    limit: int = STORYBOARD_REFERENCE_LIMIT,
+) -> list[str]:
+    normalized_text = _storyboard_match_text(shot, scene)
+    target_rows: list[tuple[str, UUID, str, int]] = []
+    for target_kind, model, kind_priority in (
+        ("character", Character, 0),
+        ("location", Location, 1),
+        ("prop", Prop, 2),
+    ):
+        result = await session.execute(
+            select(model).where(model.project_id == project_id).order_by(model.created_at)
+        )
+        for item in result.scalars():
+            name = str(getattr(item, "name", "") or "")
+            score = 20 if _name_is_mentioned(name, normalized_text) else 0
+            target_rows.append((target_kind, item.id, name, score - kind_priority))
+
+    if not target_rows:
+        return []
+
+    target_ids_by_kind: dict[str, list[UUID]] = {}
+    for target_kind, target_id, _name, _score in target_rows:
+        target_ids_by_kind.setdefault(target_kind, []).append(target_id)
+
+    references_by_target: dict[tuple[str, UUID], list[VisualReference]] = {}
+    for target_kind, target_ids in target_ids_by_kind.items():
+        refs_result = await session.execute(
+            select(VisualReference)
+            .where(
+                VisualReference.project_id == project_id,
+                VisualReference.target_kind == target_kind,
+                VisualReference.target_id.in_(target_ids),
+                VisualReference.asset_id.is_not(None),
+            )
+            .order_by(VisualReference.created_at.desc())
+        )
+        for reference in refs_result.scalars():
+            key = (reference.target_kind, reference.target_id)
+            references_by_target.setdefault(key, []).append(reference)
+
+    selected_targets = sorted(target_rows, key=lambda row: (-row[3], row[0], row[2]))[:limit]
+    reference_uris: list[str] = []
+    seen: set[str] = set()
+    for target_kind, target_id, _name, _score in selected_targets:
+        references = sorted(
+            references_by_target.get((target_kind, target_id), []),
+            key=lambda item: (
+                _storyboard_reference_view_priority(item.target_kind, item.view_type),
+                -item.created_at.timestamp(),
+            ),
+        )
+        if not references:
+            continue
+        asset = await session.get(Asset, references[0].asset_id)
+        storage_uri = str(getattr(asset, "storage_uri", "") or "").strip()
+        if storage_uri and storage_uri not in seen:
+            seen.add(storage_uri)
+            reference_uris.append(storage_uri)
+        if len(reference_uris) >= limit:
+            break
+    return reference_uris
+
+
 def _storyboard_visual_context_text(visual_context: dict | None) -> str:
     if not visual_context:
         return ""
@@ -125,8 +256,10 @@ def _storyboard_visual_context_text(visual_context: dict | None) -> str:
 def _storyboard_prompt(shot: Shot, scene: Scene, visual_context: dict | None = None) -> str:
     visual_context_text = _storyboard_visual_context_text(visual_context)
     return (
-        "Storyboard frame cinematográfico para video vertical 9:16.\n"
+        "Quadro cinematográfico fotorrealista para storyboard de video vertical 9:16.\n"
         f"Cena {scene.scene_number}, plano {shot.shot_number}.\n\n"
+        f"{STORYBOARD_STYLE_CONTRACT}\n\n"
+        f"{STORYBOARD_STYLE_RULES}\n\n"
         f"Acao principal do plano: {shot.action}.\n"
         f"Emocao dominante: {shot.emotion}.\n"
         f"Composicao planejada: {shot.visual_composition}.\n"
@@ -137,6 +270,7 @@ def _storyboard_prompt(shot: Shot, scene: Scene, visual_context: dict | None = N
         "ambiente coerente, profundidade espacial e direcao de movimento compreensivel.\n\n"
         "Regras visuais obrigatorias:\n"
         "- formato vertical 9:16\n"
+        "- estilo fotorrealista live-action; nunca transformar em desenho ou animação\n"
         "- composicao cinematografica, clara e sem poluicao visual\n"
         "- continuidade rigorosa de rosto, idade, figurino, objetos, paleta, luz e ambiente\n"
         "- nenhum texto, legenda, marca d'agua, baloes, UI ou anotacao dentro da imagem\n"
@@ -250,11 +384,24 @@ def _storyboard_effective_prompt(
     shot_id: UUID,
     default_prompt: str,
 ) -> str:
-    return (
+    prompt = (
         _storyboard_prompt_override(metadata, script_id, shot_id)
         or _storyboard_generated_prompt(metadata, script_id, shot_id)
         or default_prompt
     )
+    return _storyboard_generation_prompt(prompt)
+
+
+def _storyboard_generation_prompt(prompt: str) -> str:
+    text = str(prompt or "").strip()
+    if STORYBOARD_STYLE_CONTRACT in text and STORYBOARD_STYLE_RULES in text:
+        return text
+    additions = [
+        section
+        for section in (STORYBOARD_STYLE_CONTRACT, STORYBOARD_STYLE_RULES)
+        if section not in text
+    ]
+    return f"{text}\n\n" + "\n".join(additions)
 
 
 def _storyboard_prompt_is_approved(

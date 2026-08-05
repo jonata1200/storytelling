@@ -374,9 +374,8 @@ def test_llm_provider_for_name_supports_text_providers() -> None:
     assert ollama_provider.provider_name == "ollama_cloud"
 
 
-def test_llm_provider_for_name_maps_removed_text_providers_to_ollama_cloud() -> None:
+def test_llm_provider_for_name_rejects_removed_text_providers() -> None:
     settings = Settings(ollama_cloud_api_key="ollama-secret")
 
-    provider = cast(Any, model_settings.llm_provider_for_name(settings, "groq"))
-
-    assert provider.provider_name == "ollama_cloud"
+    with pytest.raises(ValueError, match="Provider de texto não suportado"):
+        model_settings.llm_provider_for_name(settings, "groq")

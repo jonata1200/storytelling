@@ -20,6 +20,7 @@ from app.storyboards.prompts import (
     _store_storyboard_prompt_approval,
     _store_storyboard_prompt_override,
     _storyboard_effective_prompt,
+    _storyboard_generation_prompt,
     _storyboard_prompt,
     _storyboard_prompt_is_approved,
 )
@@ -109,6 +110,9 @@ def test_storyboard_prompt_includes_visual_bible_context() -> None:
     )
 
     assert "Biblioteca visual canonica - autoridade de continuidade" in prompt
+    assert "fotorrealista" in prompt
+    assert "live-action" in prompt
+    assert "nunca transformar em desenho ou animação" in prompt
     assert "Personagens:" in prompt
     assert "Locais:" in prompt
     assert "Objetos:" in prompt
@@ -162,9 +166,9 @@ def test_storyboard_prompt_override_invalidates_previous_approval() -> None:
         "Prompt editado para este plano.",
     )
 
-    assert _storyboard_effective_prompt(metadata, script_id, shot_id, "Prompt original") == (
-        "Prompt editado para este plano."
-    )
+    effective_prompt = _storyboard_effective_prompt(metadata, script_id, shot_id, "Prompt original")
+    assert effective_prompt.startswith("Prompt editado para este plano.")
+    assert "fotorrealista" in effective_prompt
     assert not _storyboard_prompt_is_approved(metadata, script_id, shot_id, "hash-a")
 
 
@@ -179,9 +183,9 @@ def test_storyboard_effective_prompt_uses_deepseek_generated_prompt() -> None:
         "source-hash",
     )
 
-    assert _storyboard_effective_prompt(metadata, script_id, shot_id, "Prompt local") == (
-        "Prompt cinematografico gerado pelo DeepSeek."
-    )
+    effective_prompt = _storyboard_effective_prompt(metadata, script_id, shot_id, "Prompt local")
+    assert effective_prompt.startswith("Prompt cinematografico gerado pelo DeepSeek.")
+    assert "live-action" in effective_prompt
 
 
 def test_storyboard_manual_prompt_overrides_deepseek_generated_prompt() -> None:
@@ -201,9 +205,19 @@ def test_storyboard_manual_prompt_overrides_deepseek_generated_prompt() -> None:
         "Prompt manual aprovado pelo usuario.",
     )
 
-    assert _storyboard_effective_prompt(metadata, script_id, shot_id, "Prompt local") == (
-        "Prompt manual aprovado pelo usuario."
-    )
+    effective_prompt = _storyboard_effective_prompt(metadata, script_id, shot_id, "Prompt local")
+    assert effective_prompt.startswith("Prompt manual aprovado pelo usuario.")
+    assert "não converter para animação" in effective_prompt
+
+
+def test_storyboard_generation_prompt_adds_style_contract_once() -> None:
+    prompt = _storyboard_generation_prompt("Plano fechado em Clara.")
+    repeated_prompt = _storyboard_generation_prompt(prompt)
+
+    assert "fotorrealista" in prompt
+    assert "live-action" in prompt
+    assert "Biblioteca Visual" in prompt
+    assert prompt == repeated_prompt
 
 
 def test_storyboard_image_concurrency_is_bounded() -> None:
@@ -220,11 +234,13 @@ async def test_generate_storyboard_plan_images_respects_concurrency_limit(
 ) -> None:
     active_generations = 0
     max_active_generations = 0
+    captured_requests: list[ImageGenerationRequest] = []
     lock = asyncio.Lock()
 
     class FakeProvider:
         async def generate(self, request: ImageGenerationRequest) -> ImageResult:
             nonlocal active_generations, max_active_generations
+            captured_requests.append(request)
             async with lock:
                 active_generations += 1
                 max_active_generations = max(max_active_generations, active_generations)
@@ -256,6 +272,7 @@ async def test_generate_storyboard_plan_images_respects_concurrency_limit(
             existing_frame=None,
             needs_image=True,
             asset_artifact_id=uuid4(),
+            reference_uris=["storage/ref.png"] if index == 0 else [],
         )
         for index in range(4)
     ]
@@ -273,6 +290,9 @@ async def test_generate_storyboard_plan_images_respects_concurrency_limit(
     assert max_active_generations == 2
     assert all(plan.image is not None for plan in plans)
     assert all(plan.duration_ms for plan in plans)
+    assert captured_requests[0].references == ["storage/ref.png"]
+    assert captured_requests[0].negative_prompt is not None
+    assert "animação" in captured_requests[0].negative_prompt
 
 
 @pytest.mark.asyncio
@@ -361,9 +381,14 @@ async def test_update_storyboard_prompt_saves_override(
 
     assert updated is True
     assert session.committed is True
-    assert _storyboard_effective_prompt(settings.metadata_json, script_id, shot_id, "Original") == (
-        "Prompt editado para gerar este quadro."
+    effective_prompt = _storyboard_effective_prompt(
+        settings.metadata_json,
+        script_id,
+        shot_id,
+        "Original",
     )
+    assert effective_prompt.startswith("Prompt editado para gerar este quadro.")
+    assert "fotorrealismo live-action" in effective_prompt
 
 
 @pytest.mark.asyncio

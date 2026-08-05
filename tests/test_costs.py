@@ -38,9 +38,9 @@ def test_estimate_operation_cost_uses_default_policy() -> None:
     estimate = estimate_operation_cost("image_to_video", Decimal("12.5"), model="video/model")
 
     assert estimate.unit == "second"
-    assert estimate.unit_cost == Decimal("0.080000")
-    assert estimate.estimated == Decimal("1.000000")
-    assert estimate.maximum == Decimal("1.150000")
+    assert estimate.unit_cost == Decimal("0.400000")
+    assert estimate.estimated == Decimal("5.000000")
+    assert estimate.maximum == Decimal("5.750000")
 
 
 def test_budget_allows_blocks_when_projected_cost_exceeds_limit() -> None:

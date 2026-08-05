@@ -66,6 +66,7 @@ from app.storyboards.prompts import (
     _storyboard_frame_payload,
     _storyboard_prompt,
     _storyboard_prompt_is_approved,
+    _storyboard_reference_uris_for_shot,
     _storyboard_visual_context,
 )
 from app.storyboards.queries import (
@@ -191,6 +192,16 @@ async def generate_storyboard_frames(
                 existing_frame=existing_frame,
                 needs_image=needs_image,
                 asset_artifact_id=asset_artifact_id,
+                reference_uris=(
+                    await _storyboard_reference_uris_for_shot(
+                        session,
+                        project_id,
+                        shot,
+                        scene,
+                    )
+                    if needs_image
+                    else []
+                ),
             )
         )
 
@@ -224,6 +235,8 @@ async def generate_storyboard_frames(
                 "resolution": image_resolution,
                 "aspect_ratio": image_aspect_ratio,
                 "duration_ms": duration_ms,
+                "reference_uris": plan.reference_uris,
+                "reference_count": len(plan.reference_uris),
                 **(plan.fallback_metadata or {}),
             }
             asset = Asset(
