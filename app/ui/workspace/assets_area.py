@@ -6,11 +6,12 @@ from nicegui import app as nicegui_app
 from nicegui import ui
 
 from app.assets.models import Asset
+from app.ui.shared.generation_progress import generation_progress_dialog, progress_ratio
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS
 from app.ui.visual.actions import (
     _approve_all_visual_targets_from_ui,
     _approve_visual_target_from_ui,
-    _generate_all_visual_prompts_from_ui,
+    _generate_all_visual_prompts_with_progress_from_ui,
     _regenerate_visual_reference_from_ui,
     _update_visual_prompt_from_ui,
     _visual_batch_requests,
@@ -46,7 +47,7 @@ ReferenceAsset = tuple[VisualReference, Asset, str]
 
 
 def _progress_ratio(done: int, total: int) -> float:
-    return min(max(done / total, 0.0), 1.0) if total else 0.0
+    return progress_ratio(done, total)
 
 
 def _visual_reference_progress_for(
@@ -562,19 +563,12 @@ def render_assets_area(
                     item, "canonical_profile", {}
                 ) or {}
         batch_total = sum(len(view_types) for _kind, _id, view_types in batch_requests)
-        with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_loading_dialog, ui.card().classes(
-            "entity-card rounded-2xl p-6 w-[min(520px,92vw)]"
-        ):
-            with ui.column().classes("w-full items-center gap-4"):
-                ui.spinner(size="lg").classes("acid")
-                ui.label("Gerando imagens").classes("brand-type text-2xl font-bold")
-                batch_progress_label = ui.label(f"0/{batch_total} imagem(ns) processada(s)")
-                batch_progress_label.classes("text-sm text-[#d8dbd8]")
-                batch_progress_bar = ui.linear_progress(value=0).classes("w-full")
-                batch_progress_bar.props("instant-feedback rounded")
-                batch_progress_detail = ui.label(
-                    "A IA está criando as imagens aprovadas da Biblioteca Visual."
-                ).classes("text-xs text-[#8d938e] text-center")
+        batch_loading_dialog, update_batch_progress = generation_progress_dialog(
+            "Gerando imagens",
+            batch_total,
+            "imagem",
+            "A IA está criando as imagens aprovadas da Biblioteca Visual.",
+        )
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_prompt_dialog, ui.card().classes(
             "entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"
         ):
@@ -598,15 +592,6 @@ def render_assets_area(
             async def confirm_batch_prompts() -> None:
                 batch_prompt_dialog.close()
                 batch_loading_dialog.open()
-
-                def update_batch_progress(completed: int, total: int, detail: str) -> None:
-                    safe_total = max(total, 1)
-                    batch_progress_label.set_text(
-                        f"{completed}/{total} imagem(ns) processada(s)"
-                    )
-                    batch_progress_bar.set_value(_progress_ratio(completed, safe_total))
-                    batch_progress_detail.set_text(detail)
-
                 try:
                     await _approve_all_visual_targets_from_ui(
                         project_id,
@@ -629,15 +614,20 @@ def render_assets_area(
                 "text-sm text-[#8e948f]"
             )
         if prompts_need_generation:
-            prompt_loading_dialog = loading_dialog_factory(
+            prompt_loading_dialog, update_prompt_progress = generation_progress_dialog(
                 "Gerando prompts visuais",
+                3,
+                "etapa",
                 "A IA está criando prompts para personagens, locais e objetos.",
             )
 
             async def generate_all_visual_prompts() -> None:
                 prompt_loading_dialog.open()
                 try:
-                    await _generate_all_visual_prompts_from_ui(project_id)
+                    await _generate_all_visual_prompts_with_progress_from_ui(
+                        project_id,
+                        progress_callback=update_prompt_progress,
+                    )
                 finally:
                     prompt_loading_dialog.close()
 

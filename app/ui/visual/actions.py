@@ -181,7 +181,21 @@ def _visual_prompts_need_generation(summary: dict[str, Any]) -> bool:
 
 
 async def _generate_all_visual_prompts_from_ui(project_id: UUID) -> None:
+    await _generate_all_visual_prompts_with_progress_from_ui(project_id)
+
+
+async def _generate_all_visual_prompts_with_progress_from_ui(
+    project_id: UUID,
+    *,
+    progress_callback: VisualBatchProgressCallback | None = None,
+) -> None:
     try:
+        await _emit_visual_batch_progress(
+            progress_callback,
+            0,
+            3,
+            "Localizando o roteiro aprovado para orientar a Biblioteca Visual.",
+        )
         async with AsyncSessionLocal() as session:
             script_result = await session.execute(
                 select(Script)
@@ -196,6 +210,12 @@ async def _generate_all_visual_prompts_from_ui(project_id: UUID) -> None:
                     color="warning",
                 )
                 return
+            await _emit_visual_batch_progress(
+                progress_callback,
+                1,
+                3,
+                "Roteiro localizado. A IA está extraindo personagens, locais e objetos.",
+            )
             result = await generate_visual_bible(session, project_id, script.id)
         if result is None:
             _notify_visual_action(
@@ -205,6 +225,12 @@ async def _generate_all_visual_prompts_from_ui(project_id: UUID) -> None:
             return
         characters, locations, props = result
         total = len(characters) + len(locations) + len(props)
+        await _emit_visual_batch_progress(
+            progress_callback,
+            2,
+            3,
+            f"{total} prompt(s) visual(is) retornado(s). Salvando Biblioteca Visual.",
+        )
         if total:
             _notify_visual_action(
                 (
@@ -219,6 +245,12 @@ async def _generate_all_visual_prompts_from_ui(project_id: UUID) -> None:
                 "Nenhum prompt visual novo foi necessário para este projeto.",
                 color="positive",
             )
+        await _emit_visual_batch_progress(
+            progress_callback,
+            3,
+            3,
+            f"Biblioteca Visual pronta: {total} prompt(s) processado(s).",
+        )
         ui.navigate.reload()
     except Exception as exc:
         logger.exception("Não foi possível gerar prompts visuais no projeto %s", project_id)
@@ -448,5 +480,3 @@ async def _approve_video_prompts_from_ui(
     finally:
         if loading_dialog is not None:
             loading_dialog.close()
-
-

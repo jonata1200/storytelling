@@ -6,18 +6,22 @@ from uuid import UUID
 from nicegui import ui
 
 from app.database.session import AsyncSessionLocal
+from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact
 from app.projects.versioning import (
     create_artifact_version,
     resolve_stale_artifacts_after_regeneration,
 )
-from app.storytelling.models import Script, ScriptVersion
+from app.storytelling.models import Scene, Script, ScriptVersion, StoryIdea
 from app.storytelling.service import regenerate_scenes_and_shots
+from app.ui.project.data import latest as _latest
+from app.ui.project.data import scalar_count as _scalar_count
 from app.ui.project.workflows import (
     _generate_missing_scenes_in_background,
     _reload_project_when_script_ready,
     _resume_initial_script_in_background,
 )
+from app.ui.shared.generation_progress import generation_progress_dialog
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, STEP_LOADING_COPY
 from app.visual_bible.service import generate_visual_bible
 
@@ -36,7 +40,11 @@ def script_generation_in_progress(
     should_recover_missing_scenes: bool,
     should_resume_stale_script: bool,
 ) -> bool:
-    return (script is None and ai_status in {"queued", "running"}) or should_resume_stale_script
+    return (
+        (script is None and ai_status in {"queued", "running"})
+        or should_recover_missing_scenes
+        or should_resume_stale_script
+    )
 
 
 async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID) -> None:
@@ -62,6 +70,51 @@ async def _close_loading_dialog_when_script_ready(project_id: UUID, loading_dial
     ready = await _reload_project_when_script_ready(project_id)
     if ready and hasattr(loading_dialog, "close"):
         loading_dialog.close()
+
+
+async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int, str, bool]:
+    async with AsyncSessionLocal() as session:
+        idea = await _latest(session, StoryIdea, project_id)
+        script = await _latest(session, Script, project_id)
+        scene_count = await _scalar_count(session, Scene, project_id)
+        settings = await get_or_create_production_settings(session, project_id)
+        metadata = settings.metadata_json or {}
+        action = metadata.get("ai_action") if isinstance(metadata, dict) else None
+        status = str(action.get("status") or "") if isinstance(action, dict) else ""
+        message = str(action.get("message") or "") if isinstance(action, dict) else ""
+    completed = 0
+    if idea is not None:
+        completed = 1
+    if script is not None:
+        completed = 2
+    if scene_count > 0:
+        completed = 3
+    if status == "completed":
+        completed = 3
+    failed = status == "failed"
+    if failed:
+        detail = "A IA não conseguiu concluir o roteiro inicial."
+    elif completed == 0:
+        detail = message or "A IA está criando uma ideia narrativa para orientar o roteiro."
+    elif completed == 1:
+        detail = message or "Ideia criada. A IA está escrevendo o roteiro cinematográfico."
+    elif completed == 2:
+        detail = message or "Roteiro criado. A IA está separando cenas e planos."
+    else:
+        detail = "Roteiro, cenas e planos prontos."
+    return completed, 3, detail, completed >= 3 or failed
+
+
+async def _update_script_generation_progress(
+    project_id: UUID,
+    loading_dialog: Any,
+    update_progress: Callable[[int, int, str], None],
+) -> None:
+    completed, total, detail, terminal = await _script_generation_progress_state(project_id)
+    update_progress(completed, total, detail)
+    if terminal and hasattr(loading_dialog, "close"):
+        loading_dialog.close()
+        ui.navigate.reload()
 
 
 async def save_script_from_ui(
@@ -196,9 +249,22 @@ def render_script_area(
                 )
             )
         )
-        loading_dialog = loading_dialog_factory(loading_title, loading_message)
+        loading_dialog, update_script_progress = generation_progress_dialog(
+            loading_title,
+            3,
+            "etapa",
+            loading_message,
+        )
         loading_dialog.open()
-        ui.timer(5.0, lambda: _close_loading_dialog_when_script_ready(project_id, loading_dialog))
+        update_script_progress(0, 3, loading_message)
+        ui.timer(
+            2.0,
+            lambda: _update_script_generation_progress(
+                project_id,
+                loading_dialog,
+                update_script_progress,
+            ),
+        )
     edit_dialog = None
     if script is not None:
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_dialog, ui.card().classes(
@@ -231,13 +297,28 @@ def render_script_area(
     with ui.row().classes("w-full gap-4 items-start"):
         with ui.column().classes("flex-1 gap-4"):
             if script is None and ai_status == "failed":
-                retry_loading_dialog = loading_dialog_factory(
+                retry_loading_dialog, update_retry_progress = generation_progress_dialog(
                     "Retomando roteiro",
+                    3,
+                    "etapa",
                     "A IA está tentando criar o roteiro inicial novamente.",
                 )
 
                 async def retry_initial_script() -> None:
                     await retry_initial_script_from_ui(project_id, retry_loading_dialog)
+                    update_retry_progress(
+                        0,
+                        3,
+                        "A IA está tentando criar o roteiro inicial novamente.",
+                    )
+                    ui.timer(
+                        2.0,
+                        lambda: _update_script_generation_progress(
+                            project_id,
+                            retry_loading_dialog,
+                            update_retry_progress,
+                        ),
+                    )
 
                 with ui.element("div").classes(
                     "border border-red-900 bg-red-950/40 rounded-2xl p-4 text-red-100"

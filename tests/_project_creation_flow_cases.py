@@ -518,6 +518,19 @@ def test_script_loading_stops_when_only_scenes_are_missing() -> None:
     )
 
 
+def test_script_loading_runs_when_recovering_missing_scenes() -> None:
+    assert (
+        script_area.script_generation_in_progress(
+            script=object(),
+            scenes=[],
+            ai_status="completed",
+            should_recover_missing_scenes=True,
+            should_resume_stale_script=False,
+        )
+        is True
+    )
+
+
 def test_legacy_assistant_greeting_is_removed_from_chat_history() -> None:
     assert (
         pages._is_legacy_assistant_greeting(

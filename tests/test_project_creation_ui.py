@@ -36,6 +36,9 @@ test_safe_refresh_ignores_deleted_slot_runtime_error = (
 test_legacy_assistant_greeting_is_removed_from_chat_history = (
     cases.test_legacy_assistant_greeting_is_removed_from_chat_history
 )
+test_script_loading_runs_when_recovering_missing_scenes = (
+    cases.test_script_loading_runs_when_recovering_missing_scenes
+)
 test_visual_card_detail_formats_character_profile_without_raw_dict = (
     cases.test_visual_card_detail_formats_character_profile_without_raw_dict
 )
