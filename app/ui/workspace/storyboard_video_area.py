@@ -45,12 +45,15 @@ async def _generate_storyboards_when_prompts_are_ready(
     session: Any,
     project_id: UUID,
     script_id: UUID,
+    *,
+    progress_callback: Any | None = None,
 ) -> int | None:
     _sync_storyboard_handler_dependencies()
     return await _storyboard_handlers.generate_storyboards_when_prompts_are_ready(
         session,
         project_id,
         script_id,
+        progress_callback=progress_callback,
     )
 
 
@@ -59,12 +62,14 @@ async def _approve_storyboard_prompts_from_ui(
     script_id: UUID,
     *,
     loading_dialog: Any | None = None,
+    progress_callback: Any | None = None,
 ) -> None:
     _sync_storyboard_handler_dependencies()
     await _storyboard_handlers.approve_storyboard_prompts_from_ui(
         project_id,
         script_id,
         loading_dialog=loading_dialog,
+        progress_callback=progress_callback,
     )
 
 
@@ -74,6 +79,7 @@ async def _approve_storyboard_prompt_from_ui(
     shot_id: UUID,
     *,
     loading_dialog: Any | None = None,
+    progress_callback: Any | None = None,
 ) -> None:
     _sync_storyboard_handler_dependencies()
     await _storyboard_handlers.approve_storyboard_prompt_from_ui(
@@ -81,6 +87,7 @@ async def _approve_storyboard_prompt_from_ui(
         script_id,
         shot_id,
         loading_dialog=loading_dialog,
+        progress_callback=progress_callback,
     )
 
 
@@ -107,6 +114,7 @@ async def _generate_storyboards_from_ui(
     approved_only: bool = False,
     force: bool = False,
     loading_dialog: Any | None = None,
+    progress_callback: Any | None = None,
 ) -> None:
     _sync_storyboard_handler_dependencies()
     await _storyboard_handlers.generate_storyboards_from_ui(
@@ -116,6 +124,7 @@ async def _generate_storyboards_from_ui(
         approved_only=approved_only,
         force=force,
         loading_dialog=loading_dialog,
+        progress_callback=progress_callback,
     )
 
 
@@ -199,6 +208,37 @@ def _render_generation_progress_summary(
         ).props("instant-feedback rounded")
 
 
+def _generation_progress_dialog(
+    title: str,
+    total: int,
+    item_label: str,
+    initial_detail: str,
+) -> tuple[Any, Callable[[int, int, str], None]]:
+    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as progress_dialog, ui.card().classes(
+        "entity-card rounded-2xl p-6 w-[min(520px,92vw)]"
+    ):
+        with ui.column().classes("w-full items-center gap-4"):
+            ui.spinner(size="lg").classes("acid")
+            ui.label(title).classes("brand-type text-2xl font-bold")
+            progress_label = ui.label(f"0/{total} {item_label}(s) processado(s)")
+            progress_label.classes("text-sm text-[#d8dbd8]")
+            progress_bar = ui.linear_progress(value=0).classes("w-full")
+            progress_bar.props("instant-feedback rounded")
+            progress_detail = ui.label(initial_detail).classes(
+                "text-xs text-[#8d938e] text-center"
+            )
+
+    def update_progress(completed: int, current_total: int, detail: str) -> None:
+        safe_total = max(current_total, 1)
+        progress_label.set_text(
+            f"{completed}/{current_total} {item_label}(s) processado(s)"
+        )
+        progress_bar.set_value(_progress_ratio(completed, safe_total))
+        progress_detail.set_text(detail)
+
+    return progress_dialog, update_progress
+
+
 def render_storyboard_area(
     project_id: UUID,
     summary: dict[str, Any],
@@ -218,13 +258,11 @@ def render_storyboard_area(
     approved_missing_prompt_previews = [
         preview for preview in missing_frame_previews if bool(preview.get("approved"))
     ]
-    generation_dialog = (
-        loading_dialog_factory(
-            "Gerando storyboards",
-            "A IA está criando os quadros aprovados do storyboard.",
-        )
-        if loading_dialog_factory is not None
-        else None
+    generation_dialog, storyboard_progress_callback = _generation_progress_dialog(
+        "Gerando storyboards",
+        len(missing_frame_previews),
+        "quadro",
+        "A IA está criando os quadros aprovados do storyboard.",
     )
     prompt_dialog: Any | None = None
     if script_id is not None and prompt_previews:
@@ -262,6 +300,7 @@ def render_storyboard_area(
                     project_id,
                     script_id,
                     loading_dialog=generation_dialog,
+                    progress_callback=storyboard_progress_callback,
                 )
 
             with ui.row().classes("w-full justify-end gap-2 mt-3"):
@@ -321,6 +360,7 @@ def render_storyboard_area(
                         project_id,
                         script_id,
                         loading_dialog=generation_dialog,
+                        progress_callback=storyboard_progress_callback,
                     ),
                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
             if summary["frames"] and not pending_prompt_previews:
@@ -332,6 +372,7 @@ def render_storyboard_area(
                         script_id,
                         force=True,
                         loading_dialog=generation_dialog,
+                        progress_callback=storyboard_progress_callback,
                     ),
                 ).props("flat no-caps").classes("text-[#d8dbd8]")
     visible_prompt_previews = pending_prompt_previews + approved_missing_prompt_previews
@@ -436,6 +477,7 @@ def render_storyboard_area(
                                         script_id,
                                         shot_id,
                                         loading_dialog=generation_dialog,
+                                        progress_callback=storyboard_progress_callback,
                                     ),
                                 )
                             elif (
@@ -459,6 +501,7 @@ def render_storyboard_area(
                                         shot_id=shot_id,
                                         approved_only=True,
                                         loading_dialog=generation_dialog,
+                                        progress_callback=storyboard_progress_callback,
                                     ),
                                 )
     with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"):
@@ -484,6 +527,7 @@ def render_storyboard_area(
                                 shot_id=shot_id,
                                 force=True,
                                 loading_dialog=generation_dialog,
+                                progress_callback=storyboard_progress_callback,
                             ),
                         ).props("round unelevated dense").classes(
                             "acid-bg absolute right-3 top-3 z-10 shadow-lg"
@@ -503,6 +547,7 @@ def render_storyboard_area(
                                 shot_id=shot_id,
                                 force=True,
                                 loading_dialog=generation_dialog,
+                                progress_callback=storyboard_progress_callback,
                             ),
                         ).props("unelevated dense no-caps").classes(
                             "acid-bg self-start rounded-xl"
@@ -535,13 +580,11 @@ def render_video_area(
     active_video_job_count = view_model.queued_video_jobs + view_model.running_video_jobs
     timeline = summary["timeline"]
     total_duration = view_model.total_duration
-    loading_dialog = (
-        loading_dialog_factory(
-            "Gerando clipes",
-            "A IA est\u00e1 convertendo os quadros aprovados em v\u00eddeo.",
-        )
-        if loading_dialog_factory is not None
-        else None
+    loading_dialog, video_progress_callback = _generation_progress_dialog(
+        "Gerando clipes",
+        len(pending_frames),
+        "clipe",
+        "A IA está enviando os clipes aprovados para a fila de vídeo.",
     )
     video_missing = max(total_frames - generated_count, 0)
     if total_frames:
@@ -601,6 +644,7 @@ def render_video_area(
                     project_id,
                     frame_ids,
                     loading_dialog=loading_dialog,
+                    progress_callback=video_progress_callback,
                 )
 
             with ui.row().classes("w-full justify-end gap-2 mt-3"):
@@ -677,6 +721,7 @@ def render_video_area(
                             project_id,
                             [frame_id],
                             loading_dialog=loading_dialog,
+                            progress_callback=video_progress_callback,
                         )
 
                     with ui.row().classes(
@@ -839,6 +884,7 @@ def render_video_area(
                                 project_id,
                                 [frame_id],
                                 loading_dialog=loading_dialog,
+                                progress_callback=video_progress_callback,
                             )
 
                         with ui.row().classes(

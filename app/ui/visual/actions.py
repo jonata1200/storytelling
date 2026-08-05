@@ -397,10 +397,17 @@ async def _approve_video_prompts_from_ui(
     frame_ids: list[UUID],
     *,
     loading_dialog: Any | None = None,
+    progress_callback: VisualBatchProgressCallback | None = None,
 ) -> None:
     if loading_dialog is not None:
         loading_dialog.open()
     try:
+        await _emit_visual_batch_progress(
+            progress_callback,
+            0,
+            len(frame_ids),
+            f"{len(frame_ids)} clipe(s) aguardando envio para a fila.",
+        )
         async with AsyncSessionLocal() as session:
             job = await enqueue_project_step(
                 session,
@@ -408,6 +415,12 @@ async def _approve_video_prompts_from_ui(
                 "video",
                 {"frame_ids": [str(frame_id) for frame_id in frame_ids]},
             )
+        await _emit_visual_batch_progress(
+            progress_callback,
+            len(frame_ids),
+            len(frame_ids),
+            "Todos os clipes solicitados foram enviados para a fila de video.",
+        )
         ui.notify(f"Prompts aprovados. Job de video enfileirado: {job.id}.", color="positive")
         ui.navigate.reload()
         return
@@ -431,7 +444,6 @@ async def _approve_video_prompts_from_ui(
     finally:
         if loading_dialog is not None:
             loading_dialog.close()
-
 
 
 

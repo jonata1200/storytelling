@@ -15,15 +15,22 @@ from app.storyboards.service import (
 )
 from app.ui.shared.page_config import friendly_ai_error, show_ai_error_popup
 
+ProgressCallback = Any
+
 
 async def generate_storyboards_when_prompts_are_ready(
     session: Any,
     project_id: UUID,
     script_id: UUID,
+    *,
+    progress_callback: ProgressCallback | None = None,
 ) -> int | None:
     if await storyboard_prompts_need_approval(session, project_id, script_id):
         return None
-    frames = await generate_storyboard_frames(session, project_id, script_id)
+    kwargs: dict[str, Any] = {}
+    if progress_callback is not None:
+        kwargs["progress_callback"] = progress_callback
+    frames = await generate_storyboard_frames(session, project_id, script_id, **kwargs)
     if frames is None:
         return None
     if not await storyboard_frames_need_generation(session, project_id, script_id):
@@ -36,6 +43,7 @@ async def approve_storyboard_prompts_from_ui(
     script_id: UUID,
     *,
     loading_dialog: Any | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> None:
     if loading_dialog is not None:
         loading_dialog.open()
@@ -46,6 +54,7 @@ async def approve_storyboard_prompts_from_ui(
                 session,
                 project_id,
                 script_id,
+                progress_callback=progress_callback,
             )
         if generated_count is not None:
             ui.notify(
@@ -79,6 +88,7 @@ async def approve_storyboard_prompt_from_ui(
     shot_id: UUID,
     *,
     loading_dialog: Any | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> None:
     if loading_dialog is not None:
         loading_dialog.open()
@@ -86,7 +96,12 @@ async def approve_storyboard_prompt_from_ui(
         async with AsyncSessionLocal() as session:
             approved = await approve_storyboard_prompt(session, project_id, script_id, shot_id)
             generated_count = (
-                await generate_storyboards_when_prompts_are_ready(session, project_id, script_id)
+                await generate_storyboards_when_prompts_are_ready(
+                    session,
+                    project_id,
+                    script_id,
+                    progress_callback=progress_callback,
+                )
                 if approved
                 else None
             )
@@ -149,20 +164,21 @@ async def generate_storyboards_from_ui(
     approved_only: bool = False,
     force: bool = False,
     loading_dialog: Any | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> None:
     if loading_dialog is not None:
         loading_dialog.open()
     try:
         should_refresh_animatic = shot_id is None
         async with AsyncSessionLocal() as session:
-            frames = await generate_storyboard_frames(
-                session,
-                project_id,
-                script_id,
-                shot_id=shot_id,
-                force=force,
-                approved_only=approved_only,
-            )
+            kwargs: dict[str, Any] = {
+                "shot_id": shot_id,
+                "force": force,
+                "approved_only": approved_only,
+            }
+            if progress_callback is not None:
+                kwargs["progress_callback"] = progress_callback
+            frames = await generate_storyboard_frames(session, project_id, script_id, **kwargs)
             if not frames:
                 ui.notify("Nao foi possivel gerar storyboards.", color="negative")
                 return

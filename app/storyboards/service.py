@@ -37,6 +37,7 @@ from app.storyboards.assets import (
 )
 from app.storyboards.frame_generation import (
     StoryboardFrameGenerationPlan,
+    StoryboardProgressCallback,
     generate_storyboard_plan_images,
     storyboard_image_concurrency,
 )
@@ -98,6 +99,7 @@ async def generate_storyboard_frames(
     shot_id: UUID | None = None,
     force: bool = False,
     approved_only: bool = False,
+    progress_callback: StoryboardProgressCallback | None = None,
 ) -> list[StoryboardFrame] | None:
     project = await ProjectRepository(session).get_project(project_id)
     script = await session.get(Script, script_id)
@@ -202,6 +204,7 @@ async def generate_storyboard_frames(
         concurrency=storyboard_image_concurrency(
             getattr(app_settings, "storyboard_image_concurrency", None)
         ),
+        progress_callback=progress_callback,
     )
 
     frames: list[StoryboardFrame] = []
