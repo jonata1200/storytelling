@@ -55,6 +55,17 @@ THEME_HEAD_HTML = r"""
           body:not(.body--dark) .text-\[\#e6f59b\],
           body:not(.body--dark) .text-\[\#eaf878\] { color:#4f6417!important; }
           body:not(.body--dark) .visual-placeholder { background:radial-gradient(circle at 70% 15%,#e6e9c9 0,#d9ddcf 42%,#eef0e9 80%); }
+          .visual-library-panels,
+          .visual-library-panels .q-tab-panels,
+          .visual-library-panels .q-panel,
+          .visual-library-panels .q-panel > div,
+          .visual-library-panels .scroll,
+          .visual-library-panels .q-tab-panel {
+            height:auto!important;
+            max-height:none!important;
+            min-height:0!important;
+            overflow:visible!important;
+          }
           body:not(.body--dark) .q-field__control { background:#ffffff!important; }
           body:not(.body--dark) .q-field__native,
           body:not(.body--dark) .q-field__input,

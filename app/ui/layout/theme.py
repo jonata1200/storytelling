@@ -243,6 +243,17 @@ def apply_body_style() -> None:
             background:
               linear-gradient(135deg, rgba(90,163,240,.22), rgba(90,163,240,.08) 42%, rgba(5,10,16,.96) 100%)!important;
           }
+          .visual-library-panels,
+          .visual-library-panels .q-tab-panels,
+          .visual-library-panels .q-panel,
+          .visual-library-panels .q-panel > div,
+          .visual-library-panels .scroll,
+          .visual-library-panels .q-tab-panel {
+            height:auto!important;
+            max-height:none!important;
+            min-height:0!important;
+            overflow:visible!important;
+          }
           .workspace-header {
             color:var(--studio-text);
             background:

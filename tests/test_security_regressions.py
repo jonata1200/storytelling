@@ -164,7 +164,7 @@ def test_local_storage_helpers_reject_files_outside_storage_root(
     assert video_generation_service._local_storage_path(outside.as_posix()) is None
 
 
-def test_visual_library_tab_is_persisted_per_project(
+def test_visual_library_tab_defaults_to_characters_on_entry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     storage: dict[str, str] = {}
@@ -174,11 +174,11 @@ def test_visual_library_tab_is_persisted_per_project(
         SimpleNamespace(storage=SimpleNamespace(user=storage)),
     )
     project_id = uuid4()
+    storage[assets_area._visual_library_tab_storage_key(project_id)] = "props"
 
     assert assets_area._read_visual_library_active_tab(project_id) == "characters"
+    assert storage == {}
     assets_area._store_visual_library_active_tab(project_id, "locations")
-    assert assets_area._read_visual_library_active_tab(project_id) == "locations"
-    assets_area._store_visual_library_active_tab(project_id, "unexpected")
     assert assets_area._read_visual_library_active_tab(project_id) == "characters"
 
 

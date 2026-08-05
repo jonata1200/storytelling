@@ -125,17 +125,12 @@ def _visual_library_tab_storage_key(project_id: UUID) -> str:
 
 
 def _read_visual_library_active_tab(project_id: UUID) -> str:
-    raw_value = str(
-        nicegui_app.storage.user.get(
-            _visual_library_tab_storage_key(project_id), VISUAL_LIBRARY_TAB_DEFAULT
-        )
-    ).strip()
-    return raw_value if raw_value in VISUAL_LIBRARY_TAB_KEYS else VISUAL_LIBRARY_TAB_DEFAULT
+    nicegui_app.storage.user.pop(_visual_library_tab_storage_key(project_id), None)
+    return VISUAL_LIBRARY_TAB_DEFAULT
 
 
 def _store_visual_library_active_tab(project_id: UUID, tab_name: str) -> None:
-    value = tab_name if tab_name in VISUAL_LIBRARY_TAB_KEYS else VISUAL_LIBRARY_TAB_DEFAULT
-    nicegui_app.storage.user[_visual_library_tab_storage_key(project_id)] = value
+    del project_id, tab_name
 
 
 def _visual_reference_aspect_class(profile: dict, reference: VisualReference) -> str:
@@ -671,7 +666,7 @@ def render_assets_area(
         )
     )
     with ui.tab_panels(tabs, value=cast(Any, active_tab)).classes(
-        "w-full bg-transparent p-0 mt-1"
+        "visual-library-panels w-full bg-transparent p-0 mt-1"
     ):
         for tab, items, icon, target_kind in [
             (people, summary["characters"], "person", "character"),
