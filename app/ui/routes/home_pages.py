@@ -34,11 +34,11 @@ from app.ui.search_filters import (
     unique_idea_duration_options,
     unique_idea_filter_options,
 )
+from app.ui.shared.generation_progress import generation_progress_dialog
 from app.ui.shared.page_config import (
     DEFAULT_STORY_DURATION_MINUTES,
     IDEA_COUNT_OPTIONS,
     IDEA_GENRES,
-    STEP_LOADING_COPY,
     STORY_DURATION_OPTIONS,
     UI_GENERATION_TIMEOUT_SECONDS,
     friendly_ai_error,
@@ -650,19 +650,28 @@ def register_home_pages(
                             value="Esperança",
                         ).props("outlined")
 
-                    loading_title, loading_message = STEP_LOADING_COPY["ideas"]
-                    loading_dialog = loading_dialog_factory(
-                        loading_title,
-                        loading_message,
+                    idea_generation_dialog, update_idea_generation_progress = (
+                        generation_progress_dialog(
+                            "Gerando ideias",
+                            10,
+                            "ideia",
+                            "Aguardando a IA criar as opções narrativas.",
+                        )
                     )
 
                     async def generate() -> None:
-                        loading_dialog.open()
+                        expected_count = int(idea_count_select.value or 10)
+                        idea_generation_dialog.open()
+                        update_idea_generation_progress(
+                            0,
+                            expected_count,
+                            "Aguardando a IA criar as opções narrativas.",
+                        )
                         try:
                             generated = await asyncio.wait_for(
                                 generate_freeform_ideas(
                                     "",
-                                    count=int(idea_count_select.value or 10),
+                                    count=expected_count,
                                     genre=str(genre_select.value or ""),
                                     target_duration_minutes=coerce_duration_minutes(
                                         duration_select.value
@@ -670,8 +679,14 @@ def register_home_pages(
                                 ),
                                 timeout=UI_GENERATION_TIMEOUT_SECONDS,
                             )
+                            generated_count = len(generated)
+                            update_idea_generation_progress(
+                                0,
+                                generated_count,
+                                f"IA retornou {generated_count} ideia(s). Salvando cards.",
+                            )
                             replace_generated_ideas([])
-                            for generated_idea in generated:
+                            for index, generated_idea in enumerate(generated, 1):
                                 saved = save_idea(generated_idea)
                                 saved_ideas[:] = [
                                     existing
@@ -679,6 +694,15 @@ def register_home_pages(
                                     if existing.get("id") != saved["id"]
                                 ]
                                 saved_ideas.insert(0, saved)
+                                missing = max(generated_count - index, 0)
+                                update_idea_generation_progress(
+                                    index,
+                                    generated_count,
+                                    (
+                                        f"Salva: {clean_idea_title(saved.get('title'), 'Ideia')}. "
+                                        f"Faltam {missing}."
+                                    ),
+                                )
                             refresh_idea_filter_options()
                             saved_results.refresh()
                             ui.notify(
@@ -693,7 +717,7 @@ def register_home_pages(
                         except Exception as exc:
                             show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
                         finally:
-                            loading_dialog.close()
+                            idea_generation_dialog.close()
 
                 with ui.column().classes("w-full items-center gap-4 py-8"):
                     with ui.row().classes("w-full max-w-2xl gap-3 items-end justify-center"):

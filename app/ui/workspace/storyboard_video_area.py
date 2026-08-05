@@ -22,6 +22,7 @@ from app.storyboards.service import (
     storyboard_prompts_need_approval,
     update_storyboard_prompt,
 )
+from app.ui.shared.generation_progress import generation_progress_dialog, progress_ratio
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, friendly_ai_error, show_ai_error_popup
 from app.ui.visual.actions import _approve_video_prompts_from_ui
 from app.ui.visual.helpers import asset_url
@@ -236,7 +237,7 @@ def _dubbing_asset_url(job: Any) -> str:
 
 
 def _progress_ratio(done: int, total: int) -> float:
-    return min(max(done / total, 0.0), 1.0) if total else 0.0
+    return progress_ratio(done, total)
 
 
 def _render_generation_progress_summary(
@@ -327,37 +328,6 @@ def _image_cost_text(image_count: int) -> str:
     return f"Estimativa: US$ {estimate.estimated} para {image_count} imagem(ns)."
 
 
-def _generation_progress_dialog(
-    title: str,
-    total: int,
-    item_label: str,
-    initial_detail: str,
-) -> tuple[Any, Callable[[int, int, str], None]]:
-    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as progress_dialog, ui.card().classes(
-        "entity-card rounded-2xl p-6 w-[min(520px,92vw)]"
-    ):
-        with ui.column().classes("w-full items-center gap-4"):
-            ui.spinner(size="lg").classes("acid")
-            ui.label(title).classes("brand-type text-2xl font-bold")
-            progress_label = ui.label(f"0/{total} {item_label}(s) processado(s)")
-            progress_label.classes("text-sm text-[#d8dbd8]")
-            progress_bar = ui.linear_progress(value=0).classes("w-full")
-            progress_bar.props("instant-feedback rounded")
-            progress_detail = ui.label(initial_detail).classes(
-                "text-xs text-[#8d938e] text-center"
-            )
-
-    def update_progress(completed: int, current_total: int, detail: str) -> None:
-        safe_total = max(current_total, 1)
-        progress_label.set_text(
-            f"{completed}/{current_total} {item_label}(s) processado(s)"
-        )
-        progress_bar.set_value(_progress_ratio(completed, safe_total))
-        progress_detail.set_text(detail)
-
-    return progress_dialog, update_progress
-
-
 def render_storyboard_area(
     project_id: UUID,
     summary: dict[str, Any],
@@ -384,7 +354,7 @@ def render_storyboard_area(
         else len(summary["frames"])
     )
     storyboard_missing = max(storyboard_total - storyboard_generated, 0)
-    generation_dialog, storyboard_progress_callback = _generation_progress_dialog(
+    generation_dialog, storyboard_progress_callback = generation_progress_dialog(
         "Gerando storyboards",
         len(missing_frame_previews),
         "quadro",
@@ -721,7 +691,7 @@ def render_video_area(
     active_video_job_count = view_model.queued_video_jobs + view_model.running_video_jobs
     timeline = summary["timeline"]
     total_duration = view_model.total_duration
-    loading_dialog, video_progress_callback = _generation_progress_dialog(
+    loading_dialog, video_progress_callback = generation_progress_dialog(
         "Gerando clipes",
         len(pending_frames),
         "clipe",
@@ -756,7 +726,7 @@ def render_video_area(
             getattr(dubbing_job, "target_language", "") or get_settings().dubbing_target_lang
         )
         dubbing_url = _dubbing_asset_url(dubbing_job) if dubbing_job is not None else ""
-        dubbing_loading_dialog, _dubbing_progress_callback = _generation_progress_dialog(
+        dubbing_loading_dialog, _dubbing_progress_callback = generation_progress_dialog(
             "Preparando dublagem",
             1,
             "job",
