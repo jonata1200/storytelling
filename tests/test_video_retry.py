@@ -1,4 +1,4 @@
-﻿from uuid import uuid4
+from uuid import uuid4
 
 from app.providers.video.mock import MockVideoProvider
 from app.storyboards.models import StoryboardFrame
@@ -126,7 +126,7 @@ def test_video_fingerprint_changes_when_reference_uris_change() -> None:
         frame,
         "asset://frame-a",
         "google_ai",
-        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview",
         "9:16",
         "720p",
         "Movimento suave.",
@@ -136,7 +136,7 @@ def test_video_fingerprint_changes_when_reference_uris_change() -> None:
         frame,
         "asset://frame-a",
         "google_ai",
-        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview",
         "9:16",
         "720p",
         "Movimento suave.",

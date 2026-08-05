@@ -38,7 +38,7 @@ def upgrade() -> None:
         sa.Column(
             "video_model",
             sa.String(length=160),
-            server_default="veo-3.1-fast-generate-preview",
+            server_default="veo-3.1-lite-generate-preview",
             nullable=False,
         ),
         sa.Column("audio_mode", sa.String(length=80), nullable=False),

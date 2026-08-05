@@ -1,4 +1,4 @@
-﻿from uuid import UUID
+from uuid import UUID
 
 from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
@@ -30,7 +30,7 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     video_model: Mapped[str] = mapped_column(
         String(160),
-        default="veo-3.1-fast-generate-preview",
+        default="veo-3.1-lite-generate-preview",
         nullable=False,
     )
     audio_mode: Mapped[str] = mapped_column(

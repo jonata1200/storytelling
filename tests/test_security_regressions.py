@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -78,7 +78,7 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
             "OLLAMA_CLOUD_DEFAULT_MODEL": "deepseek-v4-flash:cloud",
             "GOOGLE_AI_API_KEY": "google-secret",
             "GOOGLE_AI_IMAGE_MODEL": "gemini-3.1-flash-lite-image",
-            "GOOGLE_AI_VIDEO_MODEL": "veo-3.1-fast-generate-preview",
+            "GOOGLE_AI_VIDEO_MODEL": "veo-3.1-lite-generate-preview",
             "SPEECH_PROVIDER": "elevenlabs",
             "SPEECH_TIMEOUT_SECONDS": "120",
             "ELEVENLABS_API_KEY": "eleven-secret",
@@ -94,7 +94,7 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     assert preferences["ollama_cloud_default_model"] == "deepseek-v4-flash:cloud"
     assert preferences["google_ai_api_key"] == "google-secret"
     assert preferences["google_ai_image_model"] == "gemini-3.1-flash-lite-image"
-    assert preferences["google_ai_video_model"] == "veo-3.1-fast-generate-preview"
+    assert preferences["google_ai_video_model"] == "veo-3.1-lite-generate-preview"
     assert preferences["speech_provider"] == "elevenlabs"
     assert preferences["speech_timeout_seconds"] == "120"
     assert preferences["elevenlabs_api_key"] == "eleven-secret"

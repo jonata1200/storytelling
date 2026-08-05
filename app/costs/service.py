@@ -68,13 +68,13 @@ MODEL_OPERATION_COST_OVERRIDES_USD: dict[tuple[str, str, str], tuple[str, Decima
         "image",
         Decimal("0.033600"),
     ),
-    ("google_ai", "veo-3.1-fast-generate-preview", "image_to_video"): (
+    ("google_ai", "veo-3.1-lite-generate-preview", "image_to_video"): (
         "second",
-        Decimal("0.100000"),
+        Decimal("0.050000"),
     ),
-    ("google_ai", "veo-3.1-fast-generate-preview", "text_to_video"): (
+    ("google_ai", "veo-3.1-lite-generate-preview", "text_to_video"): (
         "second",
-        Decimal("0.100000"),
+        Decimal("0.050000"),
     ),
     ("elevenlabs", "eleven_flash_v2_5", "speech_generation"): (
         "1k_characters",

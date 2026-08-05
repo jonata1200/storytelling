@@ -1,4 +1,4 @@
-﻿# ruff: noqa: F401
+# ruff: noqa: F401
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -59,7 +59,7 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
             image_provider="google_ai",
             video_provider="google_ai",
             google_ai_image_model="gemini-3.1-flash-lite-image",
-            google_ai_video_model="veo-3.1-fast-generate-preview",
+            google_ai_video_model="veo-3.1-lite-generate-preview",
         ),
     )
     idea = {

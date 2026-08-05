@@ -1,4 +1,4 @@
-﻿from functools import lru_cache
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
 
@@ -21,7 +21,7 @@ GOOGLE_AI_IMAGE_MODELS = (
 )
 
 GOOGLE_AI_VIDEO_MODELS = (
-    "veo-3.1-fast-generate-preview",
+    "veo-3.1-lite-generate-preview",
 )
 
 ELEVENLABS_SPEECH_MODELS = (

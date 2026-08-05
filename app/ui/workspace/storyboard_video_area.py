@@ -1,4 +1,4 @@
-﻿# ruff: noqa: E501
+# ruff: noqa: E501
 
 from collections.abc import Callable
 from decimal import Decimal
@@ -259,13 +259,14 @@ def _render_generation_progress_summary(
                 )
                 ui.label(f"Faltam {missing}. {detail}").classes("text-xs text-[#8d938e]")
             ui.badge(badge or ("pronto" if missing == 0 and total else "pendente")).classes(
-                "bg-[#26301f] text-[#eaf878]"
+                "bg-[#26301f] text-white"
                 if missing == 0 and total
                 else "blue-status-badge bg-[#243342]"
             )
-        ui.linear_progress(value=_progress_ratio(generated, total)).classes(
-            "w-full mt-3"
-        ).props("instant-feedback rounded")
+        ui.linear_progress(
+            value=_progress_ratio(generated, total),
+            show_value=False,
+        ).classes("w-full mt-3").props("instant-feedback rounded")
 
 
 def _render_continuity_checks(checks: list[dict[str, Any]]) -> None:
@@ -299,7 +300,7 @@ def _video_cost_text(frame_count: int, duration_seconds: int) -> str:
         "image_to_video",
         Decimal(duration_seconds),
         provider="google_ai",
-        model="veo-3.1-fast-generate-preview",
+        model="veo-3.1-lite-generate-preview",
     )
     return f"Estimativa: US$ {estimate.estimated} para {frame_count} clipe(s)."
 

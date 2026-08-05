@@ -60,7 +60,7 @@ def test_provider_channel_readiness_reports_new_provider_components() -> None:
         ollama_cloud_default_model="deepseek-v4-flash:cloud",
         google_ai_api_key="google-secret",
         google_ai_image_model="gemini-3.1-flash-lite-image",
-        google_ai_video_model="veo-3.1-fast-generate-preview",
+        google_ai_video_model="veo-3.1-lite-generate-preview",
     )
 
     text = _provider_channel_readiness(settings, "text")
@@ -142,7 +142,7 @@ def test_provider_channel_readiness_reports_google_ai_media() -> None:
         video_provider="google_ai",
         google_ai_api_key="google-secret",
         google_ai_image_model="gemini-3.1-flash-lite-image",
-        google_ai_video_model="veo-3.1-fast-generate-preview",
+        google_ai_video_model="veo-3.1-lite-generate-preview",
     )
 
     image = _provider_channel_readiness(settings, "image")
@@ -154,7 +154,7 @@ def test_provider_channel_readiness_reports_google_ai_media() -> None:
     assert image.details["api_key_configured"] == "true"
     assert video.status == "ready"
     assert video.details["provider"] == "google_ai"
-    assert video.details["model"] == "veo-3.1-fast-generate-preview"
+    assert video.details["model"] == "veo-3.1-lite-generate-preview"
 
 
 def test_readiness_dashboard_helpers_report_elevenlabs_dubbing() -> None:
