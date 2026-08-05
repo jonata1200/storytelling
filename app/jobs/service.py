@@ -24,6 +24,7 @@ PROJECT_STEP_JOB_TYPES = {
     "visual": GenerationJobType.IMAGE,
     "storyboard": GenerationJobType.IMAGE,
     "video": GenerationJobType.VIDEO,
+    "dubbing": GenerationJobType.SPEECH,
     "finalization": GenerationJobType.RENDER,
     "quality": GenerationJobType.ANALYSIS,
 }

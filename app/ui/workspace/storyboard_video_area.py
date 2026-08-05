@@ -11,6 +11,8 @@ from nicegui import ui
 from app.config.settings import get_settings
 from app.costs.service import estimate_operation_cost
 from app.database.session import AsyncSessionLocal
+from app.dubbing.service import refresh_dubbing_job
+from app.jobs.service import enqueue_project_step
 from app.storyboards.service import (
     approve_storyboard_prompt,
     approve_storyboard_prompts,
@@ -20,7 +22,7 @@ from app.storyboards.service import (
     storyboard_prompts_need_approval,
     update_storyboard_prompt,
 )
-from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS
+from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, friendly_ai_error, show_ai_error_popup
 from app.ui.visual.actions import _approve_video_prompts_from_ui
 from app.ui.visual.helpers import asset_url
 from app.ui.workspace import storyboard_handlers as _storyboard_handlers
@@ -132,6 +134,52 @@ async def _generate_storyboards_from_ui(
     )
 
 
+async def _enqueue_dubbing_from_ui(
+    project_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+) -> None:
+    if loading_dialog is not None:
+        loading_dialog.open()
+    try:
+        async with AsyncSessionLocal() as session:
+            job = await enqueue_project_step(session, project_id, "dubbing")
+        ui.notify(f"Dublagem enfileirada: {job.id}.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            loading_dialog.close()
+
+
+async def _refresh_dubbing_from_ui(
+    project_id: UUID,
+    job_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+) -> None:
+    if loading_dialog is not None:
+        loading_dialog.open()
+    try:
+        async with AsyncSessionLocal() as session:
+            job = await refresh_dubbing_job(session, project_id, job_id)
+        if job is None:
+            ui.notify("Dublagem não encontrada.", color="warning")
+        elif job.status == "SUCCEEDED":
+            ui.notify("Dublagem pronta.", color="positive")
+        elif job.status == "FAILED":
+            ui.notify("Dublagem falhou. Veja o detalhe no card.", color="negative")
+        else:
+            ui.notify(f"Dublagem em andamento: {job.progress}%.", color="info")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            loading_dialog.close()
+
+
 def _local_asset_file_exists(storage_uri: str) -> bool:
     if not storage_uri:
         return False
@@ -175,6 +223,13 @@ def _storyboard_frame_image_url(summary: dict[str, Any], frame: Any) -> str:
 
 def _video_clip_asset_url(clip: Any) -> str:
     asset_id = getattr(clip, "asset_id", None)
+    if asset_id is None:
+        return ""
+    return f"/api/v1/assets/{asset_id}/content"
+
+
+def _dubbing_asset_url(job: Any) -> str:
+    asset_id = getattr(job, "result_asset_id", None)
     if asset_id is None:
         return ""
     return f"/api/v1/assets/{asset_id}/content"
@@ -246,6 +301,18 @@ def _video_cost_text(frame_count: int, duration_seconds: int) -> str:
         model="veo-3.1-fast-generate-preview",
     )
     return f"Estimativa: US$ {estimate.estimated} para {frame_count} clipe(s)."
+
+
+def _dubbing_cost_text(duration_seconds: int) -> str:
+    if duration_seconds <= 0:
+        return "Nenhum custo previsto agora."
+    estimate = estimate_operation_cost(
+        "dubbing",
+        Decimal(max(1, duration_seconds)) / Decimal("60"),
+        provider="elevenlabs",
+        model="dubbing-v1",
+    )
+    return f"Estimativa: US$ {estimate.estimated} para dublagem."
 
 
 def _image_cost_text(image_count: int) -> str:
@@ -680,6 +747,73 @@ def render_video_area(
             video_detail,
             badge="720p",
         )
+
+    if summary["clips"]:
+        dubbing_job = summary.get("dubbing_job")
+        dubbing_status = str(getattr(dubbing_job, "status", "") or "").upper()
+        dubbing_progress = int(getattr(dubbing_job, "progress", 0) or 0)
+        dubbing_target = str(
+            getattr(dubbing_job, "target_language", "") or get_settings().dubbing_target_lang
+        )
+        dubbing_url = _dubbing_asset_url(dubbing_job) if dubbing_job is not None else ""
+        dubbing_loading_dialog, _dubbing_progress_callback = _generation_progress_dialog(
+            "Preparando dublagem",
+            1,
+            "job",
+            "A aplicação está preparando o export base e acionando o ElevenLabs.",
+        )
+        with ui.element("div").classes("w-full entity-card rounded-2xl p-4 mb-3"):
+            with ui.row().classes("w-full items-start justify-between gap-3"):
+                with ui.column().classes("gap-1 min-w-0"):
+                    ui.label("Dublagem").classes("brand-type text-2xl font-bold")
+                    ui.label(
+                        "Etapa após os clipes: cria um export base 720p e envia ao ElevenLabs."
+                    ).classes("text-sm text-[#8d938e]")
+                    ui.label(_dubbing_cost_text(total_duration)).classes(
+                        "text-xs text-[#8d938e]"
+                    )
+                ui.badge(dubbing_status or "pendente").classes(
+                    "bg-[#26301f] text-[#eaf878]"
+                    if dubbing_status == "SUCCEEDED"
+                    else "blue-status-badge bg-[#243342]"
+                )
+            ui.linear_progress(value=_progress_ratio(dubbing_progress, 100)).classes(
+                "w-full mt-3"
+            ).props("instant-feedback rounded")
+            with ui.row().classes("w-full items-center justify-between gap-3 mt-3"):
+                ui.label(f"Idioma alvo: {dubbing_target or 'não configurado'}").classes(
+                    "text-xs text-[#8d938e]"
+                )
+                with ui.row().classes("gap-2"):
+                    if dubbing_job is not None and dubbing_status not in {"SUCCEEDED", "FAILED"}:
+                        ui.button(
+                            "Atualizar status",
+                            icon="sync",
+                            on_click=lambda job_id=dubbing_job.id: _refresh_dubbing_from_ui(
+                                project_id,
+                                job_id,
+                                loading_dialog=dubbing_loading_dialog,
+                            ),
+                        ).props("flat no-caps").classes("rounded-xl")
+                    if dubbing_url:
+                        ui.button(
+                            "Baixar dublagem",
+                            icon="download",
+                            on_click=lambda url=dubbing_url: ui.download(
+                                url,
+                                f"storytelling-dublagem-{dubbing_target or 'audio'}.mp4",
+                            ),
+                        ).props("flat no-caps").classes("rounded-xl")
+                    ui.button(
+                        "Gerar dublagem" if dubbing_job is None else "Reaproveitar/atualizar",
+                        icon="graphic_eq",
+                        on_click=lambda: _enqueue_dubbing_from_ui(
+                            project_id,
+                            loading_dialog=dubbing_loading_dialog,
+                        ),
+                    ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+            if dubbing_job is not None and getattr(dubbing_job, "error", None):
+                ui.label(str(dubbing_job.error)).classes("text-xs text-red-300 mt-2")
 
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]

@@ -53,7 +53,7 @@ def render_assistant_panel(
         ),
         "video": (
             "Sugestões que posso ajudar agora: criar clipes a partir do storyboard, "
-            "orientar movimento de câmera, ajustar ritmo ou propor variações de montagem."
+            "orientar movimento de câmera, ajustar ritmo, gerar dublagem ou propor variações."
         ),
     }
     chat_loading_copy = {
@@ -70,6 +70,7 @@ def render_assistant_panel(
             "Gerando clipes",
             "A IA está criando clipes a partir dos prompts aprovados.",
         ),
+        "generate_dubbing": STEP_LOADING_COPY["dubbing"],
         "generate_finalization": STEP_LOADING_COPY["finalization"],
         "run_quality": STEP_LOADING_COPY["quality"],
     }

@@ -13,6 +13,7 @@ from app.ui.shared.assistant_state import (
     append_assistant_message_to_chat as _append_assistant_message_to_chat,
 )
 from app.ui.shared.page_config import friendly_ai_error, show_ai_error_popup
+from app.video_generation.models import VideoClip
 from app.visual_bible.service import (
     visual_reference_completion_message,
     visual_reference_completion_report,
@@ -31,6 +32,7 @@ async def _run_step(
         "visual": "Criando prompts visuais.",
         "storyboard": "Criando storyboard.",
         "video": "Preparando video.",
+        "dubbing": "Preparando dublagem.",
         "finalization": "Finalizando projeto.",
         "quality": "Revisando qualidade.",
     }
@@ -57,6 +59,13 @@ async def _run_step(
                 )
                 ui.navigate.reload()
                 return
+            if step_key == "dubbing":
+                result = await session.execute(
+                    select(VideoClip).where(VideoClip.project_id == project_id)
+                )
+                clips = list(result.scalars())
+                if not clips:
+                    raise ValueError("gere os clipes de video primeiro")
 
             if step_key not in {
                 "ideas",
@@ -64,6 +73,7 @@ async def _run_step(
                 "scenes",
                 "visual",
                 "storyboard",
+                "dubbing",
                 "finalization",
                 "quality",
             }:

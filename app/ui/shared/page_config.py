@@ -86,6 +86,13 @@ PRODUCTION_STEPS = [
         "movie",
     ),
     ProductionStep(
+        "dubbing",
+        "Dublagem",
+        "Duble o export base com ElevenLabs, reaproveitando jobs e arquivos já criados.",
+        "Gerar dublagem",
+        "graphic_eq",
+    ),
+    ProductionStep(
         "finalization",
         "Finalização",
         "Monte a timeline final e exporte os clipes selecionados.",
@@ -118,6 +125,7 @@ STEP_LOADING_COPY = {
     ),
     "storyboard": ("Gerando storyboard", "A IA está criando quadros, planos e animatic."),
     "video": ("Preparando vídeo", "A IA está verificando prompts e deixando os clipes prontos."),
+    "dubbing": ("Gerando dublagem", "A IA está preparando o export base e enviando ao ElevenLabs."),
     "finalization": ("Finalizando projeto", "A IA está montando timeline final e export."),
     "quality": ("Revisando qualidade", "A IA está checando continuidade e riscos."),
 }

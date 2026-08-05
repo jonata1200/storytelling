@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ArtifactStatus
+from app.dubbing.models import DubbingJob
 from app.finalization.models import Export
 from app.projects.models import Artifact
 from app.projects.repository import ProjectRepository
@@ -131,6 +132,7 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
             "clips": await _count(session, VideoClip, project_id),
             "timelines": await _count(session, Timeline, project_id),
             "exports": await _count(session, Export, project_id),
+            "dubbing_jobs": await _count(session, DubbingJob, project_id),
             "quality_checks": await _count(session, QualityCheck, project_id),
             "qa_issues": await _count(session, ContinuityIssue, project_id),
             "stale_artifacts": int(stale_count or 0),

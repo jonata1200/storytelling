@@ -102,6 +102,7 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "animatic",
     )
     video_terms = ("video", "vídeo", "clipe", "clipes", "montagem")
+    dubbing_terms = ("dublagem", "dublar", "dubla", "dublado", "dub", "idioma")
 
     finalization_terms = (
         "finalizacao",
@@ -131,6 +132,8 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         return "generate_script"
     if actionable and any(term in normalized for term in quality_terms):
         return "run_quality"
+    if actionable and any(term in normalized for term in dubbing_terms):
+        return "generate_dubbing"
     if actionable and any(term in normalized for term in finalization_terms):
         return "generate_finalization"
     if actionable and any(term in normalized for term in video_terms):
@@ -210,6 +213,7 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
     props = counts.get("props", 0)
     frames = counts.get("frames", 0)
     clips = counts.get("clips", 0)
+    dubbing_jobs = counts.get("dubbing_jobs", 0)
 
     if scripts == 0:
         return "generate_script"
@@ -221,6 +225,8 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
         return "generate_storyboard"
     if clips == 0:
         return "generate_video"
+    if dubbing_jobs == 0:
+        return "generate_dubbing"
     if active == "video":
         return "generate_finalization"
     return "run_quality"
@@ -272,8 +278,9 @@ async def _infer_project_chat_intent_with_ai(
         "Interprete a intencao operacional do usuario dentro de um software de criacao "
         "audiovisual. Retorne somente JSON válido, sem markdown. Acoes possíveis: "
         "chat, generate_ideas, generate_script, revise_script, generate_assets, "
-        "approve_visual_prompt, generate_storyboard, generate_video, generate_finalization, "
-        "run_quality. Use o estado real do projeto para decidir se o usuario quer executar "
+        "approve_visual_prompt, generate_storyboard, generate_video, generate_dubbing, "
+        "generate_finalization, run_quality. Use o estado real do projeto para decidir se "
+        "o usuario quer executar "
         "uma etapa ou apenas conversar. Se a confianca for menor que 0.70, use chat. "
         'Formato: {"action":"generate_assets","confidence":0.92,"reason":"..."}. '
         f"Etapa ativa: {active}. Estado do projeto: {project_context}. "

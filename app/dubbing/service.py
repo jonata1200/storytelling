@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetVersion
 from app.config.settings import get_settings
-from app.core.enums import ArtifactStatus, ArtifactType, AssetKind, CostEntryType
+from app.core.enums import ArtifactStatus, ArtifactType, AssetKind, CostEntryType, ProjectStatus
 from app.costs.models import CostEntry
 from app.costs.service import cost_audit_metadata, estimate_operation_cost
 from app.dubbing.models import DubbingJob
@@ -26,6 +26,8 @@ from app.providers.dubbing.types import (
     DubbingSubmitResult,
 )
 from app.storage.service import apply_asset_storage_metadata, resolve_storage_path
+from app.video_generation.models import VideoClip
+from app.workflows.state_machine import advance_project_status
 
 DUBBING_PROVIDER_MODEL = "dubbing-v1"
 RUNNING_PROVIDER_STATUSES = {
@@ -92,6 +94,30 @@ async def start_dubbing_job(
         raise ValueError("Idioma de dublagem não configurado")
     export_path = _export_path(export.output_uri)
     provider_client = provider or dubbing_provider_from_settings()
+    existing_result = await session.execute(
+        select(DubbingJob)
+        .where(
+            DubbingJob.project_id == project_id,
+            DubbingJob.export_id == export.id,
+            DubbingJob.provider == getattr(provider_client, "provider_name", "elevenlabs"),
+            DubbingJob.target_language == target,
+            DubbingJob.status != "FAILED",
+        )
+        .order_by(DubbingJob.created_at.desc())
+        .limit(1)
+    )
+    existing_job = existing_result.scalars().first()
+    if existing_job is not None:
+        if existing_job.status in {"PROCESSING", "PENDING"} and existing_job.external_job_id:
+            refreshed = await refresh_dubbing_job(
+                session,
+                project_id,
+                existing_job.id,
+                provider=provider_client,
+                download_when_ready=True,
+            )
+            return refreshed or existing_job
+        return existing_job
     estimate = estimate_operation_cost(
         "dubbing",
         Decimal(max(1, export.duration_seconds)) / Decimal("60"),
@@ -158,6 +184,110 @@ async def start_dubbing_job(
     )
     await session.commit()
     await session.refresh(job)
+    return job
+
+
+async def start_project_dubbing(
+    session: AsyncSession,
+    project_id: UUID,
+    *,
+    source_language: str | None = None,
+    target_language: str | None = None,
+    provider: DubbingProvider | None = None,
+) -> DubbingJob | None:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return None
+
+    settings = get_settings()
+    target = _language(target_language or settings.dubbing_target_lang)
+    if target is None:
+        raise ValueError("Idioma de dublagem não configurado")
+
+    latest_job = await session.scalar(
+        select(DubbingJob)
+        .where(
+            DubbingJob.project_id == project_id,
+            DubbingJob.target_language == target,
+            DubbingJob.status != "FAILED",
+        )
+        .order_by(DubbingJob.created_at.desc())
+        .limit(1)
+    )
+    latest_clip_created_at = await session.scalar(
+        select(VideoClip.created_at)
+        .where(VideoClip.project_id == project_id)
+        .order_by(VideoClip.created_at.desc())
+        .limit(1)
+    )
+    latest_job_is_current = (
+        latest_job is not None
+        and (
+            latest_clip_created_at is None
+            or latest_job.created_at is None
+            or latest_job.created_at >= latest_clip_created_at
+        )
+    )
+    if latest_job is not None and latest_job_is_current:
+        if latest_job.status in {"PROCESSING", "PENDING"} and latest_job.external_job_id:
+            refreshed = await refresh_dubbing_job(
+                session,
+                project_id,
+                latest_job.id,
+                provider=provider,
+                download_when_ready=True,
+            )
+            return refreshed or latest_job
+        if latest_job.status == "SUCCEEDED" and latest_job.result_asset_id is not None:
+            return latest_job
+
+    from app.finalization.service import create_final_timeline, export_timeline
+    from app.storyboards.models import Timeline
+
+    timeline = await session.scalar(
+        select(Timeline)
+        .where(Timeline.project_id == project_id)
+        .order_by(Timeline.created_at.desc())
+        .limit(1)
+    )
+    if timeline is None:
+        timeline = await create_final_timeline(session, project_id)
+    if timeline is None:
+        raise ValueError("gere e selecione os clipes de vídeo antes da dublagem")
+
+    export = await session.scalar(
+        select(Export)
+        .where(
+            Export.project_id == project_id,
+            Export.timeline_id == timeline.id,
+            Export.status == "RENDERED",
+        )
+        .order_by(Export.created_at.desc())
+        .limit(1)
+    )
+    if export is None:
+        export = await export_timeline(
+            session,
+            project_id,
+            timeline.id,
+            resolution="720x1280",
+            bitrate="4M",
+        )
+    if export is None:
+        raise ValueError("não foi possível criar o export base para dublagem")
+
+    job = await start_dubbing_job(
+        session,
+        project_id,
+        export.id,
+        source_language=source_language,
+        target_language=target,
+        provider=provider,
+    )
+    if job is not None:
+        advance_project_status(project, ProjectStatus.AUDIO_GENERATION)
+        await session.commit()
+        await session.refresh(job)
     return job
 
 

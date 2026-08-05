@@ -5,6 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import AsyncSessionLocal
+from app.dubbing.service import start_project_dubbing
+from app.finalization.models import Export
 from app.finalization.service import (
     create_final_timeline,
     export_timeline,
@@ -20,7 +22,7 @@ from app.jobs.service import (
 from app.observability.schemas import OperationalEventCreate
 from app.observability.service import emit_project_event
 from app.quality.service import run_quality_check
-from app.storyboards.models import Animatic
+from app.storyboards.models import Animatic, Timeline
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
 from app.storytelling.models import Script, StoryIdea
 from app.storytelling.service import (
@@ -171,11 +173,50 @@ async def _run_video(
     return {"job_count": len(jobs), "clip_count": len(clips)}
 
 
+async def _run_dubbing(
+    session: AsyncSession,
+    project_id: UUID,
+    payload: dict,
+) -> dict[str, Any]:
+    job = await start_project_dubbing(
+        session,
+        project_id,
+        source_language=payload.get("source_language"),
+        target_language=payload.get("target_language"),
+    )
+    if job is None:
+        raise ValueError("não encontrei o projeto para gerar a dublagem")
+    return {
+        "dubbing_job_id": str(job.id),
+        "status": job.status,
+        "progress": job.progress,
+        "target_language": job.target_language,
+    }
+
+
 async def _run_finalization(session: AsyncSession, project_id: UUID) -> dict[str, Any]:
     animatic = await _latest(session, Animatic, project_id)
-    timeline = await create_final_timeline(session, project_id, animatic.id if animatic else None)
+    timeline = await _latest(session, Timeline, project_id)
+    if timeline is None:
+        timeline = await create_final_timeline(
+            session,
+            project_id,
+            animatic.id if animatic else None,
+        )
     if timeline is None:
         raise ValueError("gere clipes de video primeiro")
+    existing_export = await session.scalar(
+        select(Export)
+        .where(
+            Export.project_id == project_id,
+            Export.timeline_id == timeline.id,
+            Export.status == "RENDERED",
+        )
+        .order_by(Export.created_at.desc())
+        .limit(1)
+    )
+    if existing_export is not None:
+        return {"timeline_id": str(timeline.id), "export_id": str(existing_export.id)}
     export = await export_timeline(
         session,
         project_id,
@@ -257,6 +298,8 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
                 response = await _run_storyboard(session, job.project_id)
             elif step == "video":
                 response = await _run_video(session, job.project_id, payload)
+            elif step == "dubbing":
+                response = await _run_dubbing(session, job.project_id, payload)
             elif step == "finalization":
                 response = await _run_finalization(session, job.project_id)
             elif step == "quality":

@@ -33,6 +33,9 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("gerar os clipes de video", "storyboard") == (
         "generate_video"
     )
+    assert classify_project_chat_action("gerar dublagem em inglês", "video") == (
+        "generate_dubbing"
+    )
     assert classify_project_chat_action("melhore o gancho do roteiro", "script") == (
         "revise_script"
     )

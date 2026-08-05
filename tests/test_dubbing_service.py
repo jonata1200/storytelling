@@ -1,5 +1,6 @@
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
 
@@ -50,9 +51,10 @@ class _FakeDubbingProvider:
 
 
 class _FakeSession:
-    def __init__(self, project: Project, export: Export) -> None:
+    def __init__(self, project: Project, export: Export, existing_job: Any | None = None) -> None:
         self.project = project
         self.export = export
+        self.existing_job = existing_job
         self.added: list[Any] = []
         self.flushed = False
         self.committed = False
@@ -64,6 +66,24 @@ class _FakeSession:
         if model is Export and key == self.export.id:
             return self.export
         return None
+
+    async def execute(self, *args: Any, **kwargs: Any) -> Any:
+        _ = args, kwargs
+
+        class Result:
+            def __init__(self, item: Any | None) -> None:
+                self.item = item
+
+            def scalars(self) -> Any:
+                item = self.item
+
+                class Scalars:
+                    def first(self) -> Any | None:
+                        return item
+
+                return Scalars()
+
+        return Result(self.existing_job)
 
     def add(self, value: Any) -> None:
         self.added.append(value)
@@ -164,3 +184,63 @@ async def test_start_dubbing_job_submits_export_and_records_cost(
     assert job.cost_estimate == Decimal("0.660000")
     assert session.flushed is True
     assert session.committed is True
+
+
+@pytest.mark.asyncio
+async def test_start_dubbing_job_reuses_existing_non_failed_job(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project_id = uuid4()
+    export_id = uuid4()
+    existing_job = SimpleNamespace(
+        id=uuid4(),
+        project_id=project_id,
+        export_id=export_id,
+        provider="elevenlabs",
+        target_language="en",
+        status="SUCCEEDED",
+        result_asset_id=uuid4(),
+    )
+    export_file = tmp_path / "storage" / "exports" / "final.mp4"
+    export_file.parent.mkdir(parents=True)
+    export_file.write_bytes(b"video")
+    project = Project(id=project_id, title="Projeto")
+    export = Export(
+        id=export_id,
+        project_id=project_id,
+        artifact_id=uuid4(),
+        timeline_id=uuid4(),
+        asset_id=uuid4(),
+        status="RENDERED",
+        profile={},
+        duration_seconds=120,
+        output_uri=export_file.as_posix(),
+    )
+    session = _FakeSession(project, export, existing_job)
+    provider = _FakeDubbingProvider()
+
+    monkeypatch.setattr(
+        dubbing_service,
+        "get_settings",
+        lambda: type(
+            "SettingsLike",
+            (),
+            {
+                "local_storage_path": tmp_path / "storage",
+                "dubbing_source_lang": "pt",
+                "dubbing_target_lang": "en",
+            },
+        )(),
+    )
+    monkeypatch.setattr(dubbing_service, "resolve_storage_path", lambda _uri: export_file)
+
+    job = await start_dubbing_job(
+        cast(AsyncSession, session),
+        project_id,
+        export_id,
+        provider=provider,
+    )
+
+    assert job is existing_job
+    assert provider.request is None

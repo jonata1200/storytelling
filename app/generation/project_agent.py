@@ -2,6 +2,9 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.dubbing.models import DubbingJob
+from app.dubbing.service import start_project_dubbing
+from app.finalization.models import Export
 from app.finalization.service import (
     create_final_timeline,
     export_timeline,
@@ -384,6 +387,14 @@ async def _ensure_finalization_pipeline(
             )
         changed = True
 
+    existing_export = await _latest(session, Export, project_id)
+    if existing_export is not None and existing_export.timeline_id == timeline.id:
+        return ProjectChatResult(
+            "Exportação final já existe e foi reaproveitada.",
+            "generate_finalization",
+            changed,
+        )
+
     await _emit_progress(progress, "Vou exportar a timeline com as vozes dos personagens.")
     exported = await export_timeline(
         session,
@@ -400,6 +411,45 @@ async def _ensure_finalization_pipeline(
     return ProjectChatResult(
         "Finalização criada e exportação salva no projeto.",
         "generate_finalization",
+        True,
+    )
+
+
+async def _ensure_dubbing_pipeline(
+    session: AsyncSession,
+    project_id: UUID,
+    progress: ProgressCallback | None = None,
+) -> ProjectChatResult:
+    video_result = await _ensure_video_pipeline(session, project_id, progress=progress)
+    if video_result.failed or not await _count(session, VideoClip, project_id):
+        return ProjectChatResult(
+            video_result.message,
+            "generate_dubbing",
+            video_result.changed,
+            video_result.failed,
+        )
+    existing_jobs = await _count(session, DubbingJob, project_id)
+    await _emit_progress(progress, "Vou preparar o export base e acionar a dublagem.")
+    try:
+        job = await start_project_dubbing(session, project_id)
+    except ValueError as exc:
+        return ProjectChatResult(str(exc), "generate_dubbing", existing_jobs > 0, True)
+    if job is None:
+        return ProjectChatResult(
+            "Não consegui iniciar a dublagem do projeto.",
+            "generate_dubbing",
+            existing_jobs > 0,
+            True,
+        )
+    if existing_jobs:
+        return ProjectChatResult(
+            f"Dublagem reaproveitada/atualizada ({job.target_language}, {job.status}).",
+            "generate_dubbing",
+            False,
+        )
+    return ProjectChatResult(
+        f"Dublagem enviada ao ElevenLabs para {job.target_language}.",
+        "generate_dubbing",
         True,
     )
 
@@ -535,6 +585,8 @@ async def handle_project_chat(
         )
     if action == "generate_video":
         return await _ensure_video_pipeline(session, project_id, force=force, progress=progress)
+    if action == "generate_dubbing":
+        return await _ensure_dubbing_pipeline(session, project_id, progress=progress)
     if action == "generate_finalization":
         return await _ensure_finalization_pipeline(session, project_id, progress=progress)
     if action == "run_quality":

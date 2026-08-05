@@ -11,6 +11,7 @@ ProjectChatAction = Literal[
     "approve_visual_prompt",
     "generate_storyboard",
     "generate_video",
+    "generate_dubbing",
     "generate_finalization",
     "run_quality",
 ]
@@ -62,6 +63,7 @@ ACTION_PROGRESS_MESSAGES: dict[ProjectChatAction, str] = {
     "approve_visual_prompt": "Aprovando prompt visual.",
     "generate_storyboard": "Criando storyboard.",
     "generate_video": "Preparando video.",
+    "generate_dubbing": "Preparando dublagem.",
     "generate_finalization": "Finalizando projeto.",
     "run_quality": "Rodando controle de qualidade.",
     "chat": "Analisando projeto.",

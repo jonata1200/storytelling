@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_session
 from app.dubbing.schemas import DubbingJobRead, DubbingStartRequest
-from app.dubbing.service import list_dubbing_jobs, refresh_dubbing_job, start_dubbing_job
+from app.dubbing.service import (
+    list_dubbing_jobs,
+    refresh_dubbing_job,
+    start_dubbing_job,
+    start_project_dubbing,
+)
 from app.finalization.schemas import (
     ExportRead,
     ExportRequest,
@@ -93,6 +98,26 @@ async def post_export_dubbing(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+    return DubbingJobRead.model_validate(job)
+
+
+@router.post("/{project_id}/dubbing", response_model=DubbingJobRead)
+async def post_project_dubbing(
+    project_id: UUID,
+    payload: DubbingStartRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DubbingJobRead:
+    try:
+        job = await start_project_dubbing(
+            session,
+            project_id,
+            source_language=payload.source_language,
+            target_language=payload.target_language,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return DubbingJobRead.model_validate(job)
 
 

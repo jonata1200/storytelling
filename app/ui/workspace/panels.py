@@ -121,8 +121,8 @@ def _render_director_cockpit(settings: ProjectProductionSettings, counts: dict[s
         ("Assets", counts["characters"] + counts["visual_refs"]),
         ("Storyboard", counts["frames"]),
         ("Video", counts["clips"]),
-        ("Timeline", counts["exports"]),
         ("Dublagem", counts.get("dubbing_jobs", 0)),
+        ("Timeline", counts["exports"]),
     ]
     with ui.card().classes(_card_classes("w-full")):
         with ui.row().classes("items-center justify-between w-full"):
