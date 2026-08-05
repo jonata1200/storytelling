@@ -14,6 +14,7 @@ from app.storytelling.service import (
 from app.ui import page_runtime, pages
 from app.ui.pages import _asset_url, _compact_project_title
 from app.ui.project import actions as project_actions
+from app.ui.routes import home_pages
 from app.ui.workspace import script_area, storyboard_video_area
 from app.ui.workspace.assets_area import _character_reference_sheet_asset
 
@@ -116,6 +117,15 @@ def test_chat_prompt_title_uses_first_sentence() -> None:
     prompt = "A chave perdida. Depois disso, a historia revela um segredo familiar."
 
     assert _compact_project_title(prompt) == "A chave perdida"
+
+
+def test_dashboard_prompt_enter_key_submits_without_breaking_shift_enter() -> None:
+    handler = home_pages.DASHBOARD_PROMPT_KEYDOWN_JS
+
+    assert "event.key === 'Enter'" in handler
+    assert "!event.shiftKey" in handler
+    assert "event.preventDefault()" in handler
+    assert "emit()" in handler
 
 
 def test_clean_idea_title_removes_numbered_prefix() -> None:

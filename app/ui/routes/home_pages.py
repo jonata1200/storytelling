@@ -54,6 +54,15 @@ IdeaDeleter = Callable[[str, str], Awaitable[bool]]
 LoadingDialogFactory = Callable[[str, str], Any]
 TextCleaner = Callable[[Any, str], str]
 
+DASHBOARD_PROMPT_KEYDOWN_JS = """
+(event) => {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    emit();
+  }
+}
+"""
+
 
 def register_home_pages(
     *,
@@ -196,6 +205,12 @@ def register_home_pages(
                                 ui.notify("Imagem de referência removida.", color="warning")
 
                         with ui.element("div").classes("prompt-composer w-full relative"):
+                            async def submit_prompt_from_keyboard() -> None:
+                                await create_project_from_chat_prompt(
+                                    str(idea.value or ""),
+                                    list(reference_uploads),
+                                )
+
                             idea = (
                                 ui.textarea(
                                     placeholder="Descreva sua história, cole um roteiro ou peça uma ideia..."
@@ -204,6 +219,11 @@ def register_home_pages(
                                 .classes(
                                     "prompt-composer-input w-full text-base md:text-lg flex-1 text-left"
                                 )
+                            )
+                            idea.on(
+                                "keydown",
+                                submit_prompt_from_keyboard,
+                                js_handler=DASHBOARD_PROMPT_KEYDOWN_JS,
                             )
                             with ui.element("div").classes("hidden"):
                                 ui.upload(

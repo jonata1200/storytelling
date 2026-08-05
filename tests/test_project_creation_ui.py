@@ -8,6 +8,9 @@ test_register_ui_pages_resolves_page_facade_dependencies = (
 )
 test_chat_prompt_title_is_compact = cases.test_chat_prompt_title_is_compact
 test_chat_prompt_title_uses_first_sentence = cases.test_chat_prompt_title_uses_first_sentence
+test_dashboard_prompt_enter_key_submits_without_breaking_shift_enter = (
+    cases.test_dashboard_prompt_enter_key_submits_without_breaking_shift_enter
+)
 test_clean_idea_title_removes_numbered_prefix = (
     cases.test_clean_idea_title_removes_numbered_prefix
 )

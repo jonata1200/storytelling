@@ -179,6 +179,10 @@ def apply_body_style() -> None:
           .prompt-send-button .q-btn__content {
             color:#031019!important;
           }
+          body:not(.body--dark) .prompt-send-button .q-icon,
+          body:not(.body--dark) .prompt-send-button .q-btn__content {
+            color:#ffffff!important;
+          }
           body:not(.body--dark) .prompt-composer-input .q-field__control {
             background:#ffffff!important;
             box-shadow:
