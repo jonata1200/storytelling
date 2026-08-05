@@ -166,6 +166,8 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
             return "generate_storyboard"
         if active == "video":
             return "generate_video"
+        if active == "dubbing":
+            return "generate_dubbing"
         return "generate_script"
     return "chat"
 
@@ -227,7 +229,7 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
         return "generate_video"
     if dubbing_jobs == 0:
         return "generate_dubbing"
-    if active == "video":
+    if active in {"video", "dubbing"}:
         return "generate_finalization"
     return "run_quality"
 

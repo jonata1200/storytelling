@@ -126,11 +126,15 @@ async def dashboard_metrics() -> dict[str, str]:
 
 
 async def project_summary(project_id: UUID, section: str = "script") -> dict[str, Any] | None:
-    active_section = section if section in {"script", "assets", "storyboard", "video"} else "script"
+    active_section = (
+        section
+        if section in {"script", "assets", "storyboard", "video", "dubbing"}
+        else "script"
+    )
     load_script_details = active_section == "script"
     load_assets = active_section == "assets"
     load_storyboard = active_section == "storyboard"
-    load_video = active_section == "video"
+    load_video = active_section in {"video", "dubbing"}
     load_frames = load_storyboard or load_video
 
     async with AsyncSessionLocal() as session:

@@ -113,6 +113,7 @@ WORKSPACE_TABS = [
     ("Personagens", "assets"),
     ("Storyboard", "storyboard"),
     ("Vídeo", "video"),
+    ("Dublagem", "dubbing"),
 ]
 
 STEP_LOADING_COPY = {

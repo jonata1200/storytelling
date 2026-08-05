@@ -751,73 +751,6 @@ def render_video_area(
             badge="720p",
         )
 
-    if summary["clips"]:
-        dubbing_job = summary.get("dubbing_job")
-        dubbing_status = str(getattr(dubbing_job, "status", "") or "").upper()
-        dubbing_progress = int(getattr(dubbing_job, "progress", 0) or 0)
-        dubbing_target = str(
-            getattr(dubbing_job, "target_language", "") or get_settings().dubbing_target_lang
-        )
-        dubbing_url = _dubbing_asset_url(dubbing_job) if dubbing_job is not None else ""
-        dubbing_loading_dialog, _dubbing_progress_callback = generation_progress_dialog(
-            "Preparando dublagem",
-            1,
-            "job",
-            "A aplicação está preparando o export base e acionando o ElevenLabs.",
-        )
-        with ui.element("div").classes("w-full entity-card rounded-2xl p-4 mb-3"):
-            with ui.row().classes("w-full items-start justify-between gap-3"):
-                with ui.column().classes("gap-1 min-w-0"):
-                    ui.label("Dublagem").classes("brand-type text-2xl font-bold")
-                    ui.label(
-                        "Etapa após os clipes: cria um export base 720p e envia ao ElevenLabs."
-                    ).classes("text-sm text-[#8d938e]")
-                    ui.label(_dubbing_cost_text(total_duration)).classes(
-                        "text-xs text-[#8d938e]"
-                    )
-                ui.badge(dubbing_status or "pendente").classes(
-                    "bg-[#26301f] text-[#eaf878]"
-                    if dubbing_status == "SUCCEEDED"
-                    else "blue-status-badge bg-[#243342]"
-                )
-            ui.linear_progress(value=_progress_ratio(dubbing_progress, 100)).classes(
-                "w-full mt-3"
-            ).props("instant-feedback rounded")
-            with ui.row().classes("w-full items-center justify-between gap-3 mt-3"):
-                ui.label(f"Idioma alvo: {dubbing_target or 'não configurado'}").classes(
-                    "text-xs text-[#8d938e]"
-                )
-                with ui.row().classes("gap-2"):
-                    if dubbing_job is not None and dubbing_status not in {"SUCCEEDED", "FAILED"}:
-                        ui.button(
-                            "Atualizar status",
-                            icon="sync",
-                            on_click=lambda job_id=dubbing_job.id: _refresh_dubbing_from_ui(
-                                project_id,
-                                job_id,
-                                loading_dialog=dubbing_loading_dialog,
-                            ),
-                        ).props("flat no-caps").classes("rounded-xl")
-                    if dubbing_url:
-                        ui.button(
-                            "Baixar dublagem",
-                            icon="download",
-                            on_click=lambda url=dubbing_url: ui.download(
-                                url,
-                                f"storytelling-dublagem-{dubbing_target or 'audio'}.mp4",
-                            ),
-                        ).props("flat no-caps").classes("rounded-xl")
-                    ui.button(
-                        "Gerar dublagem" if dubbing_job is None else "Reaproveitar/atualizar",
-                        icon="graphic_eq",
-                        on_click=lambda: _enqueue_dubbing_from_ui(
-                            project_id,
-                            loading_dialog=dubbing_loading_dialog,
-                        ),
-                    ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-            if dubbing_job is not None and getattr(dubbing_job, "error", None):
-                ui.label(str(dubbing_job.error)).classes("text-xs text-red-300 mt-2")
-
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
         with (
@@ -1218,3 +1151,96 @@ def render_video_area(
             if timeline is None:
                 ui.badge("timeline pendente").classes("blue-status-badge bg-[#243342]")
         _render_timeline_strip(timeline, summary["timeline_items"])
+
+
+def render_dubbing_area(
+    project_id: UUID,
+    summary: dict[str, Any],
+    *,
+    section_title: SectionTitle,
+    loading_dialog_factory: LoadingDialogFactory | None = None,
+) -> None:
+    del loading_dialog_factory
+    clips = list(summary.get("clips", []))
+    total_duration = sum(int(getattr(clip, "duration_seconds", 0) or 0) for clip in clips)
+    section_title(
+        "Dublagem",
+        "Gere a versão dublada do vídeo final usando ElevenLabs.",
+        None,
+        None,
+    )
+    if not clips:
+        with ui.element("div").classes("entity-card rounded-2xl p-6 w-full"):
+            ui.label("Nenhum clipe pronto para dublar").classes(
+                "brand-type text-2xl font-bold"
+            )
+            ui.label(
+                "Gere os clipes na etapa de vídeo antes de criar a dublagem."
+            ).classes("text-sm text-[#8d938e] leading-6")
+        return
+
+    dubbing_job = summary.get("dubbing_job")
+    dubbing_status = str(getattr(dubbing_job, "status", "") or "").upper()
+    dubbing_progress = int(getattr(dubbing_job, "progress", 0) or 0)
+    dubbing_target = str(
+        getattr(dubbing_job, "target_language", "") or get_settings().dubbing_target_lang
+    )
+    dubbing_url = _dubbing_asset_url(dubbing_job) if dubbing_job is not None else ""
+    dubbing_loading_dialog, _dubbing_progress_callback = generation_progress_dialog(
+        "Preparando dublagem",
+        1,
+        "job",
+        "A aplicação está preparando o export base e acionando o ElevenLabs.",
+    )
+    with ui.element("div").classes("w-full entity-card rounded-2xl p-5"):
+        with ui.row().classes("w-full items-start justify-between gap-3"):
+            with ui.column().classes("gap-1 min-w-0"):
+                ui.label("Dublagem ElevenLabs").classes("brand-type text-2xl font-bold")
+                ui.label(
+                    "Cria um export base 720p com os clipes selecionados e envia para dublagem."
+                ).classes("text-sm text-[#8d938e]")
+                ui.label(_dubbing_cost_text(total_duration)).classes("text-xs text-[#8d938e]")
+            ui.badge(dubbing_status or "pendente").classes(
+                "bg-[#26301f] text-white"
+                if dubbing_status == "SUCCEEDED"
+                else "blue-status-badge bg-[#243342]"
+            )
+        ui.linear_progress(
+            value=_progress_ratio(dubbing_progress, 100),
+            show_value=False,
+        ).classes("w-full mt-3").props("instant-feedback rounded")
+        with ui.row().classes("w-full items-center justify-between gap-3 mt-3"):
+            ui.label(
+                f"{len(clips)} clipe(s) · {total_duration}s · idioma alvo: "
+                f"{dubbing_target or 'não configurado'}"
+            ).classes("text-xs text-[#8d938e]")
+            with ui.row().classes("gap-2"):
+                if dubbing_job is not None and dubbing_status not in {"SUCCEEDED", "FAILED"}:
+                    ui.button(
+                        "Atualizar status",
+                        icon="sync",
+                        on_click=lambda job_id=dubbing_job.id: _refresh_dubbing_from_ui(
+                            project_id,
+                            job_id,
+                            loading_dialog=dubbing_loading_dialog,
+                        ),
+                    ).props("flat no-caps").classes("rounded-xl")
+                if dubbing_url:
+                    ui.button(
+                        "Baixar dublagem",
+                        icon="download",
+                        on_click=lambda url=dubbing_url: ui.download(
+                            url,
+                            f"storytelling-dublagem-{dubbing_target or 'audio'}.mp4",
+                        ),
+                    ).props("flat no-caps").classes("rounded-xl")
+                ui.button(
+                    "Gerar dublagem" if dubbing_job is None else "Reaproveitar/atualizar",
+                    icon="graphic_eq",
+                    on_click=lambda: _enqueue_dubbing_from_ui(
+                        project_id,
+                        loading_dialog=dubbing_loading_dialog,
+                    ),
+                ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+        if dubbing_job is not None and getattr(dubbing_job, "error", None):
+            ui.label(str(dubbing_job.error)).classes("text-xs text-red-300 mt-2")

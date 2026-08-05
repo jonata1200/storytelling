@@ -36,6 +36,7 @@ def render_assistant_panel(
         "assets": "Descreva um personagem, local ou objeto.",
         "storyboard": "Diga ao diretor o que enquadrar.",
         "video": "Descreva movimento, câmera ou ritmo.",
+        "dubbing": "Peça ajustes de idioma, voz ou sincronização.",
     }
     assistant_suggestions = {
         "script": (
@@ -53,7 +54,11 @@ def render_assistant_panel(
         ),
         "video": (
             "Sugestões que posso ajudar agora: criar clipes a partir do storyboard, "
-            "orientar movimento de câmera, ajustar ritmo, gerar dublagem ou propor variações."
+            "orientar movimento de câmera, ajustar ritmo ou propor variações."
+        ),
+        "dubbing": (
+            "Sugestões que posso ajudar agora: gerar dublagem, revisar idioma alvo, "
+            "atualizar o status do job ou preparar a etapa final após o áudio."
         ),
     }
     chat_loading_copy = {

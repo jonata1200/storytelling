@@ -1243,4 +1243,55 @@ def test_workspace_tabs_start_with_script() -> None:
     tab_keys = [key for _, key in pages.WORKSPACE_TABS]
 
     assert tab_keys[:2] == ["script", "assets"]
+    assert "dubbing" in tab_keys
+
+
+def test_dubbing_section_waits_for_video_clips() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "scripts": 1,
+        "scenes": 2,
+        "shots": 8,
+        "characters": 2,
+        "locations": 1,
+        "props": 1,
+        "visual_refs": 4,
+        "frames": 8,
+        "animatics": 1,
+        "clips": 0,
+        "dubbing_jobs": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    allowed, reason = pages._workspace_section_access("dubbing", counts)
+
+    assert allowed is False
+    assert reason == "Gere pelo menos um clipe antes de acessar dublagem."
+
+
+def test_dubbing_section_unlocks_after_video_clips() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "scripts": 1,
+        "scenes": 2,
+        "shots": 8,
+        "characters": 2,
+        "locations": 1,
+        "props": 1,
+        "visual_refs": 4,
+        "frames": 8,
+        "animatics": 1,
+        "clips": 1,
+        "dubbing_jobs": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    allowed, reason = pages._workspace_section_access("dubbing", counts)
+
+    assert allowed is True
+    assert reason == ""
 
