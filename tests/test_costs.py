@@ -15,6 +15,7 @@ from app.costs.service import (
     estimate_operation_cost,
     final_budget_cost,
 )
+from app.ui.shared.cost_display import operation_cost_text
 
 
 def test_calculate_total_cost_quantizes_to_six_decimal_places() -> None:
@@ -95,6 +96,29 @@ def test_google_ai_cost_policy_uses_model_overrides() -> None:
     assert image.unit_cost == Decimal("0.033600")
     assert video.unit == "second"
     assert video.estimated == Decimal("0.800000")
+
+
+def test_operation_cost_text_formats_estimates_and_zero_quantity() -> None:
+    assert (
+        operation_cost_text(
+            "image_generation",
+            Decimal("2"),
+            provider="google_ai",
+            model="gemini-3.1-flash-lite-image",
+            label="2 imagem(ns)",
+        )
+        == "Estimativa: US$ 0.067200 para 2 imagem(ns)."
+    )
+    assert (
+        operation_cost_text(
+            "image_generation",
+            Decimal("0"),
+            provider="google_ai",
+            model="gemini-3.1-flash-lite-image",
+            label="0 imagem(ns)",
+        )
+        == "Nenhum custo previsto agora."
+    )
 
 
 def test_elevenlabs_cost_policy_uses_speech_and_dubbing_units() -> None:

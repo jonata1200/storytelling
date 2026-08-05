@@ -21,6 +21,7 @@ from app.ui.project.workflows import (
     _reload_project_when_script_ready,
     _resume_initial_script_in_background,
 )
+from app.ui.shared.cost_display import SCRIPT_TEXT_ESTIMATED_TOKENS, text_generation_cost_text
 from app.ui.shared.generation_progress import generation_progress_dialog
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, STEP_LOADING_COPY
 from app.visual_bible.service import generate_visual_bible
@@ -296,6 +297,15 @@ def render_script_area(
     )
     with ui.row().classes("w-full gap-4 items-start"):
         with ui.column().classes("flex-1 gap-4"):
+            if script is None:
+                ui.label(
+                    text_generation_cost_text(
+                        summary,
+                        "generate_script",
+                        SCRIPT_TEXT_ESTIMATED_TOKENS,
+                        "ideia, roteiro e cenas",
+                    )
+                ).classes("text-xs text-[#8d938e]")
             if script is None and ai_status == "failed":
                 retry_loading_dialog, update_retry_progress = generation_progress_dialog(
                     "Retomando roteiro",

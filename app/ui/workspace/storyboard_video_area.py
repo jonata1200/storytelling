@@ -698,6 +698,9 @@ def render_video_area(
         "A IA está enviando os clipes aprovados para a fila de vídeo.",
     )
     video_missing = max(total_frames - generated_count, 0)
+    pending_duration = sum(
+        int(getattr(frame, "duration_seconds", 0) or 0) for frame in pending_frames
+    )
     if total_frames:
         video_detail = "Saída padronizada em 720p."
         if active_video_job_count:
@@ -714,7 +717,7 @@ def render_video_area(
             generated_count,
             total_frames,
             video_missing,
-            video_detail,
+            f"{video_detail} {_video_cost_text(len(pending_frames), pending_duration)}",
             badge="720p",
         )
 
@@ -787,7 +790,6 @@ def render_video_area(
 
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
-        pending_duration = sum(int(getattr(frame, "duration_seconds", 0) or 0) for frame in pending_frames)
         with (
             ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_dialog,
             ui.card().classes(
