@@ -7,9 +7,9 @@ from nicegui import app as nicegui_app
 from nicegui import ui
 
 from app.assets.models import Asset
+from app.costs.service import estimate_operation_cost
 from app.ui.shared.cost_display import (
     VISUAL_PROMPTS_ESTIMATED_TOKENS,
-    operation_cost_text,
     text_generation_cost_text,
 )
 from app.ui.shared.generation_progress import generation_progress_dialog, progress_ratio
@@ -56,14 +56,27 @@ def _progress_ratio(done: int, total: int) -> float:
     return progress_ratio(done, total)
 
 
-def _visual_image_cost_text(image_count: int) -> str:
-    return operation_cost_text(
+def _visual_image_cost_text(
+    image_count: int,
+    scope: str,
+    *,
+    include_unit_cost: bool = False,
+    unit_cost_only: bool = False,
+) -> str:
+    if image_count <= 0:
+        return "Nenhuma imagem pendente."
+    estimate = estimate_operation_cost(
         "image_generation",
-        Decimal(max(0, image_count)),
+        Decimal(image_count),
         provider="google_ai",
         model="gemini-3.1-flash-lite-image",
-        label=f"{image_count} imagem(ns) da Biblioteca Visual",
     )
+    if unit_cost_only:
+        return f"Custo por imagem: US$ {estimate.unit_cost}."
+    text = f"{scope}: US$ {estimate.estimated} para {image_count} imagem(ns)."
+    if include_unit_cost:
+        text = f"{text} Custo por imagem: US$ {estimate.unit_cost}."
+    return text
 
 
 def _visual_reference_progress_for(
@@ -121,10 +134,11 @@ def _render_visual_progress_summary(summary: dict[str, Any]) -> None:
                     "text-sm font-semibold text-[#d8dbd8]"
                 )
                 ui.label(
-                    f"Faltam {missing} imagem(ns). {_visual_image_cost_text(missing)}"
+                    f"Faltam {missing} imagem(ns). "
+                    f"{_visual_image_cost_text(missing, 'Total pendente')}"
                 ).classes("text-xs text-[#8d938e]")
             ui.badge("pronto" if missing == 0 and expected else "pendente").classes(
-                "bg-[#26301f] text-[#eaf878]"
+                "bg-[#26301f] text-white"
                 if missing == 0 and expected
                 else "blue-status-badge bg-[#243342]"
             )
@@ -238,12 +252,12 @@ def _entity_card(
 ) -> None:
     if not existing_views:
         requested_views = [initial_view_for(target_kind)]
-        approval_label = "Aprovar prompt"
+        show_prompt_approval_button = True
     else:
         requested_views = [
             view for view in default_views_for(target_kind) if view not in existing_views
         ]
-        approval_label = "Aprovar vistas"
+        show_prompt_approval_button = False
     required_views = default_views_for(target_kind)
     required_generated = sum(1 for view in required_views if view in existing_views)
     required_expected = len(required_views)
@@ -378,25 +392,25 @@ def _entity_card(
         with ui.column().classes("p-4 gap-2"):
             ui.label(title).classes("brand-type text-xl font-bold")
             ui.label(subtitle).classes("text-xs acid uppercase tracking-wide")
-            with ui.row().classes("w-full items-center justify-between gap-2"):
-                ui.label(
-                    f"Referência obrigatória: {required_generated}/{required_expected}"
-                ).classes("text-xs text-[#c6cbc6]")
-                if target_kind == "character":
-                    sheet_status = (
-                        "múltiplas vistas pronta"
-                        if CHARACTER_REFERENCE_SHEET_VIEW in existing_views
-                        else "múltiplas vistas opcional"
-                    )
-                    ui.badge(sheet_status).classes("bg-[#20251f] text-[#c9cec9]")
+            if target_kind == "character":
+                sheet_status = (
+                    "múltiplas vistas pronta"
+                    if CHARACTER_REFERENCE_SHEET_VIEW in existing_views
+                    else "múltiplas vistas opcional"
+                )
+                ui.badge(sheet_status).classes("bg-[#20251f] text-white")
             ui.linear_progress(
                 value=_progress_ratio(required_generated, required_expected),
                 show_value=False,
             ).classes("w-full").props("instant-feedback rounded")
             if requested_views:
-                ui.label(_visual_image_cost_text(len(requested_views))).classes(
-                    "text-xs text-[#8d938e]"
-                )
+                ui.label(
+                    _visual_image_cost_text(
+                        len(requested_views),
+                        "Este card",
+                        unit_cost_only=True,
+                    )
+                ).classes("text-xs text-[#8d938e]")
             ui.label(detail).classes("text-sm text-[#999f9a] line-clamp-2")
             with ui.dialog().props(BLOCKING_DIALOG_PROPS) as prompt_dialog, ui.card().classes(
                 "entity-card rounded-2xl p-6 w-[min(760px,92vw)] max-h-[82vh]"
@@ -521,13 +535,14 @@ def _entity_card(
                         on_click=save_visual_prompt,
                     ).props("unelevated no-caps").classes("acid-bg rounded-xl")
             with ui.row().classes("w-full pt-2 border-t border-[#292d29]"):
-                approval_button = ui.button(
-                    approval_label,
-                    icon="check_circle",
-                    on_click=prompt_dialog.open,
-                ).props("flat dense no-caps").classes("text-[#d8dbd8]")
-                if not prompt_previews:
-                    approval_button.props("disable")
+                if show_prompt_approval_button:
+                    approval_button = ui.button(
+                        "Aprovar prompt",
+                        icon="check_circle",
+                        on_click=prompt_dialog.open,
+                    ).props("flat dense no-caps").classes("text-[#d8dbd8]")
+                    if not prompt_previews:
+                        approval_button.props("disable")
                 ui.button("Editar", icon="edit", on_click=edit_prompt_dialog.open).props(
                     "flat dense no-caps"
                 ).classes("text-[#d8dbd8]")
@@ -600,7 +615,13 @@ def render_assets_area(
             ui.label(
                 "Confira os prompts pendentes antes de gerar as imagens da Biblioteca Visual."
             ).classes("text-sm text-[#8d938e]")
-            ui.label(_visual_image_cost_text(batch_total)).classes("text-xs text-[#8d938e]")
+            ui.label(
+                _visual_image_cost_text(
+                    batch_total,
+                    "Total desta geração",
+                    include_unit_cost=True,
+                )
+            ).classes("text-xs text-[#8d938e]")
             with ui.scroll_area().classes("w-full max-h-[52vh] pr-2"):
                 with ui.column().classes("w-full gap-3"):
                     for target_kind, target_id, view_types in batch_requests:

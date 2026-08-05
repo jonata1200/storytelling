@@ -16,7 +16,10 @@ from app.ui.pages import _asset_url, _compact_project_title
 from app.ui.project import actions as project_actions
 from app.ui.routes import home_pages
 from app.ui.workspace import script_area, storyboard_video_area
-from app.ui.workspace.assets_area import _character_reference_sheet_asset
+from app.ui.workspace.assets_area import (
+    _character_reference_sheet_asset,
+    _visual_image_cost_text,
+)
 
 
 def test_settings_tab_key_keeps_data_tab_after_destructive_actions() -> None:
@@ -58,6 +61,14 @@ def test_register_ui_pages_resolves_page_facade_dependencies(
     pages.register_ui_pages()
 
     assert registered == ["home", "settings", "workspace"]
+
+
+def test_visual_image_cost_text_separates_total_and_card_scope() -> None:
+    total_text = _visual_image_cost_text(10, "Total pendente")
+    card_text = _visual_image_cost_text(1, "Este card", unit_cost_only=True)
+
+    assert total_text == "Total pendente: US$ 0.336000 para 10 imagem(ns)."
+    assert card_text == "Custo por imagem: US$ 0.033600."
 
 
 @pytest.mark.asyncio

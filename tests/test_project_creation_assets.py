@@ -24,3 +24,6 @@ test_visual_library_cards_ready_when_any_card_type_exists = (
 test_visual_batch_requests_include_only_required_missing_views = (
     cases.test_visual_batch_requests_include_only_required_missing_views
 )
+test_visual_image_cost_text_separates_total_and_card_scope = (
+    cases.test_visual_image_cost_text_separates_total_and_card_scope
+)
