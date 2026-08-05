@@ -26,6 +26,12 @@ test_storyboard_section_waits_for_all_visual_references = (
 test_storyboard_section_unlocks_after_visual_references_are_complete = (
     cases.test_storyboard_section_unlocks_after_visual_references_are_complete
 )
+test_finalization_section_waits_for_video_clips = (
+    cases.test_finalization_section_waits_for_video_clips
+)
+test_finalization_section_unlocks_after_video_clips = (
+    cases.test_finalization_section_unlocks_after_video_clips
+)
 test_dubbing_section_waits_for_video_clips = cases.test_dubbing_section_waits_for_video_clips
 test_dubbing_section_unlocks_after_video_clips = (
     cases.test_dubbing_section_unlocks_after_video_clips

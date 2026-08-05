@@ -1,4 +1,4 @@
-﻿import re
+import re
 from dataclasses import dataclass
 
 from nicegui import ui
@@ -86,18 +86,18 @@ PRODUCTION_STEPS = [
         "movie",
     ),
     ProductionStep(
-        "dubbing",
-        "Dublagem",
-        "Duble o export base com ElevenLabs, reaproveitando jobs e arquivos já criados.",
-        "Gerar dublagem",
-        "graphic_eq",
-    ),
-    ProductionStep(
         "finalization",
         "Finalização",
         "Monte a timeline final e exporte os clipes selecionados.",
         "Finalizar",
         "auto_awesome_motion",
+    ),
+    ProductionStep(
+        "dubbing",
+        "Dublagem",
+        "Duble o export base com ElevenLabs, reaproveitando jobs e arquivos já criados.",
+        "Gerar dublagem",
+        "graphic_eq",
     ),
     ProductionStep(
         "quality",
@@ -113,6 +113,7 @@ WORKSPACE_TABS = [
     ("Personagens", "assets"),
     ("Storyboard", "storyboard"),
     ("Vídeo", "video"),
+    ("Finalização", "finalization"),
     ("Dublagem", "dubbing"),
 ]
 
@@ -160,9 +161,8 @@ def friendly_ai_error(exc: BaseException) -> str:
             "O provedor de IA recusou a chamada por limite de uso. Aguarde alguns minutos "
             "ou troque para um modelo com mais disponibilidade."
         )
-    if (
-        "http 404" in normalized
-        and ("not found for account" in normalized or "modelo selecionado" in normalized)
+    if "http 404" in normalized and (
+        "not found for account" in normalized or "modelo selecionado" in normalized
     ):
         return (
             "O modelo escolhido não está disponível para a sua chave ou conta do provider. "
@@ -200,8 +200,9 @@ def show_ai_error_popup(
         message or "A IA não retornou nenhuma resposta. Tente novamente ou escolha outro modelo."
     )
     try:
-        with ui.dialog() as dialog, ui.card().classes(
-            "entity-card rounded-2xl p-6 w-[min(560px,92vw)] gap-4"
+        with (
+            ui.dialog() as dialog,
+            ui.card().classes("entity-card rounded-2xl p-6 w-[min(560px,92vw)] gap-4"),
         ):
             with ui.row().classes("items-start gap-3 w-full"):
                 ui.icon("error_outline").classes("text-3xl text-red-300 shrink-0")

@@ -15,6 +15,7 @@ from app.ui.workspace.assets_area import render_assets_area
 from app.ui.workspace.script_area import render_script_area, save_script_from_ui
 from app.ui.workspace.storyboard_video_area import (
     render_dubbing_area,
+    render_finalization_area,
     render_storyboard_area,
     render_video_area,
 )
@@ -180,6 +181,15 @@ def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
     )
 
 
+def _render_finalization_area(project_id: UUID, summary: dict[str, Any]) -> None:
+    render_finalization_area(
+        project_id,
+        summary,
+        section_title=_section_title,
+        loading_dialog_factory=_page_attr("_generation_loading_dialog"),
+    )
+
+
 def _render_dubbing_area(project_id: UUID, summary: dict[str, Any]) -> None:
     render_dubbing_area(
         project_id,
@@ -226,6 +236,7 @@ def register_ui_pages() -> None:
         render_assets_area=_page_attr("_render_assets_area"),
         render_storyboard_area=_page_attr("_render_storyboard_area"),
         render_video_area=_page_attr("_render_video_area"),
+        render_finalization_area=_page_attr("_render_finalization_area"),
         render_dubbing_area=_page_attr("_render_dubbing_area"),
         assistant_panel=_page_attr("_assistant_panel"),
     )

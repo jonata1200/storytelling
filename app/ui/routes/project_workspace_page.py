@@ -1,4 +1,4 @@
-﻿# ruff: noqa: E501
+# ruff: noqa: E501
 
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -28,6 +28,7 @@ def register_project_workspace_pages(
     render_assets_area: WorkspaceAreaRenderer,
     render_storyboard_area: WorkspaceAreaRenderer,
     render_video_area: WorkspaceAreaRenderer,
+    render_finalization_area: WorkspaceAreaRenderer,
     render_dubbing_area: WorkspaceAreaRenderer,
     assistant_panel: AssistantPanelRenderer,
 ) -> None:
@@ -39,7 +40,7 @@ def register_project_workspace_pages(
     @ui.page("/projects/{project_id}/{section}", response_timeout=15)
     async def project_studio(project_id: str, section: str) -> None:
         body_style()
-        if section not in {"script", "assets", "storyboard", "video", "dubbing"}:
+        if section not in {"script", "assets", "storyboard", "video", "finalization", "dubbing"}:
             ui.navigate.to(f"/projects/{project_id}/script")
             return
         try:
@@ -64,7 +65,9 @@ def register_project_workspace_pages(
             ui.navigate.to(f"/projects/{project_id}/{fallback}")
             return
         workspace_header(project, section, counts)
-        with ui.element("div").classes("workspace-layout flex w-full items-start flex-nowrap gap-0"):
+        with ui.element("div").classes(
+            "workspace-layout flex w-full items-start flex-nowrap gap-0"
+        ):
             with ui.column().classes(
                 "workspace-main flex-1 min-w-0 p-8 lg:p-10 gap-4 h-[calc(100vh-64px)] overflow-y-auto"
             ):
@@ -76,16 +79,8 @@ def register_project_workspace_pages(
                     render_storyboard_area(project_uuid, summary)
                 elif section == "video":
                     render_video_area(project_uuid, summary)
-                else:
+                elif section == "finalization":
+                    render_finalization_area(project_uuid, summary)
+                elif section == "dubbing":
                     render_dubbing_area(project_uuid, summary)
             assistant_panel(project_uuid, section, summary)
-
-
-
-
-
-
-
-
-
-

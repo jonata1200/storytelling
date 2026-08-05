@@ -1,4 +1,4 @@
-﻿from typing import Any, cast
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -155,6 +155,10 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
             return "generate_storyboard"
         if active == "video":
             return "generate_video"
+        if active == "finalization":
+            return "generate_finalization"
+        if active == "dubbing":
+            return "generate_dubbing"
     if wants_generation and (
         active == "script" or any(term in normalized for term in script_terms)
     ):
@@ -166,6 +170,8 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
             return "generate_storyboard"
         if active == "video":
             return "generate_video"
+        if active == "finalization":
+            return "generate_finalization"
         if active == "dubbing":
             return "generate_dubbing"
         return "generate_script"
@@ -215,6 +221,7 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
     props = counts.get("props", 0)
     frames = counts.get("frames", 0)
     clips = counts.get("clips", 0)
+    exports = counts.get("exports", 0)
     dubbing_jobs = counts.get("dubbing_jobs", 0)
 
     if scripts == 0:
@@ -227,9 +234,11 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
         return "generate_storyboard"
     if clips == 0:
         return "generate_video"
+    if exports == 0 or active == "finalization":
+        return "generate_finalization"
     if dubbing_jobs == 0:
         return "generate_dubbing"
-    if active in {"video", "dubbing"}:
+    if active in {"video", "finalization", "dubbing"}:
         return "generate_finalization"
     return "run_quality"
 

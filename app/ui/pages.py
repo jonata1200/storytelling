@@ -1,4 +1,4 @@
-﻿# ruff: noqa: E501
+# ruff: noqa: E501
 
 import asyncio
 import logging
@@ -96,6 +96,9 @@ from app.ui.page_runtime import (
 )
 from app.ui.page_runtime import (
     _render_dubbing_area as _render_dubbing_area,  # noqa: F401
+)
+from app.ui.page_runtime import (
+    _render_finalization_area as _render_finalization_area,  # noqa: F401
 )
 from app.ui.page_runtime import (
     _render_script_area as _render_script_area,  # noqa: F401
@@ -270,6 +273,8 @@ def _default_media_model(channel: ProviderChannel) -> str:
     settings = get_settings()
     provider = effective_provider_for_channel(settings, channel)
     return provider_model(settings, provider, channel)
+
+
 PRODUCTION_STEPS = PAGE_PRODUCTION_STEPS
 WORKSPACE_TABS = PAGE_WORKSPACE_TABS
 _is_legacy_assistant_greeting = assistant_state.is_legacy_assistant_greeting
@@ -558,9 +563,7 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
         "objective": f"desenvolver uma história completa de {duration:g} minutos",
         "cta": "",
         "constraints": (
-            "manter ritmo forte\n"
-            "criar ganchos claros\n"
-            f"adequar para {duration:g} minutos"
+            f"manter ritmo forte\ncriar ganchos claros\nadequar para {duration:g} minutos"
         ),
         "one_line_idea": _format_idea_payload_for_project(idea),
         "source_idea_payload": dict(idea),
@@ -619,8 +622,9 @@ async def _create_next_episode(project_id: UUID) -> None:
 
 
 def _generation_loading_dialog(title: str, message: str) -> Any:
-    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as loading_dialog, ui.card().classes(
-        "entity-card rounded-2xl p-6 min-w-80 items-center text-center"
+    with (
+        ui.dialog().props(BLOCKING_DIALOG_PROPS) as loading_dialog,
+        ui.card().classes("entity-card rounded-2xl p-6 min-w-80 items-center text-center"),
     ):
         ui.spinner("dots", size="lg", color="primary")
         ui.label(title).classes("brand-type text-xl font-bold mt-3")

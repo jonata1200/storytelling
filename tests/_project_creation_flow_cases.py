@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -971,9 +971,7 @@ def test_visual_library_cards_ready_when_any_card_type_exists() -> None:
 
 
 def test_visual_prompts_need_generation_before_visual_targets_exist() -> None:
-    assert pages._visual_prompts_need_generation(
-        {"characters": [], "locations": [], "props": []}
-    )
+    assert pages._visual_prompts_need_generation({"characters": [], "locations": [], "props": []})
 
 
 def test_visual_prompts_are_ready_when_targets_have_canonical_prompts() -> None:
@@ -1242,8 +1240,58 @@ def test_production_steps_do_not_include_story_bible() -> None:
 def test_workspace_tabs_start_with_script() -> None:
     tab_keys = [key for _, key in pages.WORKSPACE_TABS]
 
-    assert tab_keys[:2] == ["script", "assets"]
+    assert tab_keys[:5] == ["script", "assets", "storyboard", "video", "finalization"]
     assert "dubbing" in tab_keys
+
+
+def test_finalization_section_waits_for_video_clips() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "scripts": 1,
+        "scenes": 2,
+        "shots": 8,
+        "characters": 2,
+        "locations": 1,
+        "props": 1,
+        "visual_refs": 4,
+        "frames": 8,
+        "animatics": 1,
+        "clips": 0,
+        "dubbing_jobs": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    allowed, reason = pages._workspace_section_access("finalization", counts)
+
+    assert allowed is False
+    assert reason == "Gere pelo menos um clipe antes de acessar finalização."
+
+
+def test_finalization_section_unlocks_after_video_clips() -> None:
+    counts = {
+        "briefings": 1,
+        "ideas": 1,
+        "scripts": 1,
+        "scenes": 2,
+        "shots": 8,
+        "characters": 2,
+        "locations": 1,
+        "props": 1,
+        "visual_refs": 4,
+        "frames": 8,
+        "animatics": 1,
+        "clips": 1,
+        "dubbing_jobs": 0,
+        "exports": 0,
+        "qa_issues": 0,
+    }
+
+    allowed, reason = pages._workspace_section_access("finalization", counts)
+
+    assert allowed is True
+    assert reason == ""
 
 
 def test_dubbing_section_waits_for_video_clips() -> None:
@@ -1294,4 +1342,3 @@ def test_dubbing_section_unlocks_after_video_clips() -> None:
 
     assert allowed is True
     assert reason == ""
-

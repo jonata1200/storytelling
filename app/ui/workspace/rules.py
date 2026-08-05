@@ -1,6 +1,6 @@
-﻿from app.visual_bible.prompts import default_views_for
+from app.visual_bible.prompts import default_views_for
 
-WORKSPACE_SECTIONS = ("script", "assets", "storyboard", "video", "dubbing")
+WORKSPACE_SECTIONS = ("script", "assets", "storyboard", "video", "finalization", "dubbing")
 VISUAL_REFERENCE_VIEW_COUNTS = {
     "characters": len(default_views_for("character")),
     "locations": len(default_views_for("location")),
@@ -80,6 +80,13 @@ def workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool
             return False, reason
         if not step_ready("video", counts):
             return False, "Gere pelo menos um clipe antes de acessar dublagem."
+        return True, ""
+    if section == "finalization":
+        allowed, reason = workspace_section_access("video", counts)
+        if not allowed:
+            return False, reason
+        if not step_ready("video", counts):
+            return False, "Gere pelo menos um clipe antes de acessar finalização."
         return True, ""
     return False, "Etapa desconhecida."
 

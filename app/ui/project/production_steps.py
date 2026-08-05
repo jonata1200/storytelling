@@ -1,4 +1,4 @@
-﻿from typing import Any
+from typing import Any
 from uuid import UUID
 
 from nicegui import ui
@@ -59,7 +59,7 @@ async def _run_step(
                 )
                 ui.navigate.reload()
                 return
-            if step_key == "dubbing":
+            if step_key in {"dubbing", "finalization"}:
                 result = await session.execute(
                     select(VideoClip).where(VideoClip.project_id == project_id)
                 )

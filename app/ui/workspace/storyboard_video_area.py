@@ -154,6 +154,25 @@ async def _enqueue_dubbing_from_ui(
             loading_dialog.close()
 
 
+async def _enqueue_finalization_from_ui(
+    project_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+) -> None:
+    if loading_dialog is not None:
+        loading_dialog.open()
+    try:
+        async with AsyncSessionLocal() as session:
+            job = await enqueue_project_step(session, project_id, "finalization")
+        ui.notify(f"Finalização enfileirada: {job.id}.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            loading_dialog.close()
+
+
 async def _refresh_dubbing_from_ui(
     project_id: UUID,
     job_id: UUID,
@@ -234,6 +253,19 @@ def _dubbing_asset_url(job: Any) -> str:
     if asset_id is None:
         return ""
     return f"/api/v1/assets/{asset_id}/content"
+
+
+def _export_asset_url(export: Any) -> str:
+    asset_id = getattr(export, "asset_id", None)
+    if asset_id is None:
+        return ""
+    return f"/api/v1/assets/{asset_id}/content"
+
+
+def _export_filename(export: Any) -> str:
+    output_uri = str(getattr(export, "output_uri", "") or "").lower()
+    suffix = ".json" if output_uri.endswith(".json") else ".mp4"
+    return f"storytelling-final{suffix}"
 
 
 def _progress_ratio(done: int, total: int) -> float:
@@ -418,9 +450,7 @@ def render_storyboard_area(
                             ui.label(str(preview.get("prompt") or "")).classes(
                                 "text-xs text-[#aeb4af] whitespace-pre-wrap mt-2"
                             )
-                            _render_continuity_checks(
-                                list(preview.get("continuity_checks") or [])
-                            )
+                            _render_continuity_checks(list(preview.get("continuity_checks") or []))
 
             async def confirm_storyboard_prompts() -> None:
                 prompt_dialog.close()
@@ -690,9 +720,7 @@ def render_storyboard_area(
                                 loading_dialog=generation_dialog,
                                 progress_callback=storyboard_progress_callback,
                             ),
-                        ).props("unelevated dense no-caps").classes(
-                            "acid-bg self-start rounded-xl"
-                        )
+                        ).props("unelevated dense no-caps").classes("acid-bg self-start rounded-xl")
         if not summary["frames"]:
             ui.label(
                 "O Diretor IA pode criar os quadros quando roteiro e ativos estiverem prontos."
@@ -735,8 +763,7 @@ def render_video_area(
         video_detail = "Saída padronizada em 720p."
         if active_video_job_count:
             video_detail = (
-                f"{active_video_job_count} job(s) em fila/processando. "
-                "Saída padronizada em 720p."
+                f"{active_video_job_count} job(s) em fila/processando. Saída padronizada em 720p."
             )
         if view_model.failed_video_jobs:
             video_detail = (
@@ -755,9 +782,7 @@ def render_video_area(
         pending_frame_ids = [frame.id for frame in pending_frames]
         with (
             ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_dialog,
-            ui.card().classes(
-                "entity-card rounded-2xl p-6 w-[min(920px,94vw)] max-h-[86vh]"
-            ),
+            ui.card().classes("entity-card rounded-2xl p-6 w-[min(920px,94vw)] max-h-[86vh]"),
         ):
             ui.label("Revisar prompts e gerar clipes").classes("brand-type text-2xl font-bold")
             ui.label(
@@ -782,9 +807,7 @@ def render_video_area(
                 with ui.column().classes("w-full gap-3"):
                     for frame in pending_frames:
                         preview = video_prompt_by_frame_id.get(frame.id, {})
-                        with ui.element("div").classes(
-                            "border border-[#343934] rounded-xl p-4"
-                        ):
+                        with ui.element("div").classes("border border-[#343934] rounded-xl p-4"):
                             with ui.row().classes("w-full items-start justify-between gap-3"):
                                 ui.label(f"Plano {frame.frame_number:02d}").classes(
                                     "text-sm font-semibold"
@@ -972,9 +995,7 @@ def render_video_area(
                     ):
                         with ui.row().classes("w-full items-center justify-between gap-3"):
                             with ui.column().classes("gap-0 min-w-0"):
-                                ui.label(f"Clipe {i:02d}").classes(
-                                    "brand-type text-2xl font-bold"
-                                )
+                                ui.label(f"Clipe {i:02d}").classes("brand-type text-2xl font-bold")
                                 ui.label(f"{clip.duration_seconds}s · {clip.model}").classes(
                                     "text-sm text-[#8d938e]"
                                 )
@@ -982,9 +1003,11 @@ def render_video_area(
                                 ui.button(
                                     "Baixar vídeo",
                                     icon="download",
-                                    on_click=lambda url=clip_url, filename=download_filename: ui.download(
-                                        url,
-                                        filename,
+                                    on_click=lambda url=clip_url, filename=download_filename: (
+                                        ui.download(
+                                            url,
+                                            filename,
+                                        )
                                     ),
                                 ).props("flat no-caps").classes("rounded-xl")
                                 ui.button(
@@ -1084,9 +1107,9 @@ def render_video_area(
                     with ui.column().classes("p-4 gap-2"):
                         with ui.row().classes("w-full justify-between"):
                             ui.label(f"Clipe {i:02d}").classes("font-semibold")
-                            ui.badge("Selecionado" if clip.selected else "Varia\u00e7\u00e3o").classes(
-                                "bg-[#30362b] text-[#eaf878]"
-                            )
+                            ui.badge(
+                                "Selecionado" if clip.selected else "Varia\u00e7\u00e3o"
+                            ).classes("bg-[#30362b] text-[#eaf878]")
                         ui.label(f"{clip.duration_seconds}s \u00b7 {clip.model}").classes(
                             "text-xs text-[#878d88]"
                         )
@@ -1116,9 +1139,11 @@ def render_video_area(
                                         ui.button(
                                             "Baixar",
                                             icon="download",
-                                            on_click=lambda url=clip_url, filename=download_filename: ui.download(
-                                                url,
-                                                filename,
+                                            on_click=lambda url=clip_url, filename=download_filename: (
+                                                ui.download(
+                                                    url,
+                                                    filename,
+                                                )
                                             ),
                                         ).props("flat dense no-caps").classes(
                                             "text-[#d8dbd8] rounded-xl"
@@ -1153,6 +1178,98 @@ def render_video_area(
         _render_timeline_strip(timeline, summary["timeline_items"])
 
 
+def render_finalization_area(
+    project_id: UUID,
+    summary: dict[str, Any],
+    *,
+    section_title: SectionTitle,
+    loading_dialog_factory: LoadingDialogFactory | None = None,
+) -> None:
+    del loading_dialog_factory
+    clips = list(summary.get("clips", []))
+    timeline = summary.get("timeline")
+    timeline_items = list(summary.get("timeline_items", []))
+    export = summary.get("export")
+    export_status = str(getattr(export, "status", "") or "").upper()
+    export_url = _export_asset_url(export) if export is not None else ""
+    export_filename = _export_filename(export) if export is not None else "storytelling-final.mp4"
+    clip_duration = sum(int(getattr(clip, "duration_seconds", 0) or 0) for clip in clips)
+    timeline_duration = int(getattr(timeline, "duration_seconds", 0) or 0)
+    total_duration = timeline_duration or clip_duration
+    section_title(
+        "Finalização",
+        "Monte a timeline final, gere o arquivo único e prepare o projeto para entrega.",
+        None,
+        None,
+    )
+    if not clips:
+        with ui.element("div").classes("entity-card rounded-2xl p-6 w-full"):
+            ui.label("Nenhum clipe pronto para finalizar").classes("brand-type text-2xl font-bold")
+            ui.label("Gere os clipes na etapa de vídeo antes de montar a timeline final.").classes(
+                "text-sm text-[#8d938e] leading-6"
+            )
+        return
+
+    finalization_loading_dialog, _finalization_progress_callback = generation_progress_dialog(
+        "Finalizando projeto",
+        1,
+        "export",
+        "A aplicação está montando a timeline final e gerando o arquivo único.",
+    )
+    progress_value = 1.0 if export is not None else (0.5 if timeline is not None else 0.0)
+    with ui.element("div").classes("w-full entity-card rounded-2xl p-5"):
+        with ui.row().classes("w-full items-start justify-between gap-3"):
+            with ui.column().classes("gap-1 min-w-0"):
+                ui.label("Timeline e export final").classes("brand-type text-2xl font-bold")
+                ui.label(
+                    "Une os clipes selecionados em ordem de storyboard e cria um único arquivo."
+                ).classes("text-sm text-[#8d938e]")
+                ui.label(
+                    "Custo de IA previsto: US$ 0.000000. Esta etapa usa processamento local."
+                ).classes("text-xs text-[#8d938e]")
+            ui.badge(
+                export_status or ("timeline pronta" if timeline is not None else "pendente")
+            ).classes(
+                "bg-[#26301f] text-white"
+                if export_status == "RENDERED"
+                else "blue-status-badge bg-[#243342]"
+            )
+        ui.linear_progress(value=progress_value, show_value=False).classes("w-full mt-3").props(
+            "instant-feedback rounded"
+        )
+        with ui.row().classes("w-full items-center justify-between gap-3 mt-3"):
+            ui.label(
+                f"{len(clips)} clipe(s) selecionado(s) · {total_duration}s · saída 720p"
+            ).classes("text-xs text-[#8d938e]")
+            with ui.row().classes("gap-2"):
+                if export_url:
+                    ui.button(
+                        "Baixar final",
+                        icon="download",
+                        on_click=lambda url=export_url, filename=export_filename: ui.download(
+                            url,
+                            filename,
+                        ),
+                    ).props("flat no-caps").classes("rounded-xl")
+                ui.button(
+                    "Gerar final" if export is None else "Gerar novamente",
+                    icon="auto_awesome_motion",
+                    on_click=lambda: _enqueue_finalization_from_ui(
+                        project_id,
+                        loading_dialog=finalization_loading_dialog,
+                    ),
+                ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+        if export is not None:
+            ui.label(f"Arquivo: {getattr(export, 'output_uri', '')}").classes(
+                "text-xs text-[#8d938e] mt-2 break-all"
+            )
+            render_log = str(getattr(export, "render_log", "") or "").strip()
+            if render_log:
+                ui.label(render_log[:420]).classes("text-xs text-[#8d938e] mt-1")
+
+    _render_timeline_strip(timeline, timeline_items)
+
+
 def render_dubbing_area(
     project_id: UUID,
     summary: dict[str, Any],
@@ -1171,12 +1288,10 @@ def render_dubbing_area(
     )
     if not clips:
         with ui.element("div").classes("entity-card rounded-2xl p-6 w-full"):
-            ui.label("Nenhum clipe pronto para dublar").classes(
-                "brand-type text-2xl font-bold"
+            ui.label("Nenhum clipe pronto para dublar").classes("brand-type text-2xl font-bold")
+            ui.label("Gere os clipes na etapa de vídeo antes de criar a dublagem.").classes(
+                "text-sm text-[#8d938e] leading-6"
             )
-            ui.label(
-                "Gere os clipes na etapa de vídeo antes de criar a dublagem."
-            ).classes("text-sm text-[#8d938e] leading-6")
         return
 
     dubbing_job = summary.get("dubbing_job")

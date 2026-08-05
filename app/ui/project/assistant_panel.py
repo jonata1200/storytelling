@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -36,6 +36,7 @@ def render_assistant_panel(
         "assets": "Descreva um personagem, local ou objeto.",
         "storyboard": "Diga ao diretor o que enquadrar.",
         "video": "Descreva movimento, câmera ou ritmo.",
+        "finalization": "Peça ajustes de timeline, export ou arquivo final.",
         "dubbing": "Peça ajustes de idioma, voz ou sincronização.",
     }
     assistant_suggestions = {
@@ -55,6 +56,10 @@ def render_assistant_panel(
         "video": (
             "Sugestões que posso ajudar agora: criar clipes a partir do storyboard, "
             "orientar movimento de câmera, ajustar ritmo ou propor variações."
+        ),
+        "finalization": (
+            "Sugestões que posso ajudar agora: montar a timeline final, exportar o "
+            "arquivo único, revisar duração ou preparar a entrega."
         ),
         "dubbing": (
             "Sugestões que posso ajudar agora: gerar dublagem, revisar idioma alvo, "
@@ -104,9 +109,11 @@ def render_assistant_panel(
                 ui.label("Diretor IA").classes("font-semibold")
             with ui.row().classes("items-center gap-2"):
                 ui.badge("online").classes("bg-[#26301f] text-white")
-                with ui.button(icon="delete_sweep", on_click=clear_conversation).props(
-                    "flat round dense"
-                ).classes("text-[#7c8a7c]"):
+                with (
+                    ui.button(icon="delete_sweep", on_click=clear_conversation)
+                    .props("flat round dense")
+                    .classes("text-[#7c8a7c]")
+                ):
                     ui.tooltip("Limpar histórico da conversa")
 
         @ui.refreshable
@@ -136,9 +143,7 @@ def render_assistant_panel(
                                 )
                             )
 
-        with ui.column().classes(
-            "assistant-chat-messages w-full flex-1 min-h-0 overflow-y-auto"
-        ):
+        with ui.column().classes("assistant-chat-messages w-full flex-1 min-h-0 overflow-y-auto"):
             conversation()
 
         async def send_message(text: str | None = None) -> None:
@@ -235,7 +240,3 @@ def render_assistant_panel(
                 icon="arrow_upward",
                 on_click=send_message,
             ).props("round unelevated").classes("acid-bg shrink-0 mb-1")
-
-
-
-

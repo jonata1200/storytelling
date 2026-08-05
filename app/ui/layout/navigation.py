@@ -23,6 +23,7 @@ WORKSPACE_NAV_ICONS = {
     "assets": "palette",
     "storyboard": "view_comfy",
     "video": "movie",
+    "finalization": "auto_awesome_motion",
     "dubbing": "graphic_eq",
 }
 
