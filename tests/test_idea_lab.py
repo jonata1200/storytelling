@@ -16,6 +16,7 @@ from app.storytelling.idea_lab import (
     delete_all_ideas,
     delete_generated_idea,
     delete_saved_idea,
+    generate_freeform_idea_batches,
     generate_freeform_ideas,
     load_generated_ideas,
     load_saved_ideas,
@@ -190,6 +191,46 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
 
     assert len(ideas) == 10
     assert {int(idea.get("duration_minutes", 0)) for idea in ideas} == {25}
+
+
+@pytest.mark.asyncio
+async def test_generate_freeform_idea_batches_yields_incremental_batches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested_counts: list[int] = []
+    avoidance_memory: list[str] = []
+
+    async def fake_batch_generation(provider: object, request: LLMRequest) -> LLMResult:
+        requested_counts.append(int(request.variables.get("count") or 0))
+        avoidance_memory.append(str(request.variables.get("avoidance_memory") or ""))
+        return await _fake_idea_generation(provider, request)
+
+    monkeypatch.setattr(
+        idea_lab,
+        "get_settings",
+        lambda: Settings(
+            ai_provider="ollama_cloud",
+            text_provider="ollama_cloud",
+            ollama_cloud_api_key="ollama-secret",
+        ),
+    )
+    monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", fake_batch_generation)
+
+    batches = [
+        batch
+        async for batch in generate_freeform_idea_batches(
+            count=5,
+            genre="Drama",
+            batch_size=2,
+        )
+    ]
+
+    assert [len(batch) for batch in batches] == [2, 2, 1]
+    assert requested_counts == [2, 2, 1]
+    assert avoidance_memory[0] == ""
+    assert "A escolha 1" in avoidance_memory[1]
+    assert "A escolha 2" in avoidance_memory[1]
+    assert sum(len(batch) for batch in batches) == 5
 
 
 @pytest.mark.asyncio

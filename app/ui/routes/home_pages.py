@@ -7,7 +7,7 @@ from typing import Any
 from nicegui import ui
 
 from app.storytelling.idea_lab import (
-    generate_freeform_ideas,
+    generate_freeform_idea_batches,
     load_saved_ideas,
     replace_generated_ideas,
     save_idea,
@@ -668,39 +668,59 @@ def register_home_pages(
                             "Aguardando a IA criar as opções narrativas.",
                         )
                         try:
-                            generated = await asyncio.wait_for(
-                                generate_freeform_ideas(
+                            replace_generated_ideas([])
+                            generated: list[dict[str, Any]] = []
+                            async with asyncio.timeout(UI_GENERATION_TIMEOUT_SECONDS):
+                                async for batch in generate_freeform_idea_batches(
                                     "",
                                     count=expected_count,
                                     genre=str(genre_select.value or ""),
                                     target_duration_minutes=coerce_duration_minutes(
                                         duration_select.value
                                     ),
-                                ),
-                                timeout=UI_GENERATION_TIMEOUT_SECONDS,
-                            )
-                            generated_count = len(generated)
-                            update_idea_generation_progress(
-                                0,
-                                generated_count,
-                                f"IA retornou {generated_count} ideia(s). Salvando cards.",
-                            )
-                            replace_generated_ideas([])
-                            for index, generated_idea in enumerate(generated, 1):
-                                saved = save_idea(generated_idea)
-                                saved_ideas[:] = [
-                                    existing
-                                    for existing in saved_ideas
-                                    if existing.get("id") != saved["id"]
-                                ]
-                                saved_ideas.insert(0, saved)
-                                missing = max(generated_count - index, 0)
+                                ):
+                                    batch_start = len(generated)
+                                    for batch_index, generated_idea in enumerate(batch, 1):
+                                        saved = save_idea(generated_idea)
+                                        generated.append(saved)
+                                        saved_ideas[:] = [
+                                            existing
+                                            for existing in saved_ideas
+                                            if existing.get("id") != saved["id"]
+                                        ]
+                                        saved_ideas.insert(0, saved)
+                                        completed = batch_start + batch_index
+                                        missing = max(expected_count - completed, 0)
+                                        update_idea_generation_progress(
+                                            completed,
+                                            expected_count,
+                                            (
+                                                "Salva: "
+                                                f"{clean_idea_title(saved.get('title'), 'Ideia')}. "
+                                                f"Faltam {missing}."
+                                            ),
+                                        )
+                                    refresh_idea_filter_options()
+                                    saved_results.refresh()
+                                    if len(generated) < expected_count:
+                                        update_idea_generation_progress(
+                                            len(generated),
+                                            expected_count,
+                                            (
+                                                f"{len(generated)} ideia(s) salva(s). "
+                                                f"Gerando próximo lote de "
+                                                f"{expected_count - len(generated)}."
+                                            ),
+                                        )
+                            if not generated:
+                                raise RuntimeError("A IA não retornou ideias válidas.")
+                            if len(generated) < expected_count:
                                 update_idea_generation_progress(
-                                    index,
-                                    generated_count,
+                                    len(generated),
+                                    expected_count,
                                     (
-                                        f"Salva: {clean_idea_title(saved.get('title'), 'Ideia')}. "
-                                        f"Faltam {missing}."
+                                        f"A IA retornou {len(generated)} ideia(s) válida(s). "
+                                        f"Faltaram {expected_count - len(generated)}."
                                     ),
                                 )
                             refresh_idea_filter_options()

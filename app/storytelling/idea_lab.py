@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from app.storytelling.service import (
 SAVED_IDEAS_PATH = Path(".runtime/idea_lab_saved.json")
 GENERATED_IDEAS_PATH = Path(".runtime/idea_lab_generated.json")
 IDEA_PROVIDER_TIMEOUT_SECONDS = 180
+IDEA_PROGRESS_BATCH_SIZE = 2
 
 
 def build_idea_lab_prompt(
@@ -33,6 +35,7 @@ def build_idea_lab_prompt(
     genre: str,
     duration_minutes: float,
     retry_guidance: str = "",
+    avoidance_memory: str = "",
 ) -> str:
     duration = f"{duration_minutes:g}"
     genre_instruction = (
@@ -51,6 +54,12 @@ def build_idea_lab_prompt(
     retry_instruction = (
         f"\nCorrecao obrigatoria da tentativa anterior: {retry_guidance}"
         if retry_guidance
+        else ""
+    )
+    avoidance_instruction = (
+        "\nIdeias ja geradas nesta rodada que devem ser evitadas: "
+        f"{avoidance_memory.strip()}."
+        if avoidance_memory.strip()
         else ""
     )
 
@@ -89,6 +98,7 @@ def build_idea_lab_prompt(
         f"Use duration_minutes igual a {duration} em todas as ideias. "
         "retention_potential, cliche_risk e production_complexity devem ser números "
         "de 0 a 100. obstacles deve ser uma lista com 2 a 4 obstaculos concretos."
+        f"{avoidance_instruction}"
         f"{retry_instruction}"
     )
 
@@ -107,11 +117,72 @@ async def generate_freeform_ideas(
     )
     count = max(1, min(10, int(count)))
     duration = coerce_duration_minutes(target_duration_minutes)
+    return await _generate_freeform_idea_batch(
+        provider,
+        model,
+        theme,
+        count,
+        genre,
+        duration,
+    )
+
+
+async def generate_freeform_idea_batches(
+    theme: str = "",
+    count: int = 10,
+    genre: str = "",
+    target_duration_minutes: float = 5.0,
+    *,
+    batch_size: int = IDEA_PROGRESS_BATCH_SIZE,
+) -> AsyncIterator[list[dict[str, Any]]]:
+    settings = get_settings()
+    provider, model, configured_provider = configured_text_llm_provider(settings)
+    model = validate_model_name(
+        model,
+        provider=configured_provider,
+    )
+    total = max(1, min(10, int(count)))
+    duration = coerce_duration_minutes(target_duration_minutes)
+    safe_batch_size = max(1, min(total, int(batch_size)))
+    generated: list[dict[str, Any]] = []
+    while len(generated) < total:
+        remaining = total - len(generated)
+        current_batch_size = min(safe_batch_size, remaining)
+        batch = await _generate_freeform_idea_batch(
+            provider,
+            model,
+            theme,
+            current_batch_size,
+            genre,
+            duration,
+            avoidance_memory=_idea_batch_avoidance_memory(generated),
+        )
+        generated.extend(batch)
+        yield batch
+
+
+async def _generate_freeform_idea_batch(
+    provider: LLMProvider,
+    model: str,
+    theme: str,
+    count: int,
+    genre: str,
+    duration: float,
+    *,
+    avoidance_memory: str = "",
+) -> list[dict[str, Any]]:
     retry_guidance = ""
     request = LLMRequest(
         task="generate_story_ideas",
         model=model,
-        prompt=build_idea_lab_prompt(theme, count, genre, duration, retry_guidance),
+        prompt=build_idea_lab_prompt(
+            theme,
+            count,
+            genre,
+            duration,
+            retry_guidance,
+            avoidance_memory,
+        ),
         variables={
             "theme": theme or "tema livre criado pela IA",
             "count": count,
@@ -120,6 +191,7 @@ async def generate_freeform_ideas(
             "target_duration_minutes": duration,
             "audience": "público geral",
             "retry_guidance": retry_guidance,
+            "avoidance_memory": avoidance_memory,
         },
         output_schema={"type": "object", "properties": {"ideas": {"type": "array"}}},
     )
@@ -130,12 +202,39 @@ async def generate_freeform_ideas(
         retry_guidance = _story_idea_retry_guidance([str(exc)])
         retry_request = request.model_copy(
             update={
-                "prompt": build_idea_lab_prompt(theme, count, genre, duration, retry_guidance),
-                "variables": request.variables | {"retry_guidance": retry_guidance},
+                "prompt": build_idea_lab_prompt(
+                    theme,
+                    count,
+                    genre,
+                    duration,
+                    retry_guidance,
+                    avoidance_memory,
+                ),
+                "variables": request.variables
+                | {"retry_guidance": retry_guidance, "avoidance_memory": avoidance_memory},
             }
         )
         result = await _generate_with_runtime_fallback(provider, retry_request)
         return _normalize_generated_ideas(result, count, duration)
+
+
+def _idea_batch_avoidance_memory(ideas: list[dict[str, Any]]) -> str:
+    fragments: list[str] = []
+    for idea in ideas[-8:]:
+        fragments.append(
+            " | ".join(
+                str(value)
+                for value in (
+                    idea.get("title"),
+                    idea.get("protagonist"),
+                    idea.get("conflict"),
+                    idea.get("twist"),
+                    idea.get("payoff") or idea.get("resolution"),
+                )
+                if value not in (None, "", [], {})
+            )
+        )
+    return "; ".join(fragment for fragment in fragments if fragment)
 
 
 async def _generate_with_runtime_fallback(

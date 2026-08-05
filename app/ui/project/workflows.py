@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import AsyncSessionLocal
 from app.production.service import get_or_create_production_settings
 from app.projects.repository import ProjectRepository
+from app.projects.service import sync_project_title
 from app.storytelling.models import Briefing, Scene, Script, StoryIdea
 from app.storytelling.service import (
     create_story_idea_from_payload,
@@ -23,6 +24,25 @@ from app.ui.project.data import scalar_count as _scalar_count
 from app.ui.shared.page_config import friendly_ai_error as _friendly_ai_error
 
 logger = logging.getLogger(__name__)
+
+
+async def _sync_project_title_from_story(
+    session: AsyncSession,
+    project_id: UUID,
+    title: object,
+    *,
+    source: str,
+) -> None:
+    clean_title = str(title or "").strip()
+    if not clean_title:
+        return
+    await sync_project_title(
+        session,
+        project_id,
+        clean_title,
+        change_note=f"Project title synchronized from {source}",
+    )
+
 
 def _log_ai_background_failure(message: str, identifier: UUID, exc: Exception) -> None:
     normalized = str(exc).lower()
@@ -61,12 +81,24 @@ async def _generate_initial_script(
         if not generated_ideas:
             raise ValueError("não foi possível gerar ideias iniciais")
         idea = generated_ideas[0]
+    await _sync_project_title_from_story(
+        session,
+        project_id,
+        getattr(idea, "title", ""),
+        source="story idea",
+    )
 
     if progress is not None:
         await progress("Vou escrever o roteiro cinematográfico a partir da ideia escolhida.")
     script = await generate_script(session, project_id, idea.id)
     if script is None:
         raise ValueError("não foi possível gerar roteiro")
+    await _sync_project_title_from_story(
+        session,
+        project_id,
+        getattr(script, "title", ""),
+        source="script title",
+    )
     if progress is not None:
         await progress("Roteiro criado. Agora vou separar a história em cenas e planos.")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
@@ -190,6 +222,12 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
 
             script = await _latest(session, Script, project_id)
             if script is not None:
+                await _sync_project_title_from_story(
+                    session,
+                    project_id,
+                    getattr(script, "title", ""),
+                    source="script title",
+                )
                 existing_scenes = await _latest_many(session, Scene, project_id, 1)
                 if not existing_scenes:
                     await _set_project_ai_action_status(
@@ -241,6 +279,12 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                     if not generated_ideas:
                         raise ValueError("não foi possível gerar ideias iniciais")
                     story_idea = generated_ideas[0]
+            await _sync_project_title_from_story(
+                session,
+                project_id,
+                getattr(story_idea, "title", ""),
+                source="story idea",
+            )
 
             await _set_project_ai_action_status(
                 session,
@@ -251,6 +295,12 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
             script = await generate_script(session, project_id, story_idea.id)
             if script is None:
                 raise ValueError("não foi possível gerar roteiro")
+            await _sync_project_title_from_story(
+                session,
+                project_id,
+                getattr(script, "title", ""),
+                source="script title",
+            )
 
             await _set_project_ai_action_status(
                 session,
@@ -397,10 +447,22 @@ async def _develop_script_for_existing_project(
         if not ideas:
             return "Não consegui gerar uma ideia base para este projeto.", False
         idea = ideas[0]
+    await _sync_project_title_from_story(
+        session,
+        project_id,
+        getattr(idea, "title", ""),
+        source="story idea",
+    )
 
     script = await generate_script(session, project_id, idea.id)
     if script is None:
         return "Não consegui gerar o roteiro para este projeto.", False
+    await _sync_project_title_from_story(
+        session,
+        project_id,
+        getattr(script, "title", ""),
+        source="script title",
+    )
     scenes = await generate_scenes_and_shots(session, project_id, script.id)
     if scenes is None:
         return "O roteiro foi criado, mas não consegui gerar as cenas e planos.", True

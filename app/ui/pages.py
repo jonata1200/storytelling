@@ -28,6 +28,7 @@ from app.projects.models import Project
 from app.projects.schemas import ProjectCreate
 from app.projects.service import (
     create_project,
+    sync_project_title,
 )
 from app.storytelling.models import (
     Briefing,
@@ -288,6 +289,24 @@ def _log_ai_background_failure(message: str, identifier: UUID, exc: Exception) -
     _workflow_log_ai_background_failure(message, identifier, exc)
 
 
+async def _sync_project_title_from_story(
+    session: AsyncSession,
+    project_id: UUID,
+    title: object,
+    *,
+    source: str,
+) -> None:
+    clean_title = str(title or "").strip()
+    if not clean_title:
+        return
+    await sync_project_title(
+        session,
+        project_id,
+        clean_title,
+        change_note=f"Project title synchronized from {source}",
+    )
+
+
 async def _generate_initial_script(
     session: AsyncSession,
     project_id: UUID,
@@ -307,12 +326,24 @@ async def _generate_initial_script(
         if not generated_ideas:
             raise ValueError("não foi possível gerar ideias iniciais")
         idea = generated_ideas[0]
+    await _sync_project_title_from_story(
+        session,
+        project_id,
+        getattr(idea, "title", ""),
+        source="story idea",
+    )
 
     if progress is not None:
         await progress("Vou escrever o roteiro cinematográfico a partir da ideia escolhida.")
     script = await generate_script(session, project_id, idea.id)
     if script is None:
         raise ValueError("não foi possível gerar roteiro")
+    await _sync_project_title_from_story(
+        session,
+        project_id,
+        getattr(script, "title", ""),
+        source="script title",
+    )
     if progress is not None:
         await progress("Roteiro criado. Agora vou separar a história em cenas e planos.")
     scenes = await generate_scenes_and_shots(session, project_id, script.id)

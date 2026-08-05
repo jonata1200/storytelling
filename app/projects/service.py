@@ -61,6 +61,36 @@ async def rename_project(session: AsyncSession, project_id: UUID, title: str) ->
     return project
 
 
+async def sync_project_title(
+    session: AsyncSession,
+    project_id: UUID,
+    title: str,
+    *,
+    change_note: str = "Project title synchronized",
+) -> Project | None:
+    cleaned_title = title.strip()[:220]
+    if not cleaned_title:
+        return None
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return None
+    if project.title.strip() == cleaned_title:
+        return project
+    project.title = cleaned_title
+    project.current_version += 1
+    session.add(
+        ProjectVersion(
+            project_id=project.id,
+            version_number=project.current_version,
+            snapshot={"title": project.title, "description": project.description},
+            change_note=change_note,
+        )
+    )
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
 async def delete_project(session: AsyncSession, project_id: UUID) -> bool:
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
