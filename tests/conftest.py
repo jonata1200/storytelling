@@ -15,10 +15,7 @@ SECURITY_TEST_FILES = {
 }
 
 PROVIDER_TEST_FILES = {
-    "test_mock_image_provider.py",
-    "test_mock_llm_provider.py",
-    "test_mock_speech_provider.py",
-    "test_mock_video_provider.py",
+    "test_mock_providers.py",
     "test_prompt_compiler.py",
     "test_visual_bible.py",
     "test_visual_bible_script_profiles.py",

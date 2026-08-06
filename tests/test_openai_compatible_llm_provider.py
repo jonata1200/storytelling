@@ -356,6 +356,7 @@ def test_openai_compatible_provider_reports_timeout(
         "app.providers.llm.openai_compatible.urllib.request.urlopen",
         fake_urlopen,
     )
+    monkeypatch.setattr("app.providers.llm.openai_compatible.time.sleep", lambda delay: None)
 
     with pytest.raises(RuntimeError, match="Provider Teste timeout"):
         provider._send_request(

@@ -252,8 +252,23 @@ mypy app tests
 pytest -q
 ```
 
-Testes automatizados não devem chamar provedores pagos. Testes smoke reais devem
-ser habilitados explicitamente por variáveis como `RUN_PROVIDER_SMOKE_TESTS=1`.
+Para ciclos mais rápidos durante o desenvolvimento:
+
+```powershell
+pytest -q -m unit
+pytest -q -m "integration or provider or ui"
+pytest -q -m security
+```
+
+Testes automatizados não devem chamar provedores pagos no fluxo padrão. Testes
+smoke reais ficam separados com `@pytest.mark.smoke` e só rodam quando suas
+variáveis forem habilitadas explicitamente, por exemplo:
+
+```powershell
+$env:STORYTELLING_TEXT_PROVIDER_SMOKE="1"; pytest -q tests/test_text_provider_smoke.py
+$env:RUN_GOOGLE_AI_IMAGE_SMOKE="1"; pytest -q tests/test_google_ai_provider_smoke.py
+$env:RUN_ELEVENLABS_SPEECH_SMOKE="1"; pytest -q tests/test_elevenlabs_smoke.py
+```
 
 ## Estrutura Do Projeto
 
