@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -38,13 +38,13 @@ def test_idea_lab_prompt_guides_quality_and_output_contract() -> None:
 
     assert "gere exatamente 4 ideias" in prompt
     assert "Duracao obrigatoria" in prompt
-    assert "20 minutos" in prompt
+    assert "5 minutos" in prompt
     assert "Gênero obrigatório" in prompt
     assert "Drama" in prompt
     assert "Não numere os títulos" in prompt
     assert "somente JSON válido" in prompt
     assert '"ideas"' in prompt
-    assert "duration_minutes igual a 20" in prompt
+    assert "duration_minutes igual a 5" in prompt
     assert "campo obrigatório vazio: conflict" in prompt
 
 
@@ -150,7 +150,7 @@ async def test_generate_freeform_ideas_returns_ten_ai_suggested_ideas(
     assert len(ideas) == 10
     assert all(idea.get("genre") for idea in ideas)
     assert all(idea.get("primary_emotion") for idea in ideas)
-    assert {int(idea.get("duration_minutes", 0)) for idea in ideas} == {6}
+    assert {int(idea.get("duration_minutes", 0)) for idea in ideas} == {5}
 
 
 @pytest.mark.asyncio
@@ -174,7 +174,7 @@ async def test_generate_freeform_ideas_respects_selected_genre(
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_count(
+async def test_generate_freeform_ideas_forces_five_minutes_and_clamps_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -190,7 +190,7 @@ async def test_generate_freeform_ideas_supports_twenty_five_minutes_and_clamps_c
     ideas = await generate_freeform_ideas(count=99, target_duration_minutes=25)
 
     assert len(ideas) == 10
-    assert {int(idea.get("duration_minutes", 0)) for idea in ideas} == {25}
+    assert {int(idea.get("duration_minutes", 0)) for idea in ideas} == {5}
 
 
 @pytest.mark.asyncio
@@ -523,7 +523,7 @@ def test_generated_ideas_can_be_persisted_and_discarded(tmp_path: Path) -> None:
     )
 
     assert ideas[0]["id"] == "idea-pending-1"
-    assert ideas[0]["duration_minutes"] == 7
+    assert ideas[0]["duration_minutes"] == 5.0
     assert load_generated_ideas(path)[0]["title"] == "A ponte azul"
 
     delete_generated_idea("idea-pending-1", path)
@@ -604,4 +604,3 @@ async def test_list_story_ideas_orders_newest_first() -> None:
 
     assert ideas == []
     assert "story_ideas.created_at DESC" in session.executed_sql
-

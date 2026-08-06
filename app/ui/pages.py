@@ -548,7 +548,7 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
     premise = str(idea.get("premise") or idea.get("hook") or theme).strip()
     genre = str(idea.get("genre") or "drama emocional").strip()
     emotion = str(idea.get("primary_emotion") or idea.get("final_emotion") or "curiosidade").strip()
-    duration = coerce_duration_minutes(idea.get("duration_minutes"), DEFAULT_STORY_DURATION_MINUTES)
+    duration = DEFAULT_STORY_DURATION_MINUTES
     form = {
         "title": title[:80] or "Novo projeto de storytelling",
         "description": premise[:240],

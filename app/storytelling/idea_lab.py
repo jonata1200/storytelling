@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import json
 import os
 import tempfile
@@ -25,6 +25,7 @@ from app.storytelling.service import (
 
 SAVED_IDEAS_PATH = Path(".runtime/idea_lab_saved.json")
 GENERATED_IDEAS_PATH = Path(".runtime/idea_lab_generated.json")
+IDEA_LAB_DURATION_MINUTES = 5.0
 IDEA_PROVIDER_TIMEOUT_SECONDS = 180
 IDEA_PROGRESS_BATCH_SIZE = 2
 
@@ -37,7 +38,7 @@ def build_idea_lab_prompt(
     retry_guidance: str = "",
     avoidance_memory: str = "",
 ) -> str:
-    duration = f"{duration_minutes:g}"
+    duration = f"{IDEA_LAB_DURATION_MINUTES:g}"
     genre_instruction = (
         f"Gênero obrigatório: todas as ideias devem ser de {genre}."
         if genre
@@ -52,13 +53,10 @@ def build_idea_lab_prompt(
         )
     )
     retry_instruction = (
-        f"\nCorrecao obrigatoria da tentativa anterior: {retry_guidance}"
-        if retry_guidance
-        else ""
+        f"\nCorrecao obrigatoria da tentativa anterior: {retry_guidance}" if retry_guidance else ""
     )
     avoidance_instruction = (
-        "\nIdeias ja geradas nesta rodada que devem ser evitadas: "
-        f"{avoidance_memory.strip()}."
+        f"\nIdeias ja geradas nesta rodada que devem ser evitadas: {avoidance_memory.strip()}."
         if avoidance_memory.strip()
         else ""
     )
@@ -87,10 +85,10 @@ def build_idea_lab_prompt(
         "familiar, a menos que haja uma abordagem muito especifica.\n"
         "- O hook deve prender nos primeiros segundos; a premise deve explicar a "
         "historia em 2 ou 3 frases objetivas.\n"
-        "- Para duracoes maiores, aumente a escalada, o número de obstaculos e a "
-        "profundidade emocional, sem transformar a ideia em serie.\n\n"
+        "- Estruture a ideia para um roteiro curto de 5 minutos, com escala objetiva "
+        "e produção enxuta.\n\n"
         "Retorne somente JSON válido, sem markdown, sem comentarios e sem texto fora "
-        "do objeto. O objeto raiz deve ter a chave \"ideas\". Cada item em \"ideas\" "
+        'do objeto. O objeto raiz deve ter a chave "ideas". Cada item em "ideas" '
         "deve conter exatamente estes campos: title, genre, primary_emotion, theme, "
         "hook, premise, protagonist, duration_minutes, conflict, obstacles, stakes, "
         "twist, climax, payoff, resolution, retention_potential, cliche_risk e "
@@ -116,7 +114,7 @@ async def generate_freeform_ideas(
         provider=configured_provider,
     )
     count = max(1, min(10, int(count)))
-    duration = coerce_duration_minutes(target_duration_minutes)
+    duration = IDEA_LAB_DURATION_MINUTES
     return await _generate_freeform_idea_batch(
         provider,
         model,
@@ -142,7 +140,7 @@ async def generate_freeform_idea_batches(
         provider=configured_provider,
     )
     total = max(1, min(10, int(count)))
-    duration = coerce_duration_minutes(target_duration_minutes)
+    duration = IDEA_LAB_DURATION_MINUTES
     safe_batch_size = max(1, min(total, int(batch_size)))
     generated: list[dict[str, Any]] = []
     while len(generated) < total:
@@ -237,9 +235,7 @@ def _idea_batch_avoidance_memory(ideas: list[dict[str, Any]]) -> str:
     return "; ".join(fragment for fragment in fragments if fragment)
 
 
-async def _generate_with_runtime_fallback(
-    provider: LLMProvider, request: LLMRequest
-) -> LLMResult:
+async def _generate_with_runtime_fallback(provider: LLMProvider, request: LLMRequest) -> LLMResult:
     try:
         provider_call = provider.generate_structured(request)
         return await asyncio.wait_for(provider_call, timeout=IDEA_PROVIDER_TIMEOUT_SECONDS)
@@ -251,8 +247,7 @@ async def _generate_with_runtime_fallback(
         ) from exc
     except RuntimeError as exc:
         raise RuntimeError(
-            "Não foi possível gerar ideias com o modelo configurado. "
-            f"Detalhe do provedor: {exc}"
+            f"Não foi possível gerar ideias com o modelo configurado. Detalhe do provedor: {exc}"
         ) from exc
 
 
@@ -275,9 +270,7 @@ def _normalize_generated_ideas(
             continue
         idea_errors = story_idea_validation_errors(idea)
         if idea_errors:
-            errors.extend(
-                f"generate_story_ideas.ideas[{index}]: {error}" for error in idea_errors
-            )
+            errors.extend(f"generate_story_ideas.ideas[{index}]: {error}" for error in idea_errors)
             continue
         normalized.append(idea)
     if not normalized:
@@ -369,6 +362,7 @@ def _normalize_idea(
     normalized = normalize_story_idea_payload(
         idea, default_duration_minutes=default_duration_minutes
     )
+    normalized["duration_minutes"] = IDEA_LAB_DURATION_MINUTES
     normalized.setdefault("id", uuid.uuid4().hex)
     normalized.setdefault("created_at", created_at or datetime.now(UTC).isoformat())
     return normalized

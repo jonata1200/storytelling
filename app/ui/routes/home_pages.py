@@ -1,4 +1,4 @@
-﻿# ruff: noqa: E501
+# ruff: noqa: E501
 
 import asyncio
 from collections.abc import Awaitable, Callable
@@ -31,7 +31,6 @@ from app.ui.search_filters import (
     has_project_filters,
     idea_active_filter_labels,
     project_active_filter_labels,
-    unique_idea_duration_options,
     unique_idea_filter_options,
 )
 from app.ui.shared.generation_progress import generation_progress_dialog
@@ -114,6 +113,7 @@ def register_home_pages(
                             ).tooltip(
                                 "Um prompt simples ja basta: o agente cria briefing, ideia e roteiro inicial."
                             )
+
                         async def upload_script(event: Any) -> None:
                             nonlocal uploaded_script
                             try:
@@ -123,7 +123,9 @@ def register_home_pages(
                                 ui.notify(str(exc), color="warning")
                                 return
                             except Exception as exc:
-                                ui.notify(f"Não foi possível ler o arquivo: {exc}", color="negative")
+                                ui.notify(
+                                    f"Não foi possível ler o arquivo: {exc}", color="negative"
+                                )
                                 return
                             previous_text = str(idea.value or "")
                             uploaded_script = {
@@ -153,7 +155,9 @@ def register_home_pages(
                                         ui.button(
                                             icon="close",
                                             on_click=remove_uploaded_script,
-                                        ).props("flat round dense").classes("prompt-attachment-remove")
+                                        ).props("flat round dense").classes(
+                                            "prompt-attachment-remove"
+                                        )
                                 for index, item in enumerate(reference_uploads):
                                     with ui.element("div").classes("prompt-attachment-chip"):
                                         ui.icon("image").classes("text-base")
@@ -162,10 +166,12 @@ def register_home_pages(
                                         )
                                         ui.button(
                                             icon="close",
-                                            on_click=lambda item_index=index: remove_reference_upload(
-                                                item_index
+                                            on_click=lambda item_index=index: (
+                                                remove_reference_upload(item_index)
                                             ),
-                                        ).props("flat round dense").classes("prompt-attachment-remove")
+                                        ).props("flat round dense").classes(
+                                            "prompt-attachment-remove"
+                                        )
 
                         async def upload_reference_image(event: Any) -> None:
                             try:
@@ -178,7 +184,9 @@ def register_home_pages(
                                 ui.notify(str(exc), color="warning")
                                 return
                             except Exception as exc:
-                                ui.notify(f"Não foi possível anexar a imagem: {exc}", color="negative")
+                                ui.notify(
+                                    f"Não foi possível anexar a imagem: {exc}", color="negative"
+                                )
                                 return
                             reference_uploads.append(prepared)
                             attachment_list.refresh()
@@ -205,6 +213,7 @@ def register_home_pages(
                                 ui.notify("Imagem de referência removida.", color="warning")
 
                         with ui.element("div").classes("prompt-composer w-full relative"):
+
                             async def submit_prompt_from_keyboard() -> None:
                                 await create_project_from_chat_prompt(
                                     str(idea.value or ""),
@@ -300,6 +309,7 @@ def register_home_pages(
                                 "Sua história, personagens e storyboards aparecerão aqui."
                             ).classes("mt-1 text-sm text-[#747a75]")
                     else:
+
                         def clear_dashboard_project_filters() -> None:
                             dashboard_project_search.value = ""
                             dashboard_project_status.value = "all"
@@ -320,7 +330,9 @@ def register_home_pages(
                             dashboard_project_search = (
                                 ui.input(
                                     placeholder="Buscar projetos...",
-                                    on_change=lambda _event=None: dashboard_project_results.refresh(),
+                                    on_change=lambda _event=None: (
+                                        dashboard_project_results.refresh()
+                                    ),
                                 )
                                 .props(
                                     "outlined dense clearable debounce=250 prepend-icon=search aria-label='Buscar projetos recentes'"
@@ -332,7 +344,9 @@ def register_home_pages(
                                     PROJECT_STATUS_FILTER_OPTIONS,
                                     label="Status",
                                     value="all",
-                                    on_change=lambda _event=None: dashboard_project_results.refresh(),
+                                    on_change=lambda _event=None: (
+                                        dashboard_project_results.refresh()
+                                    ),
                                 )
                                 .props("outlined dense")
                                 .classes("w-40")
@@ -342,7 +356,9 @@ def register_home_pages(
                                     PROJECT_STAGE_FILTER_OPTIONS,
                                     label="Etapa",
                                     value="all",
-                                    on_change=lambda _event=None: dashboard_project_results.refresh(),
+                                    on_change=lambda _event=None: (
+                                        dashboard_project_results.refresh()
+                                    ),
                                 )
                                 .props("outlined dense")
                                 .classes("w-40")
@@ -352,7 +368,9 @@ def register_home_pages(
                                     PROJECT_UPDATED_FILTER_OPTIONS,
                                     label="Atualizacao",
                                     value="any",
-                                    on_change=lambda _event=None: dashboard_project_results.refresh(),
+                                    on_change=lambda _event=None: (
+                                        dashboard_project_results.refresh()
+                                    ),
                                 )
                                 .props("outlined dense")
                                 .classes("w-44")
@@ -362,7 +380,9 @@ def register_home_pages(
                                     PROJECT_SORT_OPTIONS,
                                     label="Ordenar",
                                     value="updated_desc",
-                                    on_change=lambda _event=None: dashboard_project_results.refresh(),
+                                    on_change=lambda _event=None: (
+                                        dashboard_project_results.refresh()
+                                    ),
                                 )
                                 .props("outlined dense")
                                 .classes("w-48")
@@ -405,9 +425,9 @@ def register_home_pages(
                                     "w-full border border-dashed border-[#363b36] rounded-2xl min-h-40 flex flex-col items-center justify-center text-[#969c97]"
                                 ):
                                     ui.icon("search_off").classes("text-3xl")
-                                    ui.label("Nenhum projeto encontrado para esses filtros.").classes(
-                                        "mt-2 text-sm font-semibold"
-                                    )
+                                    ui.label(
+                                        "Nenhum projeto encontrado para esses filtros."
+                                    ).classes("mt-2 text-sm font-semibold")
                                     if has_project_filters(
                                         dashboard_project_search.value,
                                         str(dashboard_project_status.value or "all"),
@@ -477,6 +497,7 @@ def register_home_pages(
                             on_click=lambda: ui.navigate.to("/dashboard"),
                         ).props("flat no-caps").classes("acid mt-2")
                 else:
+
                     def clear_project_filters() -> None:
                         project_search.value = ""
                         project_status.value = "all"
@@ -837,7 +858,6 @@ def register_home_pages(
                 duration_values = {
                     float(coerce_duration_minutes(value)) for value in STORY_DURATION_OPTIONS
                 }
-                duration_values.update(unique_idea_duration_options(saved_ideas))
                 idea_duration_filter_options = {
                     "all": "Todas",
                     **{f"{value:g}": f"{value:g} min" for value in sorted(duration_values)},
@@ -877,7 +897,6 @@ def register_home_pages(
                     values = {
                         float(coerce_duration_minutes(value)) for value in STORY_DURATION_OPTIONS
                     }
-                    values.update(unique_idea_duration_options(saved_ideas))
                     return {
                         "all": "Todas",
                         **{f"{value:g}": f"{value:g} min" for value in sorted(values)},
@@ -1044,9 +1063,7 @@ def register_home_pages(
                             ):
                                 ui.label(
                                     clean_idea_title(idea.get("title"), "História sem título")
-                                ).classes(
-                                    "brand-type text-2xl font-bold"
-                                )
+                                ).classes("brand-type text-2xl font-bold")
                                 with ui.row().classes("gap-2 mt-3 flex-wrap"):
                                     ui.label(str(idea.get("genre") or "Gênero sugerido")).classes(
                                         "idea-badge-genre rounded-md px-2 py-0.5 text-xs font-medium"
@@ -1077,7 +1094,9 @@ def register_home_pages(
                                     ui.button(
                                         "Descartar",
                                         icon="delete",
-                                        on_click=lambda idea_id=saved_idea_id: delete_saved(idea_id),
+                                        on_click=lambda idea_id=saved_idea_id: delete_saved(
+                                            idea_id
+                                        ),
                                     ).props("flat no-caps").classes("text-red-300")
                                     ui.button(
                                         "Desenvolver",
@@ -1086,6 +1105,3 @@ def register_home_pages(
                                     ).props("flat no-caps").classes("acid")
 
                 saved_results()
-
-
-
