@@ -184,13 +184,8 @@ def workspace_header(project: Project, active: str, counts: dict[str, int]) -> N
                 )
                 if not allowed:
                     button.tooltip(reason)
-        with ui.row().classes("workspace-actions items-center gap-3"):
-            ui.label("PT-BR").classes("desktop-nav text-sm text-[#a9aea9] shrink-0")
+        with ui.row().classes("workspace-theme-action items-center justify-end"):
             theme_toggle()
-            logout_button(dense=True)
-            ui.button("Exportar", icon="ios_share").props("unelevated no-caps").classes(
-                "acid-bg workspace-export-button rounded-xl font-semibold shrink-0"
-            )
     with ui.element("nav").classes("mobile-bottom-nav mobile-workspace-nav"):
         for label, key in WORKSPACE_TABS:
             allowed, reason = workspace_section_access(key, counts)
@@ -211,19 +206,5 @@ def workspace_header(project: Project, active: str, counts: dict[str, int]) -> N
                 ui.label(label).classes("mobile-nav-label")
             if not allowed:
                 nav_button.tooltip(reason)
-        with (
-            ui.element("button")
-            .classes("mobile-nav-item")
-            .props("type=button")
-            .on(
-                "click",
-                lambda: ui.run_javascript(
-                    "fetch('/auth/logout', {method: 'POST'}).finally(() => "
-                    "window.location.href = '/login')"
-                ),
-            )
-        ):
-            ui.icon("logout").classes("mobile-nav-icon")
-            ui.label("Sair").classes("mobile-nav-label")
 
 

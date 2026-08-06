@@ -72,12 +72,6 @@ def apply_body_style() -> None:
             filter:brightness(1.08);
             box-shadow:0 0 0 1px rgba(90,163,240,.4), 0 0 32px rgba(90,163,240,.38)!important;
           }
-          .workspace-export-button,
-          .workspace-export-button .q-icon,
-          .workspace-export-button .q-btn__content,
-          .workspace-export-button .q-btn__content span {
-            color:#ffffff!important;
-          }
           .blue-status-badge,
           .blue-status-badge .q-badge__content,
           .blue-status-badge span {
@@ -542,18 +536,7 @@ def apply_body_style() -> None:
             color:#07121d!important;
             text-shadow:none!important;
           }
-          .workspace-header .workspace-export-button,
-          .workspace-header .workspace-export-button .q-icon,
-          .workspace-header .workspace-export-button .q-btn__content,
-          .workspace-header .workspace-export-button .q-btn__content span,
-          body:not(.body--dark) .workspace-header .workspace-export-button,
-          body:not(.body--dark) .workspace-header .workspace-export-button .q-icon,
-          body:not(.body--dark) .workspace-header .workspace-export-button .q-btn__content,
-          body:not(.body--dark) .workspace-header .workspace-export-button .q-btn__content span {
-            color:#ffffff!important;
-          }
-          body:not(.body--dark) .workspace-header .workspace-episode,
-          body:not(.body--dark) .workspace-actions label {
+          body:not(.body--dark) .workspace-header .workspace-episode {
             color:#5d7488!important;
           }
           body:not(.body--dark) .workspace-layout {
