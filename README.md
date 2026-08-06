@@ -244,20 +244,34 @@ token bearer.
 
 ## Qualidade E Desenvolvimento
 
+No PowerShell, use o Python do ambiente virtual para garantir que os comandos
+rodem com as dependências corretas:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m ruff check .
+```
+
+O script do projeto também executa a suíte padrão:
+
+```powershell
+.\scripts\story.ps1 tools test
+```
+
 Comandos recomendados antes de entregar alterações:
 
 ```powershell
-ruff check app tests
-mypy app tests
-pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m mypy app tests
+.\.venv\Scripts\python.exe -m pytest
 ```
 
 Para ciclos mais rápidos durante o desenvolvimento:
 
 ```powershell
-pytest -q -m unit
-pytest -q -m "integration or provider or ui"
-pytest -q -m security
+.\.venv\Scripts\python.exe -m pytest -m unit
+.\.venv\Scripts\python.exe -m pytest -m "integration or provider or ui"
+.\.venv\Scripts\python.exe -m pytest -m security
 ```
 
 Testes automatizados não devem chamar provedores pagos no fluxo padrão. Testes
@@ -265,10 +279,16 @@ smoke reais ficam separados com `@pytest.mark.smoke` e só rodam quando suas
 variáveis forem habilitadas explicitamente, por exemplo:
 
 ```powershell
-$env:STORYTELLING_TEXT_PROVIDER_SMOKE="1"; pytest -q tests/test_text_provider_smoke.py
-$env:RUN_GOOGLE_AI_IMAGE_SMOKE="1"; pytest -q tests/test_google_ai_provider_smoke.py
-$env:RUN_ELEVENLABS_SPEECH_SMOKE="1"; pytest -q tests/test_elevenlabs_smoke.py
+$env:STORYTELLING_TEXT_PROVIDER_SMOKE="1"; .\.venv\Scripts\python.exe -m pytest tests/test_text_provider_smoke.py
+$env:RUN_GOOGLE_AI_IMAGE_SMOKE="1"; .\.venv\Scripts\python.exe -m pytest tests/test_google_ai_provider_smoke.py
+$env:RUN_ELEVENLABS_SPEECH_SMOKE="1"; .\.venv\Scripts\python.exe -m pytest tests/test_elevenlabs_smoke.py
 ```
+
+O pytest foi configurado para usar uma pasta temporária única por execução em
+`.runtime/pytest/runs/run-<pid>` e para não gravar cache persistente. Isso evita
+o erro comum no Windows `PermissionError: [WinError 5] Acesso negado` ao tentar
+criar ou apagar arquivos em `AppData\Local\Temp`, `.pytest_cache` ou em uma pasta
+temporária antiga ainda presa por outro processo.
 
 ## Estrutura Do Projeto
 

@@ -1,8 +1,19 @@
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
 from _pytest.nodes import Item
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PYTEST_RUNTIME_DIR = PROJECT_ROOT / ".runtime" / "pytest"
+PYTEST_TMP_ROOT = PYTEST_RUNTIME_DIR / "runs" / f"run-{os.getpid()}"
+
+PYTEST_TMP_ROOT.mkdir(parents=True, exist_ok=True)
+os.environ["TMP"] = str(PYTEST_TMP_ROOT)
+os.environ["TEMP"] = str(PYTEST_TMP_ROOT)
+os.environ["TMPDIR"] = str(PYTEST_TMP_ROOT)
+tempfile.tempdir = str(PYTEST_TMP_ROOT)
 
 SECURITY_TEST_FILES = {
     "test_auth.py",
