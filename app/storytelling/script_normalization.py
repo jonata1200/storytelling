@@ -1,4 +1,5 @@
 ﻿import re
+import unicodedata
 
 from app.storytelling.normalization_common import (
     GenerationOutputError,
@@ -113,6 +114,41 @@ PLACEHOLDER_SCENE_SLUGLINE_RE = re.compile(
 FADE_IN_WITH_INLINE_TEXT_RE = re.compile(r"(?im)^\s*FADE IN\s*:?[^\S\r\n]+\S")
 
 
+LOCATION_DIALOGUE_CUE_TERMS = {
+    "AMBIENTE",
+    "APARTAMENTO",
+    "BAR",
+    "CASA",
+    "CENARIO",
+    "COZINHA",
+    "CORREDOR",
+    "ESCOLA",
+    "ESCRITORIO",
+    "ESTUDIO",
+    "FACHADA",
+    "FAZENDA",
+    "HOSPITAL",
+    "IGREJA",
+    "JANELA",
+    "LOCAL",
+    "MERCADO",
+    "PRAIA",
+    "PRACA",
+    "QUARTO",
+    "RESTAURANTE",
+    "RUA",
+    "SALA",
+}
+
+
+NON_DIALOGUE_CUE_RE = re.compile(
+    r"(?i)^(?:"
+    r"CENA\b|FADE\b|FADE IN\b|FADE OUT\b|CORTE PARA\b|CORTA PARA\b|"
+    r"INT\.|EXT\.|INT/EXT\.|EXT/INT\.|TITULO:|T[IÍ]TULO:|FIM\b"
+    r")"
+)
+
+
 def _looks_like_screenplay(content: str) -> bool:
     text = str(content or "").strip()
     if not text:
@@ -155,6 +191,80 @@ def _normalize_inline_scene_headings(content: str) -> str:
     return INLINE_SCENE_HEADING_RE.sub(replace, str(content or "").strip())
 
 
+def _ascii_upper_key(value: object) -> str:
+    decomposed = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(char for char in decomposed if not unicodedata.combining(char))
+    text = re.sub(r"[^A-Za-z0-9]+", " ", text).strip().upper()
+    return re.sub(r"\s+", " ", text)
+
+
+def _is_uppercase_dialogue_candidate(line: str) -> bool:
+    text = line.strip()
+    if not text or len(text) > 80 or NON_DIALOGUE_CUE_RE.match(text):
+        return False
+    if ":" in text or text.startswith("(") or text.endswith(")"):
+        return False
+    letters = re.sub(r"[^A-Za-zÀ-ÖØ-öø-ÿ]", "", text)
+    return bool(letters) and text == text.upper()
+
+
+def _next_dialogue_text_line(lines: list[str], index: int) -> str:
+    skipped_parenthetical = False
+    for candidate in lines[index + 1 : index + 4]:
+        text = candidate.strip()
+        if not text:
+            continue
+        if text.startswith("(") and text.endswith(")") and not skipped_parenthetical:
+            skipped_parenthetical = True
+            continue
+        if NON_DIALOGUE_CUE_RE.match(text) or SCREENPLAY_SLUGLINE_RE.match(text):
+            return ""
+        if _is_uppercase_dialogue_candidate(text):
+            return ""
+        return text
+    return ""
+
+
+def _location_key_from_slugline(line: str) -> str:
+    match = SCREENPLAY_HEADING_RE.match(line.strip())
+    if match is None:
+        return ""
+    location = _clean_screenplay_location(match.group("location"), "")
+    return _ascii_upper_key(location)
+
+
+def _looks_like_location_dialogue_cue(cue_key: str, location_keys: set[str]) -> bool:
+    if not cue_key:
+        return False
+    if cue_key in location_keys:
+        return True
+    tokens = set(cue_key.split())
+    if "DE" in tokens:
+        tokens.remove("DE")
+    has_location_term = bool(tokens & LOCATION_DIALOGUE_CUE_TERMS)
+    if has_location_term and len(cue_key.split()) <= 5:
+        return True
+    return False
+
+
+def _location_dialogue_cue_errors(content: str) -> list[str]:
+    lines = str(content or "").splitlines()
+    location_keys = {
+        key for line in lines if (key := _location_key_from_slugline(line.strip()))
+    }
+    errors: list[str] = []
+    for index, raw_line in enumerate(lines):
+        line = raw_line.strip()
+        if not _is_uppercase_dialogue_candidate(line):
+            continue
+        if not _next_dialogue_text_line(lines, index):
+            continue
+        cue_key = _ascii_upper_key(line)
+        if _looks_like_location_dialogue_cue(cue_key, location_keys):
+            errors.append(f"cue de dialogo usa nome de local: {line[:60]}")
+    return errors
+
+
 def screenplay_validation_errors(content: str) -> list[str]:
     text = str(content or "").strip()
     errors: list[str] = []
@@ -176,6 +286,7 @@ def screenplay_validation_errors(content: str) -> list[str]:
         errors.append("sluglines numeradas não podem ficar dentro de parágrafos")
     if PLACEHOLDER_SCENE_SLUGLINE_RE.search(text):
         errors.append("slugline generica INT. CENA precisa ser substituida por local real")
+    errors.extend(_location_dialogue_cue_errors(text))
     if len(text.split()) < 12:
         errors.append("conteúdo curto demais para roteiro")
     return errors

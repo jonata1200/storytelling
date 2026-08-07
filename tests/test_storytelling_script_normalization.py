@@ -21,6 +21,9 @@ test_screenplay_válidator_rejects_scene_and_slugline_on_same_line = (
 test_screenplay_válidator_rejects_compacted_inline_numbered_sluglines = (
     cases.test_screenplay_válidator_rejects_compacted_inline_numbered_sluglines
 )
+test_screenplay_validator_rejects_location_used_as_dialogue_cue = (
+    cases.test_screenplay_validator_rejects_location_used_as_dialogue_cue
+)
 test_script_payload_retries_compacted_inline_numbered_sluglines = (
     cases.test_script_payload_retries_compacted_inline_numbered_sluglines
 )
@@ -44,4 +47,7 @@ test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_scrip
 )
 test_fallback_script_content_from_idea_scales_scene_count_with_duration = (
     cases.test_fallback_script_content_from_idea_scales_scene_count_with_duration
+)
+test_idea_script_contract_uses_canonical_protagonist_name_and_dialogue_rules = (
+    cases.test_idea_script_contract_uses_canonical_protagonist_name_and_dialogue_rules
 )

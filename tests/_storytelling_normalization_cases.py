@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.storytelling import service as storytelling_service
 from app.storytelling.models import StoryIdea
+from app.storytelling.script_contracts import _idea_script_contract
 from app.storytelling.service import (
     GenerationOutputError,
     _bounded_required_str,
@@ -377,6 +378,28 @@ FADE OUT.
     assert "slugline generica INT. CENA precisa ser substituida por local real" in errors
 
 
+def test_screenplay_validator_rejects_location_used_as_dialogue_cue() -> None:
+    errors = screenplay_validation_errors(
+        """
+TITULO: A carta azul
+
+FADE IN:
+
+CENA 01
+INT. SALA DA CASA - NOITE
+
+CLARA segura a carta dobrada.
+
+SALA DA CASA
+Eu não consigo abrir isso sozinha.
+
+FADE OUT.
+"""
+    )
+
+    assert "cue de dialogo usa nome de local: SALA DA CASA" in errors
+
+
 def test_script_payload_retries_compacted_inline_numbered_sluglines() -> None:
     with pytest.raises(GenerationOutputError, match="sluglines numeradas"):
         normalize_script_payload(
@@ -636,3 +659,31 @@ def test_fallback_script_content_from_idea_scales_scene_count_with_duration() ->
     assert expected_script_scene_count(900) == 12
     assert content.count("CENA ") == 12
     assert "CENA 12" in content
+
+
+def test_idea_script_contract_uses_canonical_protagonist_name_and_dialogue_rules() -> None:
+    idea = SimpleNamespace(
+        title="O farol apagado",
+        premise="Uma faroleira mantém a luz acesa.",
+        hook="A cidade quer apagar o farol.",
+        protagonist="Lia, uma faroleira teimosa",
+        payload={
+            "conflict": "A cidade quer desligar o farol.",
+            "stakes": "Um barco pode desaparecer.",
+            "resolution": "Lia prova que a luz ainda salva.",
+        },
+    )
+    briefing = SimpleNamespace(
+        theme="esperança",
+        genre="drama",
+        primary_emotion="esperança",
+        audience="público geral",
+        constraints=[],
+        visual_style="cinemático realista",
+    )
+
+    contract = _idea_script_contract(cast(Any, idea), cast(Any, briefing))
+
+    assert contract["characters"][0]["name"] == "Lia"
+    assert contract["characters"][0]["description"] == "Lia, uma faroleira teimosa"
+    assert "usar LIA como cue de dialogo da protagonista" in contract["dialogue_rules"]

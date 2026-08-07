@@ -257,7 +257,9 @@ async def generate_script(
                 "A resposta anterior foi recusada porque não seguiu o formato exigido: "
                 f"{exc}. Reescreva mantendo content como roteiro de filme limpo e "
                 "sem plano tecnico, lista de shots, cenas compactadas em parágrafos ou "
-                "sluglines numeradas como '1. INT.'."
+                "sluglines numeradas como '1. INT.'. Em blocos de dialogo, use apenas "
+                "nomes de personagens como cue; nunca use local/cenario como SALA, CASA, "
+                "RUA, HOSPITAL ou QUARTO no lugar do personagem."
             )
     if payload is None:
         if last_error is not None:
@@ -363,7 +365,8 @@ async def revise_script(
             variables["retry_guidance"] = (
                 "A resposta anterior foi recusada porque não seguiu o formato exigido: "
                 f"{exc}. Reescreva mantendo apenas roteiro de filme em content, com "
-                "FADE IN, CENA, slugline, acao e dialogo em linhas separadas."
+                "FADE IN, CENA, slugline, acao e dialogo em linhas separadas. Em falas, "
+                "a cue deve ser nome de personagem, nunca nome de local/cenario."
             )
     if payload is None or execution is None:
         return None

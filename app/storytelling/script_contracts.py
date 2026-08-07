@@ -1,6 +1,14 @@
 ﻿from app.storytelling.models import Briefing, StoryIdea
 
 
+def _canonical_character_name(value: object, fallback: str = "Protagonista") -> str:
+    text = str(value or "").strip()
+    if not text:
+        return fallback
+    name = text.split(",", 1)[0].split(";", 1)[0].split("(", 1)[0].strip()
+    return name or fallback
+
+
 def _compact_named_items(items: object, keys: tuple[str, ...]) -> list[dict]:
     if not isinstance(items, list):
         return []
@@ -102,6 +110,7 @@ def _story_bible_visual_contract(story_bible_payload: dict) -> dict:
 
 def _idea_script_contract(idea: StoryIdea, briefing: Briefing) -> dict:
     payload = idea.payload or {}
+    protagonist_name = _canonical_character_name(idea.protagonist)
     return {
         "title": idea.title,
         "logline": payload.get("premise") or idea.premise,
@@ -123,18 +132,26 @@ def _idea_script_contract(idea: StoryIdea, briefing: Briefing) -> dict:
         },
         "characters": [
             {
-                "name": idea.protagonist,
+                "name": protagonist_name,
                 "role": "protagonista",
+                "description": idea.protagonist,
                 "desire": payload.get("protagonist_desire") or payload.get("stakes"),
                 "fear": payload.get("fear") or payload.get("obstacles"),
                 "arc": payload.get("emotional_need") or payload.get("resolution"),
             }
+        ],
+        "dialogue_rules": [
+            "linhas de fala devem usar somente nomes de personagens, nunca nomes de locais",
+            "sluglines descrevem locais; blocos de dialogo identificam pessoas",
+            f"usar {protagonist_name.upper()} como cue de dialogo da protagonista",
         ],
         "locations": payload.get("locations") or payload.get("locais") or [],
         "props": payload.get("props") or payload.get("objetos") or [],
         "narrative_rules": [
             "gancho visual imediato",
             "microviradas ao longo das cenas",
+            "cada cena deve ter desejo, obstaculo e mudanca emocional observavel",
+            "dialogos devem revelar subtexto e escolha, nao explicar a trama",
             "payoff emocional claro",
         ],
         "continuity_rules": [
