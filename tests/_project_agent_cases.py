@@ -39,6 +39,12 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("melhore o gancho do roteiro", "script") == (
         "revise_script"
     )
+    assert classify_project_chat_action("edite o roteiro para ficar mais emocional", "script") == (
+        "revise_script"
+    )
+    assert classify_project_chat_action("corrija a cena 2 do roteiro", "script") == (
+        "revise_script"
+    )
     assert classify_project_chat_action("gere novamente o roteiro completo", "script") == (
         "generate_script"
     )

@@ -173,6 +173,15 @@ def test_project_ai_action_reads_production_metadata() -> None:
     assert action["message"] == "Criando roteiro"
 
 
+def test_script_editor_state_starts_with_current_script_values() -> None:
+    state = script_area.script_editor_state(" Roteiro atual ", "Cena 01\nINT. CASA - DIA")
+
+    assert state == {
+        "title": " Roteiro atual ",
+        "content": "Cena 01\nINT. CASA - DIA",
+    }
+
+
 @pytest.mark.asyncio
 async def test_manual_script_save_refreshes_scene_plan_and_visual_bible(
     monkeypatch: pytest.MonkeyPatch,

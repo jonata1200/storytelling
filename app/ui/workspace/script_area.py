@@ -67,6 +67,13 @@ def _schedule_missing_scenes_generation(project_id: UUID, script_id: UUID) -> No
     asyncio.create_task(_generate_missing_scenes_in_background(project_id, script_id))
 
 
+def script_editor_state(title: object, content: object) -> dict[str, str]:
+    return {
+        "title": str(title or ""),
+        "content": str(content or ""),
+    }
+
+
 async def _close_loading_dialog_when_script_ready(project_id: UUID, loading_dialog: Any) -> None:
     ready = await _reload_project_when_script_ready(project_id)
     if ready and hasattr(loading_dialog, "close"):
@@ -272,9 +279,21 @@ def render_script_area(
             "entity-card rounded-2xl p-6 w-[min(1040px,94vw)] h-[min(860px,92vh)] "
             "max-h-[92vh] flex flex-col"
         ):
+            edit_state = script_editor_state(script.title, script.content)
+
+            async def save_current_script() -> None:
+                await save_script_from_ui(
+                    project_id,
+                    script.id,
+                    edit_state["title"],
+                    edit_state["content"],
+                )
+
             ui.label("Editar roteiro").classes("brand-type text-2xl font-bold shrink-0")
-            title_input = ui.input("Título", value=script.title).props("outlined").classes("w-full")
-            content_input = ui.textarea("Conteúdo do roteiro", value=script.content).props(
+            ui.input("Título").bind_value(edit_state, "title").props("outlined").classes(
+                "w-full"
+            )
+            ui.textarea("Conteúdo do roteiro").bind_value(edit_state, "content").props(
                 "outlined"
             ).classes("script-editor-textarea w-full flex-1 min-h-0 font-mono text-sm")
             with ui.row().classes("w-full justify-end gap-2 shrink-0"):
@@ -282,12 +301,7 @@ def render_script_area(
                 ui.button(
                     "Salvar",
                     icon="save",
-                    on_click=lambda: save_script_from_ui(
-                        project_id,
-                        script.id,
-                        str(title_input.value or ""),
-                        str(content_input.value or ""),
-                    ),
+                    on_click=save_current_script,
                 ).props("unelevated no-caps").classes("acid-bg rounded-xl font-semibold")
     section_title(
         "Roteiro",
