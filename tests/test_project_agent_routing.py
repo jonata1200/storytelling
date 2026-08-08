@@ -24,4 +24,7 @@ test_project_chat_routes_script_finalization_and_quality = (
 test_project_chat_routes_visual_prompt_approval = (
     cases.test_project_chat_routes_visual_prompt_approval
 )
+test_project_chat_routes_storyboard_prompt_approval = (
+    cases.test_project_chat_routes_storyboard_prompt_approval
+)
 test_project_chat_reports_progress = cases.test_project_chat_reports_progress

@@ -471,6 +471,39 @@ def test_ai_action_sync_adds_only_one_chat_message_per_action(
     ]
 
 
+def test_ai_action_sync_skips_initial_script_events_after_project_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    storage: dict[str, Any] = {}
+    monkeypatch.setattr(
+        pages,
+        "nicegui_app",
+        SimpleNamespace(storage=SimpleNamespace(user=storage)),
+    )
+    summary = {
+        "counts": {"scripts": 1, "frames": 2},
+        "production_settings": SimpleNamespace(
+            metadata_json={
+                "ai_action": {
+                    "events": [
+                        {
+                            "id": "create_initial_script:1",
+                            "action": "create_initial_script",
+                            "status": "queued",
+                            "message": "A IA vai iniciar a criacao do roteiro inicial.",
+                        }
+                    ]
+                }
+            }
+        ),
+    }
+
+    pages._sync_ai_action_events_to_chat(project_id, summary)
+
+    assert storage.get("project_assistant_messages") in (None, {})
+
+
 def test_assistant_draft_persists_by_project(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

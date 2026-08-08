@@ -65,6 +65,7 @@ from app.projects.versioning import (
 from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
 from app.storyboards.service import (
+    approve_storyboard_prompts,
     generate_animatic_bundle,
     generate_storyboard_frames,
     storyboard_frames_need_generation,
@@ -416,6 +417,91 @@ async def _ensure_video_pipeline(
     )
 
 
+async def _approve_storyboard_prompts_from_chat(
+    session: AsyncSession,
+    project_id: UUID,
+    progress: ProgressCallback | None = None,
+    scene_number: int | None = None,
+) -> ProjectChatResult:
+    script = await _latest(session, Script, project_id)
+    if script is None:
+        return ProjectChatResult(
+            "Ainda não existe roteiro neste projeto para aprovar prompts de storyboard.",
+            "approve_storyboard_prompt",
+            False,
+        )
+
+    visual_report = await visual_reference_completion_report(session, project_id)
+    if not visual_report["complete"]:
+        return ProjectChatResult(
+            visual_reference_completion_message(visual_report),
+            "approve_storyboard_prompt",
+            False,
+        )
+
+    scene_copy = f" da cena {scene_number}" if scene_number is not None else ""
+    await _emit_progress(
+        progress,
+        f"Vou aprovar os prompts de storyboard{scene_copy} e gerar os quadros pendentes.",
+    )
+    approved_count = await approve_storyboard_prompts(
+        session,
+        project_id,
+        script.id,
+        scene_number=scene_number,
+    )
+    generated_frames = []
+    if await storyboard_frames_need_generation(session, project_id, script.id):
+        if await storyboard_prompts_need_approval(
+            session,
+            project_id,
+            script.id,
+            scene_number=scene_number,
+        ):
+            return ProjectChatResult(
+                (
+                    f"Aprovei {approved_count} prompt(s), mas ainda existem prompts de "
+                    "storyboard pendentes. Revise a aba Storyboard para concluir a aprovação."
+                ),
+                "approve_storyboard_prompt",
+                approved_count > 0,
+            )
+        generated_frames = await generate_storyboard_frames(
+            session,
+            project_id,
+            script.id,
+            scene_number=scene_number,
+            approved_only=True,
+        )
+        if generated_frames is None:
+            return ProjectChatResult(
+                "Aprovei os prompts, mas não consegui gerar os quadros de storyboard.",
+                "approve_storyboard_prompt",
+                approved_count > 0,
+                True,
+            )
+
+    if not await storyboard_frames_need_generation(session, project_id, script.id):
+        await _emit_progress(progress, "Vou atualizar o animatic com os quadros aprovados.")
+        await generate_animatic_bundle(session, project_id, script.id)
+
+    generated_count = len(generated_frames)
+    if approved_count or generated_count:
+        return ProjectChatResult(
+            (
+                f"Aprovei {approved_count} prompt(s) de storyboard"
+                f"{scene_copy} e gerei {generated_count} quadro(s)."
+            ),
+            "approve_storyboard_prompt",
+            True,
+        )
+    return ProjectChatResult(
+        "Os prompts de storyboard já estavam aprovados e os quadros já estavam gerados.",
+        "approve_storyboard_prompt",
+        False,
+    )
+
+
 async def _ensure_finalization_pipeline(
     session: AsyncSession,
     project_id: UUID,
@@ -654,6 +740,13 @@ async def handle_project_chat(
             project_id,
             message,
             progress=progress,
+        )
+    if action == "approve_storyboard_prompt":
+        return await _approve_storyboard_prompts_from_chat(
+            session,
+            project_id,
+            progress=progress,
+            scene_number=_requested_storyboard_scene_number(message),
         )
     if action == "generate_storyboard":
         scene_number = _requested_storyboard_scene_number(message)

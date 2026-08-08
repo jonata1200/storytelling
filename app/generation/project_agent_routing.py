@@ -126,7 +126,12 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
     wants_revision = _requests_regeneration(message)
     actionable = wants_generation or wants_revision
 
-    if _requests_visual_prompt_approval(message):
+    wants_prompt_approval = _requests_visual_prompt_approval(message)
+    if wants_prompt_approval and any(term in normalized for term in storyboard_terms):
+        return "approve_storyboard_prompt"
+    if wants_prompt_approval and active == "storyboard":
+        return "approve_storyboard_prompt"
+    if wants_prompt_approval:
         return "approve_visual_prompt"
     if _requests_full_script_regeneration(message):
         return "generate_script"
@@ -250,7 +255,23 @@ def _contextual_project_chat_intent(
     classified_action: ProjectChatAction,
 ) -> ProjectChatIntent:
     normalized = _normalize_match_text(message)
-    if _requests_visual_prompt_approval(message):
+    wants_prompt_approval = _requests_visual_prompt_approval(message)
+    storyboard_context = (
+        "storyboard" in normalized
+        or "quadro" in normalized
+        or "quadros" in normalized
+        or "frame" in normalized
+        or "frames" in normalized
+        or "enquadramento" in normalized
+        or active == "storyboard"
+    )
+    if wants_prompt_approval and storyboard_context:
+        return ProjectChatIntent(
+            "approve_storyboard_prompt",
+            1.0,
+            "pedido explicito de aprovacao de prompts de storyboard",
+        )
+    if wants_prompt_approval:
         return ProjectChatIntent("approve_visual_prompt", 1.0, "pedido explicito de aprovacao")
 
     asset_phrase = all(term in normalized for term in ("personagens", "locais", "objetos"))
@@ -289,7 +310,8 @@ async def _infer_project_chat_intent_with_ai(
         "Interprete a intencao operacional do usuario dentro de um software de criacao "
         "audiovisual. Retorne somente JSON válido, sem markdown. Acoes possíveis: "
         "chat, generate_ideas, generate_script, revise_script, generate_assets, "
-        "approve_visual_prompt, generate_storyboard, generate_video, generate_dubbing, "
+        "approve_visual_prompt, approve_storyboard_prompt, generate_storyboard, "
+        "generate_video, generate_dubbing, "
         "generate_finalization, run_quality. Use o estado real do projeto para decidir se "
         "o usuario quer executar "
         "uma etapa ou apenas conversar. Se a confianca for menor que 0.70, use chat. "

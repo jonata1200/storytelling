@@ -24,6 +24,9 @@ LEGACY_EXTERNAL_QUEUE_MESSAGE = "Etapa enfileirada para execução pelo " + "w" 
 INTERNAL_QUEUE_MESSAGE = "Etapa agendada para execução interna."
 
 
+INITIAL_SCRIPT_PROGRESS_KEYS = ("scripts", "scenes", "shots", "characters", "frames", "clips")
+
+
 def _page_attr(name: str) -> Any:
     pages = sys.modules["app.ui.pages"]
     return getattr(pages, name)
@@ -53,12 +56,36 @@ def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) ->
 def _sync_ai_action_events_to_chat(project_id: UUID, summary_or_action: dict[str, Any]) -> None:
     nicegui_app = _page_attr("nicegui_app")
     assistant_state.nicegui_app = nicegui_app
+    summary = summary_or_action if "production_settings" in summary_or_action else {}
     ai_action = (
-        _project_ai_action(summary_or_action)
-        if "production_settings" in summary_or_action
+        _project_ai_action(summary)
+        if summary
         else summary_or_action
     )
+    if summary:
+        counts = summary.get("counts")
+        count_map = counts if isinstance(counts, dict) else {}
+        progressed_past_initial_script = any(
+            _positive_count(count_map.get(key)) for key in INITIAL_SCRIPT_PROGRESS_KEYS
+        )
+        if progressed_past_initial_script:
+            ai_action = dict(ai_action)
+            ai_action["events"] = [
+                event
+                for event in ai_action.get("events", [])
+                if not (
+                    isinstance(event, dict)
+                    and str(event.get("action") or "") == "create_initial_script"
+                )
+            ]
     assistant_state.sync_ai_action_events_to_chat(project_id, ai_action)
+
+
+def _positive_count(value: object) -> bool:
+    try:
+        return int(value or 0) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> None:

@@ -73,6 +73,10 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("aprove o prompt da Clara para gerar imagem", "assets") == (
         "approve_visual_prompt"
     )
+    assert classify_project_chat_action(
+        "pode aprovar os prompts pendentes para geração dos storyboards",
+        "storyboard",
+    ) == "approve_storyboard_prompt"
 
 
 @pytest.mark.asyncio
@@ -970,6 +974,59 @@ async def test_project_chat_routes_visual_prompt_approval(
 
     assert result == ProjectChatResult("aprovado", "approve_visual_prompt", True)
     assert calls == ["aprove o prompt da Clara para gerar imagem"]
+
+
+@pytest.mark.asyncio
+async def test_project_chat_routes_storyboard_prompt_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    calls: list[str] = []
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        assert requested_project_id == project_id
+        return {"counts": {"scripts": 1, "shots": 4, "frames": 0}}
+
+    async def fake_approve_storyboard(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+        scene_number: int | None = None,
+    ) -> ProjectChatResult:
+        calls.append("approve_storyboard")
+        assert requested_project_id == project_id
+        assert scene_number is None
+        return ProjectChatResult("storyboard aprovado", "approve_storyboard_prompt", True)
+
+    async def fail_visual_approval(*args: Any, **kwargs: Any) -> ProjectChatResult:
+        raise AssertionError("pedido de storyboard nao deve aprovar ativo visual")
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(
+        project_agent,
+        "_approve_storyboard_prompts_from_chat",
+        fake_approve_storyboard,
+    )
+    monkeypatch.setattr(
+        project_agent,
+        "_approve_visual_prompt_from_chat",
+        fail_visual_approval,
+    )
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "storyboard",
+        "pode aprovar os prompts pendentes para geração dos storyboards",
+        [],
+    )
+
+    assert result == ProjectChatResult(
+        "storyboard aprovado",
+        "approve_storyboard_prompt",
+        True,
+    )
+    assert calls == ["approve_storyboard"]
 
 
 @pytest.mark.asyncio

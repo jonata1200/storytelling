@@ -27,6 +27,9 @@ test_ai_failure_notification_is_shown_once = cases.test_ai_failure_notification_
 test_ai_action_sync_adds_only_one_chat_message_per_action = (
     cases.test_ai_action_sync_adds_only_one_chat_message_per_action
 )
+test_ai_action_sync_skips_initial_script_events_after_project_progress = (
+    cases.test_ai_action_sync_skips_initial_script_events_after_project_progress
+)
 test_assistant_draft_persists_by_project = cases.test_assistant_draft_persists_by_project
 test_safe_client_navigation_uses_captured_client = (
     cases.test_safe_client_navigation_uses_captured_client

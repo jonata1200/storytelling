@@ -83,6 +83,10 @@ def render_assistant_panel(
             "Gerando imagens",
             "A IA está criando imagens a partir dos prompts aprovados.",
         ),
+        "approve_storyboard_prompt": (
+            "Aprovando storyboards",
+            "A IA esta aprovando os prompts de storyboard e gerando os quadros pendentes.",
+        ),
         "generate_storyboard": STEP_LOADING_COPY["storyboard"],
         "generate_video": (
             "Gerando clipes",
