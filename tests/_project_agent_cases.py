@@ -282,7 +282,7 @@ async def test_project_chat_can_force_full_script_regeneration(
 
 
 @pytest.mark.asyncio
-async def test_forced_script_pipeline_refreshes_existing_visual_bible(
+async def test_forced_script_pipeline_does_not_refresh_existing_visual_bible(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
@@ -331,24 +331,6 @@ async def test_forced_script_pipeline_refreshes_existing_visual_bible(
         assert requested_script_id == new_script_id
         return [SimpleNamespace(id=uuid4())]
 
-    async def fake_count(
-        session: AsyncSession,
-        model: type[Any],
-        requested_project_id: Any,
-    ) -> int:
-        assert requested_project_id == project_id
-        return 1 if model is project_agent.Character else 0
-
-    async def fake_generate_visual_bible(
-        session: AsyncSession,
-        requested_project_id: Any,
-        requested_script_id: Any,
-    ) -> tuple[list[SimpleNamespace], list[SimpleNamespace], list[SimpleNamespace]]:
-        calls.append("visual")
-        assert requested_project_id == project_id
-        assert requested_script_id == new_script_id
-        return ([SimpleNamespace(id=uuid4())], [], [])
-
     async def fake_resolve_stale(
         session: AsyncSession,
         requested_project_id: Any,
@@ -364,8 +346,6 @@ async def test_forced_script_pipeline_refreshes_existing_visual_bible(
     monkeypatch.setattr(project_agent, "mark_dependents_stale", fake_mark_dependents_stale)
     monkeypatch.setattr(project_agent, "generate_script", fake_generate_script)
     monkeypatch.setattr(project_agent, "generate_scenes_and_shots", fake_generate_scenes_and_shots)
-    monkeypatch.setattr(project_agent, "_count", fake_count)
-    monkeypatch.setattr(project_agent, "generate_visual_bible", fake_generate_visual_bible)
     monkeypatch.setattr(
         project_agent,
         "resolve_stale_artifacts_after_regeneration",
@@ -383,11 +363,11 @@ async def test_forced_script_pipeline_refreshes_existing_visual_bible(
     assert script.id == new_script_id
     assert changed is True
     assert message == (
-        "Roteiro completo gerado novamente, cenas/planos recriados "
-        "e biblioteca visual atualizada."
+        "Roteiro completo gerado novamente e dividido em cenas e planos. "
+        "Biblioteca Visual não foi atualizada automaticamente."
     )
-    assert calls == ["stale", "script", "scenes", "visual", "resolve"]
-    assert any("Biblioteca visual atualizada" in item for item in progress_messages)
+    assert calls == ["stale", "script", "scenes", "resolve"]
+    assert not any("Biblioteca visual atualizada" in item for item in progress_messages)
 
 
 @pytest.mark.asyncio

@@ -154,6 +154,30 @@ def test_recent_ai_action_is_not_stale() -> None:
     assert pages._ai_action_is_stale({"status": "running", "updated_at": updated_at}) is False
 
 
+def test_script_generation_action_recent_timeout_is_not_expired() -> None:
+    updated_at = datetime.now(UTC).isoformat()
+
+    assert (
+        script_area._ai_action_exceeded_generation_timeout(
+            {"status": "running", "updated_at": updated_at},
+            max_age_seconds=300,
+        )
+        is False
+    )
+
+
+def test_script_generation_action_old_timeout_is_expired() -> None:
+    updated_at = (datetime.now(UTC) - timedelta(seconds=301)).isoformat()
+
+    assert (
+        script_area._ai_action_exceeded_generation_timeout(
+            {"status": "running", "updated_at": updated_at},
+            max_age_seconds=300,
+        )
+        is True
+    )
+
+
 def test_project_ai_action_reads_production_metadata() -> None:
     summary = {
         "production_settings": SimpleNamespace(
@@ -207,7 +231,7 @@ def test_notify_client_uses_captured_client_outbox() -> None:
 
 
 @pytest.mark.asyncio
-async def test_manual_script_save_refreshes_scene_plan_and_visual_bible(
+async def test_manual_script_save_refreshes_scene_plan_without_visual_bible(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
@@ -257,11 +281,13 @@ async def test_manual_script_save_refreshes_scene_plan_and_visual_bible(
         requested_artifact: object,
         payload: dict[str, Any],
         change_note: str | None = None,
+        mark_downstream_stale: bool = True,
     ) -> object:
         calls.append("version")
         artifact.current_version += 1
         assert payload["title"] == "Roteiro novo"
         assert change_note == "Script edited manually in UI"
+        assert mark_downstream_stale is False
         return object()
 
     async def fake_refresh_derivatives(
@@ -298,8 +324,8 @@ async def test_manual_script_save_refreshes_scene_plan_and_visual_bible(
     assert calls == ["version", "ScriptVersion", "commit", "refresh_derivatives", "reload"]
     assert notifications == [
         ("Salvando roteiro...", "info"),
-        ("Roteiro salvo. Atualizando cenas, planos e Biblioteca Visual...", "info"),
-        ("Roteiro salvo. Cenas, planos e Biblioteca Visual atualizados.", "positive"),
+        ("Roteiro salvo. Atualizando apenas cenas e planos...", "info"),
+        ("Roteiro salvo. Cenas e planos atualizados.", "positive"),
     ]
 
 

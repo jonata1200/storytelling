@@ -1,5 +1,6 @@
 ﻿import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -23,8 +24,11 @@ from app.ui.project.workflows import (
 )
 from app.ui.shared.cost_display import SCRIPT_TEXT_ESTIMATED_TOKENS, text_generation_cost_text
 from app.ui.shared.generation_progress import generation_progress_dialog
-from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, STEP_LOADING_COPY
-from app.visual_bible.service import generate_visual_bible
+from app.ui.shared.page_config import (
+    BLOCKING_DIALOG_PROPS,
+    STEP_LOADING_COPY,
+    UI_GENERATION_TIMEOUT_SECONDS,
+)
 
 LoadingDialogFactory = Callable[[str, str], Any]
 ProjectAiActionReader = Callable[[dict[str, Any]], dict[str, Any]]
@@ -55,9 +59,6 @@ async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID)
         scenes = await regenerate_scenes_and_shots(session, project_id, script_id)
         if scenes is None:
             raise ValueError("não foi possível recriar cenas e planos para o roteiro.")
-        visual = await generate_visual_bible(session, project_id, script_id)
-        if visual is None:
-            raise ValueError("não foi possível atualizar a Biblioteca Visual.")
         await resolve_stale_artifacts_after_regeneration(session, project_id)
 
 
@@ -105,6 +106,29 @@ def _reload_client(client: Any) -> None:
             raise
 
 
+def _ai_action_age_seconds(action: dict[str, Any]) -> float | None:
+    raw_updated_at = str(action.get("updated_at") or "").strip()
+    if not raw_updated_at:
+        return None
+    try:
+        updated_at = datetime.fromisoformat(raw_updated_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - updated_at.astimezone(UTC)).total_seconds()
+
+
+def _ai_action_exceeded_generation_timeout(
+    action: dict[str, Any],
+    max_age_seconds: int = UI_GENERATION_TIMEOUT_SECONDS,
+) -> bool:
+    if str(action.get("status") or "") not in {"queued", "running"}:
+        return False
+    age_seconds = _ai_action_age_seconds(action)
+    return age_seconds is not None and age_seconds > max_age_seconds
+
+
 async def _close_loading_dialog_when_script_ready(project_id: UUID, loading_dialog: Any) -> None:
     ready = await _reload_project_when_script_ready(project_id)
     if ready and hasattr(loading_dialog, "close"):
@@ -121,6 +145,9 @@ async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int,
         action = metadata.get("ai_action") if isinstance(metadata, dict) else None
         status = str(action.get("status") or "") if isinstance(action, dict) else ""
         message = str(action.get("message") or "") if isinstance(action, dict) else ""
+        action_timeout = (
+            _ai_action_exceeded_generation_timeout(action) if isinstance(action, dict) else False
+        )
     completed = 0
     if idea is not None:
         completed = 1
@@ -131,7 +158,12 @@ async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int,
     if status == "completed":
         completed = 3
     failed = status == "failed"
-    if failed:
+    if action_timeout:
+        detail = (
+            "A geração demorou demais ou foi interrompida. Vou recarregar para liberar "
+            "uma nova tentativa."
+        )
+    elif failed:
         detail = "A IA não conseguiu concluir o roteiro inicial."
     elif completed == 0:
         detail = message or "A IA está criando uma ideia narrativa para orientar o roteiro."
@@ -141,7 +173,7 @@ async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int,
         detail = message or "Roteiro criado. A IA está separando cenas e planos."
     else:
         detail = "Roteiro, cenas e planos prontos."
-    return completed, 3, detail, completed >= 3 or failed
+    return completed, 3, detail, completed >= 3 or failed or action_timeout
 
 
 async def _update_script_generation_progress(
@@ -200,6 +232,7 @@ async def save_script_from_ui(
                 artifact,
                 payload,
                 change_note="Script edited manually in UI",
+                mark_downstream_stale=False,
             )
             session.add(
                 ScriptVersion(
@@ -212,7 +245,7 @@ async def save_script_from_ui(
             )
             await session.commit()
         notify_user(
-            "Roteiro salvo. Atualizando cenas, planos e Biblioteca Visual...",
+            "Roteiro salvo. Atualizando apenas cenas e planos...",
             "info",
         )
         try:
@@ -221,13 +254,13 @@ async def save_script_from_ui(
             notify_user(
                 (
                     "Roteiro salvo, mas não consegui atualizar automaticamente "
-                    f"cenas/planos e Biblioteca Visual: {exc}"
+                    f"cenas e planos: {exc}"
                 ),
                 "warning",
             )
             reload_user()
             return
-        notify_user("Roteiro salvo. Cenas, planos e Biblioteca Visual atualizados.", "positive")
+        notify_user("Roteiro salvo. Cenas e planos atualizados.", "positive")
         reload_user()
     except Exception as exc:
         notify_user(f"Não consegui salvar o roteiro: {exc}", "negative")

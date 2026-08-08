@@ -36,7 +36,6 @@ from app.generation.project_agent_routing import (
 )
 from app.generation.project_agent_support import (
     _ensure_ideas_pipeline,
-    _refresh_visual_bible_after_script_regeneration,
 )
 from app.generation.project_agent_types import (
     ACTION_PROGRESS_MESSAGES,
@@ -138,21 +137,15 @@ async def _ensure_script_pipeline(
     if scenes is None:
         return script, "Roteiro criado, mas as cenas e planos não foram gerados.", True
     if force:
-        visual_updated = await _refresh_visual_bible_after_script_regeneration(
-            session,
-            project_id,
-            script.id,
-            progress,
-        )
         await resolve_stale_artifacts_after_regeneration(session, project_id)
-        if visual_updated:
-            return (
-                script,
-                "Roteiro completo gerado novamente, cenas/planos recriados "
-                "e biblioteca visual atualizada.",
-                True,
-            )
-        return script, "Roteiro completo gerado novamente e dividido em cenas e planos.", True
+        return (
+            script,
+            (
+                "Roteiro completo gerado novamente e dividido em cenas e planos. "
+                "Biblioteca Visual não foi atualizada automaticamente."
+            ),
+            True,
+        )
     return script, "Roteiro criado e dividido em cenas e planos.", True
 
 
