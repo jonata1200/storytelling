@@ -29,9 +29,23 @@ def _facade_attr(name: str, fallback: Any) -> Any:
 
 
 def _requests_regeneration(message: str) -> bool:
-    normalized = message.lower()
+    normalized = _normalize_match_text(message)
     revision_terms = _facade_attr("REVISION_TERMS", REVISION_TERMS)
-    return any(term in normalized for term in revision_terms) or "refa" in normalized
+    normalized_revision_terms = tuple(_normalize_match_text(term) for term in revision_terms)
+    regeneration_terms = (
+        "regenerar",
+        "regenere",
+        "regere",
+        "gerar novamente",
+        "gere novamente",
+        "recriar",
+        "recrie",
+    )
+    return (
+        any(term in normalized for term in normalized_revision_terms if term)
+        or any(term in normalized for term in regeneration_terms)
+        or "refa" in normalized
+    )
 
 
 def _normalize_match_text(value: str) -> str:
@@ -66,7 +80,7 @@ def _requests_visual_prompt_approval(message: str) -> bool:
 
 def _requests_visual_bible_reset(message: str) -> bool:
     normalized = _normalize_match_text(message)
-    visual_terms = (
+    broad_visual_terms = (
         "biblioteca visual",
         "prompts visuais",
         "prompt visual",
@@ -74,13 +88,26 @@ def _requests_visual_bible_reset(message: str) -> bool:
         "locais",
         "objetos",
     )
-    reset_terms = (
+    prompt_library_terms = (
+        "biblioteca visual",
+        "prompts visuais",
+        "prompt visual",
+        "prompts da biblioteca visual",
+        "ativos visuais",
+    )
+    destructive_terms = (
         "apagar antigos",
+        "apagar os antigos",
         "apague antigos",
+        "apague os antigos",
         "deletar antigos",
+        "deletar os antigos",
         "excluir antigos",
+        "excluir os antigos",
         "limpar antigos",
+        "limpar os antigos",
         "remover antigos",
+        "remover os antigos",
         "substituir",
         "substitua",
         "do zero",
@@ -88,9 +115,25 @@ def _requests_visual_bible_reset(message: str) -> bool:
         "recriar tudo",
         "refazer tudo",
     )
-    return any(term in normalized for term in visual_terms) and any(
-        term in normalized for term in reset_terms
+    regeneration_terms = (
+        "regenerar",
+        "regenerados",
+        "regenere",
+        "regere",
+        "gerar novamente",
+        "gere novamente",
+        "gerar novos",
+        "gere novos",
+        "recriar",
+        "recrie",
     )
+    explicit_destructive_reset = any(term in normalized for term in broad_visual_terms) and any(
+        term in normalized for term in destructive_terms
+    )
+    prompt_regeneration_reset = any(term in normalized for term in prompt_library_terms) and any(
+        term in normalized for term in regeneration_terms
+    )
+    return explicit_destructive_reset or prompt_regeneration_reset
 
 
 @dataclass(frozen=True)

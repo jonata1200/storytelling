@@ -24,6 +24,11 @@ from app.visual_bible.service import (
 
 logger = logging.getLogger(__name__)
 VisualBatchProgressCallback = Callable[[int, int, str], Awaitable[None] | None]
+VISUAL_PROMPT_GROUP_LABELS = (
+    ("characters", "Personagens"),
+    ("locations", "Locais"),
+    ("props", "Objetos"),
+)
 
 
 async def _emit_visual_batch_progress(
@@ -184,16 +189,36 @@ async def _generate_all_visual_prompts_from_ui(project_id: UUID) -> None:
     await _generate_all_visual_prompts_with_progress_from_ui(project_id)
 
 
+def _visual_prompt_group_progress_detail(counts: dict[str, int], completed_groups: int) -> str:
+    lines: list[str] = []
+    for index, (key, label) in enumerate(VISUAL_PROMPT_GROUP_LABELS, 1):
+        if index <= completed_groups:
+            lines.append(f"{label}: {counts.get(key, 0)} prompt(s) gerado(s).")
+        else:
+            lines.append(f"{label}: aguardando processamento.")
+    pending_labels = [
+        label
+        for index, (_key, label) in enumerate(VISUAL_PROMPT_GROUP_LABELS, 1)
+        if index > completed_groups
+    ]
+    if pending_labels:
+        lines.append(f"Ainda falta: {', '.join(pending_labels).lower()}.")
+    else:
+        lines.append("Biblioteca Visual pronta para revisão.")
+    return "\n".join(lines)
+
+
 async def _generate_all_visual_prompts_with_progress_from_ui(
     project_id: UUID,
     *,
     progress_callback: VisualBatchProgressCallback | None = None,
 ) -> None:
+    total_groups = len(VISUAL_PROMPT_GROUP_LABELS)
     try:
         await _emit_visual_batch_progress(
             progress_callback,
             0,
-            3,
+            total_groups,
             "Localizando o roteiro aprovado para orientar a Biblioteca Visual.",
         )
         async with AsyncSessionLocal() as session:
@@ -212,8 +237,8 @@ async def _generate_all_visual_prompts_with_progress_from_ui(
                 return
             await _emit_visual_batch_progress(
                 progress_callback,
-                1,
-                3,
+                0,
+                total_groups,
                 "Roteiro localizado. A IA está extraindo personagens, locais e objetos.",
             )
             result = await generate_visual_bible(session, project_id, script.id)
@@ -224,13 +249,20 @@ async def _generate_all_visual_prompts_with_progress_from_ui(
             )
             return
         characters, locations, props = result
+        counts = {
+            "characters": len(characters),
+            "locations": len(locations),
+            "props": len(props),
+        }
         total = len(characters) + len(locations) + len(props)
-        await _emit_visual_batch_progress(
-            progress_callback,
-            2,
-            3,
-            f"{total} prompt(s) visual(is) retornado(s). Salvando Biblioteca Visual.",
-        )
+        for completed_groups in range(1, total_groups + 1):
+            await _emit_visual_batch_progress(
+                progress_callback,
+                completed_groups,
+                total_groups,
+                _visual_prompt_group_progress_detail(counts, completed_groups),
+            )
+            await asyncio.sleep(0)
         if total:
             _notify_visual_action(
                 (
@@ -247,9 +279,13 @@ async def _generate_all_visual_prompts_with_progress_from_ui(
             )
         await _emit_visual_batch_progress(
             progress_callback,
-            3,
-            3,
-            f"Biblioteca Visual pronta: {total} prompt(s) processado(s).",
+            total_groups,
+            total_groups,
+            (
+                f"Biblioteca Visual pronta: {total} prompt(s) processado(s).\n"
+                f"Personagens: {len(characters)} | Locais: {len(locations)} | "
+                f"Objetos: {len(props)}"
+            ),
         )
         ui.navigate.reload()
     except Exception as exc:

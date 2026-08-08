@@ -6,6 +6,9 @@ test_delete_lab_idea_does_not_remove_local_when_database_delete_is_blocked = (
 test_manual_script_save_refreshes_scene_plan_without_visual_bible = (
     cases.test_manual_script_save_refreshes_scene_plan_without_visual_bible
 )
+test_visual_prompt_progress_detail_lists_generated_and_pending_groups = (
+    cases.test_visual_prompt_progress_detail_lists_generated_and_pending_groups
+)
 test_script_editor_state_starts_with_current_script_values = (
     cases.test_script_editor_state_starts_with_current_script_values
 )

@@ -16,6 +16,7 @@ from app.ui.pages import _asset_url, _compact_project_title
 from app.ui.project import actions as project_actions
 from app.ui.routes import home_pages
 from app.ui.shared import assistant_state
+from app.ui.visual import actions as visual_actions
 from app.ui.workspace import script_area, storyboard_video_area
 from app.ui.workspace.assets_area import (
     _character_reference_sheet_asset,
@@ -28,6 +29,18 @@ def test_settings_tab_key_keeps_data_tab_after_destructive_actions() -> None:
     assert pages._settings_tab_key("Dados") == "data"
     assert pages._settings_tab_key("ia") == "ai"
     assert pages._settings_tab_key(None) == "profile"
+
+
+def test_visual_prompt_progress_detail_lists_generated_and_pending_groups() -> None:
+    detail = visual_actions._visual_prompt_group_progress_detail(
+        {"characters": 2, "locations": 1, "props": 3},
+        2,
+    )
+
+    assert "Personagens: 2 prompt(s) gerado(s)." in detail
+    assert "Locais: 1 prompt(s) gerado(s)." in detail
+    assert "Objetos: aguardando processamento." in detail
+    assert "Ainda falta: objetos." in detail
 
 
 def test_register_ui_pages_resolves_page_facade_dependencies(

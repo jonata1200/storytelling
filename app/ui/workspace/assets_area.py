@@ -663,7 +663,7 @@ def render_assets_area(
             prompt_loading_dialog, update_prompt_progress = generation_progress_dialog(
                 "Gerando prompts visuais",
                 3,
-                "etapa",
+                "grupo",
                 "A IA está criando prompts para personagens, locais e objetos.",
             )
             ui.label(

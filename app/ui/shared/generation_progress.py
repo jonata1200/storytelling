@@ -33,7 +33,7 @@ def generation_progress_dialog(
             progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full")
             progress_bar.props("instant-feedback rounded")
             progress_detail = ui.label(initial_detail).classes(
-                "text-xs text-[#8d938e] text-center"
+                "text-xs text-[#8d938e] text-center whitespace-pre-line"
             )
 
     def update_progress(completed: int, current_total: int, detail: str) -> None:

@@ -1106,7 +1106,7 @@ async def test_project_chat_can_reset_visual_bible_when_explicitly_requested(
         progress: Any = None,
     ) -> ProjectChatResult:
         captured_reset.append(reset_existing)
-        assert force is False
+        assert force is True
         return ProjectChatResult("biblioteca visual recriada", "generate_assets", True)
 
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
@@ -1116,7 +1116,7 @@ async def test_project_chat_can_reset_visual_bible_when_explicitly_requested(
         cast(AsyncSession, object()),
         project_id,
         "assets",
-        "apague os prompts visuais antigos e gere novos do zero",
+        "regenerar prompts da biblioteca visual",
         [],
     )
 
