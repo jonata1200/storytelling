@@ -260,6 +260,60 @@ def test_script_payload_preserves_briefing_duration_over_model_output() -> None:
     assert payload["target_duration_seconds"] == 420
 
 
+def test_script_payload_unwraps_serialized_json_content() -> None:
+    serialized_script = (
+        '{"title":"O Enquadramento","language":"pt-BR",'
+        '"target_duration_seconds":300,"word_count":650,'
+        '"content":"FADE IN:\\n\\nCENA 01\\nINT. LABORATORIO DE FOTOGRAFIA - NOITE\\n\\n'
+        'CLARA observa fotografias de cenas de crime.\\n\\nCLARA\\n'
+        'Não é possível.\\n\\nFADE OUT."}'
+    )
+    nested_content = (
+        "FADE IN:\n\nCENA 01\nINT. AMBIENTE PRINCIPAL - DIA\n\n"
+        f"{serialized_script}\n\nFADE OUT."
+    )
+
+    payload = normalize_script_payload(
+        {
+            "title": "O Enquadramento",
+            "content": nested_content,
+        },
+        default_title="O Enquadramento",
+        language="pt-BR",
+        target_duration_seconds=300,
+    )
+
+    assert payload["content"].startswith("FADE IN:")
+    assert "CENA 01\nINT. LABORATORIO DE FOTOGRAFIA - NOITE" in payload["content"]
+    assert "CLARA observa fotografias" in payload["content"]
+    assert '{"title"' not in payload["content"]
+    assert "\\n" not in payload["content"]
+
+
+def test_script_payload_unwraps_malformed_embedded_json_content() -> None:
+    nested_content = (
+        'FADE IN:\n\nCENA 01\nINT. AMBIENTE PRINCIPAL - DIA\n\n{ "title": '
+        '"O Enquadramento", "language": "pt-BR", "content": "FADE IN:\\n\\n'
+        'CENA 01\\nINT. LABORATORIO DE FOTOGRAFIA - NOITE\\n\\nCLARA analisa '
+        'uma fotografia.\\n\\nCLARA\\nIsso não fecha.\n\nFADE OUT.'
+    )
+
+    payload = normalize_script_payload(
+        {
+            "title": "O Enquadramento",
+            "content": nested_content,
+        },
+        default_title="O Enquadramento",
+        language="pt-BR",
+        target_duration_seconds=300,
+    )
+
+    assert "CENA 01\nINT. LABORATORIO DE FOTOGRAFIA - NOITE" in payload["content"]
+    assert "CLARA analisa uma fotografia." in payload["content"]
+    assert '{"title"' not in payload["content"]
+    assert "\\n" not in payload["content"]
+
+
 def test_script_payload_adds_scene_markers_to_screenplay_without_cena_labels() -> None:
     payload = normalize_script_payload(
         {

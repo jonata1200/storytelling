@@ -6,6 +6,12 @@ test_script_payload_accepts_common_ai_field_names = (
 test_script_payload_preserves_briefing_duration_over_model_output = (
     cases.test_script_payload_preserves_briefing_duration_over_model_output
 )
+test_script_payload_unwraps_serialized_json_content = (
+    cases.test_script_payload_unwraps_serialized_json_content
+)
+test_script_payload_unwraps_malformed_embedded_json_content = (
+    cases.test_script_payload_unwraps_malformed_embedded_json_content
+)
 test_script_payload_adds_scene_markers_to_screenplay_without_cena_labels = (
     cases.test_script_payload_adds_scene_markers_to_screenplay_without_cena_labels
 )

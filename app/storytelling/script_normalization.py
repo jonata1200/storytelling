@@ -1,4 +1,5 @@
-﻿import re
+﻿import json
+import re
 import unicodedata
 
 from app.storytelling.normalization_common import (
@@ -69,6 +70,70 @@ def _script_block_to_text(value: object) -> str:
         if text:
             lines.append(f"{labels[key]}: {text}")
     return "\n".join(lines)
+
+
+def _json_mapping_from_text(value: object) -> dict | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    payload_keys = {
+        "content",
+        "script",
+        "roteiro",
+        "scenes",
+        "cenas",
+        "acts",
+        "atos",
+        "beats",
+    }
+    decoder = json.JSONDecoder()
+    candidates = [0] if text.startswith("{") else []
+    candidates.extend(index for index, char in enumerate(text) if char == "{" and index != 0)
+    for index in candidates:
+        try:
+            parsed, _end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and payload_keys.intersection(parsed):
+            return parsed
+    content_match = re.search(r'"content"\s*:\s*"', text)
+    if content_match is None:
+        return None
+    raw_content = text[content_match.end() :]
+    content_chars: list[str] = []
+    escaped = False
+    for index, char in enumerate(raw_content):
+        if escaped:
+            content_chars.append(f"\\{char}")
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            tail = raw_content[index + 1 :].lstrip()
+            if not tail or tail.startswith((",", "}")):
+                break
+        content_chars.append(char)
+    serialized_content = "".join(content_chars).strip()
+    serialized_content = re.sub(r"\n\s*FADE OUT\.\s*$", "", serialized_content).strip()
+    try:
+        content = json.loads(f'"{serialized_content}"')
+    except json.JSONDecodeError:
+        content = (
+            serialized_content.replace('\\"', '"')
+            .replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
+        )
+    text_key = str(content or "").upper()
+    if "FADE IN" in text_key and "CENA" in text_key and any(
+        marker in text_key for marker in ("INT.", "EXT.", "INT/EXT.")
+    ):
+        return {"content": str(content)}
+    return None
 
 
 SCRIPT_TECHNICAL_LABEL_RE = re.compile(
@@ -451,7 +516,7 @@ def _screenplay_content_from_scene_items(
 
 
 def _script_content_from_payload(
-    payload: dict, *, default_title: str, target_duration_seconds: int
+    payload: dict, *, default_title: str, target_duration_seconds: int, _depth: int = 0
 ) -> str:
     direct_content = (
         payload.get("content")
@@ -464,6 +529,15 @@ def _script_content_from_payload(
         or payload.get("text")
         or payload.get("texto")
     )
+    if _depth < 2 and (nested_payload := _json_mapping_from_text(direct_content)):
+        nested_text = _script_content_from_payload(
+            nested_payload,
+            default_title=str(nested_payload.get("title") or default_title),
+            target_duration_seconds=target_duration_seconds,
+            _depth=_depth + 1,
+        )
+        if nested_text:
+            return nested_text
     if text := _script_block_to_text(direct_content):
         text = _normalize_inline_scene_headings(text)
         if _looks_like_screenplay(text):
