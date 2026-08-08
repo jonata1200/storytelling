@@ -23,7 +23,12 @@ from app.storyboards.service import (
     update_storyboard_prompt,
 )
 from app.ui.shared.generation_progress import generation_progress_dialog, progress_ratio
-from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, friendly_ai_error, show_ai_error_popup
+from app.ui.shared.page_config import (
+    BLOCKING_DIALOG_PROPS,
+    friendly_ai_error,
+    safe_close_ui_element,
+    show_ai_error_popup,
+)
 from app.ui.visual.actions import _approve_video_prompts_from_ui
 from app.ui.visual.helpers import asset_url
 from app.ui.workspace import storyboard_handlers as _storyboard_handlers
@@ -151,7 +156,7 @@ async def _enqueue_dubbing_from_ui(
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:
         if loading_dialog is not None:
-            loading_dialog.close()
+            safe_close_ui_element(loading_dialog)
 
 
 async def _enqueue_finalization_from_ui(
@@ -170,7 +175,7 @@ async def _enqueue_finalization_from_ui(
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:
         if loading_dialog is not None:
-            loading_dialog.close()
+            safe_close_ui_element(loading_dialog)
 
 
 async def _refresh_dubbing_from_ui(
@@ -197,7 +202,7 @@ async def _refresh_dubbing_from_ui(
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:
         if loading_dialog is not None:
-            loading_dialog.close()
+            safe_close_ui_element(loading_dialog)
 
 
 def _local_asset_file_exists(storage_uri: str) -> bool:
@@ -453,7 +458,7 @@ def render_storyboard_area(
                             _render_continuity_checks(list(preview.get("continuity_checks") or []))
 
             async def confirm_storyboard_prompts() -> None:
-                prompt_dialog.close()
+                safe_close_ui_element(prompt_dialog)
                 await _approve_storyboard_prompts_from_ui(
                     project_id,
                     script_id,
@@ -586,7 +591,7 @@ def render_storyboard_area(
                             if not new_prompt:
                                 ui.notify("Informe um prompt antes de salvar.", color="warning")
                                 return
-                            dialog.close()
+                            safe_close_ui_element(dialog)
                             await _save_storyboard_prompt_from_ui(
                                 project_id,
                                 active_script_id,
@@ -823,7 +828,7 @@ def render_video_area(
                             )
 
             async def confirm_video_prompts(frame_ids: list[UUID] = pending_frame_ids) -> None:
-                video_prompt_dialog.close()
+                safe_close_ui_element(video_prompt_dialog)
                 await _approve_video_prompts_from_ui(
                     project_id,
                     frame_ids,
@@ -883,7 +888,7 @@ def render_video_area(
                         if not new_prompt:
                             ui.notify("Informe um prompt antes de salvar.", color="warning")
                             return
-                        dialog.close()
+                        safe_close_ui_element(dialog)
                         await _save_video_prompt_from_ui(project_id, frame_id, new_prompt)
 
                     async def generate_single_clip(
@@ -895,7 +900,7 @@ def render_video_area(
                         if not new_prompt:
                             ui.notify("Informe um prompt antes de gerar.", color="warning")
                             return
-                        dialog.close()
+                        safe_close_ui_element(dialog)
                         await _save_video_prompt_from_ui(
                             project_id,
                             frame_id,
@@ -1049,7 +1054,7 @@ def render_video_area(
                             if not new_prompt:
                                 ui.notify("Informe um prompt antes de salvar.", color="warning")
                                 return
-                            dialog.close()
+                            safe_close_ui_element(dialog)
                             await _save_video_prompt_from_ui(project_id, frame_id, new_prompt)
 
                         async def generate_clip_variation(
@@ -1061,7 +1066,7 @@ def render_video_area(
                             if not new_prompt:
                                 ui.notify("Informe um prompt antes de gerar.", color="warning")
                                 return
-                            dialog.close()
+                            safe_close_ui_element(dialog)
                             await _save_video_prompt_from_ui(
                                 project_id,
                                 frame_id,

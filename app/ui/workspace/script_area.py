@@ -28,6 +28,7 @@ from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
     STEP_LOADING_COPY,
     UI_GENERATION_TIMEOUT_SECONDS,
+    safe_close_ui_element,
 )
 
 LoadingDialogFactory = Callable[[str, str], Any]
@@ -132,7 +133,7 @@ def _ai_action_exceeded_generation_timeout(
 async def _close_loading_dialog_when_script_ready(project_id: UUID, loading_dialog: Any) -> None:
     ready = await _reload_project_when_script_ready(project_id)
     if ready and hasattr(loading_dialog, "close"):
-        loading_dialog.close()
+        safe_close_ui_element(loading_dialog)
 
 
 async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int, str, bool]:
@@ -184,7 +185,7 @@ async def _update_script_generation_progress(
     completed, total, detail, terminal = await _script_generation_progress_state(project_id)
     update_progress(completed, total, detail)
     if terminal and hasattr(loading_dialog, "close"):
-        loading_dialog.close()
+        safe_close_ui_element(loading_dialog)
         ui.navigate.reload()
 
 

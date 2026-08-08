@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,6 +15,15 @@ from app.visual_bible.service import _generate_image_with_provider_fallback
 DEFAULT_STORYBOARD_IMAGE_CONCURRENCY = 3
 MAX_STORYBOARD_IMAGE_CONCURRENCY = 6
 StoryboardProgressCallback = Callable[[int, int, str], Awaitable[None] | None]
+logger = logging.getLogger(__name__)
+
+
+def _deleted_progress_context_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return (
+        "client this element belongs to has been deleted" in text
+        or "parent element this slot belongs to has been deleted" in text
+    )
 
 
 async def _emit_storyboard_progress(
@@ -24,9 +34,14 @@ async def _emit_storyboard_progress(
 ) -> None:
     if callback is None:
         return
-    result = callback(completed, total, detail)
-    if inspect.isawaitable(result):
-        await result
+    try:
+        result = callback(completed, total, detail)
+        if inspect.isawaitable(result):
+            await result
+    except RuntimeError as exc:
+        if not _deleted_progress_context_error(exc):
+            raise
+        logger.warning("Storyboard progress ignored because the page context was removed.")
 
 
 @dataclass
@@ -42,6 +57,43 @@ class StoryboardFrameGenerationPlan:
     image: ImageResult | None = None
     fallback_metadata: dict | None = None
     duration_ms: int | None = None
+
+
+def _storyboard_progress_target(plan: StoryboardFrameGenerationPlan) -> str:
+    scene_number = int(getattr(plan.scene, "scene_number", 0) or 0)
+    shot_number = int(getattr(plan.shot, "shot_number", 0) or 0)
+    return (
+        f"Cena {scene_number:02d} - Plano {shot_number:02d} - "
+        f"Quadro {plan.frame_number:03d}"
+    )
+
+
+def _storyboard_progress_detail(
+    *,
+    action: str,
+    plan: StoryboardFrameGenerationPlan | None,
+    completed: int,
+    total: int,
+    concurrency: int,
+) -> str:
+    pending = max(total - completed, 0)
+    if plan is None:
+        if total <= 0:
+            return (
+                "Agora: nenhum quadro novo precisa de imagem.\n"
+                "Falta: salvar metadados e atualizar o animatic quando necessario."
+            )
+        return (
+            f"Agora: preparando {total} quadro(s) para geracao.\n"
+            f"Concluido: {completed}/{total}. Falta: {pending}.\n"
+            f"Processamento: ate {concurrency} imagem(ns) em paralelo."
+        )
+    reference_count = len(plan.reference_uris)
+    return (
+        f"Agora: {action} {_storyboard_progress_target(plan)}.\n"
+        f"Concluido: {completed}/{total}. Falta: {pending}.\n"
+        f"Referencias visuais usadas: {reference_count}."
+    )
 
 
 def storyboard_image_concurrency(value: object) -> int:
@@ -70,7 +122,8 @@ async def generate_storyboard_plan_images(
     concurrency: int,
     progress_callback: StoryboardProgressCallback | None = None,
 ) -> None:
-    semaphore = asyncio.Semaphore(storyboard_image_concurrency(concurrency))
+    safe_concurrency = storyboard_image_concurrency(concurrency)
+    semaphore = asyncio.Semaphore(safe_concurrency)
     plans_to_generate = [plan for plan in plans if plan.needs_image]
     total = len(plans_to_generate)
     completed = 0
@@ -79,7 +132,13 @@ async def generate_storyboard_plan_images(
         progress_callback,
         0,
         total,
-        f"{total} quadro(s) aguardando geração.",
+        _storyboard_progress_detail(
+            action="preparando",
+            plan=None,
+            completed=0,
+            total=total,
+            concurrency=safe_concurrency,
+        ),
     )
 
     async def generate_plan(plan: StoryboardFrameGenerationPlan) -> None:
@@ -88,6 +147,19 @@ async def generate_storyboard_plan_images(
             return
         try:
             async with semaphore:
+                async with progress_lock:
+                    await _emit_storyboard_progress(
+                        progress_callback,
+                        completed,
+                        total,
+                        _storyboard_progress_detail(
+                            action="gerando",
+                            plan=plan,
+                            completed=completed,
+                            total=total,
+                            concurrency=safe_concurrency,
+                        ),
+                    )
                 generation_started_at = perf_counter()
                 image, fallback_metadata = await _generate_image_with_provider_fallback(
                     provider,
@@ -99,9 +171,9 @@ async def generate_storyboard_plan_images(
                         aspect_ratio=image_aspect_ratio,
                         resolution=image_resolution,
                         negative_prompt=(
-                            "animação, cartoon, desenho, ilustração, 3D render, anime, "
+                            "animacao, cartoon, desenho, ilustracao, 3D render, anime, "
                             "quadrinhos, pintura, concept art, personagem diferente, rosto "
-                            "diferente, figurino diferente, cenário diferente, objeto diferente, "
+                            "diferente, figurino diferente, cenario diferente, objeto diferente, "
                             "texto, legenda, marca d'agua, UI"
                         ),
                         references=plan.reference_uris,
@@ -114,17 +186,17 @@ async def generate_storyboard_plan_images(
         finally:
             async with progress_lock:
                 completed += 1
-                pending = max(total - completed, 0)
-                detail = (
-                    f"Quadro {plan.frame_number:03d} processado. Faltam {pending}."
-                    if pending
-                    else "Todos os quadros solicitados foram processados."
-                )
                 await _emit_storyboard_progress(
                     progress_callback,
                     completed,
                     total,
-                    detail,
+                    _storyboard_progress_detail(
+                        action="concluido" if completed < total else "finalizando",
+                        plan=plan,
+                        completed=completed,
+                        total=total,
+                        concurrency=safe_concurrency,
+                    ),
                 )
 
     await asyncio.gather(*(generate_plan(plan) for plan in plans_to_generate))

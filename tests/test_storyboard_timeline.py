@@ -285,6 +285,7 @@ async def test_generate_storyboard_plan_images_respects_concurrency_limit(
             raise NotImplementedError
 
     scene = Scene(id=uuid4(), scene_number=1)
+    progress_details: list[str] = []
     plans = [
         StoryboardFrameGenerationPlan(
             shot=Shot(id=uuid4(), shot_number=index + 1, artifact_id=uuid4()),
@@ -307,6 +308,7 @@ async def test_generate_storyboard_plan_images_respects_concurrency_limit(
         image_aspect_ratio="9:16",
         image_model="fake-model",
         concurrency=2,
+        progress_callback=lambda _done, _total, detail: progress_details.append(detail),
     )
 
     assert max_active_generations == 2
@@ -314,7 +316,13 @@ async def test_generate_storyboard_plan_images_respects_concurrency_limit(
     assert all(plan.duration_ms for plan in plans)
     assert captured_requests[0].references == ["storage/ref.png"]
     assert captured_requests[0].negative_prompt is not None
-    assert "animação" in captured_requests[0].negative_prompt
+    assert "animacao" in captured_requests[0].negative_prompt
+    assert any(
+        "Agora: gerando Cena 01 - Plano 01 - Quadro 001" in item
+        for item in progress_details
+    )
+    assert any("Referencias visuais usadas: 1" in item for item in progress_details)
+    assert progress_details[-1].startswith("Agora: finalizando")
 
 
 @pytest.mark.asyncio

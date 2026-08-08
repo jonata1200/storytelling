@@ -12,7 +12,11 @@ from app.ui.project.data import latest as _latest
 from app.ui.shared.assistant_state import (
     append_assistant_message_to_chat as _append_assistant_message_to_chat,
 )
-from app.ui.shared.page_config import friendly_ai_error, show_ai_error_popup
+from app.ui.shared.page_config import (
+    friendly_ai_error,
+    safe_close_ui_element,
+    show_ai_error_popup,
+)
 from app.video_generation.models import VideoClip
 from app.visual_bible.service import (
     visual_reference_completion_message,
@@ -93,8 +97,8 @@ async def _run_step(
         message = friendly_ai_error(exc)
         _append_assistant_message_to_chat(project_id, f"Não consegui concluir a etapa: {message}")
         if loading_dialog is not None:
-            loading_dialog.close()
+            safe_close_ui_element(loading_dialog)
         show_ai_error_popup(message, details=str(exc))
     finally:
         if loading_dialog is not None:
-            loading_dialog.close()
+            safe_close_ui_element(loading_dialog)

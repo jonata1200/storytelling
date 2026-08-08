@@ -1,3 +1,4 @@
+import inspect
 from typing import Any
 from uuid import UUID
 
@@ -13,9 +14,26 @@ from app.storyboards.service import (
     storyboard_prompts_need_approval,
     update_storyboard_prompt,
 )
-from app.ui.shared.page_config import friendly_ai_error, show_ai_error_popup
+from app.ui.shared.page_config import (
+    friendly_ai_error,
+    safe_close_ui_element,
+    show_ai_error_popup,
+)
 
 ProgressCallback = Any
+
+
+async def _emit_progress(
+    callback: ProgressCallback | None,
+    completed: int,
+    total: int,
+    detail: str,
+) -> None:
+    if callback is None:
+        return
+    result = callback(completed, total, detail)
+    if inspect.isawaitable(result):
+        await result
 
 
 async def generate_storyboards_when_prompts_are_ready(
@@ -34,6 +52,15 @@ async def generate_storyboards_when_prompts_are_ready(
     if frames is None:
         return None
     if not await storyboard_frames_need_generation(session, project_id, script_id):
+        await _emit_progress(
+            progress_callback,
+            len(frames),
+            len(frames),
+            (
+                "Agora: atualizando o animatic com todos os quadros gerados.\n"
+                "Falta: recarregar a etapa de storyboard."
+            ),
+        )
         await generate_animatic_bundle(session, project_id, script_id)
     return len(frames)
 
@@ -49,6 +76,15 @@ async def approve_storyboard_prompts_from_ui(
         loading_dialog.open()
     try:
         async with AsyncSessionLocal() as session:
+            await _emit_progress(
+                progress_callback,
+                0,
+                1,
+                (
+                    "Agora: aprovando todos os prompts pendentes.\n"
+                    "Falta: liberar a geracao dos quadros."
+                ),
+            )
             approved_count = await approve_storyboard_prompts(session, project_id, script_id)
             generated_count = await generate_storyboards_when_prompts_are_ready(
                 session,
@@ -79,7 +115,7 @@ async def approve_storyboard_prompts_from_ui(
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:
         if loading_dialog is not None:
-            loading_dialog.close()
+            safe_close_ui_element(loading_dialog)
 
 
 async def approve_storyboard_prompt_from_ui(
@@ -94,6 +130,15 @@ async def approve_storyboard_prompt_from_ui(
         loading_dialog.open()
     try:
         async with AsyncSessionLocal() as session:
+            await _emit_progress(
+                progress_callback,
+                0,
+                1,
+                (
+                    "Agora: aprovando o prompt selecionado.\n"
+                    "Falta: verificar se todos os prompts ja podem gerar quadros."
+                ),
+            )
             approved = await approve_storyboard_prompt(session, project_id, script_id, shot_id)
             generated_count = (
                 await generate_storyboards_when_prompts_are_ready(
@@ -125,7 +170,7 @@ async def approve_storyboard_prompt_from_ui(
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:
         if loading_dialog is not None:
-            loading_dialog.close()
+            safe_close_ui_element(loading_dialog)
 
 
 async def save_storyboard_prompt_from_ui(
@@ -190,6 +235,15 @@ async def generate_storyboards_from_ui(
                 project_id,
                 script_id,
             ):
+                await _emit_progress(
+                    progress_callback,
+                    len(frames),
+                    len(frames),
+                    (
+                        "Agora: atualizando o animatic com os quadros prontos.\n"
+                        "Falta: recarregar a etapa de storyboard."
+                    ),
+                )
                 await generate_animatic_bundle(session, project_id, script_id)
         ui.notify(
             (
@@ -204,4 +258,4 @@ async def generate_storyboards_from_ui(
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:
         if loading_dialog is not None:
-            loading_dialog.close()
+            safe_close_ui_element(loading_dialog)

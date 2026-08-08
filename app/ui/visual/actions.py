@@ -229,7 +229,10 @@ async def _generate_all_visual_prompts_with_progress_from_ui(
             progress_callback,
             0,
             total_groups,
-            "Localizando o roteiro aprovado para orientar a Biblioteca Visual.",
+            (
+                "Agora: localizando o roteiro aprovado para orientar a Biblioteca Visual.\n"
+                "Falta: extrair personagens, locais e objetos."
+            ),
         )
         async with AsyncSessionLocal() as session:
             script_result = await session.execute(
@@ -406,9 +409,15 @@ async def _approve_all_visual_targets_from_ui(
                 completed_images += len(view_types)
                 pending_images = max(total_images - completed_images, 0)
                 detail = (
-                    f"{pending_images} imagem(ns) ainda faltam."
+                    (
+                        "Agora: imagem processada para a Biblioteca Visual.\n"
+                        f"Falta: {pending_images} imagem(ns)."
+                    )
                     if pending_images
-                    else "Todas as imagens solicitadas foram processadas."
+                    else (
+                        "Agora: todas as imagens solicitadas foram processadas.\n"
+                        "Falta: recarregar a Biblioteca Visual."
+                    )
                 )
                 await _emit_visual_batch_progress(
                     progress_callback,
@@ -485,7 +494,10 @@ async def _approve_video_prompts_from_ui(
             progress_callback,
             0,
             len(frame_ids),
-            f"{len(frame_ids)} clipe(s) aguardando envio para a fila.",
+            (
+                f"Agora: preparando {len(frame_ids)} clipe(s) para a fila de video.\n"
+                "Falta: registrar os jobs e recarregar a etapa de video."
+            ),
         )
         async with AsyncSessionLocal() as session:
             job = await enqueue_project_step(
@@ -501,7 +513,10 @@ async def _approve_video_prompts_from_ui(
             progress_callback,
             len(frame_ids),
             len(frame_ids),
-            "Todos os clipes solicitados foram enviados para a fila de video.",
+            (
+                "Agora: todos os clipes solicitados foram enviados para a fila.\n"
+                "Falta: acompanhar o processamento ate os arquivos ficarem prontos."
+            ),
         )
         ui.notify(f"Prompts aprovados. Job de video enfileirado: {job.id}.", color="positive")
         ui.navigate.reload()

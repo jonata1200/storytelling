@@ -188,6 +188,7 @@ from app.ui.shared.page_config import (
     DEFAULT_STORY_DURATION_MINUTES,
     STEP_LOADING_COPY,
     ProductionStep,
+    safe_close_ui_element,
 )
 from app.ui.shared.page_config import IDEA_COUNT_OPTIONS as IDEA_COUNT_OPTIONS  # noqa: F401
 from app.ui.shared.page_config import IDEA_GENRES as IDEA_GENRES  # noqa: F401
@@ -363,7 +364,7 @@ async def _generate_initial_script(
 async def _close_loading_dialog_when_script_ready(project_id: UUID, loading_dialog: Any) -> None:
     ready = await _reload_project_when_script_ready(project_id)
     if ready and hasattr(loading_dialog, "close"):
-        loading_dialog.close()
+        safe_close_ui_element(loading_dialog)
 
 
 async def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -> None:

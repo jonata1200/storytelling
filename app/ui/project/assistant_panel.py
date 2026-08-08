@@ -16,7 +16,12 @@ from app.ui.shared.assistant_state import safe_client_navigation as _safe_client
 from app.ui.shared.assistant_state import safe_refresh as _safe_refresh
 from app.ui.shared.assistant_state import save_assistant_draft as _save_assistant_draft
 from app.ui.shared.assistant_state import save_assistant_messages as _save_assistant_messages
-from app.ui.shared.page_config import STEP_LOADING_COPY, friendly_ai_error, show_ai_error_popup
+from app.ui.shared.page_config import (
+    STEP_LOADING_COPY,
+    friendly_ai_error,
+    safe_close_ui_element,
+    show_ai_error_popup,
+)
 
 logger = logging.getLogger(__name__)
 LoadingDialogFactory = Callable[[str, str], Any]
@@ -210,7 +215,7 @@ def render_assistant_panel(
                 response = friendly_ai_error(exc)
                 error_popup = (response, str(exc), "Falha na IA")
             if loading_dialog is not None:
-                loading_dialog.close()
+                safe_close_ui_element(loading_dialog)
             if error_popup is not None:
                 popup_message, popup_details, popup_title = error_popup
                 show_ai_error_popup(

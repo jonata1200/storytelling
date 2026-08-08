@@ -41,6 +41,7 @@ from app.ui.shared.page_config import (
     STORY_DURATION_OPTIONS,
     UI_GENERATION_TIMEOUT_SECONDS,
     friendly_ai_error,
+    safe_close_ui_element,
     show_ai_error_popup,
 )
 
@@ -778,7 +779,7 @@ def register_home_pages(
                         except Exception as exc:
                             show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
                         finally:
-                            idea_generation_dialog.close()
+                            safe_close_ui_element(idea_generation_dialog)
 
                 with ui.column().classes("w-full items-center gap-4 py-8"):
                     with ui.row().classes("w-full max-w-2xl gap-3 items-end justify-center"):
