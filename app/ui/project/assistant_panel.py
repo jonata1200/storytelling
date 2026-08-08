@@ -14,6 +14,7 @@ from app.ui.shared.assistant_state import load_assistant_draft as _load_assistan
 from app.ui.shared.assistant_state import load_assistant_messages as _load_assistant_messages
 from app.ui.shared.assistant_state import safe_client_navigation as _safe_client_navigation
 from app.ui.shared.assistant_state import safe_refresh as _safe_refresh
+from app.ui.shared.assistant_state import save_assistant_draft as _save_assistant_draft
 from app.ui.shared.assistant_state import save_assistant_messages as _save_assistant_messages
 from app.ui.shared.page_config import STEP_LOADING_COPY, friendly_ai_error, show_ai_error_popup
 
@@ -232,6 +233,9 @@ def render_assistant_panel(
                 .bind_value(draft, "message")
                 .props("outlined dense autogrow rows=1")
                 .classes("flex-1 assistant-chat-input")
+            )
+            prompt.on_value_change(
+                lambda event: _save_assistant_draft(project_id, event.value)
             )
             prompt.on(
                 "keydown",

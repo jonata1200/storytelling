@@ -53,14 +53,14 @@ def load_assistant_draft(project_id: UUID) -> dict[str, str]:
     return draft
 
 
-def clear_assistant_draft(project_id: UUID) -> None:
+def save_assistant_draft(project_id: UUID, message: object) -> None:
     store = assistant_draft_store()
-    draft = store.get(str(project_id))
-    if not isinstance(draft, dict):
-        draft = {}
-    draft["message"] = ""
-    store[str(project_id)] = draft
+    store[str(project_id)] = {"message": str(message or "")}
     nicegui_app.storage.user["project_assistant_drafts"] = store
+
+
+def clear_assistant_draft(project_id: UUID) -> None:
+    save_assistant_draft(project_id, "")
 
 
 def is_legacy_assistant_greeting(role: str, content: str) -> bool:

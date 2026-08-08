@@ -471,6 +471,7 @@ def test_assistant_draft_persists_by_project(
 
     draft = assistant_state.load_assistant_draft(project_id)
     draft["message"] = "Melhore a emocao da cena final"
+    assistant_state.save_assistant_draft(project_id, draft["message"])
 
     assert assistant_state.load_assistant_draft(project_id)["message"] == (
         "Melhore a emocao da cena final"
