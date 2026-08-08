@@ -1,9 +1,12 @@
 from collections.abc import Callable
+import logging
 from typing import Any
 
 from nicegui import ui
 
-from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS
+from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, is_deleted_ui_context_error
+
+logger = logging.getLogger(__name__)
 
 
 def progress_ratio(done: int, total: int) -> float:
@@ -27,7 +30,7 @@ def generation_progress_dialog(
             ui.spinner(size="lg").classes("acid")
             ui.label(title).classes("brand-type text-2xl font-bold")
             progress_label = ui.label(
-                f"0/{total} {item_label}(s) processado(s) · {progress_percent_text(0, total)}"
+                f"0/{total} {item_label}(s) processado(s) - {progress_percent_text(0, total)}"
             )
             progress_label.classes("text-sm text-[#d8dbd8]")
             progress_bar = ui.linear_progress(value=0, show_value=False).classes("w-full")
@@ -38,11 +41,16 @@ def generation_progress_dialog(
 
     def update_progress(completed: int, current_total: int, detail: str) -> None:
         safe_total = max(current_total, 1)
-        progress_label.set_text(
-            f"{completed}/{current_total} {item_label}(s) processado(s) · "
-            f"{progress_percent_text(completed, current_total)}"
-        )
-        progress_bar.set_value(progress_ratio(completed, safe_total))
-        progress_detail.set_text(detail)
+        try:
+            progress_label.set_text(
+                f"{completed}/{current_total} {item_label}(s) processado(s) - "
+                f"{progress_percent_text(completed, current_total)}"
+            )
+            progress_bar.set_value(progress_ratio(completed, safe_total))
+            progress_detail.set_text(detail)
+        except RuntimeError as exc:
+            if not is_deleted_ui_context_error(exc):
+                raise
+            logger.warning("Generation progress ignored because the page context was removed.")
 
     return progress_dialog, update_progress

@@ -13,7 +13,7 @@ from app.ui.shared.cost_display import (
     text_generation_cost_text,
 )
 from app.ui.shared.generation_progress import generation_progress_dialog, progress_ratio
-from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS
+from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, safe_close_ui_element
 from app.ui.visual.actions import (
     _approve_all_visual_targets_from_ui,
     _approve_visual_target_from_ui,
@@ -337,7 +337,7 @@ def _entity_card(
                                     async def regenerate_gallery_reference(
                                         view_type: str = reference.view_type,
                                     ) -> None:
-                                        gallery_dialog.close()
+                                        safe_close_ui_element(gallery_dialog)
                                         loading_dialog.open()
                                         try:
                                             await _regenerate_visual_reference_from_ui(
@@ -347,7 +347,7 @@ def _entity_card(
                                                 view_type,
                                             )
                                         finally:
-                                            loading_dialog.close()
+                                            safe_close_ui_element(loading_dialog)
 
                                     ui.button(
                                         "Gerar novamente",
@@ -437,7 +437,7 @@ def _entity_card(
                 async def confirm_visual_prompts(
                     views: list[str] = requested_views,
                 ) -> None:
-                    prompt_dialog.close()
+                    safe_close_ui_element(prompt_dialog)
                     loading_dialog.open()
                     try:
                         await _approve_visual_target_from_ui(
@@ -447,7 +447,7 @@ def _entity_card(
                             views,
                         )
                     finally:
-                        loading_dialog.close()
+                        safe_close_ui_element(loading_dialog)
 
                 with ui.row().classes("w-full justify-end gap-2 mt-3"):
                     ui.button("Cancelar", on_click=prompt_dialog.close).props("flat no-caps")
@@ -481,7 +481,7 @@ def _entity_card(
                 async def confirm_optional_sheet(
                     views: list[str] = optional_sheet_views,
                 ) -> None:
-                    optional_sheet_dialog.close()
+                    safe_close_ui_element(optional_sheet_dialog)
                     loading_dialog.open()
                     try:
                         await _approve_visual_target_from_ui(
@@ -491,7 +491,7 @@ def _entity_card(
                             views,
                         )
                     finally:
-                        loading_dialog.close()
+                        safe_close_ui_element(loading_dialog)
 
                 with ui.row().classes("w-full justify-end gap-2 mt-3"):
                     ui.button("Cancelar", on_click=optional_sheet_dialog.close).props(
@@ -519,7 +519,7 @@ def _entity_card(
                     if not new_prompt:
                         ui.notify("Informe um prompt antes de salvar.", color="warning")
                         return
-                    edit_prompt_dialog.close()
+                    safe_close_ui_element(edit_prompt_dialog)
                     await _update_visual_prompt_from_ui(
                         project_id,
                         target_kind,
@@ -561,7 +561,7 @@ def _entity_card(
                                 view_type,
                             )
                         finally:
-                            loading_dialog.close()
+                            safe_close_ui_element(loading_dialog)
 
                     ui.button(
                         "Gerar novamente",
@@ -636,7 +636,7 @@ def render_assets_area(
                                 )
 
             async def confirm_batch_prompts() -> None:
-                batch_prompt_dialog.close()
+                safe_close_ui_element(batch_prompt_dialog)
                 batch_loading_dialog.open()
                 try:
                     await _approve_all_visual_targets_from_ui(
@@ -644,7 +644,7 @@ def render_assets_area(
                         progress_callback=update_batch_progress,
                     )
                 finally:
-                    batch_loading_dialog.close()
+                    safe_close_ui_element(batch_loading_dialog)
 
             with ui.row().classes("w-full justify-end gap-2 mt-3"):
                 ui.button("Cancelar", on_click=batch_prompt_dialog.close).props("flat no-caps")
@@ -683,7 +683,7 @@ def render_assets_area(
                         progress_callback=update_prompt_progress,
                     )
                 finally:
-                    prompt_loading_dialog.close()
+                    safe_close_ui_element(prompt_loading_dialog)
 
             ui.button(
                 "Gerar todos os prompts",

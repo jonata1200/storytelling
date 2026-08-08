@@ -11,7 +11,12 @@ from sqlalchemy import select
 from app.database.session import AsyncSessionLocal
 from app.jobs.service import enqueue_project_step
 from app.storytelling.models import Script
-from app.ui.shared.page_config import friendly_ai_error, show_ai_error_popup
+from app.ui.shared.page_config import (
+    friendly_ai_error,
+    is_deleted_ui_context_error,
+    safe_close_ui_element,
+    show_ai_error_popup,
+)
 from app.ui.visual.helpers import visual_reference_views_for as _visual_reference_views_for
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (
@@ -39,9 +44,14 @@ async def _emit_visual_batch_progress(
 ) -> None:
     if callback is None:
         return
-    result = callback(completed, total, detail)
-    if inspect.isawaitable(result):
-        await result
+    try:
+        result = callback(completed, total, detail)
+        if inspect.isawaitable(result):
+            await result
+    except RuntimeError as exc:
+        if not is_deleted_ui_context_error(exc):
+            raise
+        logger.warning("Visual progress ignored because the page context was removed.")
 
 
 async def _approve_visual_target_from_ui(
@@ -104,7 +114,7 @@ def _notify_visual_action(message: str, color: str, *, timeout: int | None = Non
         else:
             ui.notify(message, color=color, timeout=timeout)
     except RuntimeError as exc:
-        if "parent element this slot belongs to has been deleted" not in str(exc):
+        if not is_deleted_ui_context_error(exc):
             raise
         logger.warning("Não foi possível notificar ação visual: contexto da página foi removido.")
 
@@ -515,4 +525,4 @@ async def _approve_video_prompts_from_ui(
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:
         if loading_dialog is not None:
-            loading_dialog.close()
+            safe_close_ui_element(loading_dialog)

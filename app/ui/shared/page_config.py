@@ -1,7 +1,10 @@
 import re
 from dataclasses import dataclass
+import logging
 
 from nicegui import ui
+
+logger = logging.getLogger(__name__)
 
 BRAND_MARK_URL = "/ui-assets/favicon.png"
 DEFAULT_STORY_DURATION_MINUTES = 5.0
@@ -190,6 +193,26 @@ def friendly_ai_error(exc: BaseException) -> str:
     return "A IA não respondeu ou retornou um erro inesperado. Tente novamente."
 
 
+def is_deleted_ui_context_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return (
+        "client this element belongs to has been deleted" in text
+        or "parent element this slot belongs to has been deleted" in text
+    )
+
+
+def safe_close_ui_element(element: object) -> None:
+    close = getattr(element, "close", None)
+    if not callable(close):
+        return
+    try:
+        close()
+    except RuntimeError as exc:
+        if not is_deleted_ui_context_error(exc):
+            raise
+        logger.warning("Could not close UI element because the page context was removed.")
+
+
 def show_ai_error_popup(
     message: str | None = None,
     *,
@@ -218,4 +241,9 @@ def show_ai_error_popup(
                 )
         dialog.open()
     except RuntimeError:
-        ui.notify(f"{title}: {safe_message}", color="negative", timeout=9000, close_button=True)
+        try:
+            ui.notify(f"{title}: {safe_message}", color="negative", timeout=9000, close_button=True)
+        except RuntimeError as notify_exc:
+            if not is_deleted_ui_context_error(notify_exc):
+                raise
+            logger.warning("Could not show AI error because the page context was removed.")

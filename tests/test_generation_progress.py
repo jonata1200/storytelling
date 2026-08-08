@@ -1,4 +1,6 @@
 from app.ui.shared.generation_progress import progress_percent_text, progress_ratio
+from app.ui.shared.page_config import is_deleted_ui_context_error, safe_close_ui_element
+from app.ui.visual.actions import _emit_visual_batch_progress
 
 
 def test_progress_ratio_is_clamped() -> None:
@@ -13,3 +15,28 @@ def test_progress_percent_text_uses_percentage() -> None:
     assert progress_percent_text(1, 4) == "25%"
     assert progress_percent_text(2, 3) == "67%"
     assert progress_percent_text(10, 10) == "100%"
+
+
+def test_deleted_ui_context_errors_are_detected() -> None:
+    assert is_deleted_ui_context_error(
+        RuntimeError("The client this element belongs to has been deleted.")
+    )
+    assert is_deleted_ui_context_error(
+        RuntimeError("The parent element this slot belongs to has been deleted.")
+    )
+    assert not is_deleted_ui_context_error(RuntimeError("other failure"))
+
+
+def test_safe_close_ui_element_ignores_deleted_client() -> None:
+    class DeletedDialog:
+        def close(self) -> None:
+            raise RuntimeError("The client this element belongs to has been deleted.")
+
+    safe_close_ui_element(DeletedDialog())
+
+
+async def test_visual_progress_ignores_deleted_client() -> None:
+    def callback(_completed: int, _total: int, _detail: str) -> None:
+        raise RuntimeError("The client this element belongs to has been deleted.")
+
+    await _emit_visual_batch_progress(callback, 1, 2, "Gerando")
