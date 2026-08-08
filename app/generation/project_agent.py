@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dubbing.models import DubbingJob
 from app.dubbing.service import start_project_dubbing
 from app.finalization.models import Export
+from app.finalization.models import SubtitleTrack
 from app.finalization.service import (
     create_final_timeline,
     export_timeline,
@@ -50,6 +51,7 @@ from app.generation.project_agent_visual import (  # noqa: E402,F401
     _normalize_match_text,
     _requests_all_visual_targets,
     _requests_all_visual_views,
+    _requests_visual_bible_reset,
     _requests_regeneration,
     _requests_visual_prompt_approval,
     _visual_chat_targets,
@@ -61,7 +63,7 @@ from app.projects.versioning import (
     resolve_stale_artifacts_after_regeneration,
 )
 from app.quality.service import run_quality_check
-from app.storyboards.models import Animatic, StoryboardFrame, Timeline
+from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
 from app.storyboards.service import (
     generate_animatic_bundle,
     generate_storyboard_frames,
@@ -83,9 +85,47 @@ from app.visual_bible.service import (  # noqa: F401
 )
 from app.visual_bible.service import (
     generate_visual_bible,
+    reset_visual_bible,
     visual_reference_completion_message,
     visual_reference_completion_report,
 )
+
+
+SCRIPT_AGENT_EDIT_BLOCKER_MODELS = (
+    ("personagens", Character),
+    ("locais", Location),
+    ("objetos", Prop),
+    ("referencias visuais", VisualReference),
+    ("storyboard", StoryboardFrame),
+    ("animatic", Animatic),
+    ("timeline", Timeline),
+    ("faixas de audio", AudioTrack),
+    ("clipes de video", VideoClip),
+    ("exportacoes", Export),
+    ("legendas", SubtitleTrack),
+    ("dublagem", DubbingJob),
+)
+
+
+async def _script_agent_edit_blockers(
+    session: AsyncSession,
+    project_id: UUID,
+) -> dict[str, int]:
+    blockers: dict[str, int] = {}
+    for label, model in SCRIPT_AGENT_EDIT_BLOCKER_MODELS:
+        count = await _count(session, model, project_id)
+        if count:
+            blockers[label] = count
+    return blockers
+
+
+def _script_agent_edit_blocked_message(blockers: dict[str, int]) -> str:
+    details = ", ".join(f"{label}: {count}" for label, count in sorted(blockers.items()))
+    return (
+        "Não posso alterar o roteiro pelo agente porque o projeto já avançou além da "
+        f"etapa de roteiro ({details}). Para proteger a continuidade, faça ajustes no "
+        "roteiro apenas enquanto ainda não houver Biblioteca Visual, storyboard ou vídeo."
+    )
 
 
 async def _ensure_script_pipeline(
@@ -153,6 +193,7 @@ async def _ensure_visual_pipeline(
     session: AsyncSession,
     project_id: UUID,
     force: bool = False,
+    reset_existing: bool = False,
     progress: ProgressCallback | None = None,
 ) -> ProjectChatResult:
     script, message, changed = await _ensure_script_pipeline(session, project_id, progress)
@@ -164,11 +205,27 @@ async def _ensure_visual_pipeline(
             failed=_is_ai_generation_failure_message(message),
         )
 
+    reset_counts: dict[str, int] | None = None
+    if reset_existing:
+        await _emit_progress(
+            progress,
+            "Vou apagar a Biblioteca Visual atual e recriar os prompts a partir do roteiro.",
+        )
+        try:
+            reset_counts = await reset_visual_bible(session, project_id)
+        except ValueError as exc:
+            return ProjectChatResult(str(exc), "generate_assets", False, True)
+        changed = True
+
     existing_characters = await _count(session, Character, project_id)
     existing_locations = await _count(session, Location, project_id)
     existing_props = await _count(session, Prop, project_id)
     needs_visual = (
-        force or existing_characters == 0 or existing_locations == 0 or existing_props == 0
+        reset_existing
+        or force
+        or existing_characters == 0
+        or existing_locations == 0
+        or existing_props == 0
     )
     changed = changed or needs_visual
     if needs_visual:
@@ -189,6 +246,20 @@ async def _ensure_visual_pipeline(
         )
 
     visual_refs = await _count(session, VisualReference, project_id)
+    if reset_counts is not None:
+        removed = (
+            reset_counts.get("characters", 0)
+            + reset_counts.get("locations", 0)
+            + reset_counts.get("props", 0)
+        )
+        return ProjectChatResult(
+            (
+                f"Biblioteca Visual recriada do zero. Removi {removed} item(ns) antigo(s) "
+                "e gerei novos personagens, locais e objetos para revisão."
+            ),
+            "generate_assets",
+            True,
+        )
     if visual_refs == 0:
         return ProjectChatResult(
             "Personagens, locais e objetos foram preparados. "
@@ -490,6 +561,15 @@ async def handle_project_chat(
     if action == "generate_ideas":
         return await _ensure_ideas_pipeline(session, project_id, progress=progress)
     if action == "generate_script":
+        if force:
+            blockers = await _script_agent_edit_blockers(session, project_id)
+            if blockers:
+                return ProjectChatResult(
+                    _script_agent_edit_blocked_message(blockers),
+                    action,
+                    False,
+                    True,
+                )
         _script, result_message, changed = await _ensure_script_pipeline(
             session, project_id, progress, force=force
         )
@@ -500,6 +580,14 @@ async def handle_project_chat(
             failed=_is_ai_generation_failure_message(result_message),
         )
     if action == "revise_script":
+        blockers = await _script_agent_edit_blockers(session, project_id)
+        if blockers:
+            return ProjectChatResult(
+                _script_agent_edit_blocked_message(blockers),
+                action,
+                False,
+                True,
+            )
         script, result_message, changed = await _ensure_script_pipeline(
             session, project_id, progress
         )
@@ -553,7 +641,13 @@ async def handle_project_chat(
             True,
         )
     if action == "generate_assets":
-        return await _ensure_visual_pipeline(session, project_id, force=force, progress=progress)
+        return await _ensure_visual_pipeline(
+            session,
+            project_id,
+            force=force,
+            reset_existing=_requests_visual_bible_reset(message),
+            progress=progress,
+        )
     if action == "approve_visual_prompt":
         return await _approve_visual_prompt_from_chat(
             session,

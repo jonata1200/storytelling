@@ -3,7 +3,7 @@ from time import perf_counter
 from typing import TypedDict
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approvals.service import record_approval
@@ -18,6 +18,8 @@ from app.core.enums import (
 )
 from app.costs.models import CostEntry
 from app.costs.service import cost_audit_metadata, estimate_operation_cost, final_budget_cost
+from app.dubbing.models import DubbingJob
+from app.finalization.models import Export, SubtitleTrack
 from app.generation.model_settings import llm_provider_for_task
 from app.generation.models import PromptExecution
 from app.generation.service import run_structured_generation
@@ -26,12 +28,15 @@ from app.production.service import (
     normalize_image_aspect_ratio,
     normalize_image_resolution,
 )
-from app.projects.models import Artifact, ArtifactVersion
+from app.projects.models import Approval, Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import create_artifact_version
 from app.providers.image.types import ImageGenerationRequest
 from app.storage.service import apply_asset_storage_metadata
+from app.storyboards.assets import _delete_local_storage_file
+from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
 from app.storytelling.models import Script, StoryIdea
+from app.video_generation.models import VideoClip
 from app.visual_bible.artifacts import _add_dependency, _create_artifact
 from app.visual_bible.image_generation import (
     _generate_image_with_provider_fallback,
@@ -96,6 +101,7 @@ from app.visual_bible.upsert import (
     _upsert_location_profile,
     _upsert_prop_profile,
 )
+from app.workflows.models import ArtifactDependency
 
 
 class VisualReferenceCompletionReport(TypedDict):
@@ -105,6 +111,160 @@ class VisualReferenceCompletionReport(TypedDict):
     expected_references: int
     existing_references: int
     missing_views: int
+
+
+VISUAL_RESET_BLOCKER_MODELS = (
+    ("storyboard", StoryboardFrame),
+    ("animatics", Animatic),
+    ("timelines", Timeline),
+    ("audio_tracks", AudioTrack),
+    ("video_clips", VideoClip),
+    ("exports", Export),
+    ("subtitle_tracks", SubtitleTrack),
+    ("dubbing_jobs", DubbingJob),
+)
+
+
+async def visual_bible_reset_blockers(
+    session: AsyncSession,
+    project_id: UUID,
+) -> dict[str, int]:
+    blockers: dict[str, int] = {}
+    for key, model in VISUAL_RESET_BLOCKER_MODELS:
+        result = await session.execute(select(model.id).where(model.project_id == project_id))
+        count = len(result.all())
+        if count:
+            blockers[key] = count
+    return blockers
+
+
+def visual_bible_reset_blocker_message(blockers: dict[str, int]) -> str:
+    labels = {
+        "storyboard": "storyboard",
+        "animatics": "animatic",
+        "timelines": "timeline",
+        "audio_tracks": "faixas de audio",
+        "video_clips": "clipes de video",
+        "exports": "exportacoes",
+        "subtitle_tracks": "legendas",
+        "dubbing_jobs": "dublagem",
+    }
+    details = ", ".join(
+        f"{labels.get(key, key)}: {value}" for key, value in sorted(blockers.items())
+    )
+    return (
+        "Não posso apagar e recriar a Biblioteca Visual porque o projeto já avançou "
+        f"além da etapa de personagens ({details})."
+    )
+
+
+async def reset_visual_bible(
+    session: AsyncSession,
+    project_id: UUID,
+) -> dict[str, int]:
+    blockers = await visual_bible_reset_blockers(session, project_id)
+    if blockers:
+        raise ValueError(visual_bible_reset_blocker_message(blockers))
+
+    character_result = await session.execute(
+        select(Character.id, Character.artifact_id).where(Character.project_id == project_id)
+    )
+    location_result = await session.execute(
+        select(Location.id, Location.artifact_id).where(Location.project_id == project_id)
+    )
+    prop_result = await session.execute(
+        select(Prop.id, Prop.artifact_id).where(Prop.project_id == project_id)
+    )
+    reference_result = await session.execute(
+        select(VisualReference.id, VisualReference.artifact_id, VisualReference.asset_id).where(
+            VisualReference.project_id == project_id
+        )
+    )
+
+    character_rows = character_result.all()
+    location_rows = location_result.all()
+    prop_rows = prop_result.all()
+    reference_rows = reference_result.all()
+
+    character_ids = [row[0] for row in character_rows]
+    location_ids = [row[0] for row in location_rows]
+    prop_ids = [row[0] for row in prop_rows]
+    reference_ids = [row[0] for row in reference_rows]
+    asset_ids = {row[2] for row in reference_rows if row[2] is not None}
+    artifact_ids = {
+        row[1]
+        for row in [*character_rows, *location_rows, *prop_rows, *reference_rows]
+        if row[1] is not None
+    }
+
+    asset_storage_uris: list[str] = []
+    if asset_ids:
+        storage_result = await session.execute(
+            select(Asset.storage_uri).where(
+                Asset.project_id == project_id,
+                Asset.id.in_(asset_ids),
+            )
+        )
+        asset_storage_uris = [str(row[0] or "") for row in storage_result.all()]
+
+    if reference_ids:
+        await session.execute(
+            delete(VisualReference).where(VisualReference.id.in_(reference_ids))
+        )
+    if character_ids:
+        await session.execute(
+            delete(CharacterVersion).where(CharacterVersion.character_id.in_(character_ids))
+        )
+        await session.execute(delete(Character).where(Character.id.in_(character_ids)))
+    if location_ids:
+        await session.execute(
+            delete(LocationVersion).where(LocationVersion.location_id.in_(location_ids))
+        )
+        await session.execute(delete(Location).where(Location.id.in_(location_ids)))
+    if prop_ids:
+        await session.execute(delete(PropVersion).where(PropVersion.prop_id.in_(prop_ids)))
+        await session.execute(delete(Prop).where(Prop.id.in_(prop_ids)))
+    if asset_ids:
+        await session.execute(delete(AssetVersion).where(AssetVersion.asset_id.in_(asset_ids)))
+        await session.execute(delete(Asset).where(Asset.id.in_(asset_ids)))
+    if artifact_ids:
+        await session.execute(
+            delete(CostEntry).where(
+                CostEntry.project_id == project_id,
+                CostEntry.artifact_id.in_(artifact_ids),
+            )
+        )
+        await session.execute(
+            delete(PromptExecution).where(
+                PromptExecution.project_id == project_id,
+                PromptExecution.artifact_id.in_(artifact_ids),
+            )
+        )
+        await session.execute(
+            delete(ArtifactDependency).where(
+                (ArtifactDependency.upstream_artifact_id.in_(artifact_ids))
+                | (ArtifactDependency.downstream_artifact_id.in_(artifact_ids))
+            )
+        )
+        await session.execute(delete(Approval).where(Approval.artifact_id.in_(artifact_ids)))
+        await session.execute(
+            delete(ArtifactVersion).where(ArtifactVersion.artifact_id.in_(artifact_ids))
+        )
+        await session.execute(delete(Artifact).where(Artifact.id.in_(artifact_ids)))
+
+    deleted_files = sum(
+        1 for storage_uri in asset_storage_uris if _delete_local_storage_file(storage_uri)
+    )
+    await session.flush()
+    return {
+        "characters": len(character_ids),
+        "locations": len(location_ids),
+        "props": len(prop_ids),
+        "visual_references": len(reference_ids),
+        "assets": len(asset_ids),
+        "artifacts": len(artifact_ids),
+        "files": deleted_files,
+    }
 
 
 

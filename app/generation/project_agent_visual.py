@@ -64,6 +64,35 @@ def _requests_visual_prompt_approval(message: str) -> bool:
     )
 
 
+def _requests_visual_bible_reset(message: str) -> bool:
+    normalized = _normalize_match_text(message)
+    visual_terms = (
+        "biblioteca visual",
+        "prompts visuais",
+        "prompt visual",
+        "personagens",
+        "locais",
+        "objetos",
+    )
+    reset_terms = (
+        "apagar antigos",
+        "apague antigos",
+        "deletar antigos",
+        "excluir antigos",
+        "limpar antigos",
+        "remover antigos",
+        "substituir",
+        "substitua",
+        "do zero",
+        "zerar",
+        "recriar tudo",
+        "refazer tudo",
+    )
+    return any(term in normalized for term in visual_terms) and any(
+        term in normalized for term in reset_terms
+    )
+
+
 @dataclass(frozen=True)
 class VisualChatTarget:
     kind: str

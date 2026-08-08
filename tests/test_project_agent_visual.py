@@ -12,3 +12,9 @@ test_visual_prompt_approval_asks_for_target_when_ambiguous = (
 test_project_chat_forces_regeneration_for_visual_requests = (
     cases.test_project_chat_forces_regeneration_for_visual_requests
 )
+test_project_chat_can_reset_visual_bible_when_explicitly_requested = (
+    cases.test_project_chat_can_reset_visual_bible_when_explicitly_requested
+)
+test_visual_pipeline_reports_blocked_reset_for_advanced_project = (
+    cases.test_visual_pipeline_reports_blocked_reset_for_advanced_project
+)

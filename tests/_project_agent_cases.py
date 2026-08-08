@@ -134,7 +134,11 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
         calls.append("resolve_stale")
         return 3
 
+    async def fake_script_blockers(*args: Any, **kwargs: Any) -> dict[str, int]:
+        return {}
+
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_script_agent_edit_blockers", fake_script_blockers)
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
     monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
     monkeypatch.setattr(project_agent, "regenerate_scenes_and_shots", fake_regenerate_scenes)
@@ -203,7 +207,11 @@ async def test_project_chat_can_revise_specific_script_scenes(
         calls.append("resolve_stale")
         return 2
 
+    async def fake_script_blockers(*args: Any, **kwargs: Any) -> dict[str, int]:
+        return {}
+
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_script_agent_edit_blockers", fake_script_blockers)
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
     monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
     monkeypatch.setattr(project_agent, "regenerate_scenes_and_shots", fake_regenerate_scenes)
@@ -262,7 +270,11 @@ async def test_project_chat_can_force_full_script_regeneration(
             True,
         )
 
+    async def fake_script_blockers(*args: Any, **kwargs: Any) -> dict[str, int]:
+        return {}
+
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_script_agent_edit_blockers", fake_script_blockers)
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
 
     result = await handle_project_chat(
@@ -279,6 +291,75 @@ async def test_project_chat_can_force_full_script_regeneration(
         True,
     )
     assert captured_force == [True]
+
+
+@pytest.mark.asyncio
+async def test_project_chat_blocks_script_regeneration_after_visual_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        assert requested_project_id == project_id
+        return {"counts": {"scripts": 1, "characters": 1}}
+
+    async def fake_count(session: AsyncSession, model: type[Any], requested_project_id: Any) -> int:
+        assert requested_project_id == project_id
+        return 1 if model is project_agent.Character else 0
+
+    async def fail_ensure_script(*args: Any, **kwargs: Any) -> tuple[None, str, bool]:
+        raise AssertionError("script should not be regenerated after visual stage")
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_count", fake_count)
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fail_ensure_script)
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "script",
+        "gere novamente o roteiro completo",
+        [],
+    )
+
+    assert result.action == "generate_script"
+    assert result.changed is False
+    assert result.failed is True
+    assert "Não posso alterar o roteiro pelo agente" in result.message
+
+
+@pytest.mark.asyncio
+async def test_project_chat_blocks_script_revision_after_visual_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        assert requested_project_id == project_id
+        return {"counts": {"scripts": 1, "visual_refs": 1}}
+
+    async def fake_count(session: AsyncSession, model: type[Any], requested_project_id: Any) -> int:
+        assert requested_project_id == project_id
+        return 1 if model is project_agent.VisualReference else 0
+
+    async def fail_ensure_script(*args: Any, **kwargs: Any) -> tuple[None, str, bool]:
+        raise AssertionError("script should not be revised after visual stage")
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_count", fake_count)
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fail_ensure_script)
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "script",
+        "melhore os diálogos do roteiro",
+        [],
+    )
+
+    assert result.action == "revise_script"
+    assert result.failed is True
+    assert "Não posso alterar o roteiro pelo agente" in result.message
 
 
 @pytest.mark.asyncio
@@ -384,11 +465,13 @@ async def test_project_chat_routes_assets_storyboard_and_video(
         session: AsyncSession,
         requested_project_id: Any,
         force: bool = False,
+        reset_existing: bool = False,
         progress: Any = None,
     ) -> ProjectChatResult:
         calls.append("assets")
         assert requested_project_id == project_id
         assert force is False
+        assert reset_existing is False
         return ProjectChatResult("assets ok", "generate_assets", True)
 
     async def fake_storyboard(
@@ -511,10 +594,12 @@ async def test_project_chat_uses_project_state_for_progression_requests(
         session: AsyncSession,
         requested_project_id: Any,
         force: bool = False,
+        reset_existing: bool = False,
         progress: Any = None,
     ) -> ProjectChatResult:
         calls.append("assets")
         assert requested_project_id == project_id
+        assert reset_existing is False
         return ProjectChatResult("assets ok", "generate_assets", True)
 
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
@@ -981,9 +1066,11 @@ async def test_project_chat_forces_regeneration_for_visual_requests(
         session: AsyncSession,
         requested_project_id: Any,
         force: bool = False,
+        reset_existing: bool = False,
         progress: Any = None,
     ) -> ProjectChatResult:
         captured_force.append(force)
+        assert reset_existing is False
         return ProjectChatResult("assets revisados", "generate_assets", True)
 
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
@@ -999,6 +1086,79 @@ async def test_project_chat_forces_regeneration_for_visual_requests(
 
     assert result.action == "generate_assets"
     assert captured_force == [True]
+
+
+@pytest.mark.asyncio
+async def test_project_chat_can_reset_visual_bible_when_explicitly_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    captured_reset: list[bool] = []
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        return {"project_id": str(requested_project_id)}
+
+    async def fake_assets(
+        session: AsyncSession,
+        requested_project_id: Any,
+        force: bool = False,
+        reset_existing: bool = False,
+        progress: Any = None,
+    ) -> ProjectChatResult:
+        captured_reset.append(reset_existing)
+        assert force is False
+        return ProjectChatResult("biblioteca visual recriada", "generate_assets", True)
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(project_agent, "_ensure_visual_pipeline", fake_assets)
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "assets",
+        "apague os prompts visuais antigos e gere novos do zero",
+        [],
+    )
+
+    assert result.action == "generate_assets"
+    assert captured_reset == [True]
+
+
+@pytest.mark.asyncio
+async def test_visual_pipeline_reports_blocked_reset_for_advanced_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+
+    async def fake_script(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+    ) -> tuple[SimpleNamespace, str, bool]:
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=script_id), "script ok", False
+
+    async def fake_reset(*args: Any, **kwargs: Any) -> dict[str, int]:
+        raise ValueError("Não posso apagar e recriar a Biblioteca Visual")
+
+    async def fail_visual_bible(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("visual bible should not be generated when reset is blocked")
+
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
+    monkeypatch.setattr(project_agent, "reset_visual_bible", fake_reset)
+    monkeypatch.setattr(project_agent, "generate_visual_bible", fail_visual_bible)
+
+    result = await project_agent._ensure_visual_pipeline(
+        cast(AsyncSession, object()),
+        project_id,
+        force=True,
+        reset_existing=True,
+    )
+
+    assert result.action == "generate_assets"
+    assert result.failed is True
+    assert "Não posso apagar" in result.message
 
 
 @pytest.mark.asyncio
