@@ -11,16 +11,11 @@ from app.observability.schemas import ReadinessComponentRead
 
 def test_create_app_without_ui_starts_api_routes() -> None:
     app = create_app(include_ui=False)
+    client = TestClient(app)
 
     assert app.title == "Storytelling"
     assert len(app.routes) >= 2
-
-
-def test_injected_widget_script_request_does_not_log_404() -> None:
-    client = TestClient(create_app(include_ui=False))
-
     response = client.get("/static/widget.js")
-
     assert response.status_code == 200
     assert response.text == ""
     assert response.headers["content-type"].startswith("application/javascript")

@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+import app.auth.user_store as auth_user_store
 import app.providers.media_utils as media_utils
 import app.ui.workspace.assets_area as assets_area
 import app.video_generation.service as video_generation_service
@@ -52,7 +53,10 @@ def test_app_without_auth_does_not_mask_endpoint_exceptions() -> None:
         client.get("/")
 
 
-def test_local_user_store_creates_and_verifies_user(tmp_path: Path) -> None:
+def test_local_user_store_creates_and_verifies_user(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(auth_user_store, "PBKDF2_ITERATIONS", 1)
     users_path = tmp_path / "users.json"
     create_user("Jonata", "senha-segura", users_path)
 

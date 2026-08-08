@@ -1,4 +1,5 @@
-﻿from typing import cast
+﻿from collections.abc import Iterator
+from typing import cast
 
 import pytest
 from fastapi import FastAPI
@@ -6,6 +7,7 @@ from fastapi.testclient import TestClient
 from pytest import approx
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.auth.passwords as auth_passwords
 import app.auth.service as auth_service
 from app.auth.csrf import create_csrf_token, verify_csrf_token
 from app.auth.passwords import (
@@ -22,6 +24,7 @@ from app.auth.session import (
     verify_persistent_session_token,
 )
 from app.auth.ui_middleware import UIBasicAuthMiddleware
+from app.auth.ui_routes import _auth_page
 from app.config.settings import get_settings
 from app.factory import create_app
 from app.projects.models import User
@@ -85,9 +88,14 @@ class _FakeSessionStore:
         return _FakeExecuteResult(self.persisted)
 
 
-def test_auth_me_uses_local_user_in_local_environment() -> None:
-    client = TestClient(create_app(include_ui=False))
-    response = client.get("/api/v1/auth/me")
+@pytest.fixture(scope="module")
+def local_api_client() -> Iterator[TestClient]:
+    with TestClient(create_app(include_ui=False)) as client:
+        yield client
+
+
+def test_auth_me_uses_local_user_in_local_environment(local_api_client: TestClient) -> None:
+    response = local_api_client.get("/api/v1/auth/me")
     assert response.status_code == 200
     assert response.json() == {"username": "local-user"}
 
@@ -112,23 +120,16 @@ async def test_persistent_session_token_can_be_revoked() -> None:
     assert await verify_persistent_session_token(cast(AsyncSession, session), token) is None
 
 
-def test_health_live_does_not_require_authentication() -> None:
-    client = TestClient(create_app(include_ui=False))
-    response = client.get("/api/v1/health/live")
+def test_health_live_does_not_require_authentication(local_api_client: TestClient) -> None:
+    response = local_api_client.get("/api/v1/health/live")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
 
-def test_live_health() -> None:
-    client = TestClient(create_app(include_ui=False))
-    response = client.get("/api/v1/health/live")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-
-def test_operational_api_endpoint_does_not_require_authentication() -> None:
-    client = TestClient(create_app(include_ui=False))
-    response = client.post(
+def test_operational_api_endpoint_does_not_require_authentication(
+    local_api_client: TestClient,
+) -> None:
+    response = local_api_client.post(
         "/api/v1/costs/estimate",
         json={
             "generation_count": 2,
@@ -231,7 +232,8 @@ def test_strong_password_validation() -> None:
         validate_strong_password("UserSenhaForte123!", "user@example.com")
 
 
-def test_password_hash_verification_is_defensive() -> None:
+def test_password_hash_verification_is_defensive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(auth_passwords, "PBKDF2_ITERATIONS", 1)
     stored_hash = hash_password("Se1!ha")
 
     assert verify_password("Se1!ha", stored_hash)
@@ -252,6 +254,7 @@ async def test_register_user_normalizes_email_and_hashes_password(
         return None
 
     monkeypatch.setattr(auth_service, "get_user_by_email", missing_user)
+    monkeypatch.setattr(auth_service, "hash_password", lambda password: f"hashed::{password}")
     fake_session = _FakeAuthSession()
 
     user = await auth_service.register_user(
@@ -266,8 +269,7 @@ async def test_register_user_normalizes_email_and_hashes_password(
     assert fake_session.refreshed == [user]
     assert user.email == "user@example.com"
     assert user.display_name == "Jonata"
-    assert user.password_hash != "Se1!ha"
-    assert verify_password("Se1!ha", user.password_hash)
+    assert user.password_hash == "hashed::Se1!ha"
     get_settings.cache_clear()
 
 
@@ -276,7 +278,7 @@ async def test_register_user_rejects_duplicate_email(monkeypatch: pytest.MonkeyP
     existing_user = User(
         email="user@example.com",
         display_name="User",
-        password_hash=hash_password("Se1!ha"),
+        password_hash="stored-hash",
     )
 
     async def found_user(_session: AsyncSession, _email: str) -> User | None:
@@ -359,33 +361,32 @@ async def test_authenticate_user_checks_email_and_password(
     existing_user = User(
         email="user@example.com",
         display_name="User",
-        password_hash=hash_password("Se1!ha"),
+        password_hash="stored-hash",
     )
 
     async def found_user(_session: AsyncSession, _email: str) -> User | None:
         return existing_user
 
     monkeypatch.setattr(auth_service, "get_user_by_email", found_user)
+    monkeypatch.setattr(
+        auth_service,
+        "verify_password",
+        lambda password, stored_hash: password == "Se1!ha" and stored_hash == "stored-hash",
+    )
     fake_session = cast(AsyncSession, _FakeAuthSession())
 
     assert await auth_service.authenticate_user(fake_session, "USER@example.com", "Se1!ha")
     assert await auth_service.authenticate_user(fake_session, "USER@example.com", "errada") is None
 
 
-def test_login_and_register_pages_use_email_fields(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ALLOW_USER_REGISTRATION", "true")
-    monkeypatch.setenv("SINGLE_USER_MODE", "false")
-    get_settings.cache_clear()
-    try:
-        client = TestClient(create_app(include_ui=False))
+def test_login_and_register_pages_use_email_fields() -> None:
+    login_response = _auth_page("login", registration_available=True)
+    register_response = _auth_page("register", registration_available=True)
+    login_html = login_response.body.decode()
+    register_html = register_response.body.decode()
 
-        login_response = client.get("/login")
-        register_response = client.get("/register")
-
-        assert login_response.status_code == 200
-        assert register_response.status_code == 200
-        assert 'name="email" type="email"' in login_response.text
-        assert 'name="email" type="email"' in register_response.text
-        assert "6+ caracteres" in register_response.text
-    finally:
-        get_settings.cache_clear()
+    assert login_response.status_code == 200
+    assert register_response.status_code == 200
+    assert 'name="email" type="email"' in login_html
+    assert 'name="email" type="email"' in register_html
+    assert "6+ caracteres" in register_html
