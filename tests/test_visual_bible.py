@@ -305,6 +305,33 @@ def test_merge_profile_items_replaces_generic_story_bible_items_with_script_fall
     assert [item["name"] for item in merged] == ["Cozinha De Dona Lourdes", "Quintal"]
 
 
+def test_merge_profile_items_filters_temporal_location_names() -> None:
+    merged = _merge_profile_items(
+        "location",
+        [{"name": "Momentos Depois Do Museu Sala De Segurança"}],
+        [{"name": "Sala De Segurança Do Museu"}],
+    )
+
+    assert [item["name"] for item in merged] == ["Sala De Segurança Do Museu"]
+
+
+def test_prop_profile_cleans_contextual_names_for_single_object_prompts() -> None:
+    prop = _prop_profile(
+        {
+            "name": "Chave escondida atrás de um quadro",
+            "narrative_importance": "A chave está escondida atrás do quadro.",
+            "material": "metal antigo",
+            "color": "bronze escurecido",
+        }
+    )
+    prompt = visual_reference_prompt(prop, "front")
+
+    assert prop["name"] == "Chave"
+    assert "quadro" not in prop["canonical_prompt"].lower()
+    assert "atrás" not in prompt.lower()
+    assert "sem outros objetos" in prompt
+
+
 def test_character_profile_formats_structured_outfit_as_prompt_text() -> None:
     character = _character_profile(
         {

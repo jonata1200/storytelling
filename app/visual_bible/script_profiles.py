@@ -112,6 +112,13 @@ SCENE_LOCATION_CONTEXT_MARKERS = {
 }
 
 
+TEMPORAL_LOCATION_PREFIX_RE = re.compile(
+    r"^(?:alguns?\s+)?(?:momentos?\s+depois|instantes?\s+depois|mais\s+tarde|"
+    r"logo\s+depois|em\s+seguida|depois)\b",
+    re.IGNORECASE,
+)
+
+
 FEMININE_LOCATION_PARENTS = {"casa", "cidade", "cozinha", "escola", "sala"}
 
 
@@ -132,7 +139,8 @@ def _clean_script_location_name(value: str) -> str:
         parent_root = _ascii_lower(parent).split()[0]
         parent_prefix = "Da" if parent_root in FEMININE_LOCATION_PARENTS else "Do"
         return f"{head} {parent_prefix} {parent}".strip()
-    return _clean_script_entity_name(location_parts[0] if location_parts else value)
+    name = _clean_script_entity_name(location_parts[0] if location_parts else value)
+    return "" if TEMPORAL_LOCATION_PREFIX_RE.search(_ascii_lower(name)) else name
 
 
 def _script_heading_period(value: str) -> str:

@@ -334,6 +334,34 @@ def _ascii_lower(value: object) -> str:
     normalized = unicodedata.normalize("NFKD", text)
     return normalized.encode("ascii", "ignore").decode("ascii").lower()
 
+
+TEMPORAL_LOCATION_PREFIX_RE = re.compile(
+    r"^(?:alguns?\s+)?(?:momentos?\s+depois|instantes?\s+depois|mais\s+tarde|"
+    r"logo\s+depois|em\s+seguida|depois)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_temporal_location_name(value: object) -> bool:
+    return bool(TEMPORAL_LOCATION_PREFIX_RE.search(_ascii_lower(value)))
+
+
+def _clean_visual_prop_name(value: object) -> str:
+    text = str(value or "").strip()
+    text = re.sub(r"\([^)]*\)", "", text)
+    text = re.split(
+        r"(?i)\s+(?:que|onde|quando)\b|\s+(?:atras|atrás|dentro|embaixo|sobre|ao lado)\s+",
+        text,
+        maxsplit=1,
+    )[0]
+    text = re.sub(
+        r"(?i)\b(?:escondid[ao]s?|ocult[ao]s?|guardad[ao]s?)\b",
+        "",
+        text,
+    )
+    text = re.sub(r"\s+", " ", text).strip(" .:-")
+    return text
+
 from app.visual_bible.character_profiles import (  # noqa: E402,F401
     _character_gender,
     _character_gender_guardrail,
@@ -419,7 +447,7 @@ def _location_profile(raw: object) -> dict:
 
 def _prop_profile(raw: object) -> dict:
     raw = _profile_mapping(raw)
-    name = str(raw.get("name") or "Objeto")
+    name = _clean_visual_prop_name(raw.get("name") or "Objeto") or "Objeto"
     dimensions = _first_value(
         raw,
         "dimensions",
@@ -473,10 +501,10 @@ def _prop_profile(raw: object) -> dict:
         "asset_kind": "prop",
         "canonical_prompt": (
             f"Fotorrealista, fotografia de produto. Um único {name}, inteiro e centralizado. "
-            f"Importancia: {_prompt_text(narrative_importance)}. "
             f"Dimensoes: {_prompt_text(dimensions)}. Material: {_prompt_text(material)}. "
             f"Cor: {_prompt_text(color)}. Estado: {_prompt_text(state)}. "
-            f"Relacao narrativa: {_prompt_text(owner)}. "
+            "Referencia isolada do prop para continuidade visual; nao encenar a acao "
+            "narrativa e nao incluir objetos citados no contexto. "
             "Silhueta clara, textura realista, detalhes legíveis. "
             "Sem mãos, sem pessoas, sem cenario, sem outros objetos."
         ),
@@ -550,13 +578,14 @@ VISUAL_CHARACTER_HONORIFIC_PREFIXES = {
 
 
 def _visual_item_name(item: dict) -> str:
-    return str(
+    name = str(
         item.get("name")
         or item.get("nome")
         or item.get("title")
         or item.get("titulo")
         or ""
     ).strip()
+    return name
 
 
 def _looks_like_screenplay_marker_name(value: object) -> bool:
@@ -609,6 +638,8 @@ def _invalid_visual_item(target_kind: str, item: dict) -> bool:
     name = _visual_item_name(item)
     if _looks_like_screenplay_marker_name(name):
         return True
+    if target_kind == "location" and _looks_like_temporal_location_name(name):
+        return True
     if target_kind == "prop":
         normalized_name = re.sub(r"\s+", " ", _ascii_lower(name)).strip()
         if normalized_name in WEAK_SET_DRESSING_PROP_NAMES and not _has_strong_prop_evidence(
@@ -623,6 +654,8 @@ def _visual_merge_key(target_kind: str, item: dict) -> str:
     if key:
         return key
     name = _visual_item_name(item)
+    if target_kind == "prop":
+        return _visual_key(_clean_visual_prop_name(name))
     if target_kind != "character":
         return _visual_key(name)
     tokens = _ascii_lower(name).split()
@@ -649,6 +682,8 @@ def visual_profile_validation_errors(target_kind: str, profile: dict) -> list[st
         errors.append(f"name generico: {name}")
     elif _looks_like_screenplay_marker_name(name):
         errors.append(f"name marcador de roteiro: {name}")
+    elif target_kind == "location" and _looks_like_temporal_location_name(name):
+        errors.append(f"name temporal em vez de local: {name}")
     if profile.get("asset_kind") != target_kind:
         errors.append(f"asset_kind deve ser {target_kind}")
     if not str(profile.get("canonical_prompt") or "").strip():

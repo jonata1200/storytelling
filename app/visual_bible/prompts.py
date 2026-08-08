@@ -231,11 +231,11 @@ def _compact_visual_base_prompt(profile: dict) -> str:
         parts = [
             "Fotorrealista, fotografia de produto",
             name,
-            f"importancia {_prompt_text(profile.get('narrative_importance'))}",
             f"dimensoes {_prompt_text(profile.get('dimensions'))}",
             f"material {_prompt_text(profile.get('material'))}",
             f"cor {_prompt_text(profile.get('color'))}",
             f"estado {_prompt_text(profile.get('state'))}",
+            "referencia isolada do objeto, sem encenar contexto narrativo",
         ]
         return _truncate_prompt_text(". ".join(part for part in parts if part), 320)
     fallback = str(profile.get("canonical_prompt") or name or "").strip()

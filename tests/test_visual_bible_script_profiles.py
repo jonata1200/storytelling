@@ -97,6 +97,22 @@ def test_script_fallback_cleans_hierarchical_and_repeated_locations() -> None:
     assert barraca["evidence_text"] == ["INT. BARRACA VAZIA - MEIA-NOITE"]
 
 
+def test_script_fallback_ignores_temporal_location_prefixes() -> None:
+    script = """
+    CENA 01
+    INT. MOMENTOS DEPOIS DO MUSEU SALA DE SEGURANCA - NOITE
+    Clara observa os monitores.
+
+    CENA 02
+    INT. SALA DE SEGURANCA DO MUSEU - NOITE
+    Clara aponta para a tela.
+    """
+
+    locations = _script_location_profiles(script)
+
+    assert [item["name"] for item in locations] == ["Sala De Seguranca Do Museu"]
+
+
 def test_script_fallback_does_not_turn_screenplay_markers_into_characters() -> None:
     script = """
     INT. QUARTO DE IAN - DIA
