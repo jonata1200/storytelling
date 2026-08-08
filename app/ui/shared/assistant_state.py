@@ -35,6 +35,34 @@ def assistant_chat_store() -> dict[str, list[dict[str, str]]]:
     return cast(dict[str, list[dict[str, str]]], raw_store)
 
 
+def assistant_draft_store() -> dict[str, dict[str, str]]:
+    raw_store = nicegui_app.storage.user.get("project_assistant_drafts")
+    if not isinstance(raw_store, dict):
+        raw_store = {}
+    return cast(dict[str, dict[str, str]], raw_store)
+
+
+def load_assistant_draft(project_id: UUID) -> dict[str, str]:
+    store = assistant_draft_store()
+    raw_draft = store.get(str(project_id))
+    if not isinstance(raw_draft, dict):
+        raw_draft = {}
+    draft = {"message": str(raw_draft.get("message") or "")}
+    store[str(project_id)] = draft
+    nicegui_app.storage.user["project_assistant_drafts"] = store
+    return draft
+
+
+def clear_assistant_draft(project_id: UUID) -> None:
+    store = assistant_draft_store()
+    draft = store.get(str(project_id))
+    if not isinstance(draft, dict):
+        draft = {}
+    draft["message"] = ""
+    store[str(project_id)] = draft
+    nicegui_app.storage.user["project_assistant_drafts"] = store
+
+
 def is_legacy_assistant_greeting(role: str, content: str) -> bool:
     return role == "assistant" and content.startswith("Estou acompanhando está etapa.")
 

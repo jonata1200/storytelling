@@ -84,6 +84,140 @@ async def test_ollama_cloud_provider_sends_native_chat_request(
     assert result.completion_tokens == 4
 
 
+@pytest.mark.asyncio
+async def test_ollama_cloud_provider_accepts_content_parts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        text_provider="ollama_cloud",
+        ollama_cloud_api_key="ollama-secret",
+        ollama_cloud_base_url="https://ollama.com/api",
+        ollama_cloud_default_model="deepseek-v4-flash:cloud",
+    )
+    monkeypatch.setattr("app.providers.llm.ollama_cloud.get_settings", lambda: settings)
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
+        return _JsonResponse(
+            {
+                "model": "deepseek-v4-flash:cloud",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": '{"ok": true}'}],
+                },
+                "done": True,
+            }
+        )
+
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    result = await OllamaCloudLLMProvider().generate_structured(
+        LLMRequest(
+            task="generate_script",
+            prompt='Retorne {"ok": true}',
+            model="deepseek-v4-flash:cloud",
+            timeout_seconds=60,
+        )
+    )
+
+    assert result.content == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_ollama_cloud_provider_accepts_openai_compatible_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        text_provider="ollama_cloud",
+        ollama_cloud_api_key="ollama-secret",
+        ollama_cloud_base_url="https://ollama.com/api",
+        ollama_cloud_default_model="deepseek-v4-flash:cloud",
+    )
+    monkeypatch.setattr("app.providers.llm.ollama_cloud.get_settings", lambda: settings)
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
+        return _JsonResponse(
+            {
+                "model": "deepseek-v4-flash:cloud",
+                "message": {"role": "assistant", "content": ""},
+                "choices": [{"message": {"content": '{"ok": true}'}}],
+            }
+        )
+
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    result = await OllamaCloudLLMProvider().generate_structured(
+        LLMRequest(
+            task="generate_script",
+            prompt='Retorne {"ok": true}',
+            model="deepseek-v4-flash:cloud",
+            timeout_seconds=60,
+        )
+    )
+
+    assert result.content == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_ollama_cloud_provider_retries_empty_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        text_provider="ollama_cloud",
+        ollama_cloud_api_key="ollama-secret",
+        ollama_cloud_base_url="https://ollama.com/api",
+        ollama_cloud_default_model="deepseek-v4-flash:cloud",
+    )
+    monkeypatch.setattr("app.providers.llm.ollama_cloud.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        OllamaCloudLLMProvider,
+        "_sleep_before_retry",
+        lambda self, headers, attempt: None,
+    )
+    calls = 0
+
+    def fake_urlopen(request: urllib.request.Request, **kwargs: object) -> _JsonResponse:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return _JsonResponse(
+                {
+                    "model": "deepseek-v4-flash:cloud",
+                    "message": {"role": "assistant", "content": ""},
+                    "done": True,
+                }
+            )
+        return _JsonResponse(
+            {
+                "model": "deepseek-v4-flash:cloud",
+                "message": {"role": "assistant", "content": '{"ok": true}'},
+                "done": True,
+            }
+        )
+
+    monkeypatch.setattr(
+        "app.providers.llm.openai_compatible.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    result = await OllamaCloudLLMProvider().generate_structured(
+        LLMRequest(
+            task="generate_script",
+            prompt='Retorne {"ok": true}',
+            model="deepseek-v4-flash:cloud",
+            timeout_seconds=60,
+        )
+    )
+
+    assert calls == 2
+    assert result.content == {"ok": True}
+
+
 def test_llm_provider_for_name_supports_ollama_cloud(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

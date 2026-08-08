@@ -15,6 +15,7 @@ from app.ui import page_runtime, pages
 from app.ui.pages import _asset_url, _compact_project_title
 from app.ui.project import actions as project_actions
 from app.ui.routes import home_pages
+from app.ui.shared import assistant_state
 from app.ui.workspace import script_area, storyboard_video_area
 from app.ui.workspace.assets_area import (
     _character_reference_sheet_asset,
@@ -455,6 +456,29 @@ def test_ai_action_sync_adds_only_one_chat_message_per_action(
             "event_action": "create_initial_script",
         }
     ]
+
+
+def test_assistant_draft_persists_by_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    storage: dict[str, Any] = {}
+    monkeypatch.setattr(
+        assistant_state,
+        "nicegui_app",
+        SimpleNamespace(storage=SimpleNamespace(user=storage)),
+    )
+
+    draft = assistant_state.load_assistant_draft(project_id)
+    draft["message"] = "Melhore a emocao da cena final"
+
+    assert assistant_state.load_assistant_draft(project_id)["message"] == (
+        "Melhore a emocao da cena final"
+    )
+
+    assistant_state.clear_assistant_draft(project_id)
+
+    assert assistant_state.load_assistant_draft(project_id)["message"] == ""
 
 
 def test_safe_client_navigation_uses_captured_client() -> None:

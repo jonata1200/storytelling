@@ -8,7 +8,9 @@ from nicegui import ui
 
 from app.database.session import AsyncSessionLocal
 from app.generation.project_agent import classify_project_chat_action, handle_project_chat
+from app.ui.shared.assistant_state import clear_assistant_draft as _clear_assistant_draft
 from app.ui.shared.assistant_state import clear_assistant_messages as _clear_assistant_messages
+from app.ui.shared.assistant_state import load_assistant_draft as _load_assistant_draft
 from app.ui.shared.assistant_state import load_assistant_messages as _load_assistant_messages
 from app.ui.shared.assistant_state import safe_client_navigation as _safe_client_navigation
 from app.ui.shared.assistant_state import safe_refresh as _safe_refresh
@@ -91,6 +93,7 @@ def render_assistant_panel(
     sync_ai_action_events_to_chat(project_id, project_ai_action(summary))
     notify_ai_action_failure_once(project_id, summary)
     messages = _load_assistant_messages(project_id, active, assistant_suggestions)
+    draft = _load_assistant_draft(project_id)
 
     def clear_conversation() -> None:
         _clear_assistant_messages(project_id)
@@ -148,7 +151,8 @@ def render_assistant_panel(
 
         async def send_message(text: str | None = None) -> None:
             client = prompt.client
-            user_message = (text or prompt.value or "").strip()
+            raw_message = text if isinstance(text, str) else draft.get("message") or prompt.value
+            user_message = str(raw_message or "").strip()
             if not user_message:
                 return
             messages.append({"role": "user", "content": user_message})
@@ -158,6 +162,8 @@ def render_assistant_panel(
             }
             messages.append(pending_message)
             _save_assistant_messages(project_id, messages)
+            _clear_assistant_draft(project_id)
+            draft["message"] = ""
             prompt.value = ""
             _safe_refresh(conversation)
             should_reload = False
@@ -223,6 +229,7 @@ def render_assistant_panel(
         with ui.row().classes("w-full items-end gap-2 shrink-0"):
             prompt = (
                 ui.textarea(placeholder=prompts[active])
+                .bind_value(draft, "message")
                 .props("outlined dense autogrow rows=1")
                 .classes("flex-1 assistant-chat-input")
             )
@@ -238,5 +245,5 @@ def render_assistant_panel(
             )
             ui.button(
                 icon="arrow_upward",
-                on_click=send_message,
+                on_click=lambda: send_message(),
             ).props("round unelevated").classes("acid-bg shrink-0 mb-1")
