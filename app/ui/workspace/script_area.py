@@ -31,6 +31,8 @@ ProjectAiActionReader = Callable[[dict[str, Any]], dict[str, Any]]
 AiActionStaleChecker = Callable[[dict[str, Any]], bool]
 RetryInitialScriptHandler = Callable[[UUID, Any], Awaitable[None]]
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
+NotifyCallback = Callable[[str, str], None]
+ReloadCallback = Callable[[], None]
 
 
 def script_generation_in_progress(
@@ -71,7 +73,36 @@ def script_editor_state(title: object, content: object) -> dict[str, str]:
     return {
         "title": str(title or ""),
         "content": str(content or ""),
+        "saving": "false",
     }
+
+
+def _is_deleted_slot_error(exc: RuntimeError) -> bool:
+    return "parent element this slot belongs to has been deleted" in str(exc).lower()
+
+
+def _notify_client(client: Any, message: str, color: str) -> None:
+    try:
+        if getattr(client, "is_deleted", False):
+            return
+        client.outbox.enqueue_message(
+            "notify",
+            {"message": str(message), "color": color},
+            client.id,
+        )
+    except RuntimeError as exc:
+        if not _is_deleted_slot_error(exc):
+            raise
+
+
+def _reload_client(client: Any) -> None:
+    try:
+        if getattr(client, "is_deleted", False):
+            return
+        client.run_javascript("history.go(0)")
+    except RuntimeError as exc:
+        if not _is_deleted_slot_error(exc):
+            raise
 
 
 async def _close_loading_dialog_when_script_ready(project_id: UUID, loading_dialog: Any) -> None:
@@ -130,8 +161,14 @@ async def save_script_from_ui(
     script_id: UUID,
     title: str,
     content: str,
+    *,
+    notify: NotifyCallback | None = None,
+    reload_page: ReloadCallback | None = None,
 ) -> None:
+    notify_user = notify or (lambda message, color: ui.notify(message, color=color))
+    reload_user = reload_page or ui.navigate.reload
     try:
+        notify_user("Salvando roteiro...", "info")
         clean_title = title.strip()
         clean_content = content.strip()
         if not clean_title:
@@ -174,22 +211,26 @@ async def save_script_from_ui(
                 )
             )
             await session.commit()
+        notify_user(
+            "Roteiro salvo. Atualizando cenas, planos e Biblioteca Visual...",
+            "info",
+        )
         try:
             await _refresh_script_derivatives_from_ui(project_id, script_id)
         except Exception as exc:
-            ui.notify(
+            notify_user(
                 (
                     "Roteiro salvo, mas não consegui atualizar automaticamente "
                     f"cenas/planos e Biblioteca Visual: {exc}"
                 ),
-                color="warning",
+                "warning",
             )
-            ui.navigate.reload()
+            reload_user()
             return
-        ui.notify("Roteiro salvo. Cenas, planos e Biblioteca Visual atualizados.", color="positive")
-        ui.navigate.reload()
+        notify_user("Roteiro salvo. Cenas, planos e Biblioteca Visual atualizados.", "positive")
+        reload_user()
     except Exception as exc:
-        ui.notify(f"Não consegui salvar o roteiro: {exc}", color="negative")
+        notify_user(f"Não consegui salvar o roteiro: {exc}", "negative")
 
 
 def render_script_area(
@@ -275,6 +316,7 @@ def render_script_area(
         )
     edit_dialog = None
     if script is not None:
+        script_id = script.id
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_dialog, ui.card().classes(
             "entity-card rounded-2xl p-6 w-[min(1040px,94vw)] h-[min(860px,92vh)] "
             "max-h-[92vh] flex flex-col"
@@ -282,11 +324,21 @@ def render_script_area(
             edit_state = script_editor_state(script.title, script.content)
 
             async def save_current_script() -> None:
+                if edit_state["saving"] == "true":
+                    return
+                client = ui.context.client
+                edit_state["saving"] = "true"
+                if save_button is not None:
+                    save_button.disable()
+                if edit_dialog is not None:
+                    edit_dialog.close()
                 await save_script_from_ui(
                     project_id,
-                    script.id,
+                    script_id,
                     edit_state["title"],
                     edit_state["content"],
+                    notify=lambda message, color: _notify_client(client, message, color),
+                    reload_page=lambda: _reload_client(client),
                 )
 
             ui.label("Editar roteiro").classes("brand-type text-2xl font-bold shrink-0")
@@ -298,11 +350,12 @@ def render_script_area(
             ).classes("script-editor-textarea w-full flex-1 min-h-0 font-mono text-sm")
             with ui.row().classes("w-full justify-end gap-2 shrink-0"):
                 ui.button("Cancelar", on_click=edit_dialog.close).props("flat no-caps")
-                ui.button(
+                save_button = ui.button(
                     "Salvar",
                     icon="save",
                     on_click=save_current_script,
-                ).props("unelevated no-caps").classes("acid-bg rounded-xl font-semibold")
+                )
+                save_button.props("unelevated no-caps").classes("acid-bg rounded-xl font-semibold")
     section_title(
         "Roteiro",
         "Edite e revise o roteiro cinematográfico que orienta as próximas etapas.",

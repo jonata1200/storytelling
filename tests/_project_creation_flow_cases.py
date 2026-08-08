@@ -179,7 +179,31 @@ def test_script_editor_state_starts_with_current_script_values() -> None:
     assert state == {
         "title": " Roteiro atual ",
         "content": "Cena 01\nINT. CASA - DIA",
+        "saving": "false",
     }
+
+
+def test_notify_client_uses_captured_client_outbox() -> None:
+    messages: list[tuple[str, dict[str, str], str]] = []
+    client = SimpleNamespace(
+        id="client-1",
+        is_deleted=False,
+        outbox=SimpleNamespace(
+            enqueue_message=lambda event, payload, client_id: messages.append(
+                (event, payload, client_id)
+            )
+        ),
+    )
+
+    script_area._notify_client(client, "Salvando roteiro...", "info")
+
+    assert messages == [
+        (
+            "notify",
+            {"message": "Salvando roteiro...", "color": "info"},
+            "client-1",
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -273,7 +297,9 @@ async def test_manual_script_save_refreshes_scene_plan_and_visual_bible(
     assert script.content == "Cena nova com conflito visual."
     assert calls == ["version", "ScriptVersion", "commit", "refresh_derivatives", "reload"]
     assert notifications == [
-        ("Roteiro salvo. Cenas, planos e Biblioteca Visual atualizados.", "positive")
+        ("Salvando roteiro...", "info"),
+        ("Roteiro salvo. Atualizando cenas, planos e Biblioteca Visual...", "info"),
+        ("Roteiro salvo. Cenas, planos e Biblioteca Visual atualizados.", "positive"),
     ]
 
 

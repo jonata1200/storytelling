@@ -9,6 +9,9 @@ test_manual_script_save_refreshes_scene_plan_and_visual_bible = (
 test_script_editor_state_starts_with_current_script_values = (
     cases.test_script_editor_state_starts_with_current_script_values
 )
+test_notify_client_uses_captured_client_outbox = (
+    cases.test_notify_client_uses_captured_client_outbox
+)
 test_retry_initial_script_opens_loading_dialog_and_watches_status = (
     cases.test_retry_initial_script_opens_loading_dialog_and_watches_status
 )

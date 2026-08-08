@@ -517,7 +517,14 @@ async def handle_project_chat(
                 changed,
                 failed=_is_ai_generation_failure_message(result_message),
             )
-        revised = await revise_script(session, project_id, script.id, message, project_context)
+        revised = await revise_script(
+            session,
+            project_id,
+            script.id,
+            message,
+            project_context,
+            mark_downstream_stale=False,
+        )
         if revised is None:
             return ProjectChatResult(
                 "Não consegui aplicar a revisão no roteiro.",
@@ -534,30 +541,21 @@ async def handle_project_chat(
                 True,
                 True,
             )
-        visual_updated = await _refresh_visual_bible_after_script_regeneration(
-            session,
-            project_id,
-            revised.id,
-            progress,
-        )
         await resolve_stale_artifacts_after_regeneration(session, project_id)
         if _requests_specific_script_scenes(message):
             return ProjectChatResult(
-                "Cena(s) revisada(s), cenas/planos recriados e artefatos antigos substituidos.",
-                action,
-                True,
-            )
-        if visual_updated:
-            return ProjectChatResult(
                 (
-                    "Roteiro revisado, cenas/planos recriados e Biblioteca Visual "
-                    "atualizada para o projeto."
+                    "Cena(s) revisada(s) e cenas/planos recriados. "
+                    "Biblioteca Visual não foi atualizada automaticamente; peça quando quiser."
                 ),
                 action,
                 True,
             )
         return ProjectChatResult(
-            "Roteiro revisado, cenas/planos recriados e artefatos antigos substituidos.",
+            (
+                "Roteiro revisado e cenas/planos recriados. "
+                "Biblioteca Visual não foi atualizada automaticamente; peça quando quiser."
+            ),
             action,
             True,
         )

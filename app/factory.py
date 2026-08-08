@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
@@ -31,6 +31,10 @@ def create_app(include_ui: bool = True) -> FastAPI:
     app.include_router(api_router)
     app.include_router(auth_ui_router)
     app.router.on_startup.append(install_asyncio_exception_filter)
+
+    @app.get("/static/widget.js", include_in_schema=False)
+    async def empty_injected_widget_script() -> Response:
+        return Response(content="", media_type="application/javascript")
 
     @app.exception_handler(WorkflowStateError)
     async def workflow_state_error_handler(

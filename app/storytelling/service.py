@@ -9,7 +9,7 @@ from app.generation.model_settings import llm_provider_for_task
 from app.generation.service import run_structured_generation
 from app.projects.models import Artifact
 from app.projects.repository import ProjectRepository
-from app.projects.versioning import create_artifact_version
+from app.projects.versioning import create_artifact_version, mark_dependents_stale
 from app.storytelling.artifacts import (
     _add_dependency,
     _advance_project_status_when_reachable,
@@ -307,6 +307,7 @@ async def revise_script(
     script_id: UUID,
     instruction: str,
     project_context: dict | None = None,
+    mark_downstream_stale: bool = True,
 ) -> Script | None:
     project = await ProjectRepository(session).get_project(project_id)
     script = await session.get(Script, script_id)
@@ -384,6 +385,7 @@ async def revise_script(
         artifact,
         payload,
         change_note=f"Revisão por chat: {instruction[:160]}",
+        mark_downstream_stale=mark_downstream_stale,
     )
     session.add(
         ScriptVersion(
@@ -578,6 +580,7 @@ async def _mark_existing_scene_plan_stale(
     if not stale_artifact_ids:
         return
 
+    await mark_dependents_stale(session, stale_artifact_ids)
     artifact_result = await session.execute(
         select(Artifact).where(
             Artifact.project_id == project_id,

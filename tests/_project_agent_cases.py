@@ -121,6 +121,7 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
         assert args[1] == project_id
         assert args[2] == script_id
         assert "melhore" in args[3]
+        assert kwargs["mark_downstream_stale"] is False
         return SimpleNamespace(id=script_id)
 
     async def fake_regenerate_scenes(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
@@ -128,10 +129,6 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
         assert args[1] == project_id
         assert args[2] == script_id
         return [SimpleNamespace(id=uuid4())]
-
-    async def fake_refresh_visual(*args: Any, **kwargs: Any) -> bool:
-        calls.append("refresh_visual")
-        return False
 
     async def fake_resolve_stale(*args: Any, **kwargs: Any) -> int:
         calls.append("resolve_stale")
@@ -141,11 +138,6 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
     monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
     monkeypatch.setattr(project_agent, "regenerate_scenes_and_shots", fake_regenerate_scenes)
-    monkeypatch.setattr(
-        project_agent,
-        "_refresh_visual_bible_after_script_regeneration",
-        fake_refresh_visual,
-    )
     monkeypatch.setattr(
         project_agent,
         "resolve_stale_artifacts_after_regeneration",
@@ -161,7 +153,10 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
     )
 
     assert result == ProjectChatResult(
-        "Roteiro revisado, cenas/planos recriados e artefatos antigos substituidos.",
+        (
+            "Roteiro revisado e cenas/planos recriados. "
+            "Biblioteca Visual não foi atualizada automaticamente; peça quando quiser."
+        ),
         "revise_script",
         True,
     )
@@ -169,7 +164,6 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
         "ensure_script",
         "revise",
         "regenerate_scenes",
-        "refresh_visual",
         "resolve_stale",
     ]
 
@@ -197,16 +191,13 @@ async def test_project_chat_can_revise_specific_script_scenes(
         calls.append("revise")
         assert args[2] == script_id
         assert "cena 3" in args[3]
+        assert kwargs["mark_downstream_stale"] is False
         return SimpleNamespace(id=script_id)
 
     async def fake_regenerate_scenes(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
         calls.append("regenerate_scenes")
         assert args[2] == script_id
         return [SimpleNamespace(id=uuid4())]
-
-    async def fake_refresh_visual(*args: Any, **kwargs: Any) -> bool:
-        calls.append("refresh_visual")
-        return False
 
     async def fake_resolve_stale(*args: Any, **kwargs: Any) -> int:
         calls.append("resolve_stale")
@@ -216,11 +207,6 @@ async def test_project_chat_can_revise_specific_script_scenes(
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
     monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
     monkeypatch.setattr(project_agent, "regenerate_scenes_and_shots", fake_regenerate_scenes)
-    monkeypatch.setattr(
-        project_agent,
-        "_refresh_visual_bible_after_script_regeneration",
-        fake_refresh_visual,
-    )
     monkeypatch.setattr(
         project_agent,
         "resolve_stale_artifacts_after_regeneration",
@@ -236,7 +222,10 @@ async def test_project_chat_can_revise_specific_script_scenes(
     )
 
     assert result == ProjectChatResult(
-        "Cena(s) revisada(s), cenas/planos recriados e artefatos antigos substituidos.",
+        (
+            "Cena(s) revisada(s) e cenas/planos recriados. "
+            "Biblioteca Visual não foi atualizada automaticamente; peça quando quiser."
+        ),
         "revise_script",
         True,
     )
@@ -244,7 +233,6 @@ async def test_project_chat_can_revise_specific_script_scenes(
         "ensure_script",
         "revise",
         "regenerate_scenes",
-        "refresh_visual",
         "resolve_stale",
     ]
 

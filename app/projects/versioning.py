@@ -16,6 +16,7 @@ async def create_artifact_version(
     artifact: Artifact,
     payload: dict,
     change_note: str | None = None,
+    mark_downstream_stale: bool = True,
 ) -> ArtifactVersion:
     locked_artifact = await session.get(Artifact, artifact.id, with_for_update=True)
     if locked_artifact is None:
@@ -34,7 +35,8 @@ async def create_artifact_version(
     artifact.current_version = next_version
     artifact.status = ArtifactStatus.READY_FOR_REVIEW
     session.add(version)
-    await mark_dependents_stale(session, {artifact.id})
+    if mark_downstream_stale:
+        await mark_dependents_stale(session, {artifact.id})
     return version
 
 
