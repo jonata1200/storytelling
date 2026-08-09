@@ -113,7 +113,8 @@ def test_storyboard_prompt_includes_visual_bible_context() -> None:
 
     assert "Biblioteca visual canonica - autoridade de continuidade" in prompt
     assert "fotorrealista" in prompt
-    assert "live-action" in prompt
+    assert "atores reais" in prompt
+    assert "live-action" not in prompt
     assert "nunca transformar em desenho ou animação" in prompt
     assert "Personagens:" in prompt
     assert "Locais:" in prompt
@@ -121,9 +122,9 @@ def test_storyboard_prompt_includes_visual_bible_context() -> None:
     assert "Clara" in prompt
     assert "casaco verde gasto" in prompt
     assert "Carta azul" in prompt
-    assert "primeiro frame util para image-to-video" in prompt
+    assert "primeiro frame util para video a partir de imagem" in prompt
     assert "nenhum texto, legenda, marca d'agua" in prompt
-    assert "não criar montagem, colagem, split screen" in prompt
+    assert "não criar montagem, colagem, tela dividida" in prompt
 
 
 def test_storyboard_coverage_errors_detect_missing_and_duration_mismatch() -> None:
@@ -187,7 +188,8 @@ def test_storyboard_effective_prompt_uses_deepseek_generated_prompt() -> None:
 
     effective_prompt = _storyboard_effective_prompt(metadata, script_id, shot_id, "Prompt local")
     assert effective_prompt.startswith("Prompt cinematografico gerado pelo DeepSeek.")
-    assert "live-action" in effective_prompt
+    assert "atores reais" in effective_prompt
+    assert "live-action" not in effective_prompt
 
 
 def test_storyboard_manual_prompt_overrides_deepseek_generated_prompt() -> None:
@@ -217,7 +219,8 @@ def test_storyboard_generation_prompt_adds_style_contract_once() -> None:
     repeated_prompt = _storyboard_generation_prompt(prompt)
 
     assert "fotorrealista" in prompt
-    assert "live-action" in prompt
+    assert "atores reais" in prompt
+    assert "live-action" not in prompt
     assert "Biblioteca Visual" in prompt
     assert prompt == repeated_prompt
 
@@ -234,7 +237,7 @@ def test_storyboard_generation_fingerprint_changes_when_references_change() -> N
 
 def test_storyboard_continuity_checklist_reports_reference_status() -> None:
     checks = storyboard_continuity_checklist(
-        "Quadro fotorrealista live-action vertical 9:16 sem animação.",
+        "Quadro fotorrealista com atores reais vertical 9:16 sem animação.",
         ["storage/clara.png"],
     )
 
@@ -418,7 +421,7 @@ async def test_update_storyboard_prompt_saves_override(
         "Original",
     )
     assert effective_prompt.startswith("Prompt editado para gerar este quadro.")
-    assert "fotorrealismo live-action" in effective_prompt
+    assert "fotorrealismo cinematografico com atores reais" in effective_prompt
 
 
 @pytest.mark.asyncio

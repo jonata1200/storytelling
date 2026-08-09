@@ -48,6 +48,7 @@ from app.visual_bible.service import (
     initial_view_for,
     visual_reference_aspect_ratio,
     visual_reference_prompt,
+    visual_reference_view_label,
 )
 
 VISUAL_LIBRARY_TAB_DEFAULT = "characters"
@@ -336,7 +337,7 @@ def _entity_card(
                                     "object-contain bg-black"
                                 ).props("fit=contain")
                                 with ui.column().classes("p-3 gap-1"):
-                                    ui.label(reference.view_type).classes(
+                                    ui.label(visual_reference_view_label(reference.view_type)).classes(
                                         "text-xs acid uppercase"
                                     )
                                     ui.label(asset.name).classes("text-sm text-[#d8dbd8]")
@@ -434,7 +435,9 @@ def _entity_card(
                             with ui.element("div").classes(
                                 "border border-[#343934] rounded-xl p-4"
                             ):
-                                ui.label(view_type).classes("text-xs acid uppercase")
+                                ui.label(visual_reference_view_label(view_type)).classes(
+                                    "text-xs acid uppercase"
+                                )
                                 ui.label(prompt).classes(
                                     "text-sm text-[#d8dbd8] whitespace-pre-wrap"
                                 )
@@ -478,7 +481,9 @@ def _entity_card(
                             with ui.element("div").classes(
                                 "border border-[#343934] rounded-xl p-4"
                             ):
-                                ui.label(view_type).classes("text-xs acid uppercase")
+                                ui.label(visual_reference_view_label(view_type)).classes(
+                                    "text-xs acid uppercase"
+                                )
                                 ui.label(prompt).classes(
                                     "text-sm text-[#d8dbd8] whitespace-pre-wrap"
                                 )
@@ -642,7 +647,12 @@ def render_assets_area(
                         profile = target_profiles.get((target_kind, target_id), {})
                         with ui.element("div").classes("border border-[#343934] rounded-xl p-4"):
                             ui.label(title).classes("text-sm font-semibold")
-                            ui.label(", ".join(view_types)).classes("text-xs acid")
+                            ui.label(
+                                ", ".join(
+                                    visual_reference_view_label(view_type)
+                                    for view_type in view_types
+                                )
+                            ).classes("text-xs acid")
                             for view_type in view_types[:2]:
                                 ui.label(visual_reference_prompt(profile, view_type)).classes(
                                     "text-xs text-[#aeb4af] whitespace-pre-wrap mt-2 line-clamp-3"

@@ -8,22 +8,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset
+from app.generation.prompt_language import ensure_portuguese_prompt_text
 from app.storytelling.models import Scene, Shot
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 
 STORYBOARD_REFERENCE_LIMIT = 6
 STORYBOARD_STYLE_CONTRACT = (
-    "Contrato visual global: fotorrealista, live-action cinematográfico, mesma linguagem "
-    "visual da Biblioteca Visual; não usar desenho, animação, cartoon, anime, quadrinhos, "
-    "3D render, pintura ou concept art. As imagens de referência anexadas são autoridade "
+    "Contrato visual global: fotorrealista, cinematografico com atores reais, mesma linguagem "
+    "visual da Biblioteca Visual; não usar desenho, animação, desenho caricato, anime, quadrinhos, "
+    "renderizacao 3D, pintura ou arte conceitual. As imagens de referência anexadas são autoridade "
     "visual para rosto, idade, cabelo, figurino, paleta, objetos, materiais e cenário."
 )
 STORYBOARD_STYLE_RULES = (
-    "Regras finais obrigatórias: gerar somente fotorrealismo live-action cinematográfico; "
+    "Regras finais obrigatórias: gerar somente fotorrealismo cinematografico com atores reais; "
     "preservar fielmente personagens, locais e objetos da Biblioteca Visual e das imagens de "
     "referência anexadas; manter rosto, idade, cabelo, figurino, materiais, escala, paleta, "
-    "luz e geografia espacial; não converter para animação, desenho, cartoon, anime, "
-    "quadrinhos, 3D render, pintura, concept art ou estética ilustrada."
+    "luz e geografia espacial; não converter para animação, desenho, desenho caricato, anime, "
+    "quadrinhos, renderizacao 3D, pintura, arte conceitual ou estética ilustrada."
 )
 
 
@@ -95,7 +96,7 @@ def _visual_context_items(items: list[Character] | list[Location] | list[Prop]) 
                 "description": getattr(item, "description", ""),
                 "narrative_importance": getattr(item, "narrative_importance", ""),
                 "profile": {
-                    key: _compact_prompt_value(profile.get(key))
+                    key: ensure_portuguese_prompt_text(_compact_prompt_value(profile.get(key)))
                     for key in (
                         "hair",
                         "base_outfit",
@@ -265,16 +266,18 @@ def _storyboard_prompt(shot: Shot, scene: Scene, visual_context: dict | None = N
         f"Composicao planejada: {shot.visual_composition}.\n"
         f"Movimento de camera previsto: {shot.camera_movement}.\n\n"
         "Crie um único quadro de storyboard que funcione como primeiro frame util "
-        "para image-to-video. O quadro deve mostrar o instante inicial mais claro "
+        "para video a partir de imagem. O quadro deve mostrar o instante inicial mais claro "
         "e filmavel da acao, com sujeito principal legivel, silhueta reconhecivel, "
         "ambiente coerente, profundidade espacial e direcao de movimento compreensivel.\n\n"
         "Regras visuais obrigatorias:\n"
         "- formato vertical 9:16\n"
-        "- estilo fotorrealista live-action; nunca transformar em desenho ou animação\n"
+        "- estilo fotorrealista cinematografico com atores reais; nunca transformar em "
+        "desenho ou animação\n"
         "- composicao cinematografica, clara e sem poluicao visual\n"
         "- continuidade rigorosa de rosto, idade, figurino, objetos, paleta, luz e ambiente\n"
-        "- nenhum texto, legenda, marca d'agua, baloes, UI ou anotacao dentro da imagem\n"
-        "- não criar montagem, colagem, split screen ou multiplas cenas no mesmo quadro\n"
+        "- nenhum texto, legenda, marca d'agua, baloes, interface visual ou anotacao "
+        "dentro da imagem\n"
+        "- não criar montagem, colagem, tela dividida ou multiplas cenas no mesmo quadro\n"
         "- não adicionar personagens, objetos ou locais que não estejam no plano\n"
         "- não mudar o gênero visual definido pelos ativos canonicos\n"
         "- deixar espaco visual suficiente para movimento curto de camera ou personagem"
@@ -416,7 +419,7 @@ def _storyboard_effective_prompt(
 
 
 def _storyboard_generation_prompt(prompt: str) -> str:
-    text = str(prompt or "").strip()
+    text = ensure_portuguese_prompt_text(prompt)
     if STORYBOARD_STYLE_CONTRACT in text and STORYBOARD_STYLE_RULES in text:
         return text
     additions = [
@@ -424,7 +427,7 @@ def _storyboard_generation_prompt(prompt: str) -> str:
         for section in (STORYBOARD_STYLE_CONTRACT, STORYBOARD_STYLE_RULES)
         if section not in text
     ]
-    return f"{text}\n\n" + "\n".join(additions)
+    return ensure_portuguese_prompt_text(f"{text}\n\n" + "\n".join(additions))
 
 
 def storyboard_continuity_checklist(
@@ -435,12 +438,12 @@ def storyboard_continuity_checklist(
     references = list(reference_uris or [])
     return [
         {
-            "label": "Estilo fotorrealista/live-action fixado",
-            "ok": "fotorreal" in text and "live-action" in text,
+            "label": "Estilo fotorrealista com atores reais fixado",
+            "ok": "fotorreal" in text and "atores reais" in text,
         },
         {
-            "label": "Anti-cartoon/animação explícito",
-            "ok": any(term in text for term in ("animação", "cartoon", "anime", "desenho")),
+            "label": "Anti-desenho/animação explícito",
+            "ok": any(term in text for term in ("animação", "desenho", "anime")),
         },
         {
             "label": "Referências canônicas anexadas",

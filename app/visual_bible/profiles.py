@@ -3,6 +3,8 @@ import json
 import re
 import unicodedata
 
+from app.generation.prompt_language import ensure_portuguese_prompt_text
+
 
 def _fingerprint(payload: dict) -> dict:
     canonical = json.dumps(payload, sort_keys=True, ensure_ascii=True)
@@ -433,9 +435,9 @@ def _location_profile(raw: object) -> dict:
         "visual_profile": visual_profile,
         "asset_kind": "location",
         "spatial_rules": ["manter portas, janelas e moveis na mesma posicao"],
-        "canonical_prompt": (
+        "canonical_prompt": ensure_portuguese_prompt_text(
             f"Fotorrealista, fotografia de arquitetura cinematografica. {name}, ambiente vazio. "
-            f"Funcao: {_prompt_text(description)}. Layout: {_prompt_text(layout)}. "
+            f"Funcao: {_prompt_text(description)}. Organizacao espacial: {_prompt_text(layout)}. "
             f"Materiais: {_prompt_text(materials)}. Paleta: {_prompt_text(palette)}. "
             f"Luz: {_prompt_text(lighting)}. "
             "Mostrar entradas, portas, janelas, moveis principais e circulacao. "
@@ -499,11 +501,11 @@ def _prop_profile(raw: object) -> dict:
         "narrative_profile": narrative_profile,
         "visual_profile": visual_profile,
         "asset_kind": "prop",
-        "canonical_prompt": (
+        "canonical_prompt": ensure_portuguese_prompt_text(
             f"Fotorrealista, fotografia de produto. Um único {name}, inteiro e centralizado. "
             f"Dimensoes: {_prompt_text(dimensions)}. Material: {_prompt_text(material)}. "
             f"Cor: {_prompt_text(color)}. Estado: {_prompt_text(state)}. "
-            "Referencia isolada do prop para continuidade visual; nao encenar a acao "
+            "Referencia isolada do objeto para continuidade visual; nao encenar a acao "
             "narrativa e nao incluir objetos citados no contexto. "
             "Silhueta clara, textura realista, detalhes legíveis. "
             "Sem mãos, sem pessoas, sem cenario, sem outros objetos."

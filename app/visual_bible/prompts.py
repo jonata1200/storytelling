@@ -1,3 +1,7 @@
+from app.generation.prompt_language import (
+    ensure_portuguese_prompt_text,
+    formatted_prompt_sections,
+)
 from app.visual_bible.profiles import _clean_prompt_fragment, _prompt_text
 
 CHARACTER_REQUIRED_VIEWS = ["front_portrait"]
@@ -5,12 +9,30 @@ CHARACTER_OPTIONAL_VIEWS = ["character_reference_sheet"]
 CHARACTER_VIEWS = CHARACTER_REQUIRED_VIEWS + CHARACTER_OPTIONAL_VIEWS
 LOCATION_VIEWS = ["establishing"]
 PROP_VIEWS = ["front"]
+VIEW_LABELS_PT = {
+    "character_reference_sheet": "Folha de referencia do personagem",
+    "front_portrait": "Retrato frontal de corpo inteiro",
+    "left_profile": "Perfil lateral esquerdo",
+    "right_profile": "Perfil lateral direito",
+    "back_view": "Vista de costas",
+    "full_body": "Corpo inteiro frontal",
+    "expression_sheet": "Folha de expressoes",
+    "pose_sheet": "Folha de poses",
+    "scale_reference": "Referencia de escala",
+    "establishing": "Plano geral do local",
+    "floor_plan": "Planta baixa",
+    "camera_points": "Pontos de camera",
+    "prop_reference_sheet": "Folha de referencia do objeto",
+    "front": "Vista frontal",
+    "side": "Vista lateral",
+    "top": "Vista superior",
+}
 VIEW_PROMPT_DETAILS = {
     "character_reference_sheet": (
         "folha única de referência em fundo branco: close frontal grande do rosto a esquerda, "
         "corpo inteiro frontal, corpo inteiro em perfil lateral e corpo inteiro de costas; "
         "mesmo rosto, cabelo, figurino, proporções e paleta; composicao horizontal limpa; "
-        "sem texto, sem labels e sem bordas"
+        "sem texto, sem rotulos e sem bordas"
     ),
     "front_portrait": (
         "imagem inicial do personagem em pe, corpo inteiro, vista frontal, pose neutra, "
@@ -43,7 +65,7 @@ VIEW_PROMPT_DETAILS = {
     ),
     "establishing": (
         "plano geral cinematográfico do ambiente vazio, perspectiva natural de camera, "
-        "layout espacial, luz, entradas e objetos principais visiveis"
+        "organizacao espacial, luz, entradas e objetos principais visiveis"
     ),
     "floor_plan": (
         "planta baixa limpa vista de cima, sem perspectiva, paredes, portas, janelas, moveis "
@@ -56,7 +78,7 @@ VIEW_PROMPT_DETAILS = {
     "prop_reference_sheet": (
         "folha única de referência do objeto em fundo branco: vista frontal, vista lateral, "
         "vista superior e detalhe ampliado de textura; mesmo material, cor, estado e escala; "
-        "composicao limpa de fotografia de produto, sem texto, sem labels e sem bordas"
+        "composicao limpa de fotografia de produto, sem texto, sem rotulos e sem bordas"
     ),
     "front": (
         "vista frontal, objeto totalmente em destáque, centralizado, material, "
@@ -101,6 +123,13 @@ def validated_visual_reference_views(target_kind: str, view_types: list[str] | N
     return view_types
 
 
+def visual_reference_view_label(view_type: str) -> str:
+    return VIEW_LABELS_PT.get(
+        view_type,
+        view_type.replace("_", " ").strip().capitalize() or "Vista visual",
+    )
+
+
 def initial_view_for(target_kind: str) -> str:
     return {
         "character": "front_portrait",
@@ -110,7 +139,7 @@ def initial_view_for(target_kind: str) -> str:
 
 
 COMMON_NEGATIVE_GUARDRAIL = (
-    "sem texto, marca d'agua, logotipo, UI, borrado ou duplicacoes"
+    "sem texto, marca d'agua, logotipo, interface visual, borrado ou duplicacoes"
 )
 
 
@@ -147,7 +176,7 @@ def _location_view_guardrail(view_type: str) -> str:
         )
     return (
         "cenario vazio, sem pessoas, sem personagens ou silhuetas; priorizar arquitetura, "
-        "layout, luz, materiais e objetos fixos"
+        "organizacao espacial, luz, materiais e objetos fixos"
     )
 
 
@@ -215,18 +244,24 @@ def _compact_visual_base_prompt(profile: dict) -> str:
             f"figurino {_clean_prompt_fragment(profile.get('base_outfit'), ('figurino', 'roupa'))}",
             f"paleta {_clean_prompt_fragment(profile.get('palette'), ('paleta',))}",
         ]
-        return _truncate_prompt_text(". ".join(part for part in parts if part), 370)
+        return _truncate_prompt_text(
+            ensure_portuguese_prompt_text(". ".join(part for part in parts if part)),
+            370,
+        )
     if asset_kind == "location":
         parts = [
             "Fotorrealista, arquitetura cinematografica",
             name,
             f"funcao {_prompt_text(profile.get('description'))}",
-            f"layout {_prompt_text(profile.get('layout'))}",
+            f"organizacao espacial {_prompt_text(profile.get('layout'))}",
             f"materiais {_prompt_text(profile.get('materials'))}",
             f"paleta {_clean_prompt_fragment(profile.get('palette'), ('paleta',))}",
             f"luz {_prompt_text(profile.get('lighting'))}",
         ]
-        return _truncate_prompt_text(". ".join(part for part in parts if part), 360)
+        return _truncate_prompt_text(
+            ensure_portuguese_prompt_text(". ".join(part for part in parts if part)),
+            360,
+        )
     if asset_kind == "prop":
         parts = [
             "Fotorrealista, fotografia de produto",
@@ -237,9 +272,12 @@ def _compact_visual_base_prompt(profile: dict) -> str:
             f"estado {_prompt_text(profile.get('state'))}",
             "referencia isolada do objeto, sem encenar contexto narrativo",
         ]
-        return _truncate_prompt_text(". ".join(part for part in parts if part), 320)
+        return _truncate_prompt_text(
+            ensure_portuguese_prompt_text(". ".join(part for part in parts if part)),
+            320,
+        )
     fallback = str(profile.get("canonical_prompt") or name or "").strip()
-    return _truncate_prompt_text(fallback, 360)
+    return _truncate_prompt_text(ensure_portuguese_prompt_text(fallback), 360)
 
 
 def visual_reference_prompt(profile: dict, view_type: str) -> str:
@@ -253,8 +291,20 @@ def visual_reference_prompt(profile: dict, view_type: str) -> str:
         guardrail = _prop_view_guardrail(view_type)
     else:
         guardrail = _character_view_guardrail(view_type)
-    return (
-        f"{base_prompt}. Vista: {view_detail}. Regras: {guardrail}. "
-        f"Evitar: {COMMON_NEGATIVE_GUARDRAIL}. Proporcao: {aspect_ratio}. "
-        "Referência de continuidade; detalhes legíveis."
+    return formatted_prompt_sections(
+        [
+            (
+                "Objetivo",
+                "Criar uma referencia visual fotorrealista e consistente para continuidade.",
+            ),
+            ("Ativo", base_prompt),
+            ("Vista solicitada", f"{visual_reference_view_label(view_type)}. {view_detail}."),
+            ("Composicao e foco", guardrail),
+            (
+                "Continuidade obrigatoria",
+                "Preservar identidade, materiais, cor, escala, proporcoes e detalhes legiveis.",
+            ),
+            ("Restricoes", COMMON_NEGATIVE_GUARDRAIL),
+            ("Proporcao", aspect_ratio),
+        ]
     )

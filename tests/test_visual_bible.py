@@ -164,14 +164,16 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
 
     prompt = visual_reference_prompt(profile, "character_reference_sheet")
 
-    assert prompt.startswith(
-        "Helena, 35, expressive detective, rainy noir lighting. Vista: folha única"
-    )
+    assert prompt.startswith("Objetivo:\nCriar uma referencia visual")
+    assert "Ativo:\nHelena, 35, detetive expressiva, iluminacao noir chuvosa" in prompt
+    assert "Vista solicitada:\nFolha de referencia do personagem" in prompt
+    assert "expressive detective" not in prompt
+    assert "rainy noir lighting" not in prompt
     assert "perspectivas solicitadas" in prompt
-    assert "Proporcao: 16:9" in prompt
+    assert "Proporcao:\n16:9" in prompt
     assert "sem texto" in prompt
-    assert "Referência de continuidade" in prompt
-    assert len(prompt) < 900
+    assert "Continuidade obrigatoria:" in prompt
+    assert len(prompt) < 1100
 
 
 def test_visual_reference_prompts_are_distinct_by_view_type() -> None:
@@ -392,9 +394,9 @@ def test_character_initial_reference_uses_single_turnaround_sheet() -> None:
     assert "fundo cinza neutro de estudio" in prompt
     assert "uma única péssoa" in prompt
     assert "não cortar cabeça, pés ou mãos" in prompt
-    assert "Proporcao: 9:16" in prompt
-    assert "Referência de continuidade" in prompt
-    assert len(prompt) < 900
+    assert "Proporcao:\n9:16" in prompt
+    assert "Continuidade obrigatoria:" in prompt
+    assert len(prompt) < 1200
 
 
 def test_character_approved_reference_sheet_uses_multiple_perspectives() -> None:
@@ -410,9 +412,9 @@ def test_character_approved_reference_sheet_uses_multiple_perspectives() -> None
     assert "uma única imagem" in prompt
     assert "fundo branco puro de estudio" in prompt
     assert "não cortar cabeça, pés ou mãos" in prompt
-    assert "Proporcao: 16:9" in prompt
-    assert "Referência de continuidade" in prompt
-    assert len(prompt) < 1100
+    assert "Proporcao:\n16:9" in prompt
+    assert "Continuidade obrigatoria:" in prompt
+    assert len(prompt) < 1350
 
 
 def test_character_legacy_multi_view_prompt_is_still_supported_for_old_references() -> None:
@@ -424,8 +426,8 @@ def test_character_legacy_multi_view_prompt_is_still_supported_for_old_reference
     assert "vista lateral esquerda de corpo inteiro" in prompt
     assert "angulo solicitado" in prompt
     assert "manter mesmo rosto" in prompt
-    assert "Proporcao: 16:9" in prompt
-    assert len(prompt) < 850
+    assert "Proporcao:\n16:9" in prompt
+    assert len(prompt) < 1050
 
 
 @pytest.mark.asyncio
@@ -506,8 +508,8 @@ def test_location_reference_prompt_forbids_people() -> None:
     assert "cenario vazio" in prompt
     assert "sem pessoas" in prompt
     assert "sem personagens" in prompt
-    assert "Proporcao: 16:9" in prompt
-    assert len(prompt) < 720
+    assert "Proporcao:\n16:9" in prompt
+    assert len(prompt) < 1050
 
 
 def test_script_location_profiles_split_composite_int_ext_sluglines() -> None:
@@ -530,9 +532,9 @@ def test_prop_reference_prompt_requires_white_background_and_object_focus() -> N
     assert "sem pessoas" in prompt
     assert "sem mãos" in prompt
     assert "sem texto" in prompt
-    assert "Proporcao: 9:16" in prompt
-    assert "detalhes legíveis" in prompt
-    assert len(prompt) < 700
+    assert "Proporcao:\n9:16" in prompt
+    assert "detalhes legiveis" in prompt
+    assert len(prompt) < 950
 
 
 def test_location_floor_plan_prompt_uses_technical_top_view() -> None:
@@ -544,7 +546,7 @@ def test_location_floor_plan_prompt_uses_technical_top_view() -> None:
     assert "sem perspectiva" in prompt
     assert "visual tecnico" in prompt
     assert "sem pessoas" in prompt
-    assert "Proporcao: 16:9" in prompt
+    assert "Proporcao:\n16:9" in prompt
 
 
 def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:

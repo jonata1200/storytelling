@@ -172,7 +172,8 @@ def test_video_motion_prompt_guides_image_to_video_continuity() -> None:
 
     prompt = _video_motion_prompt(frame, shot, scene)
 
-    assert "Gere um clipe image-to-video vertical 9:16" in prompt
+    assert "Gere um clipe vertical 9:16 de video a partir de imagem" in prompt
+    assert "image-to-video" not in prompt
     assert "Duracao obrigatoria: 6s" in prompt
     assert "Cena 2, plano 4" in prompt
     assert "primeiro frame como referência visual absoluta" in prompt

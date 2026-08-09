@@ -171,10 +171,10 @@ async def generate_storyboard_plan_images(
                         aspect_ratio=image_aspect_ratio,
                         resolution=image_resolution,
                         negative_prompt=(
-                            "animacao, cartoon, desenho, ilustracao, 3D render, anime, "
-                            "quadrinhos, pintura, concept art, personagem diferente, rosto "
-                            "diferente, figurino diferente, cenario diferente, objeto diferente, "
-                            "texto, legenda, marca d'agua, UI"
+                            "animacao, desenho caricato, desenho, ilustracao, renderizacao 3D, "
+                            "anime, quadrinhos, pintura, arte conceitual, personagem diferente, "
+                            "rosto diferente, figurino diferente, cenario diferente, objeto "
+                            "diferente, texto, legenda, marca d'agua, interface visual"
                         ),
                         references=plan.reference_uris,
                         model=image_model,

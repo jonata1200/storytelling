@@ -1,6 +1,7 @@
 ﻿import hashlib
 import re
 
+from app.generation.prompt_language import ensure_portuguese_prompt_text
 from app.visual_bible.profiles import (
     _ascii_lower,
     _clean_prompt_fragment,
@@ -319,7 +320,7 @@ def _character_profile(raw: object) -> dict:
             "não reutilizar roupa de outro personagem",
             "preservar identidade visual base em versões temporais do mesmo personagem",
         ],
-        "canonical_prompt": (
+        "canonical_prompt": ensure_portuguese_prompt_text(
             "Fotorrealista, referência de elenco, identidade consistente do personagem. "
             f"Identidade visual base: {identity_base_name}. "
             f"{f'Variante temporal: {identity_variant_note}. ' if identity_variant_note else ''}"

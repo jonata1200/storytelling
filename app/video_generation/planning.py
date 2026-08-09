@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from app.config.settings import get_settings
+from app.generation.prompt_language import ensure_portuguese_prompt_text
 from app.providers.video.types import VideoProvider
 from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
@@ -93,14 +94,15 @@ def _video_motion_prompt(
         )
     )
     return (
-        "Gere um clipe image-to-video vertical 9:16 a partir do primeiro frame fornecido.\n"
+        "Gere um clipe vertical 9:16 de video a partir de imagem, usando o primeiro "
+        "frame fornecido.\n"
         f"Duracao obrigatoria: {frame.duration_seconds}s.\n"
         f"Origem narrativa: {scene_label}, {shot_label}.\n\n"
         "Use o primeiro frame como referência visual absoluta:\n"
         "- mantenha exatamente os mesmos personagens, rostos, idade aparente, figurino, "
         "objetos, luz, paleta, ambiente, escala e composicao de partida\n"
         "- não redesenhe personagens, não troque roupa, cabelo, cenario ou objeto\n"
-        "- não adicione personagens, textos, logos, legendas, marcas d'agua, UI ou "
+        "- não adicione personagens, textos, logos, legendas, marcas d'agua, interface visual ou "
         "elementos que não aparecem no frame\n\n"
         f"Movimento narrativo do clipe: {action}.\n"
         f"Emocao dominante: {emotion}.\n"
@@ -142,7 +144,9 @@ def _video_effective_prompt(
     shot: Shot | None = None,
     scene: Scene | None = None,
 ) -> str:
-    return _video_prompt_override(metadata, frame.id) or _video_motion_prompt(frame, shot, scene)
+    return ensure_portuguese_prompt_text(
+        _video_prompt_override(metadata, frame.id) or _video_motion_prompt(frame, shot, scene)
+    )
 
 
 def _store_video_prompt_override(metadata: dict, frame_id: UUID, prompt: str) -> dict:
@@ -204,7 +208,7 @@ def video_generation_validation_errors(
     ):
         errors.append(f"aspect_ratio {aspect_ratio} não suportado pelo provider")
     if not capabilities.image_to_video:
-        errors.append("provider não suporta image-to-video")
+        errors.append("provedor não suporta video a partir de imagem")
     return errors
 
 

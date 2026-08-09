@@ -78,6 +78,7 @@ from app.visual_bible.prompts import (
     validated_visual_reference_views,
     visual_reference_aspect_ratio,
     visual_reference_prompt,
+    visual_reference_view_label,
 )
 from app.visual_bible.prompts import initial_view_for as initial_view_for
 from app.visual_bible.reference_status import (
