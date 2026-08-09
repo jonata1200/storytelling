@@ -11,6 +11,9 @@ test_chat_prompt_title_uses_first_sentence = cases.test_chat_prompt_title_uses_f
 test_dashboard_prompt_enter_key_submits_without_breaking_shift_enter = (
     cases.test_dashboard_prompt_enter_key_submits_without_breaking_shift_enter
 )
+test_idea_generation_progress_detail_keeps_user_informed = (
+    cases.test_idea_generation_progress_detail_keeps_user_informed
+)
 test_clean_idea_title_removes_numbered_prefix = (
     cases.test_clean_idea_title_removes_numbered_prefix
 )

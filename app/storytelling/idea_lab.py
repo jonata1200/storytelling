@@ -192,6 +192,7 @@ async def _generate_freeform_idea_batch(
             "avoidance_memory": avoidance_memory,
         },
         output_schema={"type": "object", "properties": {"ideas": {"type": "array"}}},
+        timeout_seconds=IDEA_PROVIDER_TIMEOUT_SECONDS,
     )
     result = await _generate_with_runtime_fallback(provider, request)
     try:

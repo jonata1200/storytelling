@@ -206,6 +206,22 @@ def test_dashboard_prompt_enter_key_submits_without_breaking_shift_enter() -> No
     assert "emit()" in handler
 
 
+def test_idea_generation_progress_detail_keeps_user_informed() -> None:
+    waiting = home_pages._idea_generation_progress_detail(0, 3, elapsed_seconds=15)
+    progressed = home_pages._idea_generation_progress_detail(
+        1,
+        3,
+        latest_title="A Porta Azul",
+    )
+
+    assert "ainda esta respondendo" in waiting
+    assert "Criado: nada ainda." in waiting
+    assert "Falta criar: 3 ideia(s)." in waiting
+    assert "Criado: 1 ideia(s)." in progressed
+    assert "Falta criar: 2 ideia(s)." in progressed
+    assert "A Porta Azul" in progressed
+
+
 def test_clean_idea_title_removes_numbered_prefix() -> None:
     assert pages._clean_idea_title("Ideia 06: Uma Comunidade") == "Uma Comunidade"
     assert pages._clean_idea_title("IDEIA 02 - O Trem") == "O Trem"

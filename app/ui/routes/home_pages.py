@@ -1,7 +1,9 @@
 # ruff: noqa: E501
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from typing import Any
 
 from nicegui import ui
@@ -41,7 +43,6 @@ from app.ui.shared.page_config import (
     STORY_DURATION_OPTIONS,
     UI_GENERATION_TIMEOUT_SECONDS,
     friendly_ai_error,
-    loading_status_message,
     play_completion_sound,
     safe_close_ui_element,
     show_ai_error_popup,
@@ -64,6 +65,57 @@ DASHBOARD_PROMPT_KEYDOWN_JS = """
   }
 }
 """
+
+
+IDEA_GENERATION_PROGRESS_PULSE_SECONDS = 2.5
+
+
+def _idea_generation_progress_detail(
+    completed: int,
+    total: int,
+    *,
+    elapsed_seconds: int = 0,
+    latest_title: str = "",
+) -> str:
+    remaining = max(total - completed, 0)
+    created_text = f"{completed} ideia(s)" if completed > 0 else "nada ainda"
+    missing_text = f"{remaining} ideia(s)" if remaining > 0 else "nada"
+    if completed <= 0 and elapsed_seconds >= 12:
+        now = "Agora: a IA ainda esta respondendo; a primeira ideia sera salva assim que chegar."
+    elif completed <= 0:
+        now = "Agora: aguardando a IA criar a primeira ideia."
+    elif remaining > 0:
+        title_fragment = f" Ultima: {latest_title}." if latest_title else ""
+        now = f"Agora: salvando ideias e gerando as proximas.{title_fragment}"
+    else:
+        now = "Agora: finalizando e atualizando a lista."
+    return "\n".join(
+        [
+            now,
+            f"Criado: {created_text}.",
+            f"Falta criar: {missing_text}.",
+        ]
+    )
+
+
+async def _pulse_idea_generation_progress(
+    update_progress: Callable[[int, int, str], None],
+    state: dict[str, Any],
+    total: int,
+) -> None:
+    while True:
+        await asyncio.sleep(IDEA_GENERATION_PROGRESS_PULSE_SECONDS)
+        started_at = float(state.get("started_at") or time.monotonic())
+        update_progress(
+            int(state.get("completed") or 0),
+            total,
+            _idea_generation_progress_detail(
+                int(state.get("completed") or 0),
+                total,
+                elapsed_seconds=int(time.monotonic() - started_at),
+                latest_title=str(state.get("latest_title") or ""),
+            ),
+        )
 
 
 def register_home_pages(
@@ -699,25 +751,29 @@ def register_home_pages(
                             "Gerando ideias",
                             10,
                             "ideia",
-                            loading_status_message(
-                                "ideas",
-                                {},
-                                now="Agora: aguardando a IA criar as opcoes narrativas.",
-                            ),
+                            _idea_generation_progress_detail(0, 10),
                         )
                     )
 
                     async def generate() -> None:
                         expected_count = int(idea_count_select.value or 10)
+                        progress_state: dict[str, Any] = {
+                            "completed": 0,
+                            "latest_title": "",
+                            "started_at": time.monotonic(),
+                        }
+                        progress_pulse = asyncio.create_task(
+                            _pulse_idea_generation_progress(
+                                update_idea_generation_progress,
+                                progress_state,
+                                expected_count,
+                            )
+                        )
                         idea_generation_dialog.open()
                         update_idea_generation_progress(
                             0,
                             expected_count,
-                            loading_status_message(
-                                "ideas",
-                                {},
-                                now="Agora: aguardando a IA criar as opcoes narrativas.",
-                            ),
+                            _idea_generation_progress_detail(0, expected_count),
                         )
                         try:
                             replace_generated_ideas([])
@@ -730,6 +786,7 @@ def register_home_pages(
                                     target_duration_minutes=coerce_duration_minutes(
                                         duration_select.value
                                     ),
+                                    batch_size=1,
                                 ):
                                     batch_start = len(generated)
                                     for batch_index, generated_idea in enumerate(batch, 1):
@@ -742,14 +799,23 @@ def register_home_pages(
                                         ]
                                         saved_ideas.insert(0, saved)
                                         completed = batch_start + batch_index
-                                        missing = max(expected_count - completed, 0)
+                                        progress_state["completed"] = completed
+                                        progress_state["latest_title"] = clean_idea_title(
+                                            saved.get("title"), "Ideia"
+                                        )
                                         update_idea_generation_progress(
                                             completed,
                                             expected_count,
-                                            (
-                                                "Salva: "
-                                                f"{clean_idea_title(saved.get('title'), 'Ideia')}. "
-                                                f"Faltam {missing}."
+                                            _idea_generation_progress_detail(
+                                                completed,
+                                                expected_count,
+                                                elapsed_seconds=int(
+                                                    time.monotonic()
+                                                    - float(progress_state["started_at"])
+                                                ),
+                                                latest_title=str(
+                                                    progress_state["latest_title"]
+                                                ),
                                             ),
                                         )
                                     refresh_idea_filter_options()
@@ -790,6 +856,9 @@ def register_home_pages(
                         except Exception as exc:
                             show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
                         finally:
+                            progress_pulse.cancel()
+                            with suppress(asyncio.CancelledError):
+                                await progress_pulse
                             safe_close_ui_element(idea_generation_dialog)
 
                 with ui.column().classes("w-full items-center gap-4 py-8"):
