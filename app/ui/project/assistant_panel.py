@@ -17,7 +17,7 @@ from app.ui.shared.assistant_state import safe_refresh as _safe_refresh
 from app.ui.shared.assistant_state import save_assistant_draft as _save_assistant_draft
 from app.ui.shared.assistant_state import save_assistant_messages as _save_assistant_messages
 from app.ui.shared.page_config import (
-    STEP_LOADING_COPY,
+    action_loading_copy,
     friendly_ai_error,
     safe_close_ui_element,
     show_ai_error_popup,
@@ -74,27 +74,24 @@ def render_assistant_panel(
             "atualizar o status do job ou preparar a etapa final após o áudio."
         ),
     }
+    counts = summary.get("counts")
+    count_map = counts if isinstance(counts, dict) else {}
+    chat_actions = (
+        "generate_ideas",
+        "generate_script",
+        "revise_script",
+        "generate_assets",
+        "approve_visual_prompt",
+        "approve_storyboard_prompt",
+        "generate_storyboard",
+        "generate_video",
+        "generate_dubbing",
+        "generate_finalization",
+        "run_quality",
+    )
     chat_loading_copy = {
-        "generate_ideas": STEP_LOADING_COPY["ideas"],
-        "generate_script": STEP_LOADING_COPY["script"],
-        "revise_script": ("Revisando roteiro", "A IA está aplicando ajustes no roteiro."),
-        "generate_assets": STEP_LOADING_COPY["visual"],
-        "approve_visual_prompt": (
-            "Gerando imagens",
-            "A IA está criando imagens a partir dos prompts aprovados.",
-        ),
-        "approve_storyboard_prompt": (
-            "Aprovando storyboards",
-            "A IA esta aprovando os prompts de storyboard e gerando os quadros pendentes.",
-        ),
-        "generate_storyboard": STEP_LOADING_COPY["storyboard"],
-        "generate_video": (
-            "Gerando clipes",
-            "A IA está criando clipes a partir dos prompts aprovados.",
-        ),
-        "generate_dubbing": STEP_LOADING_COPY["dubbing"],
-        "generate_finalization": STEP_LOADING_COPY["finalization"],
-        "run_quality": STEP_LOADING_COPY["quality"],
+        action: action_loading_copy(action, count_map)
+        for action in chat_actions
     }
     action_loading_dialogs = {
         action: loading_dialog_factory(title, message)

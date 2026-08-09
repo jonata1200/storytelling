@@ -13,7 +13,7 @@ from app.projects.versioning import (
     create_artifact_version,
     resolve_stale_artifacts_after_regeneration,
 )
-from app.storytelling.models import Scene, Script, ScriptVersion, StoryIdea
+from app.storytelling.models import Scene, Script, ScriptVersion, Shot, StoryIdea
 from app.storytelling.service import regenerate_scenes_and_shots
 from app.ui.project.data import latest as _latest
 from app.ui.project.data import scalar_count as _scalar_count
@@ -26,8 +26,8 @@ from app.ui.shared.cost_display import SCRIPT_TEXT_ESTIMATED_TOKENS, text_genera
 from app.ui.shared.generation_progress import generation_progress_dialog
 from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
-    STEP_LOADING_COPY,
     UI_GENERATION_TIMEOUT_SECONDS,
+    loading_status_message,
     safe_close_ui_element,
 )
 
@@ -141,6 +141,7 @@ async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int,
         idea = await _latest(session, StoryIdea, project_id)
         script = await _latest(session, Script, project_id)
         scene_count = await _scalar_count(session, Scene, project_id)
+        shot_count = await _scalar_count(session, Shot, project_id)
         settings = await get_or_create_production_settings(session, project_id)
         metadata = settings.metadata_json or {}
         action = metadata.get("ai_action") if isinstance(metadata, dict) else None
@@ -158,22 +159,48 @@ async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int,
         completed = 3
     if status == "completed":
         completed = 3
+    counts = {
+        "ideas": 1 if idea is not None else 0,
+        "scripts": 1 if script is not None else 0,
+        "scenes": scene_count,
+        "shots": shot_count,
+    }
     failed = status == "failed"
     if action_timeout:
         detail = (
             "A geração demorou demais ou foi interrompida. Vou recarregar para liberar "
             "uma nova tentativa."
+            f"\n{loading_status_message('script', counts)}"
         )
     elif failed:
-        detail = "A IA não conseguiu concluir o roteiro inicial."
+        detail = (
+            "A IA não conseguiu concluir o roteiro inicial."
+            f"\n{loading_status_message('script', counts)}"
+        )
     elif completed == 0:
-        detail = message or "A IA está criando uma ideia narrativa para orientar o roteiro."
+        detail = loading_status_message(
+            "script",
+            counts,
+            now=message or "Agora: criando uma ideia narrativa para orientar o roteiro.",
+        )
     elif completed == 1:
-        detail = message or "Ideia criada. A IA está escrevendo o roteiro cinematográfico."
+        detail = loading_status_message(
+            "script",
+            counts,
+            now=message or "Agora: escrevendo o roteiro cinematografico.",
+        )
     elif completed == 2:
-        detail = message or "Roteiro criado. A IA está separando cenas e planos."
+        detail = loading_status_message(
+            "script",
+            counts,
+            now=message or "Agora: separando cenas e planos.",
+        )
     else:
-        detail = "Roteiro, cenas e planos prontos."
+        detail = loading_status_message(
+            "script",
+            counts,
+            now="Agora: roteiro, cenas e planos prontos.",
+        )
     return completed, 3, detail, completed >= 3 or failed or action_timeout
 
 
@@ -317,18 +344,30 @@ def render_script_area(
             else (
                 "Retomando roteiro"
                 if should_resume_stale_script
-                else STEP_LOADING_COPY["script"][0]
+                else "Gerando roteiro"
             )
         )
         loading_message = (
-            "A IA está criando cenas e planos para o roteiro."
+            loading_status_message(
+                "script",
+                summary["counts"],
+                now="Agora: criando cenas e planos para o roteiro.",
+            )
             if missing_scenes
             else (
-                "Retomando a criação do roteiro internamente."
+                loading_status_message(
+                    "script",
+                    summary["counts"],
+                    now="Agora: retomando a criação do roteiro internamente.",
+                )
                 if should_resume_stale_script
-                else str(
-                    ai_action.get("message")
-                    or "A IA está desenvolvendo o roteiro com base na ideia."
+                else loading_status_message(
+                    "script",
+                    summary["counts"],
+                    now=str(
+                        ai_action.get("message")
+                        or "Agora: desenvolvendo o roteiro com base na ideia do projeto."
+                    ),
                 )
             )
         )
@@ -412,7 +451,11 @@ def render_script_area(
                     "Retomando roteiro",
                     3,
                     "etapa",
-                    "A IA está tentando criar o roteiro inicial novamente.",
+                    loading_status_message(
+                        "script",
+                        summary["counts"],
+                        now="Agora: tentando criar o roteiro inicial novamente.",
+                    ),
                 )
 
                 async def retry_initial_script() -> None:
@@ -420,7 +463,11 @@ def render_script_area(
                     update_retry_progress(
                         0,
                         3,
-                        "A IA está tentando criar o roteiro inicial novamente.",
+                        loading_status_message(
+                            "script",
+                            summary["counts"],
+                            now="Agora: tentando criar o roteiro inicial novamente.",
+                        ),
                     )
                     ui.timer(
                         2.0,

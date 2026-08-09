@@ -13,7 +13,11 @@ from app.ui.shared.cost_display import (
     text_generation_cost_text,
 )
 from app.ui.shared.generation_progress import generation_progress_dialog, progress_ratio
-from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, safe_close_ui_element
+from app.ui.shared.page_config import (
+    BLOCKING_DIALOG_PROPS,
+    loading_status_message,
+    safe_close_ui_element,
+)
 from app.ui.visual.actions import (
     _approve_all_visual_targets_from_ui,
     _approve_visual_target_from_ui,
@@ -249,6 +253,7 @@ def _entity_card(
     subtitle: str,
     detail: str,
     loading_dialog_factory: Callable[[str, str], Any],
+    counts: dict[str, int],
 ) -> None:
     if not existing_views:
         requested_views = [initial_view_for(target_kind)]
@@ -302,7 +307,11 @@ def _entity_card(
     )
     loading_dialog = loading_dialog_factory(
         "Gerando imagem",
-        f"A IA está criando a referência visual de {title}.",
+        loading_status_message(
+            "visual",
+            counts,
+            now=f"Agora: criando a referencia visual de {title}.",
+        ),
     )
 
     with ui.element("div").classes("entity-card rounded-2xl overflow-hidden"):
@@ -606,7 +615,11 @@ def render_assets_area(
             "Gerando imagens",
             batch_total,
             "imagem",
-            "A IA está criando as imagens aprovadas da Biblioteca Visual.",
+            loading_status_message(
+                "visual",
+                summary["counts"],
+                now="Agora: criando as imagens aprovadas da Biblioteca Visual.",
+            ),
         )
         with ui.dialog().props(BLOCKING_DIALOG_PROPS) as batch_prompt_dialog, ui.card().classes(
             "entity-card rounded-2xl p-6 w-[min(820px,92vw)] max-h-[82vh]"
@@ -664,7 +677,11 @@ def render_assets_area(
                 "Gerando prompts visuais",
                 3,
                 "grupo",
-                "A IA está criando prompts para personagens, locais e objetos.",
+                loading_status_message(
+                    "visual",
+                    summary["counts"],
+                    now="Agora: criando prompts para personagens, locais e objetos.",
+                ),
             )
             ui.label(
                 text_generation_cost_text(
@@ -746,6 +763,7 @@ def render_assets_area(
                             subtitle,
                             detail,
                             loading_dialog_factory,
+                            summary["counts"],
                         )
                     if not items:
                         with ui.element("div").classes("entity-card rounded-2xl p-8"):

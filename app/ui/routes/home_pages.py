@@ -41,6 +41,7 @@ from app.ui.shared.page_config import (
     STORY_DURATION_OPTIONS,
     UI_GENERATION_TIMEOUT_SECONDS,
     friendly_ai_error,
+    loading_status_message,
     safe_close_ui_element,
     show_ai_error_popup,
 )
@@ -697,7 +698,11 @@ def register_home_pages(
                             "Gerando ideias",
                             10,
                             "ideia",
-                            "Aguardando a IA criar as opções narrativas.",
+                            loading_status_message(
+                                "ideas",
+                                {},
+                                now="Agora: aguardando a IA criar as opcoes narrativas.",
+                            ),
                         )
                     )
 
@@ -707,7 +712,11 @@ def register_home_pages(
                         update_idea_generation_progress(
                             0,
                             expected_count,
-                            "Aguardando a IA criar as opções narrativas.",
+                            loading_status_message(
+                                "ideas",
+                                {},
+                                now="Agora: aguardando a IA criar as opcoes narrativas.",
+                            ),
                         )
                         try:
                             replace_generated_ideas([])

@@ -26,6 +26,7 @@ from app.ui.shared.generation_progress import generation_progress_dialog, progre
 from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
     friendly_ai_error,
+    loading_status_message,
     safe_close_ui_element,
     show_ai_error_popup,
 )
@@ -421,7 +422,11 @@ def render_storyboard_area(
         "Gerando storyboards",
         len(missing_frame_previews),
         "quadro",
-        "A IA está criando os quadros aprovados do storyboard.",
+        loading_status_message(
+            "storyboard",
+            summary["counts"],
+            now="Agora: criando os quadros aprovados do storyboard.",
+        ),
     )
     prompt_dialog: Any | None = None
     if script_id is not None and prompt_previews:
@@ -758,7 +763,11 @@ def render_video_area(
         "Gerando clipes",
         len(pending_frames),
         "clipe",
-        "A IA está enviando os clipes aprovados para a fila de vídeo.",
+        loading_status_message(
+            "video",
+            summary["counts"],
+            now="Agora: enviando os clipes aprovados para a fila de video.",
+        ),
     )
     video_missing = max(total_frames - generated_count, 0)
     pending_duration = sum(
@@ -1219,7 +1228,11 @@ def render_finalization_area(
         "Finalizando projeto",
         1,
         "export",
-        "A aplicação está montando a timeline final e gerando o arquivo único.",
+        loading_status_message(
+            "finalization",
+            summary["counts"],
+            now="Agora: montando a timeline final e gerando o arquivo unico.",
+        ),
     )
     progress_value = 1.0 if export is not None else (0.5 if timeline is not None else 0.0)
     with ui.element("div").classes("w-full entity-card rounded-2xl p-5"):
@@ -1310,7 +1323,11 @@ def render_dubbing_area(
         "Preparando dublagem",
         1,
         "job",
-        "A aplicação está preparando o export base e acionando o ElevenLabs.",
+        loading_status_message(
+            "dubbing",
+            summary["counts"],
+            now="Agora: preparando o export base e acionando o ElevenLabs.",
+        ),
     )
     with ui.element("div").classes("w-full entity-card rounded-2xl p-5"):
         with ui.row().classes("w-full items-start justify-between gap-3"):

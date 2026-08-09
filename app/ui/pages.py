@@ -186,9 +186,9 @@ from app.ui.shared.assistant_state import (  # noqa: F401
 from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
     DEFAULT_STORY_DURATION_MINUTES,
-    STEP_LOADING_COPY,
     ProductionStep,
     safe_close_ui_element,
+    step_loading_copy,
 )
 from app.ui.shared.page_config import IDEA_COUNT_OPTIONS as IDEA_COUNT_OPTIONS  # noqa: F401
 from app.ui.shared.page_config import IDEA_GENRES as IDEA_GENRES  # noqa: F401
@@ -625,20 +625,19 @@ async def _create_next_episode(project_id: UUID) -> None:
 def _generation_loading_dialog(title: str, message: str) -> Any:
     with (
         ui.dialog().props(BLOCKING_DIALOG_PROPS) as loading_dialog,
-        ui.card().classes("entity-card rounded-2xl p-6 min-w-80 items-center text-center"),
+        ui.card().classes(
+            "entity-card rounded-2xl p-6 w-[min(520px,92vw)] items-center text-center"
+        ),
     ):
         ui.spinner("dots", size="lg", color="primary")
         ui.label(title).classes("brand-type text-xl font-bold mt-3")
-        ui.label(message).classes("text-sm text-[#8f9590]")
+        ui.label(message).classes("text-sm text-[#8f9590] whitespace-pre-line leading-6")
     return loading_dialog
 
 
 def _render_step_card(project_id: UUID, step: ProductionStep, counts: dict[str, int]) -> None:
     ready = _step_ready(step.key, counts)
-    loading_title, loading_message = STEP_LOADING_COPY.get(
-        step.key,
-        ("Executando etapa", "A IA está trabalhando nestá etapa."),
-    )
+    loading_title, loading_message = step_loading_copy(step.key, counts)
     status_text = "pronto" if ready else "pendente"
     status_classes = (
         "bg-emerald-950 text-emerald-200 border border-emerald-800"

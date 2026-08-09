@@ -16,6 +16,7 @@ from app.ui.pages import _asset_url, _compact_project_title
 from app.ui.project import actions as project_actions
 from app.ui.routes import home_pages
 from app.ui.shared import assistant_state
+from app.ui.shared.page_config import action_loading_copy, step_loading_copy
 from app.ui.visual import actions as visual_actions
 from app.ui.workspace import script_area, storyboard_video_area
 from app.ui.workspace.assets_area import (
@@ -41,6 +42,50 @@ def test_visual_prompt_progress_detail_lists_generated_and_pending_groups() -> N
     assert "Locais: 1 prompt(s) gerado(s)." in detail
     assert "Objetos: aguardando processamento." in detail
     assert "Ainda falta: objetos." in detail
+
+
+def test_assistant_loading_copy_lists_created_and_pending_work() -> None:
+    title, message = action_loading_copy(
+        "approve_storyboard_prompt",
+        {
+            "scripts": 1,
+            "scenes": 2,
+            "shots": 5,
+            "characters": 1,
+            "locations": 1,
+            "props": 1,
+            "visual_refs": 3,
+            "frames": 2,
+            "animatics": 0,
+        },
+    )
+
+    assert title == "Aprovando storyboards"
+    assert "Criado:" in message
+    assert "1 roteiro" in message
+    assert "2 quadros de storyboard" in message
+    assert "Falta criar:" in message
+    assert "3 quadros de storyboard" in message
+    assert "animatic" in message
+
+
+def test_step_loading_copy_always_reports_created_and_missing_items() -> None:
+    _title, message = step_loading_copy(
+        "visual",
+        {
+            "scripts": 1,
+            "characters": 2,
+            "locations": 1,
+            "props": 0,
+            "visual_refs": 1,
+        },
+    )
+
+    assert "Criado:" in message
+    assert "2 personagens" in message
+    assert "Falta criar:" in message
+    assert "prompts de objetos" in message
+    assert "referencias visuais" in message
 
 
 def test_register_ui_pages_resolves_page_facade_dependencies(

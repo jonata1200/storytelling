@@ -1,8 +1,11 @@
+import logging
 import re
 from dataclasses import dataclass
-import logging
+from typing import Any
 
 from nicegui import ui
+
+from app.visual_bible.prompts import default_views_for
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +137,232 @@ STEP_LOADING_COPY = {
     "finalization": ("Finalizando projeto", "A IA está montando timeline final e export."),
     "quality": ("Revisando qualidade", "A IA está checando continuidade e riscos."),
 }
+
+
+ACTION_LOADING_STEPS = {
+    "generate_ideas": "ideas",
+    "generate_script": "script",
+    "revise_script": "script",
+    "generate_assets": "visual",
+    "approve_visual_prompt": "visual",
+    "approve_storyboard_prompt": "storyboard",
+    "generate_storyboard": "storyboard",
+    "generate_video": "video",
+    "generate_dubbing": "dubbing",
+    "generate_finalization": "finalization",
+    "run_quality": "quality",
+}
+
+ACTION_LOADING_TITLES = {
+    "revise_script": "Revisando roteiro",
+    "approve_visual_prompt": "Gerando imagens",
+    "approve_storyboard_prompt": "Aprovando storyboards",
+    "generate_video": "Gerando clipes",
+}
+
+ACTION_NOW_COPY = {
+    "generate_ideas": "Agora: criando ideias narrativas.",
+    "generate_script": "Agora: criando ou completando roteiro, cenas e planos.",
+    "revise_script": "Agora: revisando o roteiro e preservando o que ja existe.",
+    "generate_assets": "Agora: criando prompts visuais e preparando referencias.",
+    "approve_visual_prompt": "Agora: aprovando prompts visuais e gerando imagens pendentes.",
+    "approve_storyboard_prompt": (
+        "Agora: aprovando prompts de storyboard e gerando quadros pendentes."
+    ),
+    "generate_storyboard": "Agora: criando quadros de storyboard e animatic.",
+    "generate_video": "Agora: criando clipes de video a partir do storyboard.",
+    "generate_dubbing": "Agora: preparando dublagem para os clipes criados.",
+    "generate_finalization": "Agora: montando timeline final e export.",
+    "run_quality": "Agora: revisando continuidade e riscos de qualidade.",
+}
+
+VISUAL_REFERENCE_VIEW_COUNTS = {
+    "characters": len(default_views_for("character")),
+    "locations": len(default_views_for("location")),
+    "props": len(default_views_for("prop")),
+}
+
+
+def _safe_count(counts: dict[str, Any], key: str) -> int:
+    try:
+        return max(int(counts.get(key, 0) or 0), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _count_text(count: int, singular: str, plural: str) -> str:
+    label = singular if count == 1 else plural
+    return f"{count} {label}"
+
+
+def _append_count(
+    parts: list[str],
+    counts: dict[str, Any],
+    key: str,
+    singular: str,
+    plural: str,
+) -> None:
+    value = _safe_count(counts, key)
+    if value > 0:
+        parts.append(_count_text(value, singular, plural))
+
+
+def _expected_visual_references(counts: dict[str, Any]) -> int:
+    return sum(
+        _safe_count(counts, key) * view_count
+        for key, view_count in VISUAL_REFERENCE_VIEW_COUNTS.items()
+    )
+
+
+def _created_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
+    created: list[str] = []
+    if step_key in {"ideas", "script"}:
+        _append_count(created, counts, "ideas", "ideia", "ideias")
+    if step_key in {"script", "visual", "storyboard"}:
+        _append_count(created, counts, "scripts", "roteiro", "roteiros")
+        _append_count(created, counts, "scenes", "cena", "cenas")
+        _append_count(created, counts, "shots", "plano", "planos")
+    if step_key in {"visual", "storyboard"}:
+        _append_count(created, counts, "characters", "personagem", "personagens")
+        _append_count(created, counts, "locations", "local", "locais")
+        _append_count(created, counts, "props", "objeto", "objetos")
+        _append_count(
+            created,
+            counts,
+            "visual_refs",
+            "referencia visual",
+            "referencias visuais",
+        )
+    if step_key in {"storyboard", "video", "dubbing", "finalization"}:
+        _append_count(
+            created,
+            counts,
+            "frames",
+            "quadro de storyboard",
+            "quadros de storyboard",
+        )
+        _append_count(created, counts, "animatics", "animatic", "animatics")
+    if step_key in {"video", "dubbing", "finalization", "quality"}:
+        _append_count(created, counts, "clips", "clipe de video", "clipes de video")
+    if step_key in {"dubbing", "finalization", "quality"}:
+        _append_count(created, counts, "dubbing_jobs", "job de dublagem", "jobs de dublagem")
+    if step_key in {"finalization", "quality"}:
+        _append_count(created, counts, "exports", "export final", "exports finais")
+    if step_key == "quality":
+        created.append(
+            _count_text(
+                _safe_count(counts, "qa_issues"),
+                "alerta de qualidade registrado",
+                "alertas de qualidade registrados",
+            )
+        )
+    return created
+
+
+def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    scripts = _safe_count(counts, "scripts")
+    scenes = _safe_count(counts, "scenes")
+    shots = _safe_count(counts, "shots")
+    frames = _safe_count(counts, "frames")
+    clips = _safe_count(counts, "clips")
+    visual_refs = _safe_count(counts, "visual_refs")
+    expected_visual_refs = _expected_visual_references(counts)
+
+    if step_key == "ideas" and _safe_count(counts, "ideas") <= 0:
+        missing.append("ideia narrativa")
+    if step_key in {"script", "visual", "storyboard"}:
+        if scripts <= 0:
+            missing.append("roteiro")
+        if scenes <= 0 or shots <= 0:
+            missing.append("cenas e planos")
+    if step_key in {"visual", "storyboard"}:
+        if _safe_count(counts, "characters") <= 0:
+            missing.append("prompts de personagens")
+        if _safe_count(counts, "locations") <= 0:
+            missing.append("prompts de locais")
+        if _safe_count(counts, "props") <= 0:
+            missing.append("prompts de objetos")
+        if expected_visual_refs > visual_refs:
+            pending_refs = expected_visual_refs - visual_refs
+            missing.append(
+                _count_text(
+                    pending_refs,
+                    "referencia visual",
+                    "referencias visuais",
+                )
+            )
+    if step_key == "storyboard":
+        if shots > 0 and frames < shots:
+            pending_frames = shots - frames
+            missing.append(
+                _count_text(
+                    pending_frames,
+                    "quadro de storyboard",
+                    "quadros de storyboard",
+                )
+            )
+        if frames > 0 and _safe_count(counts, "animatics") <= 0:
+            missing.append("animatic")
+    if step_key in {"video", "dubbing", "finalization"}:
+        if frames <= 0:
+            missing.append("storyboard")
+        elif clips < frames:
+            pending_clips = frames - clips
+            missing.append(_count_text(pending_clips, "clipe de video", "clipes de video"))
+    if step_key == "dubbing" and _safe_count(counts, "dubbing_jobs") <= 0:
+        missing.append("dublagem")
+    if step_key == "finalization" and _safe_count(counts, "exports") <= 0:
+        missing.append("export final")
+    if step_key == "quality":
+        missing.append("revisao de qualidade atualizada")
+    return missing
+
+
+def loading_status_message(
+    step_key: str,
+    counts: dict[str, Any] | None = None,
+    *,
+    now: str | None = None,
+) -> str:
+    count_map = counts if isinstance(counts, dict) else {}
+    created = _created_items_for_step(step_key, count_map)
+    missing = _missing_items_for_step(step_key, count_map)
+    created_text = ", ".join(created) if created else "nada ainda"
+    missing_text = (
+        ", ".join(missing)
+        if missing
+        else "nada nesta etapa; a IA esta validando e atualizando a tela"
+    )
+    lines = [now] if now else []
+    lines.extend(
+        [
+            f"Criado: {created_text}.",
+            f"Falta criar: {missing_text}.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def step_loading_copy(step_key: str, counts: dict[str, Any] | None = None) -> tuple[str, str]:
+    title, _message = STEP_LOADING_COPY.get(
+        step_key,
+        ("Executando etapa", "A IA esta trabalhando nesta etapa."),
+    )
+    return title, loading_status_message(step_key, counts)
+
+
+def action_loading_copy(action: str, counts: dict[str, Any] | None = None) -> tuple[str, str]:
+    step_key = ACTION_LOADING_STEPS.get(action, "script")
+    title = ACTION_LOADING_TITLES.get(
+        action,
+        STEP_LOADING_COPY.get(step_key, ("Executando", ""))[0],
+    )
+    return title, loading_status_message(
+        step_key,
+        counts,
+        now=ACTION_NOW_COPY.get(action),
+    )
 
 
 def settings_tab_key(value: object) -> str:
