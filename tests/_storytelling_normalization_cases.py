@@ -376,6 +376,44 @@ FADE OUT.
     assert "FADE IN: CENA 1" not in payload["content"]
 
 
+def test_script_payload_removes_screenplay_parentheticals() -> None:
+    payload = normalize_script_payload(
+        {
+            "title": "A Porta Azul",
+            "content": """
+FADE IN:
+
+CENA 01
+INT. LOJA FECHADA - NOITE
+
+Marco fecha o caixa (a pressao pesa no ambiente).
+
+MARCO (CONT.)
+(baixo)
+Eu preciso terminar isso agora.
+
+LIA (V.O.)
+Ninguem vai esperar.
+
+FADE OUT.
+""",
+        },
+        default_title="A Porta Azul",
+        language="pt-BR",
+        target_duration_seconds=300,
+    )
+
+    content = payload["content"]
+    assert "Marco fecha o caixa." in content
+    assert "\nMARCO\nEu preciso terminar isso agora." in content
+    assert "\nLIA\nNinguem vai esperar." in content
+    assert "(CONT.)" not in content
+    assert "(V.O.)" not in content
+    assert "(baixo)" not in content
+    assert "(" not in content
+    assert ")" not in content
+
+
 def test_screenplay_válidator_rejects_technical_planning_document() -> None:
     errors = screenplay_validation_errors(
         """

@@ -187,6 +187,15 @@ PLACEHOLDER_SCENE_SLUGLINE_RE = re.compile(
 FADE_IN_WITH_INLINE_TEXT_RE = re.compile(r"(?im)^\s*FADE IN\s*:?[^\S\r\n]+\S")
 
 
+SCREENPLAY_PARENTHETICAL_LINE_RE = re.compile(r"^\s*\([^()\n]{1,120}\)\s*$")
+
+
+SCREENPLAY_INLINE_PARENTHETICAL_RE = re.compile(r"\s*\([^()\n]{1,120}\)")
+
+
+SCREENPLAY_DIALOGUE_CUE_SUFFIX_RE = re.compile(r"\s+\([^()\n]{1,60}\)\s*$")
+
+
 LOCATION_DIALOGUE_CUE_TERMS = {
     "AMBIENTE",
     "APARTAMENTO",
@@ -293,6 +302,26 @@ def _is_uppercase_dialogue_candidate(line: str) -> bool:
         return False
     letters = re.sub(r"[^A-Za-zÀ-ÖØ-öø-ÿ]", "", text)
     return bool(letters) and text == text.upper()
+
+
+def _remove_screenplay_parentheticals(content: str) -> str:
+    cleaned: list[str] = []
+    for raw_line in str(content or "").splitlines():
+        line = raw_line.rstrip()
+        if SCREENPLAY_PARENTHETICAL_LINE_RE.match(line):
+            continue
+        without_cue_suffix = SCREENPLAY_DIALOGUE_CUE_SUFFIX_RE.sub("", line).rstrip()
+        if without_cue_suffix != line and _is_uppercase_dialogue_candidate(
+            without_cue_suffix.strip()
+        ):
+            line = without_cue_suffix
+        line = SCREENPLAY_INLINE_PARENTHETICAL_RE.sub("", line).rstrip()
+        line = re.sub(r" {2,}", " ", line)
+        if line.strip():
+            cleaned.append(line)
+        elif cleaned and cleaned[-1].strip():
+            cleaned.append("")
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(cleaned)).strip()
 
 
 def _next_dialogue_text_line(lines: list[str], index: int) -> str:
@@ -777,10 +806,12 @@ def normalize_script_payload(
     normalized.setdefault("title", default_title)
     normalized.setdefault("language", language)
     normalized["target_duration_seconds"] = target_duration_seconds
-    normalized["content"] = _script_content_from_payload(
-        normalized,
-        default_title=default_title,
-        target_duration_seconds=target_duration_seconds,
+    normalized["content"] = _remove_screenplay_parentheticals(
+        _script_content_from_payload(
+            normalized,
+            default_title=default_title,
+            target_duration_seconds=target_duration_seconds,
+        )
     )
     validate_screenplay_content(normalized["content"], "generate_script")
     try:

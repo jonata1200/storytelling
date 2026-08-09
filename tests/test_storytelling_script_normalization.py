@@ -18,6 +18,9 @@ test_script_payload_adds_scene_markers_to_screenplay_without_cena_labels = (
 test_script_payload_normalizes_inline_scene_heading_from_model_response = (
     cases.test_script_payload_normalizes_inline_scene_heading_from_model_response
 )
+test_script_payload_removes_screenplay_parentheticals = (
+    cases.test_script_payload_removes_screenplay_parentheticals
+)
 test_screenplay_válidator_rejects_technical_planning_document = (
     cases.test_screenplay_válidator_rejects_technical_planning_document
 )
