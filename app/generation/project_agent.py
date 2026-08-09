@@ -4,8 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dubbing.models import DubbingJob
 from app.dubbing.service import start_project_dubbing
-from app.finalization.models import Export
-from app.finalization.models import SubtitleTrack
+from app.finalization.models import Export, SubtitleTrack
 from app.finalization.service import (
     create_final_timeline,
     export_timeline,
@@ -51,8 +50,9 @@ from app.generation.project_agent_visual import (  # noqa: E402,F401
     _normalize_match_text,
     _requests_all_visual_targets,
     _requests_all_visual_views,
-    _requests_visual_bible_reset,
+    _requests_generation_after_approval,
     _requests_regeneration,
+    _requests_visual_bible_reset,
     _requests_visual_prompt_approval,
     _visual_chat_targets,
     _visual_reference_views_for_target,
@@ -82,6 +82,9 @@ from app.storytelling.service import (
 from app.video_generation.models import VideoClip
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (  # noqa: F401
+    approve_visual_target as approve_visual_target,
+)
+from app.visual_bible.service import (
     approve_visual_target_and_generate_views as approve_visual_target_and_generate_views,
 )
 from app.visual_bible.service import (
@@ -90,7 +93,6 @@ from app.visual_bible.service import (
     visual_reference_completion_message,
     visual_reference_completion_report,
 )
-
 
 SCRIPT_AGENT_EDIT_BLOCKER_MODELS = (
     ("personagens", Character),
@@ -332,6 +334,7 @@ async def _ensure_storyboard_pipeline(
             script.id,
             scene_number=scene_number,
             force=force,
+            progress_callback=_storyboard_frame_progress(progress),
         )
         if generated_frames is None:
             return ProjectChatResult(
@@ -422,6 +425,7 @@ async def _approve_storyboard_prompts_from_chat(
     project_id: UUID,
     progress: ProgressCallback | None = None,
     scene_number: int | None = None,
+    generate_after_approval: bool = False,
 ) -> ProjectChatResult:
     script = await _latest(session, Script, project_id)
     if script is None:
@@ -442,7 +446,7 @@ async def _approve_storyboard_prompts_from_chat(
     scene_copy = f" da cena {scene_number}" if scene_number is not None else ""
     await _emit_progress(
         progress,
-        f"Vou aprovar os prompts de storyboard{scene_copy} e gerar os quadros pendentes.",
+        f"Vou aprovar os prompts de storyboard{scene_copy}.",
     )
     approved_count = await approve_storyboard_prompts(
         session,
@@ -450,6 +454,26 @@ async def _approve_storyboard_prompts_from_chat(
         script.id,
         scene_number=scene_number,
     )
+    if not generate_after_approval:
+        if approved_count:
+            return ProjectChatResult(
+                (
+                    f"Aprovei {approved_count} prompt(s) de storyboard{scene_copy}. "
+                    "Nenhum quadro foi gerado; peça explicitamente para gerar os "
+                    "storyboards quando quiser."
+                ),
+                "approve_storyboard_prompt",
+                True,
+            )
+        return ProjectChatResult(
+            (
+                f"Os prompts de storyboard{scene_copy} já estavam aprovados. "
+                "Nenhum quadro foi gerado; peça explicitamente para gerar os "
+                "storyboards quando quiser."
+            ),
+            "approve_storyboard_prompt",
+            False,
+        )
     generated_frames = []
     if await storyboard_frames_need_generation(session, project_id, script.id):
         if await storyboard_prompts_need_approval(
@@ -472,6 +496,7 @@ async def _approve_storyboard_prompts_from_chat(
             script.id,
             scene_number=scene_number,
             approved_only=True,
+            progress_callback=_storyboard_frame_progress(progress),
         )
         if generated_frames is None:
             return ProjectChatResult(
@@ -500,6 +525,25 @@ async def _approve_storyboard_prompts_from_chat(
         "approve_storyboard_prompt",
         False,
     )
+
+
+def _storyboard_frame_progress(
+    progress: ProgressCallback | None,
+):
+    if progress is None:
+        return None
+
+    async def report(completed: int, total: int, detail: str) -> None:
+        await progress(
+            {
+                "completed": completed,
+                "total": total,
+                "detail": detail,
+                "unit": "quadro",
+            }
+        )
+
+    return report
 
 
 async def _ensure_finalization_pipeline(
@@ -747,6 +791,7 @@ async def handle_project_chat(
             project_id,
             progress=progress,
             scene_number=_requested_storyboard_scene_number(message),
+            generate_after_approval=_requests_generation_after_approval(message),
         )
     if action == "generate_storyboard":
         scene_number = _requested_storyboard_scene_number(message)

@@ -598,6 +598,33 @@ async def approve_visual_target_and_generate_views(
     target_id: UUID,
     view_types: list[str] | None = None,
 ) -> list[VisualReference] | None:
+    approved = await approve_visual_target(session, project_id, target_kind, target_id)
+    if approved is None:
+        return None
+
+    existing_views = await _existing_visual_reference_views(
+        session, project_id, target_kind, target_id
+    )
+    requested_views = validated_visual_reference_views(target_kind, view_types)
+    missing_views = [view for view in requested_views if view not in existing_views]
+    if not missing_views:
+        await session.commit()
+        return []
+    return await generate_visual_references(
+        session,
+        project_id,
+        target_kind,
+        target_id,
+        missing_views,
+    )
+
+
+async def approve_visual_target(
+    session: AsyncSession,
+    project_id: UUID,
+    target_kind: str,
+    target_id: UUID,
+) -> bool | None:
     project = await ProjectRepository(session).get_project(project_id)
     target = await _get_visual_target(session, project_id, target_kind, target_id)
     if project is None or target is None:
@@ -626,21 +653,8 @@ async def approve_visual_target_and_generate_views(
         ApprovalDecision.APPROVED,
         notes="Perfil visual aprovado para criacao de vistas multiplas.",
     )
-    existing_views = await _existing_visual_reference_views(
-        session, project_id, target_kind, target_id
-    )
-    requested_views = validated_visual_reference_views(target_kind, view_types)
-    missing_views = [view for view in requested_views if view not in existing_views]
-    if not missing_views:
-        await session.commit()
-        return []
-    return await generate_visual_references(
-        session,
-        project_id,
-        target_kind,
-        target_id,
-        missing_views,
-    )
+    await session.commit()
+    return True
 
 
 async def generate_visual_references(

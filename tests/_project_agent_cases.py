@@ -805,6 +805,7 @@ async def test_storyboard_pipeline_force_regenerates_frames(
         requested_script_id: Any,
         scene_number: int | None = None,
         force: bool = False,
+        progress_callback: Any = None,
     ) -> list[SimpleNamespace]:
         assert requested_project_id == project_id
         assert requested_script_id == script_id
@@ -840,6 +841,84 @@ async def test_storyboard_pipeline_force_regenerates_frames(
 
     assert result.action == "generate_storyboard"
     assert requested_force_values == [True]
+
+
+@pytest.mark.asyncio
+async def test_storyboard_pipeline_reports_frame_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    progress_events: list[Any] = []
+
+    async def fake_script(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+    ) -> tuple[SimpleNamespace, str, bool]:
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=script_id), "script ok", False
+
+    async def fake_visual_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"complete": True, "missing_categories": [], "missing_views": 0}
+
+    async def fake_prompts_need_approval(*args: Any, **kwargs: Any) -> bool:
+        return False
+
+    async def fake_frames_need_generation(*args: Any, **kwargs: Any) -> bool:
+        return True
+
+    async def fake_generate_storyboard_frames(
+        *args: Any,
+        progress_callback: Any = None,
+        **kwargs: Any,
+    ) -> list[SimpleNamespace]:
+        assert progress_callback is not None
+        await progress_callback(1, 4, "Agora: gerando Cena 01 - Plano 01 - Quadro 001.")
+        await progress_callback(4, 4, "Agora: finalizando Cena 01 - Plano 04 - Quadro 004.")
+        return [SimpleNamespace(id=uuid4())]
+
+    async def fake_animatic_bundle(*args: Any, **kwargs: Any) -> object:
+        return object()
+
+    async def fake_count(*args: Any, **kwargs: Any) -> int:
+        return 1
+
+    async def collect_progress(event: Any) -> None:
+        progress_events.append(event)
+
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
+    monkeypatch.setattr(project_agent, "visual_reference_completion_report", fake_visual_report)
+    monkeypatch.setattr(
+        project_agent,
+        "storyboard_prompts_need_approval",
+        fake_prompts_need_approval,
+    )
+    monkeypatch.setattr(
+        project_agent,
+        "storyboard_frames_need_generation",
+        fake_frames_need_generation,
+    )
+    monkeypatch.setattr(
+        project_agent,
+        "generate_storyboard_frames",
+        fake_generate_storyboard_frames,
+    )
+    monkeypatch.setattr(project_agent, "_count", fake_count)
+    monkeypatch.setattr(project_agent, "generate_animatic_bundle", fake_animatic_bundle)
+
+    result = await project_agent._ensure_storyboard_pipeline(
+        cast(AsyncSession, object()),
+        project_id,
+        progress=collect_progress,
+    )
+
+    assert result.action == "generate_storyboard"
+    assert any(isinstance(event, dict) and event["completed"] == 4 for event in progress_events)
+    assert any(
+        isinstance(event, dict) and event["detail"].startswith("Agora: gerando")
+        for event in progress_events
+    )
 
 
 @pytest.mark.asyncio
@@ -992,10 +1071,12 @@ async def test_project_chat_routes_storyboard_prompt_approval(
         requested_project_id: Any,
         progress: Any = None,
         scene_number: int | None = None,
+        generate_after_approval: bool = False,
     ) -> ProjectChatResult:
         calls.append("approve_storyboard")
         assert requested_project_id == project_id
         assert scene_number is None
+        assert generate_after_approval is False
         return ProjectChatResult("storyboard aprovado", "approve_storyboard_prompt", True)
 
     async def fail_visual_approval(*args: Any, **kwargs: Any) -> ProjectChatResult:
@@ -1027,6 +1108,116 @@ async def test_project_chat_routes_storyboard_prompt_approval(
         True,
     )
     assert calls == ["approve_storyboard"]
+
+
+@pytest.mark.asyncio
+async def test_storyboard_prompt_approval_from_chat_does_not_generate_without_explicit_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    calls: list[str] = []
+
+    async def fake_latest(*args: Any, **kwargs: Any) -> SimpleNamespace:
+        return SimpleNamespace(id=script_id)
+
+    async def fake_visual_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"complete": True, "missing_categories": [], "missing_views": 0}
+
+    async def fake_approve_prompts(*args: Any, **kwargs: Any) -> int:
+        calls.append("approve")
+        return 38
+
+    async def fail_generate_frames(*args: Any, **kwargs: Any) -> list[Any]:
+        raise AssertionError("aprovar prompts nao deve gerar storyboards automaticamente")
+
+    monkeypatch.setattr(project_agent, "_latest", fake_latest)
+    monkeypatch.setattr(project_agent, "visual_reference_completion_report", fake_visual_report)
+    monkeypatch.setattr(project_agent, "approve_storyboard_prompts", fake_approve_prompts)
+    monkeypatch.setattr(project_agent, "generate_storyboard_frames", fail_generate_frames)
+
+    result = await project_agent._approve_storyboard_prompts_from_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        generate_after_approval=False,
+    )
+
+    assert result == ProjectChatResult(
+        (
+            "Aprovei 38 prompt(s) de storyboard. "
+            "Nenhum quadro foi gerado; peça explicitamente para gerar os storyboards quando quiser."
+        ),
+        "approve_storyboard_prompt",
+        True,
+    )
+    assert calls == ["approve"]
+
+
+@pytest.mark.asyncio
+async def test_storyboard_prompt_approval_from_chat_can_generate_when_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    script_id = uuid4()
+    calls: list[str] = []
+
+    async def fake_latest(*args: Any, **kwargs: Any) -> SimpleNamespace:
+        return SimpleNamespace(id=script_id)
+
+    async def fake_visual_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"complete": True, "missing_categories": [], "missing_views": 0}
+
+    async def fake_approve_prompts(*args: Any, **kwargs: Any) -> int:
+        calls.append("approve")
+        return 2
+
+    async def fake_frames_need_generation(*args: Any, **kwargs: Any) -> bool:
+        calls.append("frames_need_generation")
+        return len(calls) == 2
+
+    async def fake_prompts_need_approval(*args: Any, **kwargs: Any) -> bool:
+        calls.append("prompts_need_approval")
+        return False
+
+    async def fake_generate_frames(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
+        calls.append("generate_frames")
+        return [SimpleNamespace(id=uuid4())]
+
+    async def fake_animatic(*args: Any, **kwargs: Any) -> object:
+        calls.append("animatic")
+        return object()
+
+    monkeypatch.setattr(project_agent, "_latest", fake_latest)
+    monkeypatch.setattr(project_agent, "visual_reference_completion_report", fake_visual_report)
+    monkeypatch.setattr(project_agent, "approve_storyboard_prompts", fake_approve_prompts)
+    monkeypatch.setattr(
+        project_agent,
+        "storyboard_frames_need_generation",
+        fake_frames_need_generation,
+    )
+    monkeypatch.setattr(
+        project_agent,
+        "storyboard_prompts_need_approval",
+        fake_prompts_need_approval,
+    )
+    monkeypatch.setattr(project_agent, "generate_storyboard_frames", fake_generate_frames)
+    monkeypatch.setattr(project_agent, "generate_animatic_bundle", fake_animatic)
+
+    result = await project_agent._approve_storyboard_prompts_from_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        generate_after_approval=True,
+    )
+
+    assert result.message == "Aprovei 2 prompt(s) de storyboard e gerei 1 quadro(s)."
+    assert calls == [
+        "approve",
+        "frames_need_generation",
+        "prompts_need_approval",
+        "generate_frames",
+        "frames_need_generation",
+        "animatic",
+    ]
 
 
 @pytest.mark.asyncio
@@ -1067,7 +1258,7 @@ async def test_visual_prompt_approval_matches_target_name_and_generates_initial_
     result = await project_agent._approve_visual_prompt_from_chat(
         cast(AsyncSession, object()),
         project_id,
-        "aprove o prompt do personagem Clara para criar imagem",
+        "aprove o prompt do personagem Clara e crie a imagem",
     )
 
     assert result == ProjectChatResult(
@@ -1081,6 +1272,54 @@ async def test_visual_prompt_approval_matches_target_name_and_generates_initial_
         target_id,
         ["front_portrait"],
     )
+
+
+@pytest.mark.asyncio
+async def test_visual_prompt_approval_from_chat_does_not_generate_without_explicit_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    target_id = uuid4()
+    target = project_agent.VisualChatTarget("character", target_id, "Clara")
+    calls: list[str] = []
+
+    async def fake_targets(*args: Any, **kwargs: Any) -> list[Any]:
+        return [target]
+
+    async def fake_views(*args: Any, **kwargs: Any) -> set[str]:
+        return set()
+
+    async def fake_approve_only(*args: Any, **kwargs: Any) -> bool:
+        calls.append("approve_only")
+        return True
+
+    async def fail_approve_and_generate(*args: Any, **kwargs: Any) -> list[Any]:
+        raise AssertionError("aprovar prompt visual nao deve gerar imagem automaticamente")
+
+    monkeypatch.setattr(project_agent, "_visual_chat_targets", fake_targets)
+    monkeypatch.setattr(project_agent, "_visual_reference_views_for_target", fake_views)
+    monkeypatch.setattr(project_agent, "approve_visual_target", fake_approve_only)
+    monkeypatch.setattr(
+        project_agent,
+        "approve_visual_target_and_generate_views",
+        fail_approve_and_generate,
+    )
+
+    result = await project_agent._approve_visual_prompt_from_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "aprove o prompt do personagem Clara",
+    )
+
+    assert result == ProjectChatResult(
+        (
+            "Aprovei 1 ativo(s) visual(is). "
+            "Nenhuma imagem foi gerada; peça explicitamente para gerar quando quiser."
+        ),
+        "approve_visual_prompt",
+        True,
+    )
+    assert calls == ["approve_only"]
 
 
 @pytest.mark.asyncio

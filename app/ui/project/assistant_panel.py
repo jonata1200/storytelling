@@ -16,6 +16,7 @@ from app.ui.shared.assistant_state import safe_client_navigation as _safe_client
 from app.ui.shared.assistant_state import safe_refresh as _safe_refresh
 from app.ui.shared.assistant_state import save_assistant_draft as _save_assistant_draft
 from app.ui.shared.assistant_state import save_assistant_messages as _save_assistant_messages
+from app.ui.shared.generation_progress import generation_progress_dialog
 from app.ui.shared.page_config import (
     action_loading_copy,
     friendly_ai_error,
@@ -94,10 +95,39 @@ def render_assistant_panel(
         action: action_loading_copy(action, count_map)
         for action in chat_actions
     }
-    action_loading_dialogs = {
-        action: loading_dialog_factory(title, message)
-        for action, (title, message) in chat_loading_copy.items()
-    }
+    action_loading_dialogs: dict[str, Any] = {}
+    action_loading_progress_updates: dict[str, Callable[[int, int, str], None]] = {}
+    storyboard_progress_actions = {"approve_storyboard_prompt", "generate_storyboard"}
+    storyboard_progress_total = max(
+        int(count_map.get("shots") or 0) - int(count_map.get("frames") or 0),
+        1,
+    )
+    action_loading_totals: dict[str, int] = {}
+    for action, (title, message) in chat_loading_copy.items():
+        if action == "revise_script":
+            detail = message.as_text() if hasattr(message, "as_text") else str(message)
+            dialog, update_progress = generation_progress_dialog(
+                title,
+                3,
+                "etapa",
+                detail,
+            )
+            action_loading_dialogs[action] = dialog
+            action_loading_progress_updates[action] = update_progress
+            action_loading_totals[action] = 3
+        elif action in storyboard_progress_actions:
+            detail = message.as_text() if hasattr(message, "as_text") else str(message)
+            dialog, update_progress = generation_progress_dialog(
+                title,
+                storyboard_progress_total,
+                "quadro",
+                detail,
+            )
+            action_loading_dialogs[action] = dialog
+            action_loading_progress_updates[action] = update_progress
+            action_loading_totals[action] = storyboard_progress_total
+        else:
+            action_loading_dialogs[action] = loading_dialog_factory(title, message)
     sync_ai_action_events_to_chat(project_id, project_ai_action(summary))
     notify_ai_action_failure_once(project_id, summary)
     messages = _load_assistant_messages(project_id, active, assistant_suggestions)
@@ -177,15 +207,50 @@ def render_assistant_panel(
             should_reload = False
             predicted_action = classify_project_chat_action(user_message, active)
             loading_dialog = action_loading_dialogs.get(predicted_action)
+            loading_progress_update = action_loading_progress_updates.get(predicted_action)
+            loading_progress_total = action_loading_totals.get(predicted_action, 3)
+            loading_progress_completed = 0
             if loading_dialog is not None:
                 loading_dialog.open()
             error_popup: tuple[str, str | None, str] | None = None
 
-            async def report_progress(content: str) -> None:
-                progress_message = content.strip()
+            async def report_progress(content: Any) -> None:
+                nonlocal loading_progress_completed
+                if isinstance(content, dict):
+                    progress_message = str(
+                        content.get("detail") or content.get("message") or ""
+                    ).strip()
+                    if not progress_message:
+                        return
+                    if loading_progress_update is not None:
+                        try:
+                            completed = int(content.get("completed") or 0)
+                            total = int(content.get("total") or loading_progress_total)
+                        except (TypeError, ValueError):
+                            completed = loading_progress_completed
+                            total = loading_progress_total
+                        loading_progress_completed = completed
+                        loading_progress_update(completed, max(total, 1), progress_message)
+                    pending_message["content"] = progress_message
+                    _save_assistant_messages(project_id, messages)
+                    _safe_refresh(conversation)
+                    await asyncio.sleep(0)
+                    return
+
+                progress_message = str(content or "").strip()
                 if not progress_message:
                     return
                 pending_message["content"] = progress_message
+                if loading_progress_update is not None:
+                    loading_progress_completed = min(
+                        loading_progress_completed + 1,
+                        max(loading_progress_total - 1, 1),
+                    )
+                    loading_progress_update(
+                        loading_progress_completed,
+                        loading_progress_total,
+                        progress_message,
+                    )
                 _save_assistant_messages(project_id, messages)
                 _safe_refresh(conversation)
                 await asyncio.sleep(0)
@@ -216,6 +281,9 @@ def render_assistant_panel(
                 )
                 response = friendly_ai_error(exc)
                 error_popup = (response, str(exc), "Falha na IA")
+            if loading_progress_update is not None:
+                loading_progress_update(loading_progress_total, loading_progress_total, response)
+                await asyncio.sleep(0.1)
             if loading_dialog is not None:
                 safe_close_ui_element(loading_dialog)
             if error_popup is not None:
@@ -240,6 +308,9 @@ def render_assistant_panel(
                     "generate_storyboard",
                 }:
                     play_completion_sound()
+                if loading_dialog is not None:
+                    safe_close_ui_element(loading_dialog)
+                    await asyncio.sleep(0.1)
                 _safe_client_navigation(client)
                 return
             _safe_refresh(conversation)

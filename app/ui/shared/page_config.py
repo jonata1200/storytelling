@@ -193,8 +193,8 @@ ACTION_LOADING_STEPS = {
 
 ACTION_LOADING_TITLES = {
     "revise_script": "Revisando roteiro",
-    "approve_visual_prompt": "Gerando imagens",
-    "approve_storyboard_prompt": "Aprovando storyboards",
+    "approve_visual_prompt": "Aprovando prompts visuais",
+    "approve_storyboard_prompt": "Aprovando prompts de storyboard",
     "generate_video": "Gerando clipes",
 }
 
@@ -203,9 +203,9 @@ ACTION_NOW_COPY = {
     "generate_script": "Agora: criando ou completando roteiro, cenas e planos.",
     "revise_script": "Agora: revisando o roteiro e preservando o que ja existe.",
     "generate_assets": "Agora: criando prompts visuais e preparando referencias.",
-    "approve_visual_prompt": "Agora: aprovando prompts visuais e gerando imagens pendentes.",
+    "approve_visual_prompt": "Agora: aprovando os prompts visuais solicitados.",
     "approve_storyboard_prompt": (
-        "Agora: aprovando prompts de storyboard e gerando quadros pendentes."
+        "Agora: aprovando os prompts de storyboard solicitados."
     ),
     "generate_storyboard": "Agora: criando quadros de storyboard e animatic.",
     "generate_video": "Agora: criando clipes de video a partir do storyboard.",

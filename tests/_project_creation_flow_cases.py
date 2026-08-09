@@ -60,7 +60,7 @@ def test_assistant_loading_copy_lists_created_and_pending_work() -> None:
         },
     )
 
-    assert title == "Aprovando storyboards"
+    assert title == "Aprovando prompts de storyboard"
     assert isinstance(status, LoadingStatus)
     assert status.completed == 2
     assert status.total == 6

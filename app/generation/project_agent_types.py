@@ -1,6 +1,6 @@
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 ProjectChatAction = Literal[
     "chat",
@@ -59,7 +59,7 @@ class ProjectChatIntent:
     reason: str = ""
 
 
-ProgressCallback = Callable[[str], Awaitable[None]]
+ProgressCallback = Callable[[Any], Awaitable[None]]
 
 
 ACTION_PROGRESS_MESSAGES: dict[ProjectChatAction, str] = {

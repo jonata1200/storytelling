@@ -17,6 +17,9 @@ from app.generation.project_agent_types import (
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.prompts import allowed_views_for
 from app.visual_bible.service import (
+    approve_visual_target as approve_visual_target_only,
+)
+from app.visual_bible.service import (
     approve_visual_target_and_generate_views,
     default_views_for,
     initial_view_for,
@@ -75,6 +78,23 @@ def _requests_visual_prompt_approval(message: str) -> bool:
     )
     return any(term in normalized for term in approval_terms) and any(
         term in normalized for term in visual_terms
+    )
+
+
+def _requests_generation_after_approval(message: str) -> bool:
+    normalized = _normalize_match_text(message)
+    approval_terms = r"(?:aprovar|aprove|aprova|autorizar|autorize)"
+    generation_terms = r"(?:gerar|gere|criar|crie|produzir|produza)"
+    connector_terms = r"(?:e|tambem|depois|em seguida)"
+    return bool(
+        re.search(
+            rf"\b{approval_terms}\b.*\b{connector_terms}\b.*\b{generation_terms}\b",
+            normalized,
+        )
+        or re.search(
+            rf"\b{generation_terms}\b.*\b(?:depois|apos|em seguida)\b.*\b{approval_terms}\b",
+            normalized,
+        )
     )
 
 
@@ -232,10 +252,14 @@ async def _approve_visual_prompt_from_chat(
     visual_reference_views_for_target = _facade_attr(
         "_visual_reference_views_for_target", _visual_reference_views_for_target
     )
-    approve_visual_target = _facade_attr(
+    approve_visual_target_with_generation = _facade_attr(
         "approve_visual_target_and_generate_views",
         approve_visual_target_and_generate_views,
     )
+    approve_visual_target_without_generation = _facade_attr(
+        "approve_visual_target", approve_visual_target_only
+    )
+    should_generate = _requests_generation_after_approval(message)
     targets = await visual_chat_targets(session, project_id, target_kind)
     if not targets:
         return ProjectChatResult(
@@ -274,8 +298,21 @@ async def _approve_visual_prompt_from_chat(
         if not view_types:
             approved_count += 1
             continue
+        if not should_generate:
+            await _emit_progress(progress, f"Aprovando prompt visual de {target.name}.")
+            approved = await approve_visual_target_without_generation(
+                session,
+                project_id,
+                target.kind,
+                target.id,
+            )
+            if approved is None:
+                continue
+            approved_count += 1
+            continue
+
         await _emit_progress(progress, f"Aprovando {target.name} e gerando imagem.")
-        references = await approve_visual_target(
+        references = await approve_visual_target_with_generation(
             session,
             project_id,
             target.kind,
@@ -296,7 +333,10 @@ async def _approve_visual_prompt_from_chat(
         )
     if created_count == 0:
         return ProjectChatResult(
-            f"{approved_count} ativo(s) visual(is) ja estávam com as imagens solicitadas criadas.",
+            (
+                f"Aprovei {approved_count} ativo(s) visual(is). "
+                "Nenhuma imagem foi gerada; peça explicitamente para gerar quando quiser."
+            ),
             "approve_visual_prompt",
             True,
         )
