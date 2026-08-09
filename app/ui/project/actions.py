@@ -63,10 +63,12 @@ async def _purge_application_data_from_ui() -> None:
         deleted_ideas = delete_all_ideas()
         projects = counts.get("projects", 0)
         artifacts = counts.get("artifacts", 0)
+        storage_files = counts.get("storage_files", 0)
         ui.notify(
             (
                 f"Limpeza definitiva concluida: {projects} projeto(s), "
-                f"{artifacts} artefato(s) e {deleted_ideas} ideia(s) do laboratório removidos."
+                f"{artifacts} artefato(s), {storage_files} arquivo(s) do storage "
+                f"e {deleted_ideas} ideia(s) do laboratório removidos."
             ),
             color="positive",
         )
@@ -81,10 +83,12 @@ async def _purge_all_ideas_from_ui() -> None:
             counts = await hard_delete_all_story_ideas(session)
         deleted_local_ideas = delete_all_ideas()
         story_ideas = counts.get("story_ideas", 0)
+        storage_files = counts.get("storage_files", 0)
         ui.notify(
             (
-                f"Ideias apagadas definitivamente: {story_ideas} registro(s) do banco "
-                f"e {deleted_local_ideas} ideia(s) do laboratório removidos."
+                f"Ideias apagadas definitivamente: {story_ideas} registro(s) do banco, "
+                f"{storage_files} arquivo(s) do storage e {deleted_local_ideas} "
+                f"ideia(s) do laboratório removidos."
             ),
             color="positive",
         )
@@ -99,10 +103,12 @@ async def _purge_all_projects_from_ui() -> None:
             counts = await purge_application_data(session)
         projects = counts.get("projects", 0)
         artifacts = counts.get("artifacts", 0)
+        storage_files = counts.get("storage_files", 0)
         ui.notify(
             (
-                f"Projetos apagados definitivamente: {projects} projeto(s) "
-                f"e {artifacts} artefato(s) removidos do banco."
+                f"Projetos apagados definitivamente: {projects} projeto(s), "
+                f"{artifacts} artefato(s) removidos do banco e "
+                f"{storage_files} arquivo(s) do storage apagados."
             ),
             color="positive",
         )

@@ -378,20 +378,29 @@ async def application_data_counts(session: AsyncSession) -> dict[str, int]:
     return counts
 
 
+async def _all_asset_storage_uris(session: AsyncSession) -> list[str]:
+    result = await session.execute(select(Asset.storage_uri))
+    return [str(row[0] or "") for row in result.all() if row[0]]
+
+
 async def purge_application_data(session: AsyncSession) -> dict[str, int]:
     counts = await application_data_counts(session)
+    asset_storage_uris = await _all_asset_storage_uris(session)
     await session.execute(text("TRUNCATE TABLE projects RESTART IDENTITY CASCADE"))
     await session.commit()
+    counts["storage_files"] = delete_local_storage_files(asset_storage_uris)
     return counts
 
 
 async def hard_delete_all_story_ideas(session: AsyncSession) -> dict[str, int]:
     counts = await application_data_counts(session)
+    asset_storage_uris = await _all_asset_storage_uris(session)
     table_list = ", ".join(IDEA_GRAPH_TRUNCATE_TABLES)
     await session.execute(text(f"TRUNCATE TABLE {table_list} RESTART IDENTITY CASCADE"))
     for statement in NON_BRIEFING_ARTIFACT_DELETE_STATEMENTS:
         await session.execute(text(statement))
     await session.commit()
+    counts["storage_files"] = delete_local_storage_files(asset_storage_uris)
     return counts
 
 
