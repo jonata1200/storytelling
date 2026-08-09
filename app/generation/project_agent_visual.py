@@ -21,8 +21,8 @@ from app.visual_bible.service import (
 )
 from app.visual_bible.service import (
     approve_visual_target_and_generate_views,
-    default_views_for,
-    initial_view_for,
+    default_views_for_profile,
+    initial_view_for_profile,
 )
 
 
@@ -161,6 +161,7 @@ class VisualChatTarget:
     kind: str
     id: UUID
     name: str
+    profile: dict | None = None
 
 
 def _visual_target_kind_from_message(message: str) -> str | None:
@@ -205,7 +206,14 @@ async def _visual_chat_targets(
         )
         for item in result.scalars():
             visual_item = cast(Any, item)
-            targets.append(VisualChatTarget(kind, visual_item.id, str(visual_item.name)))
+            targets.append(
+                VisualChatTarget(
+                    kind,
+                    visual_item.id,
+                    str(visual_item.name),
+                    dict(visual_item.canonical_profile or {}),
+                )
+            )
     return targets
 
 
@@ -285,15 +293,18 @@ async def _approve_visual_prompt_from_chat(
     approved_count = 0
     for target in selected_targets:
         existing_views = await visual_reference_views_for_target(session, project_id, target)
+        profile = target.profile or {}
         if _requests_all_visual_views(message):
             view_types = [
                 view for view in allowed_views_for(target.kind) if view not in existing_views
             ]
         elif not existing_views:
-            view_types = [initial_view_for(target.kind)]
+            view_types = [initial_view_for_profile(target.kind, profile)]
         else:
             view_types = [
-                view for view in default_views_for(target.kind) if view not in existing_views
+                view
+                for view in default_views_for_profile(target.kind, profile)
+                if view not in existing_views
             ]
         if not view_types:
             approved_count += 1

@@ -1264,7 +1264,7 @@ def test_visual_batch_requests_include_only_required_missing_views() -> None:
     summary = {
         "characters": [SimpleNamespace(id=character_id)],
         "locations": [SimpleNamespace(id=location_id)],
-        "props": [SimpleNamespace(id=prop_id)],
+        "props": [SimpleNamespace(id=prop_id, canonical_profile={"name": "Partitura"})],
         "visual_refs": [
             SimpleNamespace(
                 target_kind="character",
@@ -1280,6 +1280,28 @@ def test_visual_batch_requests_include_only_required_missing_views() -> None:
         ("location", location_id, ["establishing"]),
         ("prop", prop_id, ["front"]),
     ]
+
+
+def test_visual_batch_requests_use_side_view_for_vehicle_props() -> None:
+    prop_id = uuid4()
+    summary = {
+        "characters": [],
+        "locations": [],
+        "props": [
+            SimpleNamespace(
+                id=prop_id,
+                canonical_profile={
+                    "name": "Bicicleta vermelha",
+                    "dimensions": "duas rodas e quadro longo",
+                },
+            )
+        ],
+        "visual_refs": [],
+    }
+
+    requests = pages._visual_batch_requests(summary)
+
+    assert requests == [("prop", prop_id, ["side"])]
 
 
 def test_visual_card_detail_formats_character_profile_without_raw_dict() -> None:

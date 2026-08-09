@@ -22,7 +22,7 @@ from app.ui.visual.helpers import visual_reference_views_for as _visual_referenc
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (
     approve_visual_target_and_generate_views,
-    default_views_for,
+    default_views_for_profile,
     generate_visual_bible,
     regenerate_visual_reference,
     update_visual_target_prompt,
@@ -321,8 +321,11 @@ def _visual_batch_requests(summary: dict[str, Any]) -> list[tuple[str, UUID, lis
     ]:
         for item in items:
             existing_views = _visual_reference_views_for(summary, target_kind, item.id)
+            profile = getattr(item, "canonical_profile", {}) or {}
             missing_views = [
-                view for view in default_views_for(target_kind) if view not in existing_views
+                view
+                for view in default_views_for_profile(target_kind, profile)
+                if view not in existing_views
             ]
             if missing_views:
                 requests.append((target_kind, item.id, missing_views))

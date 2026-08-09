@@ -24,7 +24,9 @@ from app.visual_bible.service import (
     _transient_image_provider_error,
     _visual_generation_reference_uris,
     default_views_for,
+    default_views_for_profile,
     initial_view_for,
+    initial_view_for_profile,
     validated_visual_reference_views,
     visual_profile_validation_errors,
     visual_reference_aspect_ratio,
@@ -151,9 +153,26 @@ def test_initial_visual_reference_is_single_canonical_view() -> None:
 
 def test_visual_reference_views_reject_invalid_values() -> None:
     assert validated_visual_reference_views("prop", ["front"]) == ["front"]
+    assert validated_visual_reference_views("prop", ["side"]) == ["side"]
 
     with pytest.raises(ValueError, match="View type inválido"):
         validated_visual_reference_views("prop", ["prop_reference_sheet"])
+
+
+def test_prop_default_view_uses_side_for_vehicle_like_objects() -> None:
+    bicycle = _prop_profile(
+        {
+            "name": "Bicicleta vermelha",
+            "dimensions": "quadro longo, duas rodas grandes",
+            "material": "metal pintado",
+        }
+    )
+    letter = _prop_profile({"name": "Carta azul", "material": "papel envelhecido"})
+
+    assert initial_view_for_profile("prop", bicycle) == "side"
+    assert default_views_for_profile("prop", bicycle) == ["side"]
+    assert initial_view_for_profile("prop", letter) == "front"
+    assert default_views_for_profile("prop", letter) == ["front"]
 
 
 def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
@@ -581,6 +600,7 @@ def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:
     assert visual_reference_aspect_ratio(character, "front_portrait") == "9:16"
     assert visual_reference_aspect_ratio(location, "establishing") == "16:9"
     assert visual_reference_aspect_ratio(prop, "front") == "9:16"
+    assert visual_reference_aspect_ratio(prop, "side") == "16:9"
 
 
 def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:

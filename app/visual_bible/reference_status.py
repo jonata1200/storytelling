@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset
 from app.visual_bible.models import Character, Location, Prop, VisualReference
-from app.visual_bible.prompts import default_views_for
+from app.visual_bible.prompts import default_views_for_profile
 
 
 async def _existing_visual_reference_views(
@@ -119,18 +119,19 @@ async def visual_reference_completion_report(
     missing_views = 0
 
     for target_kind, count_key, label, model in target_specs:
-        result = await session.execute(select(model.id).where(model.project_id == project_id))
-        target_ids = list(result.scalars())
-        counts[count_key] = len(target_ids)
-        if not target_ids:
+        result = await session.execute(select(model).where(model.project_id == project_id))
+        targets = list(result.scalars())
+        counts[count_key] = len(targets)
+        if not targets:
             missing_categories.append(label)
             continue
 
-        expected_views = set(default_views_for(target_kind))
-        expected_references += len(target_ids) * len(expected_views)
-        for target_id in target_ids:
+        for target in targets:
+            profile = getattr(target, "canonical_profile", {}) or {}
+            expected_views = set(default_views_for_profile(target_kind, profile))
+            expected_references += len(expected_views)
             existing_views = await _existing_visual_reference_views(
-                session, project_id, target_kind, target_id
+                session, project_id, target_kind, target.id
             )
             valid_existing_views = existing_views & expected_views
             existing_references += len(valid_existing_views)

@@ -77,12 +77,14 @@ from app.visual_bible.profiles import (
 from app.visual_bible.prompts import (
     VISUAL_PROMPT_OVERRIDES_KEY,
     default_views_for,
+    default_views_for_profile,
     validated_visual_reference_views,
     visual_reference_aspect_ratio,
     visual_reference_prompt,
     visual_reference_view_label,
 )
 from app.visual_bible.prompts import initial_view_for as initial_view_for
+from app.visual_bible.prompts import initial_view_for_profile as initial_view_for_profile
 from app.visual_bible.reference_status import (
     _existing_visual_reference_views,
 )
@@ -602,10 +604,14 @@ async def approve_visual_target_and_generate_views(
     if approved is None:
         return None
 
+    target = await _get_visual_target(session, project_id, target_kind, target_id)
+    if target is None:
+        return None
+    profile, _target_artifact_id = target
     existing_views = await _existing_visual_reference_views(
         session, project_id, target_kind, target_id
     )
-    requested_views = validated_visual_reference_views(target_kind, view_types)
+    requested_views = _requested_visual_reference_views(target_kind, profile, view_types)
     missing_views = [view for view in requested_views if view not in existing_views]
     if not missing_views:
         await session.commit()
@@ -657,6 +663,16 @@ async def approve_visual_target(
     return True
 
 
+def _requested_visual_reference_views(
+    target_kind: str,
+    profile: dict,
+    view_types: list[str] | None,
+) -> list[str]:
+    if view_types is None:
+        return default_views_for_profile(target_kind, profile)
+    return validated_visual_reference_views(target_kind, view_types)
+
+
 async def generate_visual_references(
     session: AsyncSession,
     project_id: UUID,
@@ -675,7 +691,7 @@ async def generate_visual_references(
     production_settings = await get_or_create_production_settings(session, project_id)
     provider, image_model, image_dir_name = await _image_provider_for_project(session, project_id)
     configured_image_resolution = production_settings.image_resolution
-    requested_views = validated_visual_reference_views(target_kind, view_types)
+    requested_views = _requested_visual_reference_views(target_kind, profile, view_types)
     if force:
         views = requested_views
     else:

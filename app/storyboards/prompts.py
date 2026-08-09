@@ -152,7 +152,7 @@ def _storyboard_reference_view_priority(target_kind: str, view_type: str) -> int
     priorities = {
         "character": {"front_portrait": 0, "character_reference_sheet": 1},
         "location": {"establishing": 0},
-        "prop": {"front": 0},
+        "prop": {"front": 0, "side": 1},
     }
     return priorities.get(target_kind, {}).get(view_type, 99)
 

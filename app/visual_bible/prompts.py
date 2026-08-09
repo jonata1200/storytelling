@@ -1,3 +1,5 @@
+import unicodedata
+
 from app.generation.prompt_language import (
     ensure_portuguese_prompt_text,
     formatted_prompt_sections,
@@ -8,8 +10,36 @@ CHARACTER_REQUIRED_VIEWS = ["front_portrait"]
 CHARACTER_OPTIONAL_VIEWS = ["character_reference_sheet"]
 CHARACTER_VIEWS = CHARACTER_REQUIRED_VIEWS + CHARACTER_OPTIONAL_VIEWS
 LOCATION_VIEWS = ["establishing"]
-PROP_VIEWS = ["front"]
+PROP_REQUIRED_VIEWS = ["front"]
+PROP_OPTIONAL_VIEWS = ["side"]
+PROP_VIEWS = PROP_REQUIRED_VIEWS + PROP_OPTIONAL_VIEWS
 VISUAL_PROMPT_OVERRIDES_KEY = "visual_prompt_overrides"
+SIDE_ORIENTED_PROP_TERMS = (
+    "ambulancia",
+    "aviao",
+    "barco",
+    "bicicleta",
+    "bike",
+    "caminhao",
+    "camionete",
+    "carro",
+    "carruagem",
+    "espada",
+    "faca",
+    "helicoptero",
+    "lancha",
+    "moto",
+    "motocicleta",
+    "navio",
+    "onibus",
+    "patinete",
+    "prancha",
+    "revolver",
+    "skate",
+    "trem",
+    "van",
+    "veiculo",
+)
 VIEW_LABELS_PT = {
     "character_reference_sheet": "Folha de referencia do personagem",
     "front_portrait": "Retrato frontal de corpo inteiro",
@@ -86,7 +116,8 @@ VIEW_PROMPT_DETAILS = {
         "cor e detalhes reconheciveis visiveis"
     ),
     "side": (
-        "vista lateral, objeto totalmente em destáque, espessura, silhueta e construcao visiveis"
+        "vista lateral ortografica de produto, objeto totalmente em destaque, comprimento, "
+        "perfil, espessura, rodas ou eixos quando existirem, silhueta e construcao visiveis"
     ),
     "top": (
         "vista superior, objeto totalmente em destáque, forma, textura e detalhes legíveis visiveis"
@@ -99,8 +130,46 @@ def default_views_for(target_kind: str) -> list[str]:
     return {
         "character": CHARACTER_REQUIRED_VIEWS,
         "location": LOCATION_VIEWS,
-        "prop": PROP_VIEWS,
+        "prop": PROP_REQUIRED_VIEWS,
     }[target_kind]
+
+
+def _normalized_prop_search_text(profile: dict) -> str:
+    values: list[str] = []
+    for key in (
+        "name",
+        "description",
+        "dimensions",
+        "material",
+        "narrative_importance",
+        "canonical_prompt",
+    ):
+        value = profile.get(key)
+        if value:
+            values.append(str(value))
+    visual_profile = profile.get("visual_profile")
+    if isinstance(visual_profile, dict):
+        values.extend(str(value) for value in visual_profile.values() if value)
+    narrative_profile = profile.get("narrative_profile")
+    if isinstance(narrative_profile, dict):
+        values.extend(str(value) for value in narrative_profile.values() if value)
+    text = " ".join(values).casefold()
+    return "".join(
+        char for char in unicodedata.normalize("NFKD", text) if not unicodedata.combining(char)
+    )
+
+
+def preferred_prop_view(profile: dict) -> str:
+    text = _normalized_prop_search_text(profile)
+    if any(term in text for term in SIDE_ORIENTED_PROP_TERMS):
+        return "side"
+    return "front"
+
+
+def default_views_for_profile(target_kind: str, profile: dict) -> list[str]:
+    if target_kind == "prop":
+        return [preferred_prop_view(profile)]
+    return default_views_for(target_kind)
 
 
 def allowed_views_for(target_kind: str) -> list[str]:
@@ -137,6 +206,12 @@ def initial_view_for(target_kind: str) -> str:
         "location": "establishing",
         "prop": "front",
     }[target_kind]
+
+
+def initial_view_for_profile(target_kind: str, profile: dict) -> str:
+    if target_kind == "prop":
+        return preferred_prop_view(profile)
+    return initial_view_for(target_kind)
 
 
 COMMON_NEGATIVE_GUARDRAIL = (
@@ -206,6 +281,8 @@ def visual_reference_aspect_ratio(profile: dict, view_type: str) -> str:
         return "16:9"
     asset_kind = str(profile.get("asset_kind") or "")
     if asset_kind == "location":
+        return "16:9"
+    if asset_kind == "prop" and view_type == "side":
         return "16:9"
     if asset_kind == "prop":
         return "9:16"
