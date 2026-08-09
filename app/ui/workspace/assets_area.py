@@ -536,51 +536,61 @@ def _entity_card(
                     if not optional_sheet_prompt_previews:
                         optional_button.props("disable")
             with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_prompt_dialog, ui.card().classes(
-                "entity-card rounded-2xl p-6 w-[min(760px,92vw)]"
-            ):
-                ui.label("Editar prompt visual").classes("brand-type text-2xl font-bold")
-                ui.label(
-                    "Edite o prompt completo que será usado para esta vista do ativo."
-                ).classes("text-sm text-[#8d938e]")
-                prompt_view_select = ui.select(
-                    editable_view_options,
-                    value=editable_view_type,
-                    label="Vista do prompt",
-                ).props("outlined dense").classes("w-full")
-                prompt_input = (
-                    ui.textarea("Prompt completo", value=current_prompt)
-                    .props("outlined autogrow")
-                    .classes("w-full")
-                )
+                "entity-card rounded-2xl p-0 w-[min(760px,92vw)] overflow-hidden"
+            ).style("height: min(760px, 88vh); max-height: 88vh;"):
+                with ui.column().classes("w-full h-full gap-0"):
+                    with ui.column().classes("w-full shrink-0 p-6 pb-3 gap-2"):
+                        ui.label("Editar prompt visual").classes(
+                            "brand-type text-2xl font-bold"
+                        )
+                        ui.label(
+                            "Edite o prompt completo que será usado para esta vista do ativo."
+                        ).classes("text-sm text-[#8d938e]")
+                    with ui.scroll_area().classes("w-full grow min-h-0 px-6"):
+                        with ui.column().classes("w-full gap-3 pb-3"):
+                            prompt_view_select = ui.select(
+                                editable_view_options,
+                                value=editable_view_type,
+                                label="Vista do prompt",
+                            ).props("outlined dense").classes("w-full")
+                            prompt_input = (
+                                ui.textarea("Prompt completo", value=current_prompt)
+                                .props("outlined autogrow")
+                                .classes("w-full")
+                            )
 
-                def load_prompt_for_selected_view(event: Any) -> None:
-                    selected_view_type = str(event.value or editable_view_type)
-                    prompt_input.value = visual_reference_prompt(profile, selected_view_type)
+                    def load_prompt_for_selected_view(event: Any) -> None:
+                        selected_view_type = str(event.value or editable_view_type)
+                        prompt_input.value = visual_reference_prompt(profile, selected_view_type)
 
-                prompt_view_select.on_value_change(load_prompt_for_selected_view)
+                    prompt_view_select.on_value_change(load_prompt_for_selected_view)
 
-                async def save_visual_prompt() -> None:
-                    new_prompt = str(prompt_input.value or "").strip()
-                    if not new_prompt:
-                        ui.notify("Informe um prompt antes de salvar.", color="warning")
-                        return
-                    selected_view_type = str(prompt_view_select.value or editable_view_type)
-                    safe_close_ui_element(edit_prompt_dialog)
-                    await _update_visual_prompt_from_ui(
-                        project_id,
-                        target_kind,
-                        target_id,
-                        new_prompt,
-                        view_type=selected_view_type,
-                    )
+                    async def save_visual_prompt() -> None:
+                        new_prompt = str(prompt_input.value or "").strip()
+                        if not new_prompt:
+                            ui.notify("Informe um prompt antes de salvar.", color="warning")
+                            return
+                        selected_view_type = str(prompt_view_select.value or editable_view_type)
+                        safe_close_ui_element(edit_prompt_dialog)
+                        await _update_visual_prompt_from_ui(
+                            project_id,
+                            target_kind,
+                            target_id,
+                            new_prompt,
+                            view_type=selected_view_type,
+                        )
 
-                with ui.row().classes("w-full justify-end gap-2 mt-3"):
-                    ui.button("Cancelar", on_click=edit_prompt_dialog.close).props("flat no-caps")
-                    ui.button(
-                        "Salvar",
-                        icon="save",
-                        on_click=save_visual_prompt,
-                    ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                    with ui.row().classes(
+                        "w-full justify-end gap-2 shrink-0 p-6 pt-3 border-t border-[#292d29]"
+                    ):
+                        ui.button("Cancelar", on_click=edit_prompt_dialog.close).props(
+                            "flat no-caps"
+                        )
+                        ui.button(
+                            "Salvar",
+                            icon="save",
+                            on_click=save_visual_prompt,
+                        ).props("unelevated no-caps").classes("acid-bg rounded-xl")
             with ui.row().classes("w-full pt-2 border-t border-[#292d29]"):
                 if show_prompt_approval_button:
                     approval_button = ui.button(

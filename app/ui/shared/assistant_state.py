@@ -5,6 +5,7 @@ from nicegui import app as nicegui_app
 
 LEGACY_EXTERNAL_QUEUE_MESSAGE = "Etapa enfileirada para execução pelo " + "w" + "orker."
 INTERNAL_QUEUE_MESSAGE = "Etapa agendada para execução interna."
+HIDDEN_AI_ACTION_CHAT_EVENTS = {("create_initial_script", "queued")}
 
 
 def _normalize_legacy_ai_message(content: str) -> str:
@@ -178,11 +179,13 @@ def sync_ai_action_events_to_chat(project_id: UUID, ai_action: dict[str, Any]) -
             continue
         event_id = str(event.get("id") or "")
         event_action = str(event.get("action") or "")
+        event_status = str(event.get("status") or "")
         message = _normalize_legacy_ai_message(str(event.get("message") or "")).strip()
         if (
             not event_id
             or not event_action
             or not message
+            or (event_action, event_status) in HIDDEN_AI_ACTION_CHAT_EVENTS
             or event_id in known_event_ids
             or event_action in known_event_actions
         ):
