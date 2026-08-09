@@ -10,7 +10,11 @@ import pytest
 
 import app.providers.media_utils as media_utils
 from app.config.settings import Settings
-from app.providers.image.google_ai import GoogleAIImageProvider
+from app.providers.image.google_ai import (
+    DEFAULT_GOOGLE_AI_IMAGE_MAX_ATTEMPTS,
+    DEFAULT_GOOGLE_AI_IMAGE_TIMEOUT_SECONDS,
+    GoogleAIImageProvider,
+)
 from app.providers.image.types import ImageGenerationRequest
 
 
@@ -36,6 +40,11 @@ def _http_error(status: int, payload: str) -> urllib.error.HTTPError:
         hdrs={},
         fp=BytesIO(payload.encode("utf-8")),
     )
+
+
+def test_google_ai_image_timeout_budget_stays_bounded_for_ui_flows() -> None:
+    assert DEFAULT_GOOGLE_AI_IMAGE_TIMEOUT_SECONDS <= 120
+    assert DEFAULT_GOOGLE_AI_IMAGE_MAX_ATTEMPTS <= 2
 
 
 @pytest.mark.asyncio

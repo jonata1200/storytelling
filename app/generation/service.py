@@ -35,14 +35,14 @@ DEFAULT_TEMPLATE_NAMES: dict[str, str] = {
     "director_agent_chat": "Director Agent Chat",
 }
 
-LLM_PROVIDER_TIMEOUT_SECONDS = 420
+LLM_PROVIDER_TIMEOUT_SECONDS = 180
 TASK_TIMEOUT_SECONDS: dict[str, int] = {
-    "generate_story_ideas": 180,
-    "generate_script": 300,
-    "generate_scenes_and_shots": 300,
-    "generate_visual_bible": 360,
-    "generate_storyboard_prompts": 300,
-    "revise_script": 300,
+    "generate_story_ideas": 75,
+    "generate_script": 180,
+    "generate_scenes_and_shots": 180,
+    "generate_visual_bible": 180,
+    "generate_storyboard_prompts": 180,
+    "revise_script": 180,
 }
 CREATIVE_NARRATIVE_TASKS = {
     "generate_story_ideas",

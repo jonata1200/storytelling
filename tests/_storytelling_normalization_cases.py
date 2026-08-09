@@ -32,6 +32,7 @@ from app.storytelling.service import (
 )
 from app.ui import pages
 from app.ui.pages import DEFAULT_STORY_DURATION_MINUTES, _asset_url, _compact_project_title
+from app.ui.routes import home_pages
 from app.ui.workspace import storyboard_video_area
 from app.ui.workspace.assets_area import _character_reference_sheet_asset
 from app.video_generation.durations import VIDEO_CLIP_ALLOWED_SECONDS
@@ -42,6 +43,13 @@ def test_idea_lab_duration_and_count_options_match_generation_controls() -> None
     assert pages.IDEA_COUNT_OPTIONS == list(range(1, 11))
     assert "Documentário" not in pages.IDEA_GENRES
     assert "Histórias familiares emocionantes" not in pages.IDEA_GENRES
+
+
+def test_idea_generation_progress_reports_slow_first_response() -> None:
+    detail = home_pages._idea_generation_progress_detail(0, 3, elapsed_seconds=60)
+
+    assert "demorando mais que o normal" in detail
+    assert "Falta criar: 3 ideia(s)." in detail
 
 
 def test_story_idea_payload_is_normalized_for_pipeline() -> None:

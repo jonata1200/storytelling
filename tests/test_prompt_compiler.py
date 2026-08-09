@@ -77,6 +77,19 @@ def test_default_generation_templates_with_json_examples_compile() -> None:
     assert "contrato narrativo" in compiled["generate_script"]
 
 
+def test_text_generation_timeout_budget_stays_bounded_for_ui_flows() -> None:
+    assert generation_service.LLM_PROVIDER_TIMEOUT_SECONDS <= 180
+    assert generation_service.TASK_TIMEOUT_SECONDS["generate_story_ideas"] <= 75
+    for task in (
+        "generate_script",
+        "generate_scenes_and_shots",
+        "generate_visual_bible",
+        "generate_storyboard_prompts",
+        "revise_script",
+    ):
+        assert generation_service.TASK_TIMEOUT_SECONDS[task] <= 180
+
+
 def test_generation_fallback_detects_provider_resource_exhaustion() -> None:
     error = RuntimeError(
         "Provider retornou erro: upstream service: "

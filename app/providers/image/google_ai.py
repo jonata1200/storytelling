@@ -17,8 +17,8 @@ from app.production.service import normalize_image_aspect_ratio, normalize_image
 from app.providers.image.types import ImageEditRequest, ImageGenerationRequest, ImageResult
 from app.providers.media_utils import data_url_parts, extension_from_media_type
 
-DEFAULT_GOOGLE_AI_IMAGE_TIMEOUT_SECONDS = 360
-DEFAULT_GOOGLE_AI_IMAGE_MAX_ATTEMPTS = 3
+DEFAULT_GOOGLE_AI_IMAGE_TIMEOUT_SECONDS = 120
+DEFAULT_GOOGLE_AI_IMAGE_MAX_ATTEMPTS = 2
 GOOGLE_AI_IMAGE_RESPONSE_MIME_TYPE = "image/jpeg"
 TRANSIENT_GOOGLE_AI_HTTP_STATUS = {429, 500, 502, 503, 504}
 

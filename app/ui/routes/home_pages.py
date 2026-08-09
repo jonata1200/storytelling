@@ -41,7 +41,6 @@ from app.ui.shared.page_config import (
     IDEA_COUNT_OPTIONS,
     IDEA_GENRES,
     STORY_DURATION_OPTIONS,
-    UI_GENERATION_TIMEOUT_SECONDS,
     friendly_ai_error,
     play_completion_sound,
     safe_close_ui_element,
@@ -68,6 +67,7 @@ DASHBOARD_PROMPT_KEYDOWN_JS = """
 
 
 IDEA_GENERATION_PROGRESS_PULSE_SECONDS = 2.5
+IDEA_LAB_UI_TIMEOUT_SECONDS = 120
 
 
 def _idea_generation_progress_detail(
@@ -80,7 +80,12 @@ def _idea_generation_progress_detail(
     remaining = max(total - completed, 0)
     created_text = f"{completed} ideia(s)" if completed > 0 else "nada ainda"
     missing_text = f"{remaining} ideia(s)" if remaining > 0 else "nada"
-    if completed <= 0 and elapsed_seconds >= 12:
+    if completed <= 0 and elapsed_seconds >= 60:
+        now = (
+            "Agora: a IA esta demorando mais que o normal. "
+            "Se passar do limite, a aplicacao vai encerrar e mostrar o erro."
+        )
+    elif completed <= 0 and elapsed_seconds >= 12:
         now = "Agora: a IA ainda esta respondendo; a primeira ideia sera salva assim que chegar."
     elif completed <= 0:
         now = "Agora: aguardando a IA criar a primeira ideia."
@@ -778,7 +783,7 @@ def register_home_pages(
                         try:
                             replace_generated_ideas([])
                             generated: list[dict[str, Any]] = []
-                            async with asyncio.timeout(UI_GENERATION_TIMEOUT_SECONDS):
+                            async with asyncio.timeout(IDEA_LAB_UI_TIMEOUT_SECONDS):
                                 async for batch in generate_freeform_idea_batches(
                                     "",
                                     count=expected_count,

@@ -26,7 +26,7 @@ from app.storytelling.service import (
 SAVED_IDEAS_PATH = Path(".runtime/idea_lab_saved.json")
 GENERATED_IDEAS_PATH = Path(".runtime/idea_lab_generated.json")
 IDEA_LAB_DURATION_MINUTES = 5.0
-IDEA_PROVIDER_TIMEOUT_SECONDS = 180
+IDEA_PROVIDER_TIMEOUT_SECONDS = 75
 IDEA_PROGRESS_BATCH_SIZE = 2
 
 
