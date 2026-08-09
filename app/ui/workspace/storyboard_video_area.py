@@ -38,7 +38,7 @@ from app.ui.workspace.storyboard_video_view_model import build_storyboard_video_
 from app.ui.workspace.video_handlers import save_video_prompt_from_ui as _save_video_prompt_from_ui
 
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
-LoadingDialogFactory = Callable[[str, str], Any]
+LoadingDialogFactory = Callable[[str, Any], Any]
 
 
 def _sync_storyboard_handler_dependencies() -> None:

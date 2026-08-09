@@ -186,6 +186,7 @@ from app.ui.shared.assistant_state import (  # noqa: F401
 from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
     DEFAULT_STORY_DURATION_MINUTES,
+    LoadingStatus,
     ProductionStep,
     safe_close_ui_element,
     step_loading_copy,
@@ -622,16 +623,46 @@ async def _create_next_episode(project_id: UUID) -> None:
     await _project_action_create_next_episode(project_id)
 
 
-def _generation_loading_dialog(title: str, message: str) -> Any:
+def _render_loading_status(status: LoadingStatus) -> None:
+    if status.now:
+        ui.label(status.now).classes("text-sm text-[#8f9590] text-center leading-5")
+    with ui.column().classes("w-full gap-2"):
+        with ui.row().classes("w-full items-center justify-between text-xs text-[#aab1ac]"):
+            ui.label(f"{status.completed}/{status.total} {status.unit_label}(s)")
+            ui.label(f"{round(status.ratio * 100)}%")
+        progress_bar = ui.linear_progress(value=status.ratio, show_value=False).classes("w-full")
+        progress_bar.props("instant-feedback rounded")
+    if status.created:
+        with ui.row().classes("w-full items-center justify-center gap-2 flex-wrap"):
+            ui.icon("check_circle").classes("text-emerald-300 text-lg")
+            for item in status.created[:4]:
+                ui.label(item.label).classes(
+                    "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 "
+                    "border border-emerald-800"
+                )
+    if status.missing:
+        with ui.row().classes("w-full items-center justify-center gap-2 flex-wrap"):
+            ui.icon("pending").classes("text-amber-300 text-lg")
+            for item in status.missing[:4]:
+                ui.label(item.label).classes(
+                    "text-xs px-2 py-1 rounded-md bg-slate-900 text-slate-300 "
+                    "border border-slate-700"
+                )
+
+
+def _generation_loading_dialog(title: str, message: str | LoadingStatus) -> Any:
     with (
         ui.dialog().props(BLOCKING_DIALOG_PROPS) as loading_dialog,
         ui.card().classes(
-            "entity-card rounded-2xl p-6 w-[min(520px,92vw)] items-center text-center"
+            "entity-card rounded-2xl p-6 w-[min(560px,92vw)] items-center text-center gap-4"
         ),
     ):
         ui.spinner("dots", size="lg", color="primary")
         ui.label(title).classes("brand-type text-xl font-bold mt-3")
-        ui.label(message).classes("text-sm text-[#8f9590] whitespace-pre-line leading-6")
+        if isinstance(message, LoadingStatus):
+            _render_loading_status(message)
+        else:
+            ui.label(message).classes("text-sm text-[#8f9590] whitespace-pre-line leading-6")
     return loading_dialog
 
 

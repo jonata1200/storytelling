@@ -16,7 +16,7 @@ from app.ui.pages import _asset_url, _compact_project_title
 from app.ui.project import actions as project_actions
 from app.ui.routes import home_pages
 from app.ui.shared import assistant_state
-from app.ui.shared.page_config import action_loading_copy, step_loading_copy
+from app.ui.shared.page_config import LoadingStatus, action_loading_copy, step_loading_copy
 from app.ui.visual import actions as visual_actions
 from app.ui.workspace import script_area, storyboard_video_area
 from app.ui.workspace.assets_area import (
@@ -45,7 +45,7 @@ def test_visual_prompt_progress_detail_lists_generated_and_pending_groups() -> N
 
 
 def test_assistant_loading_copy_lists_created_and_pending_work() -> None:
-    title, message = action_loading_copy(
+    title, status = action_loading_copy(
         "approve_storyboard_prompt",
         {
             "scripts": 1,
@@ -61,16 +61,20 @@ def test_assistant_loading_copy_lists_created_and_pending_work() -> None:
     )
 
     assert title == "Aprovando storyboards"
-    assert "Criado:" in message
-    assert "1 roteiro" in message
-    assert "2 quadros de storyboard" in message
-    assert "Falta criar:" in message
-    assert "3 quadros de storyboard" in message
-    assert "animatic" in message
+    assert isinstance(status, LoadingStatus)
+    assert status.completed == 2
+    assert status.total == 6
+    assert status.unit_label == "item"
+    created = [item.label for item in status.created]
+    missing = [item.label for item in status.missing]
+    assert "1 roteiro" in created
+    assert "2 quadros de storyboard" in created
+    assert "3 quadros de storyboard" in missing
+    assert "animatic" in missing
 
 
-def test_step_loading_copy_always_reports_created_and_missing_items() -> None:
-    _title, message = step_loading_copy(
+def test_step_loading_copy_reports_progress_data_for_visual_work() -> None:
+    _title, status = step_loading_copy(
         "visual",
         {
             "scripts": 1,
@@ -81,11 +85,15 @@ def test_step_loading_copy_always_reports_created_and_missing_items() -> None:
         },
     )
 
-    assert "Criado:" in message
-    assert "2 personagens" in message
-    assert "Falta criar:" in message
-    assert "prompts de objetos" in message
-    assert "referencias visuais" in message
+    assert isinstance(status, LoadingStatus)
+    assert status.completed == 1
+    assert status.total == 3
+    assert status.unit_label == "imagem"
+    created = [item.label for item in status.created]
+    missing = [item.label for item in status.missing]
+    assert "2 personagens" in created
+    assert "prompts de objetos" in missing
+    assert "2 referencias visuais" in missing
 
 
 def test_register_ui_pages_resolves_page_facade_dependencies(

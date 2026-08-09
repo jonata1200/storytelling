@@ -252,7 +252,7 @@ def _entity_card(
     title: str,
     subtitle: str,
     detail: str,
-    loading_dialog_factory: Callable[[str, str], Any],
+    loading_dialog_factory: Callable[[str, Any], Any],
     counts: dict[str, int],
 ) -> None:
     if not existing_views:
@@ -590,7 +590,7 @@ def render_assets_area(
     summary: dict[str, Any],
     *,
     section_title: Callable[[str, str, str | None, Any | None], None],
-    loading_dialog_factory: Callable[[str, str], Any],
+    loading_dialog_factory: Callable[[str, Any], Any],
 ) -> None:
     del section_title
     asset_map = {asset.id: asset for asset in summary.get("assets", [])}

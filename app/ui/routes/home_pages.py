@@ -52,7 +52,7 @@ ProjectCardRenderer = Callable[[Any, str], None]
 ChatProjectCreator = Callable[[str, list[dict[str, Any]] | None], Awaitable[None]]
 IdeaProjectCreator = Callable[[dict[str, Any]], Awaitable[None]]
 IdeaDeleter = Callable[[str, str], Awaitable[bool]]
-LoadingDialogFactory = Callable[[str, str], Any]
+LoadingDialogFactory = Callable[[str, Any], Any]
 TextCleaner = Callable[[Any, str], str]
 
 DASHBOARD_PROMPT_KEYDOWN_JS = """

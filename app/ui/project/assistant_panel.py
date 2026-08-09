@@ -24,7 +24,7 @@ from app.ui.shared.page_config import (
 )
 
 logger = logging.getLogger(__name__)
-LoadingDialogFactory = Callable[[str, str], Any]
+LoadingDialogFactory = Callable[[str, Any], Any]
 ProjectAiActionReader = Callable[[dict[str, Any]], dict[str, Any]]
 AiActionSummaryHandler = Callable[[UUID, dict[str, Any]], None]
 

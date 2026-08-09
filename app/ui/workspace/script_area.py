@@ -31,7 +31,7 @@ from app.ui.shared.page_config import (
     safe_close_ui_element,
 )
 
-LoadingDialogFactory = Callable[[str, str], Any]
+LoadingDialogFactory = Callable[[str, Any], Any]
 ProjectAiActionReader = Callable[[dict[str, Any]], dict[str, Any]]
 AiActionStaleChecker = Callable[[dict[str, Any]], bool]
 RetryInitialScriptHandler = Callable[[UUID, Any], Awaitable[None]]

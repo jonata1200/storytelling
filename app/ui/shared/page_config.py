@@ -41,6 +41,44 @@ class ProductionStep:
     icon: str
 
 
+@dataclass(frozen=True)
+class LoadingStatusItem:
+    label: str
+
+
+@dataclass(frozen=True)
+class LoadingStatus:
+    step_key: str
+    completed: int
+    total: int
+    unit_label: str
+    created: tuple[LoadingStatusItem, ...]
+    missing: tuple[LoadingStatusItem, ...]
+    now: str | None = None
+
+    @property
+    def ratio(self) -> float:
+        return min(max(self.completed / self.total, 0.0), 1.0) if self.total else 0.0
+
+    def as_text(self) -> str:
+        created_text = (
+            ", ".join(item.label for item in self.created) if self.created else "nada ainda"
+        )
+        missing_text = (
+            ", ".join(item.label for item in self.missing)
+            if self.missing
+            else "nada nesta etapa; a IA esta validando e atualizando a tela"
+        )
+        lines = [self.now] if self.now else []
+        lines.extend(
+            [
+                f"Criado: {created_text}.",
+                f"Falta criar: {missing_text}.",
+            ]
+        )
+        return "\n".join(lines)
+
+
 PRODUCTION_STEPS = [
     ProductionStep(
         "briefing",
@@ -319,46 +357,113 @@ def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
     return missing
 
 
+def _progress_for_step(step_key: str, counts: dict[str, Any]) -> tuple[int, int, str]:
+    if step_key == "ideas":
+        ideas = _safe_count(counts, "ideas")
+        return min(ideas, max(ideas, 1)), max(ideas, 1), "ideia"
+
+    if step_key == "script":
+        completed = 0
+        if _safe_count(counts, "ideas") > 0:
+            completed += 1
+        if _safe_count(counts, "scripts") > 0:
+            completed += 1
+        if _safe_count(counts, "scenes") > 0 and _safe_count(counts, "shots") > 0:
+            completed += 1
+        return completed, 3, "etapa"
+
+    if step_key == "visual":
+        expected_refs = _expected_visual_references(counts)
+        if expected_refs > 0:
+            return min(_safe_count(counts, "visual_refs"), expected_refs), expected_refs, "imagem"
+        completed_groups = sum(
+            1
+            for key in ("characters", "locations", "props")
+            if _safe_count(counts, key) > 0
+        )
+        return completed_groups, 3, "grupo"
+
+    if step_key == "storyboard":
+        shots = _safe_count(counts, "shots")
+        frames = _safe_count(counts, "frames")
+        animatics = _safe_count(counts, "animatics")
+        if shots > 0:
+            include_animatic = frames > 0 or animatics > 0
+            total = shots + (1 if include_animatic else 0)
+            completed = min(frames, shots) + (1 if animatics > 0 else 0)
+            return completed, max(total, 1), "item"
+        return min(frames, max(frames, 1)), max(frames, 1), "quadro"
+
+    if step_key == "video":
+        frames = _safe_count(counts, "frames")
+        total = max(frames, 1)
+        return min(_safe_count(counts, "clips"), total), total, "clipe"
+
+    if step_key == "dubbing":
+        return min(_safe_count(counts, "dubbing_jobs"), 1), 1, "job"
+
+    if step_key == "finalization":
+        return min(_safe_count(counts, "exports"), 1), 1, "export"
+
+    if step_key == "quality":
+        return 0, 1, "revisao"
+
+    return 0, 1, "item"
+
+
+def loading_status(
+    step_key: str,
+    counts: dict[str, Any] | None = None,
+    *,
+    now: str | None = None,
+) -> LoadingStatus:
+    count_map = counts if isinstance(counts, dict) else {}
+    completed, total, unit_label = _progress_for_step(step_key, count_map)
+    return LoadingStatus(
+        step_key=step_key,
+        completed=completed,
+        total=max(total, 1),
+        unit_label=unit_label,
+        created=tuple(
+            LoadingStatusItem(item) for item in _created_items_for_step(step_key, count_map)
+        ),
+        missing=tuple(
+            LoadingStatusItem(item) for item in _missing_items_for_step(step_key, count_map)
+        ),
+        now=now,
+    )
+
+
 def loading_status_message(
     step_key: str,
     counts: dict[str, Any] | None = None,
     *,
     now: str | None = None,
 ) -> str:
-    count_map = counts if isinstance(counts, dict) else {}
-    created = _created_items_for_step(step_key, count_map)
-    missing = _missing_items_for_step(step_key, count_map)
-    created_text = ", ".join(created) if created else "nada ainda"
-    missing_text = (
-        ", ".join(missing)
-        if missing
-        else "nada nesta etapa; a IA esta validando e atualizando a tela"
-    )
-    lines = [now] if now else []
-    lines.extend(
-        [
-            f"Criado: {created_text}.",
-            f"Falta criar: {missing_text}.",
-        ]
-    )
-    return "\n".join(lines)
+    return loading_status(step_key, counts, now=now).as_text()
 
 
-def step_loading_copy(step_key: str, counts: dict[str, Any] | None = None) -> tuple[str, str]:
+def step_loading_copy(
+    step_key: str,
+    counts: dict[str, Any] | None = None,
+) -> tuple[str, LoadingStatus]:
     title, _message = STEP_LOADING_COPY.get(
         step_key,
         ("Executando etapa", "A IA esta trabalhando nesta etapa."),
     )
-    return title, loading_status_message(step_key, counts)
+    return title, loading_status(step_key, counts)
 
 
-def action_loading_copy(action: str, counts: dict[str, Any] | None = None) -> tuple[str, str]:
+def action_loading_copy(
+    action: str,
+    counts: dict[str, Any] | None = None,
+) -> tuple[str, LoadingStatus]:
     step_key = ACTION_LOADING_STEPS.get(action, "script")
     title = ACTION_LOADING_TITLES.get(
         action,
         STEP_LOADING_COPY.get(step_key, ("Executando", ""))[0],
     )
-    return title, loading_status_message(
+    return title, loading_status(
         step_key,
         counts,
         now=ACTION_NOW_COPY.get(action),

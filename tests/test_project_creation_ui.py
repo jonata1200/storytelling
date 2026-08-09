@@ -55,8 +55,8 @@ test_visual_card_detail_formats_location_profile = (
 test_assistant_loading_copy_lists_created_and_pending_work = (
     cases.test_assistant_loading_copy_lists_created_and_pending_work
 )
-test_step_loading_copy_always_reports_created_and_missing_items = (
-    cases.test_step_loading_copy_always_reports_created_and_missing_items
+test_step_loading_copy_reports_progress_data_for_visual_work = (
+    cases.test_step_loading_copy_reports_progress_data_for_visual_work
 )
 test_visual_card_detail_prefers_explicit_description = (
     cases.test_visual_card_detail_prefers_explicit_description
