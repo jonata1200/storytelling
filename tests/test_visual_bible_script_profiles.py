@@ -446,6 +446,72 @@ async def test_update_visual_target_prompt_versions_character_profile() -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_visual_target_prompt_stores_full_prompt_override_by_view() -> None:
+    project_id = uuid4()
+    character_id = uuid4()
+    artifact_id = uuid4()
+    character = Character(
+        id=character_id,
+        project_id=project_id,
+        artifact_id=artifact_id,
+        name="Clara",
+        role="protagonista",
+        canonical_profile={
+            "asset_kind": "character",
+            "name": "Clara",
+            "canonical_prompt": "Clara original",
+        },
+        character_fingerprint={},
+        current_version=1,
+    )
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.added: list[object] = []
+            self.committed = False
+            self.refreshed: object | None = None
+
+        async def get(self, model: type[object], item_id: object) -> object | None:
+            if model is Character and item_id == character_id:
+                return character
+            if model is Artifact and item_id == artifact_id:
+                return None
+            return None
+
+        def add(self, item: object) -> None:
+            self.added.append(item)
+
+        async def commit(self) -> None:
+            self.committed = True
+
+        async def refresh(self, item: object) -> None:
+            self.refreshed = item
+
+    full_prompt = (
+        "Objetivo:\nCriar uma referencia live-action.\n\n"
+        "Ativo:\nClara, expressive detective, rainy noir lighting."
+    )
+
+    updated = await update_visual_target_prompt(
+        FakeSession(),  # type: ignore[arg-type]
+        project_id,
+        "character",
+        character_id,
+        full_prompt,
+        view_type="front_portrait",
+    )
+
+    assert updated is character
+    assert character.current_version == 2
+    assert character.canonical_profile["canonical_prompt"] == "Clara original"
+    override = character.canonical_profile["visual_prompt_overrides"]["front_portrait"]
+    assert override == visual_reference_prompt(character.canonical_profile, "front_portrait")
+    assert "atores reais" in override
+    assert "detetive expressiva" in override
+    assert "live-action" not in override
+
+
+@pytest.mark.asyncio
 async def test_unchanged_visual_profile_restores_stale_character_and_references(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

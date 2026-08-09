@@ -22,6 +22,7 @@ from app.dubbing.models import DubbingJob
 from app.finalization.models import Export, SubtitleTrack
 from app.generation.model_settings import llm_provider_for_task
 from app.generation.models import PromptExecution
+from app.generation.prompt_language import ensure_portuguese_prompt_text
 from app.generation.service import run_structured_generation
 from app.production.service import (
     get_or_create_production_settings,
@@ -74,6 +75,7 @@ from app.visual_bible.profiles import (
     visual_profile_validation_errors as visual_profile_validation_errors,
 )
 from app.visual_bible.prompts import (
+    VISUAL_PROMPT_OVERRIDES_KEY,
     default_views_for,
     validated_visual_reference_views,
     visual_reference_aspect_ratio,
@@ -496,8 +498,9 @@ async def update_visual_target_prompt(
     target_id: UUID,
     canonical_prompt: str,
     change_note: str | None = None,
+    view_type: str | None = None,
 ) -> Character | Location | Prop | None:
-    prompt = canonical_prompt.strip()
+    prompt = ensure_portuguese_prompt_text(canonical_prompt.strip())
     if not prompt:
         raise ValueError("O prompt não pode ficar vazio")
 
@@ -514,9 +517,25 @@ async def update_visual_target_prompt(
         return None
 
     profile = dict(target.canonical_profile or {})
-    if profile.get("canonical_prompt") == prompt:
-        return target
-    profile["canonical_prompt"] = prompt
+    if view_type is not None:
+        validated_visual_reference_views(target_kind, [view_type])
+        raw_overrides = profile.get(VISUAL_PROMPT_OVERRIDES_KEY)
+        visual_prompt_overrides = dict(raw_overrides) if isinstance(raw_overrides, dict) else {}
+        if visual_prompt_overrides.get(view_type) == prompt:
+            return target
+        visual_prompt_overrides[view_type] = prompt
+        profile[VISUAL_PROMPT_OVERRIDES_KEY] = visual_prompt_overrides
+        version_change_note = (
+            change_note
+            or f"Prompt visual editado: {visual_reference_view_label(view_type)}"
+        )
+        artifact_change_note = version_change_note
+    else:
+        if profile.get("canonical_prompt") == prompt:
+            return target
+        profile["canonical_prompt"] = prompt
+        version_change_note = change_note or "Canonical prompt edited"
+        artifact_change_note = change_note or "Canonical visual prompt edited"
     target.canonical_profile = profile
     target.current_version += 1
 
@@ -527,7 +546,7 @@ async def update_visual_target_prompt(
                 character_id=target.id,
                 version_number=target.current_version,
                 canonical_profile=profile,
-                change_note=change_note or "Canonical prompt edited",
+                change_note=version_change_note,
             )
         )
     elif isinstance(target, Location):
@@ -536,7 +555,7 @@ async def update_visual_target_prompt(
                 location_id=target.id,
                 version_number=target.current_version,
                 canonical_profile=profile,
-                change_note=change_note or "Canonical prompt edited",
+                change_note=version_change_note,
             )
         )
     else:
@@ -545,7 +564,7 @@ async def update_visual_target_prompt(
                 prop_id=target.id,
                 version_number=target.current_version,
                 canonical_profile=profile,
-                change_note=change_note or "Canonical prompt edited",
+                change_note=version_change_note,
             )
         )
 
@@ -556,7 +575,7 @@ async def update_visual_target_prompt(
             session,
             artifact,
             profile,
-            change_note=change_note or "Canonical visual prompt edited",
+            change_note=artifact_change_note,
         )
 
     await session.commit()

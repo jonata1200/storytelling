@@ -9,6 +9,7 @@ CHARACTER_OPTIONAL_VIEWS = ["character_reference_sheet"]
 CHARACTER_VIEWS = CHARACTER_REQUIRED_VIEWS + CHARACTER_OPTIONAL_VIEWS
 LOCATION_VIEWS = ["establishing"]
 PROP_VIEWS = ["front"]
+VISUAL_PROMPT_OVERRIDES_KEY = "visual_prompt_overrides"
 VIEW_LABELS_PT = {
     "character_reference_sheet": "Folha de referencia do personagem",
     "front_portrait": "Retrato frontal de corpo inteiro",
@@ -280,7 +281,20 @@ def _compact_visual_base_prompt(profile: dict) -> str:
     return _truncate_prompt_text(ensure_portuguese_prompt_text(fallback), 360)
 
 
+def _visual_prompt_override(profile: dict, view_type: str) -> str:
+    overrides = profile.get(VISUAL_PROMPT_OVERRIDES_KEY)
+    if not isinstance(overrides, dict):
+        return ""
+    prompt = str(overrides.get(view_type) or "").strip()
+    if not prompt:
+        return ""
+    return ensure_portuguese_prompt_text(prompt)
+
+
 def visual_reference_prompt(profile: dict, view_type: str) -> str:
+    if override := _visual_prompt_override(profile, view_type):
+        return override
+
     base_prompt = _compact_visual_base_prompt(profile)
     view_detail = VIEW_PROMPT_DETAILS.get(view_type, view_type.replace("_", " "))
     asset_kind = str(profile.get("asset_kind") or "")

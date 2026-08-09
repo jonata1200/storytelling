@@ -126,6 +126,7 @@ async def _update_visual_prompt_from_ui(
     target_kind: str,
     target_id: UUID,
     canonical_prompt: str,
+    view_type: str | None = None,
 ) -> None:
     try:
         async with AsyncSessionLocal() as session:
@@ -136,6 +137,7 @@ async def _update_visual_prompt_from_ui(
                 target_id,
                 canonical_prompt,
                 change_note="Prompt editado pela interface",
+                view_type=view_type,
             )
         if target is None:
             _notify_visual_action("Não encontrei o ativo visual para editar.", color="negative")

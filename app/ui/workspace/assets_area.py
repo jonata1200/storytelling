@@ -282,7 +282,6 @@ def _entity_card(
         (view_type, visual_reference_prompt(profile, view_type))
         for view_type in optional_sheet_views
     ]
-    current_prompt = str(profile.get("canonical_prompt") or title).strip()
     reference_assets: list[ReferenceAsset] = [
         (reference, asset, asset_url(asset.storage_uri))
         for reference in references
@@ -294,6 +293,24 @@ def _entity_card(
         if image_url
     ]
     hero_reference = reference_assets[0] if reference_assets else None
+    editable_view_types = list(
+        dict.fromkeys(
+            [
+                *[reference.view_type for reference in references],
+                *requested_views,
+                *optional_sheet_views,
+                *default_views_for(target_kind),
+            ]
+        )
+    )
+    if not editable_view_types:
+        editable_view_types = [initial_view_for(target_kind)]
+    editable_view_type = editable_view_types[0]
+    current_prompt = visual_reference_prompt(profile, editable_view_type)
+    editable_view_options = {
+        view_type: visual_reference_view_label(view_type)
+        for view_type in editable_view_types
+    }
     character_reference_sheet = _character_reference_sheet_asset(
         target_kind, reference_assets
     )
@@ -522,23 +539,39 @@ def _entity_card(
                 "entity-card rounded-2xl p-6 w-[min(760px,92vw)]"
             ):
                 ui.label("Editar prompt visual").classes("brand-type text-2xl font-bold")
+                ui.label(
+                    "Edite o prompt completo que será usado para esta vista do ativo."
+                ).classes("text-sm text-[#8d938e]")
+                prompt_view_select = ui.select(
+                    editable_view_options,
+                    value=editable_view_type,
+                    label="Vista do prompt",
+                ).props("outlined dense").classes("w-full")
                 prompt_input = (
-                    ui.textarea("Prompt canonico", value=current_prompt)
+                    ui.textarea("Prompt completo", value=current_prompt)
                     .props("outlined autogrow")
                     .classes("w-full")
                 )
+
+                def load_prompt_for_selected_view(event: Any) -> None:
+                    selected_view_type = str(event.value or editable_view_type)
+                    prompt_input.value = visual_reference_prompt(profile, selected_view_type)
+
+                prompt_view_select.on_value_change(load_prompt_for_selected_view)
 
                 async def save_visual_prompt() -> None:
                     new_prompt = str(prompt_input.value or "").strip()
                     if not new_prompt:
                         ui.notify("Informe um prompt antes de salvar.", color="warning")
                         return
+                    selected_view_type = str(prompt_view_select.value or editable_view_type)
                     safe_close_ui_element(edit_prompt_dialog)
                     await _update_visual_prompt_from_ui(
                         project_id,
                         target_kind,
                         target_id,
                         new_prompt,
+                        view_type=selected_view_type,
                     )
 
                 with ui.row().classes("w-full justify-end gap-2 mt-3"):

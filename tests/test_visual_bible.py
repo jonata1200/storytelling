@@ -176,6 +176,29 @@ def test_visual_reference_prompt_uses_canonical_profile_prompt() -> None:
     assert len(prompt) < 1100
 
 
+def test_visual_reference_prompt_uses_full_prompt_override_for_view() -> None:
+    profile = {
+        "asset_kind": "character",
+        "name": "Helena",
+        "canonical_prompt": "Helena base",
+        "visual_prompt_overrides": {
+            "front_portrait": (
+                "Objetivo:\nCriar referencia live-action.\n\n"
+                "Ativo:\nHelena, expressive detective, rainy noir lighting."
+            ),
+        },
+    }
+
+    prompt = visual_reference_prompt(profile, "front_portrait")
+
+    assert prompt.startswith("Objetivo:\nCriar referencia")
+    assert "atores reais" in prompt
+    assert "detetive expressiva" in prompt
+    assert "iluminacao noir chuvosa" in prompt
+    assert "live-action" not in prompt
+    assert "expressive detective" not in prompt
+
+
 def test_visual_reference_prompts_are_distinct_by_view_type() -> None:
     profile = {"name": "Carta azul", "canonical_prompt": "Carta azul antiga, papel gasto"}
 
