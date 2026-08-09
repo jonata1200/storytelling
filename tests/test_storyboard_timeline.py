@@ -15,6 +15,7 @@ from app.storyboards.frame_generation import (
     storyboard_image_concurrency,
 )
 from app.storyboards.models import StoryboardFrame
+from app.storyboards.prompt_approvals import _storyboard_generation_payload
 from app.storyboards.prompts import (
     _store_storyboard_generated_prompt,
     _store_storyboard_prompt_approval,
@@ -127,6 +128,87 @@ def test_storyboard_prompt_includes_visual_bible_context() -> None:
     assert "não criar montagem, colagem, tela dividida" in prompt
 
 
+def test_storyboard_prompt_enforces_spatial_blocking_continuity() -> None:
+    scene = Scene(
+        id=uuid4(),
+        scene_number=2,
+        title="Consulta",
+        payload={
+            "spatial_layout": (
+                "Marco sentado no sofa a direita da tela; Lia em pe a esquerda, "
+                "mesa baixa entre os dois."
+            )
+        },
+    )
+    shot = Shot(
+        id=uuid4(),
+        shot_number=3,
+        duration_seconds=6,
+        action="Lia mostra o tablet enquanto Marco observa.",
+        emotion="tensao contida",
+        visual_composition="Plano medio vertical mantendo Lia a esquerda e Marco a direita.",
+        camera_movement="leve aproximacao",
+        narration_text="Lia mostra o tablet.",
+        dialogue_text="",
+        payload={
+            "spatial_continuity": (
+                "Preservar Lia a esquerda segurando o tablet e Marco a direita no sofa."
+            )
+        },
+    )
+
+    prompt = _storyboard_prompt(shot, scene)
+    checks = storyboard_continuity_checklist(prompt, ["storage/lia.png"])
+
+    assert "Continuidade espacial obrigatoria" in prompt
+    assert "Mapa espacial da cena" in prompt
+    assert "Marco sentado no sofa a direita" in prompt
+    assert "Lia a esquerda segurando o tablet" in prompt
+    assert "nao podem teleportar" in prompt
+    assert any(check["label"] == "Blocking e geografia espacial preservados" for check in checks)
+
+
+def test_storyboard_generation_payload_includes_previous_shot_spatial_context() -> None:
+    scene = Scene(
+        id=uuid4(),
+        scene_number=1,
+        title="Sala",
+        summary="Lia conversa com Marco.",
+        payload={"spatial_layout": "Lia fica a esquerda; Marco fica a direita."},
+    )
+    first_shot = Shot(
+        id=uuid4(),
+        shot_number=1,
+        duration_seconds=4,
+        action="Lia se aproxima da mesa.",
+        emotion="alerta",
+        visual_composition="Lia a esquerda da mesa.",
+        camera_movement="camera fixa",
+        narration_text="Lia se aproxima.",
+        dialogue_text="",
+        payload={"spatial_continuity": "Lia permanece a esquerda da mesa."},
+    )
+    second_shot = Shot(
+        id=uuid4(),
+        shot_number=2,
+        duration_seconds=4,
+        action="Marco responde sentado.",
+        emotion="defensivo",
+        visual_composition="Marco a direita, Lia ainda a esquerda.",
+        camera_movement="contracampo leve",
+        narration_text="Marco responde.",
+        dialogue_text="Marco: Entendi.",
+        payload={"spatial_continuity": "Manter Marco a direita e Lia a esquerda."},
+    )
+
+    payload = _storyboard_generation_payload([(first_shot, scene), (second_shot, scene)])
+
+    assert payload[0]["scene_spatial_layout"] == "Lia fica a esquerda; Marco fica a direita."
+    assert payload[0]["previous_shot_visual_composition"] == ""
+    assert payload[1]["previous_shot_visual_composition"] == "Lia a esquerda da mesa."
+    assert payload[1]["previous_shot_spatial_continuity"] == "Lia permanece a esquerda da mesa."
+
+
 def test_storyboard_coverage_errors_detect_missing_and_duration_mismatch() -> None:
     first_shot_id = uuid4()
     second_shot_id = uuid4()
@@ -237,7 +319,10 @@ def test_storyboard_generation_fingerprint_changes_when_references_change() -> N
 
 def test_storyboard_continuity_checklist_reports_reference_status() -> None:
     checks = storyboard_continuity_checklist(
-        "Quadro fotorrealista com atores reais vertical 9:16 sem animação.",
+        (
+            "Quadro fotorrealista com atores reais vertical 9:16 sem animação, "
+            "preservando blocking, esquerda/direita e eixo de camera."
+        ),
         ["storage/clara.png"],
     )
 

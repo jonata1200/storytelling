@@ -13,6 +13,14 @@ from app.storytelling.models import Scene, Shot
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 
 STORYBOARD_REFERENCE_LIMIT = 6
+STORYBOARD_SPATIAL_RULES = (
+    "Continuidade espacial obrigatoria: trate cada cena como um set real. A camera pode "
+    "mudar de distancia, altura ou angulo, mas deve preservar o eixo, a esquerda/direita "
+    "dos personagens, a distancia entre eles, objetos em maos/mesa e direcao de olhar. "
+    "Personagens nao podem teleportar, trocar de lado ou mudar postura sem motivacao "
+    "visual. So altere posicao corporal, lado da tela ou relacao com objetos quando "
+    "a acao do plano mostrar esse deslocamento claramente."
+)
 STORYBOARD_STYLE_CONTRACT = (
     "Contrato visual global: fotorrealista, cinematografico com atores reais, mesma linguagem "
     "visual da Biblioteca Visual; não usar desenho, animação, desenho caricato, anime, quadrinhos, "
@@ -254,16 +262,28 @@ def _storyboard_visual_context_text(visual_context: dict | None) -> str:
     return "\n\nBiblioteca visual canonica - autoridade de continuidade:\n" + "\n\n".join(sections)
 
 
+def _payload_text(payload: object, key: str) -> str:
+    data = payload if isinstance(payload, dict) else {}
+    return ensure_portuguese_prompt_text(str(data.get(key) or "").strip())
+
+
 def _storyboard_prompt(shot: Shot, scene: Scene, visual_context: dict | None = None) -> str:
     visual_context_text = _storyboard_visual_context_text(visual_context)
+    scene_spatial_layout = _payload_text(scene.payload, "spatial_layout")
+    shot_spatial_continuity = _payload_text(shot.payload, "spatial_continuity")
     return (
         "Quadro cinematográfico fotorrealista para storyboard de video vertical 9:16.\n"
         f"Cena {scene.scene_number}, plano {shot.shot_number}.\n\n"
         f"{STORYBOARD_STYLE_CONTRACT}\n\n"
         f"{STORYBOARD_STYLE_RULES}\n\n"
+        f"{STORYBOARD_SPATIAL_RULES}\n\n"
         f"Acao principal do plano: {shot.action}.\n"
         f"Emocao dominante: {shot.emotion}.\n"
         f"Composicao planejada: {shot.visual_composition}.\n"
+        "Mapa espacial da cena: "
+        f"{scene_spatial_layout or 'preservar o blocking estabelecido na cena'}.\n"
+        "Continuidade espacial deste plano: "
+        f"{shot_spatial_continuity or 'manter posicoes relativas, eixo e direcao de olhar'}.\n"
         f"Movimento de camera previsto: {shot.camera_movement}.\n\n"
         "Crie um único quadro de storyboard que funcione como primeiro frame util "
         "para video a partir de imagem. O quadro deve mostrar o instante inicial mais claro "
@@ -275,6 +295,8 @@ def _storyboard_prompt(shot: Shot, scene: Scene, visual_context: dict | None = N
         "desenho ou animação\n"
         "- composicao cinematografica, clara e sem poluicao visual\n"
         "- continuidade rigorosa de rosto, idade, figurino, objetos, paleta, luz e ambiente\n"
+        "- continuidade rigorosa de blocking: lado da tela, distancia, postura, eixo de camera "
+        "e relacao com objetos\n"
         "- nenhum texto, legenda, marca d'agua, baloes, interface visual ou anotacao "
         "dentro da imagem\n"
         "- não criar montagem, colagem, tela dividida ou multiplas cenas no mesmo quadro\n"
@@ -420,11 +442,19 @@ def _storyboard_effective_prompt(
 
 def _storyboard_generation_prompt(prompt: str) -> str:
     text = ensure_portuguese_prompt_text(prompt)
-    if STORYBOARD_STYLE_CONTRACT in text and STORYBOARD_STYLE_RULES in text:
+    if (
+        STORYBOARD_STYLE_CONTRACT in text
+        and STORYBOARD_STYLE_RULES in text
+        and STORYBOARD_SPATIAL_RULES in text
+    ):
         return text
     additions = [
         section
-        for section in (STORYBOARD_STYLE_CONTRACT, STORYBOARD_STYLE_RULES)
+        for section in (
+            STORYBOARD_STYLE_CONTRACT,
+            STORYBOARD_STYLE_RULES,
+            STORYBOARD_SPATIAL_RULES,
+        )
         if section not in text
     ]
     return ensure_portuguese_prompt_text(f"{text}\n\n" + "\n".join(additions))
@@ -453,6 +483,10 @@ def storyboard_continuity_checklist(
         {
             "label": "Proporção 9:16 orientada",
             "ok": "9:16" in text or "vertical" in text,
+        },
+        {
+            "label": "Blocking e geografia espacial preservados",
+            "ok": any(term in text for term in ("blocking", "eixo de camera", "esquerda")),
         },
     ]
 

@@ -27,21 +27,43 @@ from app.storytelling.models import Scene, Script, Shot
 
 
 def _storyboard_generation_payload(shot_rows: list[tuple[Shot, Scene]]) -> list[dict]:
-    return [
-        {
-            "shot_id": str(shot.id),
-            "scene_number": scene.scene_number,
-            "shot_number": shot.shot_number,
-            "duration_seconds": shot.duration_seconds,
-            "action": shot.action,
-            "emotion": shot.emotion,
-            "visual_composition": shot.visual_composition,
-            "camera_movement": shot.camera_movement,
-            "narration_text": shot.narration_text,
-            "dialogue_text": shot.dialogue_text,
-        }
-        for shot, scene in shot_rows
-    ]
+    payload: list[dict] = []
+    previous_by_scene: dict[int, Shot] = {}
+    for shot, scene in shot_rows:
+        scene_payload = scene.payload if isinstance(scene.payload, dict) else {}
+        shot_payload = shot.payload if isinstance(shot.payload, dict) else {}
+        previous_shot = previous_by_scene.get(int(scene.scene_number or 0))
+        previous_payload = (
+            previous_shot.payload
+            if previous_shot is not None and isinstance(previous_shot.payload, dict)
+            else {}
+        )
+        payload.append(
+            {
+                "shot_id": str(shot.id),
+                "scene_number": scene.scene_number,
+                "scene_title": scene.title,
+                "scene_summary": scene.summary,
+                "scene_spatial_layout": scene_payload.get("spatial_layout", ""),
+                "shot_number": shot.shot_number,
+                "duration_seconds": shot.duration_seconds,
+                "action": shot.action,
+                "emotion": shot.emotion,
+                "visual_composition": shot.visual_composition,
+                "spatial_continuity": shot_payload.get("spatial_continuity", ""),
+                "previous_shot_visual_composition": (
+                    previous_shot.visual_composition if previous_shot is not None else ""
+                ),
+                "previous_shot_spatial_continuity": previous_payload.get(
+                    "spatial_continuity", ""
+                ),
+                "camera_movement": shot.camera_movement,
+                "narration_text": shot.narration_text,
+                "dialogue_text": shot.dialogue_text,
+            }
+        )
+        previous_by_scene[int(scene.scene_number or 0)] = shot
+    return payload
 
 
 def _storyboard_generated_prompt_payload(content: dict) -> dict[str, str]:

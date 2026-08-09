@@ -150,8 +150,17 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "Cenas podem agrupar varios planos; duration_seconds de cada cena deve ser a soma "
         "dos seus planos. Extraia personagens, locais, objetos, acao filmavel e "
         "diálogo de cada trecho. Não criar narrador nem fala em off. "
+        "Para cada cena, crie spatial_layout como um mapa espacial continuo: onde cada "
+        "personagem fica, quem esta a esquerda/direita, onde estao mesa, portas, janelas, "
+        "objetos importantes e fundo. Para planos consecutivos da mesma cena, nunca inverta "
+        "posicoes de personagens, direcao de olhar ou lado da tela sem uma acao clara de "
+        "deslocamento dentro do roteiro. "
         "visual_composition deve descrever enquadramento vertical, "
-        "sujeito principal, ambiente, luz, profundidade e referência de continuidade. "
+        "sujeito principal, ambiente, luz, profundidade, lado da tela e referência de "
+        "continuidade espacial. "
+        "spatial_continuity de cada plano deve explicar como o quadro preserva o mapa "
+        "espacial da cena: posicao relativa dos personagens, distancia entre eles, "
+        "objetos na mesa/maos, direcao de olhar e eixo de camera. "
         "camera_movement deve orientar movimento realista compativel com clipe curto. "
         "action deve ser visivel, especifica e executavel em uma única tomada curta. "
         "Rejeite ações abstratas como 'percebe a verdade' ou 'sente saudade'; converta "
@@ -163,9 +172,11 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "diálogo. Se o plano não tiver fala, dialogue_text pode ser string vazia. "
         "Responda somente JSON neste formato exato: "
         '{{"scenes":[{{"scene_number":1,"title":"...","summary":"...",'
-        '"duration_seconds":24,"shots":[{{"shot_number":1,"duration_seconds":8,'
+        '"spatial_layout":"...","duration_seconds":24,'
+        '"shots":[{{"shot_number":1,"duration_seconds":8,'
         '"narration_text":"...","dialogue_text":"","action":"...","emotion":"...",'
-        '"visual_composition":"...","camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}}]}}]}}'
+        '"visual_composition":"...","spatial_continuity":"...",'
+        '"camera_movement":"...","generation_type":"IMAGE_TO_VIDEO"}}]}}]}}'
     ),
     "generate_visual_bible": (
         "Você é diretor de arte e prompt designer para imagens geradas por IA. "
@@ -228,7 +239,12 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "portugues do Brasil. O estilo global deve ser sempre fotorrealista, "
         "cinematográfico com atores reais e fiel às referências canônicas da biblioteca visual. "
         "Use continuidade rigorosa de rosto, idade, cabelo, figurino, local, luz, "
-        "paleta, objetos, materiais, escala e geografia espacial. "
+        "paleta, objetos, materiais, escala, blocking e geografia espacial. "
+        "Para cada scene_number, trate spatial_layout como mapa fixo de cena: preserve "
+        "quem fica a esquerda/direita, quem esta sentado/de pe, distancia entre personagens, "
+        "objetos nas maos/mesa, direcao de olhar, eixo de camera e fundo. A camera pode "
+        "mudar de plano, mas os personagens nao podem teleportar, trocar de lado ou mudar "
+        "postura sem acao visivel que justifique. "
         "Não invente personagens, locais ou objetos fora do plano. Não inclua texto, "
         "legendas, marcas d'água, interface, balões, montagem, colagem ou tela dividida. "
         "Não use desenho, animação, desenho caricato, anime, quadrinhos, renderizacao 3D, pintura, "

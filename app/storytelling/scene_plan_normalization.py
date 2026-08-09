@@ -9,6 +9,17 @@ from app.storytelling.normalization_common import (
 from app.storytelling.script_normalization import _script_block_to_text
 from app.video_generation.durations import validate_video_clip_duration, video_clip_durations
 
+DEFAULT_SCENE_SPATIAL_LAYOUT = (
+    "Mapa espacial da cena: definir posicoes relativas fixas de personagens, "
+    "objetos importantes, entradas, mesa, assentos e fundo. Manter eixo de camera "
+    "coerente entre planos, permitindo variar enquadramento sem trocar lados da tela."
+)
+DEFAULT_SHOT_SPATIAL_CONTINUITY = (
+    "Continuar o blocking da cena: preservar esquerda/direita, distancia entre "
+    "personagens, relacao com objetos e direcao de olhar/movimento estabelecidas "
+    "nos planos anteriores, salvo se a acao mostrar deslocamento claro."
+)
+
 
 def _script_scene_sections(script_content: str) -> list[dict]:
     text = str(script_content or "")
@@ -115,6 +126,7 @@ def _scene_plan_from_script_sections(sections: list[dict], target_duration_secon
                 "scene_number": scene_number,
                 "title": section["title"],
                 "summary": section["summary"],
+                "spatial_layout": DEFAULT_SCENE_SPATIAL_LAYOUT,
                 "duration_seconds": sum(durations),
                 "shots": shots,
             }
@@ -208,6 +220,7 @@ def normalize_scene_plan_payload_from_script(
             "visual_composition",
             "Composicao vertical 9:16 com sujeito principal, ambiente e luz definidos.",
         )
+        shot.setdefault("spatial_continuity", DEFAULT_SHOT_SPATIAL_CONTINUITY)
         shot.setdefault("camera_movement", "movimento suave e realista")
         shot.setdefault("generation_type", "IMAGE_TO_VIDEO")
         groups[-1][1].append(shot)
@@ -218,6 +231,7 @@ def normalize_scene_plan_payload_from_script(
         scene["scene_number"] = scene_number
         scene.setdefault("title", f"Cena {scene_number}")
         scene.setdefault("summary", _shot_narration_text(shots[0], f"scene[{scene_number}]"))
+        scene.setdefault("spatial_layout", DEFAULT_SCENE_SPATIAL_LAYOUT)
         scene["shots"] = shots
         scene["duration_seconds"] = sum(int(shot["duration_seconds"]) for shot in shots)
         normalized_scenes.append(scene)

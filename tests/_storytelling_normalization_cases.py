@@ -693,6 +693,42 @@ FADE OUT.
     )
 
 
+def test_scene_plan_payload_adds_spatial_continuity_defaults() -> None:
+    payload = normalize_scene_plan_payload(
+        {
+            "scenes": [
+                {
+                    "scene_number": 1,
+                    "title": "Consulta",
+                    "summary": "Lia conversa com Marco.",
+                    "duration_seconds": 8,
+                    "shots": [
+                        {
+                            "shot_number": 1,
+                            "duration_seconds": 8,
+                            "narration_text": "Lia mostra um tablet.",
+                            "dialogue_text": "",
+                            "action": "Lia mostra um tablet para Marco.",
+                            "emotion": "tensao",
+                            "visual_composition": "Plano medio vertical.",
+                            "camera_movement": "camera fixa",
+                            "generation_type": "IMAGE_TO_VIDEO",
+                        }
+                    ],
+                }
+            ]
+        },
+        8,
+    )
+
+    scene = payload["scenes"][0]
+    shot = scene["shots"][0]
+    assert "spatial_layout" in scene
+    assert "spatial_continuity" in shot
+    assert "lados da tela" in scene["spatial_layout"]
+    assert "esquerda/direita" in shot["spatial_continuity"]
+
+
 def test_script_payload_builds_content_from_scene_list_when_content_is_empty() -> None:
     payload = normalize_script_payload(
         {
