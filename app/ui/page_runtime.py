@@ -10,6 +10,7 @@ from app.ui.routes.home_pages import register_home_pages
 from app.ui.routes.project_workspace_page import register_project_workspace_pages
 from app.ui.routes.settings_page import register_settings_page
 from app.ui.shared import assistant_state
+from app.ui.shared.page_config import play_completion_sound
 from app.ui.visual.helpers import asset_url as _visual_asset_url
 from app.ui.workspace.assets_area import render_assets_area
 from app.ui.workspace.script_area import render_script_area, save_script_from_ui
@@ -50,7 +51,24 @@ def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) ->
     _page_attr("_show_ai_error_popup")(
         error or "A IA não respondeu. Tente novamente ou escolha outro modelo.",
         details=error,
-    )
+            )
+
+
+def _play_ai_action_completion_sound_once(project_id: UUID, ai_action: dict[str, Any]) -> None:
+    if str(ai_action.get("status") or "") != "completed":
+        return
+    action = str(ai_action.get("action") or "ai_action")
+    updated_at = str(ai_action.get("updated_at") or "")
+    message = str(ai_action.get("message") or "")
+    sound_key = f"{project_id}:{action}:{updated_at}:{message}"
+    nicegui_app = _page_attr("nicegui_app")
+    store = nicegui_app.storage.user.setdefault("heard_ai_completion_sounds", [])
+    heard = [str(item) for item in store if isinstance(item, str)]
+    if sound_key in heard:
+        return
+    heard.append(sound_key)
+    nicegui_app.storage.user["heard_ai_completion_sounds"] = heard[-80:]
+    play_completion_sound()
 
 
 def _sync_ai_action_events_to_chat(project_id: UUID, summary_or_action: dict[str, Any]) -> None:
@@ -79,6 +97,7 @@ def _sync_ai_action_events_to_chat(project_id: UUID, summary_or_action: dict[str
                 )
             ]
     assistant_state.sync_ai_action_events_to_chat(project_id, ai_action)
+    _play_ai_action_completion_sound_once(project_id, ai_action)
 
 
 def _positive_count(value: object) -> bool:

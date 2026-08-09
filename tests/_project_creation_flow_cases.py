@@ -557,6 +557,39 @@ def test_ai_action_sync_skips_initial_script_events_after_project_progress(
     assert storage.get("project_assistant_messages") in (None, {})
 
 
+def test_ai_action_completion_sound_is_played_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    project_id = uuid4()
+    storage: dict[str, Any] = {}
+    sounds: list[str] = []
+    monkeypatch.setattr(
+        pages,
+        "nicegui_app",
+        SimpleNamespace(storage=SimpleNamespace(user=storage)),
+    )
+    monkeypatch.setattr(
+        page_runtime,
+        "play_completion_sound",
+        lambda: sounds.append("played"),
+    )
+    summary = {
+        "production_settings": SimpleNamespace(
+            metadata_json={
+                "ai_action": {
+                    "action": "create_initial_script",
+                    "status": "completed",
+                    "message": "Roteiro inicial criado.",
+                    "updated_at": "2026-08-09T12:00:00+00:00",
+                }
+            }
+        )
+    }
+
+    pages._sync_ai_action_events_to_chat(project_id, summary)
+    pages._sync_ai_action_events_to_chat(project_id, summary)
+
+    assert sounds == ["played"]
+
+
 def test_assistant_draft_persists_by_project(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

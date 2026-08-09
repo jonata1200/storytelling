@@ -14,6 +14,7 @@ from app.storytelling.models import Script
 from app.ui.shared.page_config import (
     friendly_ai_error,
     is_deleted_ui_context_error,
+    play_completion_sound,
     safe_close_ui_element,
     show_ai_error_popup,
 )
@@ -80,6 +81,7 @@ async def _approve_visual_target_from_ui(
                     f"Ativo aprovado. {len(references)} vista(s) complementar(es) criada(s).",
                     color="positive",
                 )
+                play_completion_sound()
         else:
             _notify_visual_action(
                 "Ativo aprovado. Todas as vistas já estávam criadas.", color="positive"
@@ -168,6 +170,7 @@ async def _regenerate_visual_reference_from_ui(
             _notify_visual_action(_visual_fallback_notice(), color="warning", timeout=9000)
         else:
             _notify_visual_action("Imagem gerada novamente.", color="positive")
+            play_completion_sound()
         ui.navigate.reload()
     except Exception as exc:
         logger.exception(
@@ -285,6 +288,7 @@ async def _generate_all_visual_prompts_with_progress_from_ui(
                 ),
                 color="positive",
             )
+            play_completion_sound()
         else:
             _notify_visual_action(
                 "Nenhum prompt visual novo foi necessário para este projeto.",
@@ -469,6 +473,7 @@ async def _approve_all_visual_targets_from_ui(
                     f"{created_count} imagem(ns) criada(s) em fila para a Biblioteca Visual.",
                     color="positive",
                 )
+                play_completion_sound()
         else:
             _notify_visual_action(
                 "Todas as imagens iniciais já estávam criadas.", color="positive"

@@ -16,6 +16,7 @@ from app.storyboards.service import (
 )
 from app.ui.shared.page_config import (
     friendly_ai_error,
+    play_completion_sound,
     safe_close_ui_element,
     show_ai_error_popup,
 )
@@ -100,6 +101,7 @@ async def approve_storyboard_prompts_from_ui(
                 ),
                 color="positive",
             )
+            play_completion_sound()
             ui.navigate.reload()
             return
         ui.notify(
@@ -110,6 +112,8 @@ async def approve_storyboard_prompts_from_ui(
             ),
             color="positive",
         )
+        if approved_count:
+            play_completion_sound()
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
@@ -155,6 +159,7 @@ async def approve_storyboard_prompt_from_ui(
                 f"Ultimo prompt aprovado. {generated_count} storyboard(s) gerado(s).",
                 color="positive",
             )
+            play_completion_sound()
             ui.navigate.reload()
             return
         ui.notify(
@@ -165,6 +170,8 @@ async def approve_storyboard_prompt_from_ui(
             ),
             color="positive",
         )
+        if approved:
+            play_completion_sound()
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
@@ -253,6 +260,7 @@ async def generate_storyboards_from_ui(
             ),
             color="positive",
         )
+        play_completion_sound()
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))

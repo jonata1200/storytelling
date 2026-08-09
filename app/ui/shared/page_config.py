@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from nicegui import ui
+from nicegui import core, ui
 
 from app.visual_bible.prompts import default_views_for
 
@@ -545,6 +545,44 @@ def safe_close_ui_element(element: object) -> None:
         if not is_deleted_ui_context_error(exc):
             raise
         logger.warning("Could not close UI element because the page context was removed.")
+
+
+COMPLETION_SOUND_JS = """
+(() => {
+  try {
+    if (window.localStorage?.getItem('storytellingCompletionSound') === 'off') return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const context = window.__storytellingCompletionAudioContext || new AudioContext();
+    window.__storytellingCompletionAudioContext = context;
+    const now = context.currentTime;
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.09, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+    gain.connect(context.destination);
+    [523.25, 659.25, 783.99].forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, now + index * 0.08);
+      oscillator.connect(gain);
+      oscillator.start(now + index * 0.08);
+      oscillator.stop(now + 0.38 + index * 0.04);
+    });
+  } catch (_) {}
+})();
+"""
+
+
+def play_completion_sound() -> None:
+    if core.loop is None:
+        return
+    try:
+        ui.run_javascript(COMPLETION_SOUND_JS)
+    except (AssertionError, RuntimeError) as exc:
+        if isinstance(exc, RuntimeError) and not is_deleted_ui_context_error(exc):
+            raise
+        logger.warning("Could not play completion sound because the page context was removed.")
 
 
 def show_ai_error_popup(

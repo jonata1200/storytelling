@@ -28,6 +28,7 @@ from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
     UI_GENERATION_TIMEOUT_SECONDS,
     loading_status_message,
+    play_completion_sound,
     safe_close_ui_element,
 )
 
@@ -213,6 +214,8 @@ async def _update_script_generation_progress(
     update_progress(completed, total, detail)
     if terminal and hasattr(loading_dialog, "close"):
         safe_close_ui_element(loading_dialog)
+        if completed >= total:
+            play_completion_sound()
         ui.navigate.reload()
 
 
@@ -289,6 +292,8 @@ async def save_script_from_ui(
             reload_user()
             return
         notify_user("Roteiro salvo. Cenas e planos atualizados.", "positive")
+        if notify is None:
+            play_completion_sound()
         reload_user()
     except Exception as exc:
         notify_user(f"Não consegui salvar o roteiro: {exc}", "negative")

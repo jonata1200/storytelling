@@ -30,8 +30,8 @@ test_screenplay_válidator_rejects_compacted_inline_numbered_sluglines = (
 test_screenplay_validator_rejects_location_used_as_dialogue_cue = (
     cases.test_screenplay_validator_rejects_location_used_as_dialogue_cue
 )
-test_script_payload_retries_compacted_inline_numbered_sluglines = (
-    cases.test_script_payload_retries_compacted_inline_numbered_sluglines
+test_script_payload_repairs_compacted_inline_numbered_sluglines = (
+    cases.test_script_payload_repairs_compacted_inline_numbered_sluglines
 )
 test_script_payload_preserves_embedded_production_plan_separately = (
     cases.test_script_payload_preserves_embedded_production_plan_separately

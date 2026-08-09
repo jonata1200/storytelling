@@ -1,5 +1,12 @@
+import pytest
+
+from app.ui.shared import page_config
 from app.ui.shared.generation_progress import progress_percent_text, progress_ratio
-from app.ui.shared.page_config import is_deleted_ui_context_error, safe_close_ui_element
+from app.ui.shared.page_config import (
+    is_deleted_ui_context_error,
+    play_completion_sound,
+    safe_close_ui_element,
+)
 from app.ui.visual.actions import _emit_visual_batch_progress
 
 
@@ -33,6 +40,28 @@ def test_safe_close_ui_element_ignores_deleted_client() -> None:
             raise RuntimeError("The client this element belongs to has been deleted.")
 
     safe_close_ui_element(DeletedDialog())
+
+
+def test_play_completion_sound_runs_browser_audio_script(monkeypatch: pytest.MonkeyPatch) -> None:
+    scripts: list[str] = []
+    monkeypatch.setattr(page_config.core, "loop", object())
+    monkeypatch.setattr(page_config.ui, "run_javascript", scripts.append)
+
+    play_completion_sound()
+
+    assert scripts
+    assert "AudioContext" in scripts[0]
+    assert "storytellingCompletionSound" in scripts[0]
+
+
+def test_play_completion_sound_ignores_deleted_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    def deleted_context(_script: str) -> None:
+        raise RuntimeError("The client this element belongs to has been deleted.")
+
+    monkeypatch.setattr(page_config.core, "loop", object())
+    monkeypatch.setattr(page_config.ui, "run_javascript", deleted_context)
+
+    play_completion_sound()
 
 
 async def test_visual_progress_ignores_deleted_client() -> None:

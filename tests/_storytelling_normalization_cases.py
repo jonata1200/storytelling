@@ -454,25 +454,28 @@ FADE OUT.
     assert "cue de dialogo usa nome de local: SALA DA CASA" in errors
 
 
-def test_script_payload_retries_compacted_inline_numbered_sluglines() -> None:
-    with pytest.raises(GenerationOutputError, match="sluglines numeradas"):
-        normalize_script_payload(
-            {
-                "title": "Memorias de Omero",
-                "content": """
-CENA 01
-INT. CENA 1 - DIA
-
+def test_script_payload_repairs_compacted_inline_numbered_sluglines() -> None:
+    payload = normalize_script_payload(
+        {
+            "title": "Memorias de Omero",
+            "content": """
 FADE IN: 1. INT. MERCADO NOTURNO - NOITE Um labirinto de barracas.
 OMERO vende memórias. 2. INT. BARRACA DE OMERO - MAIS TARDE Omero abre um caderno.
 
 FADE OUT.
 """,
-            },
-            default_title="Memorias de Omero",
-            language="pt-BR",
-            target_duration_seconds=300,
-        )
+        },
+        default_title="Memorias de Omero",
+        language="pt-BR",
+        target_duration_seconds=300,
+    )
+
+    content = payload["content"]
+    assert "FADE IN: 1." not in content
+    assert "1. INT." not in content
+    assert "2. INT." not in content
+    assert "FADE IN:\n\nCENA 01\nINT. MERCADO NOTURNO - NOITE" in content
+    assert "CENA 02\nINT. BARRACA DE OMERO - MAIS TARDE" in content
 
 
 def test_story_idea_db_text_truncates_long_protagonist_for_varchar_column() -> None:

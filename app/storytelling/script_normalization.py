@@ -170,6 +170,14 @@ INLINE_NUMBERED_SLUGLINE_RE = re.compile(
 )
 
 
+INLINE_NUMBERED_SLUGLINE_DETAIL_RE = re.compile(
+    r"(?i)(?<!CENA\s)\b(?P<number>\d{1,2})\.\s*"
+    r"(?P<heading>(?:INT|EXT|INT/EXT|EXT/INT)\.\s+[^.\n]*?\s+-\s*"
+    r"(?:DIA|NOITE|MANH[ÃA]|TARDE|MADRUGADA|AMANHECER|ANOITECER|"
+    r"CREP[ÚU]SCULO|FIM DE TARDE|MAIS TARDE|CONT[IÍ]NUO))\b"
+)
+
+
 PLACEHOLDER_SCENE_SLUGLINE_RE = re.compile(
     r"(?im)^\s*(?:INT|EXT|INT/EXT|EXT/INT)\.\s*CENA\s+\d+\s*-\s*"
     r"(?:DIA|NOITE|MANHA|MANHÃ|TARDE|MADRUGADA|AMANHECER)\s*$"
@@ -248,12 +256,26 @@ def _ensure_screenplay_scene_markers(content: str) -> str:
 
 
 def _normalize_inline_scene_headings(content: str) -> str:
+    text = re.sub(
+        r"(?im)^\s*FADE IN\s*:?[^\S\r\n]+(?=\d{1,2}\.\s*(?:INT|EXT|INT/EXT|EXT/INT)\.)",
+        "FADE IN:\n\n",
+        str(content or "").strip(),
+    )
+
     def replace(match: re.Match[str]) -> str:
         scene_number = int(match.group("number"))
         heading = match.group("heading").strip()
         return f"CENA {scene_number:02d}\n{heading}"
 
-    return INLINE_SCENE_HEADING_RE.sub(replace, str(content or "").strip())
+    text = INLINE_SCENE_HEADING_RE.sub(replace, text)
+
+    def replace_numbered_slugline(match: re.Match[str]) -> str:
+        scene_number = int(match.group("number"))
+        heading = match.group("heading").strip()
+        return f"\n\nCENA {scene_number:02d}\n{heading}\n\n"
+
+    text = INLINE_NUMBERED_SLUGLINE_DETAIL_RE.sub(replace_numbered_slugline, text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def _ascii_upper_key(value: object) -> str:

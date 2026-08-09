@@ -42,6 +42,7 @@ from app.ui.shared.page_config import (
     UI_GENERATION_TIMEOUT_SECONDS,
     friendly_ai_error,
     loading_status_message,
+    play_completion_sound,
     safe_close_ui_element,
     show_ai_error_popup,
 )
@@ -780,6 +781,7 @@ def register_home_pages(
                                 f"{len(generated)} ideia(s) gerada(s) e salva(s).",
                                 color="positive",
                             )
+                            play_completion_sound()
                         except TimeoutError:
                             show_ai_error_popup(
                                 "A geração demorou demais. Tente novamente ou escolha outro modelo.",

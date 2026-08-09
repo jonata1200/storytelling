@@ -19,6 +19,7 @@ from app.ui.shared.assistant_state import save_assistant_messages as _save_assis
 from app.ui.shared.page_config import (
     action_loading_copy,
     friendly_ai_error,
+    play_completion_sound,
     safe_close_ui_element,
     show_ai_error_popup,
 )
@@ -229,6 +230,16 @@ def render_assistant_panel(
             messages.append({"role": "assistant", "content": response})
             _save_assistant_messages(project_id, messages)
             if should_reload:
+                if error_popup is None and predicted_action in {
+                    "generate_ideas",
+                    "generate_script",
+                    "revise_script",
+                    "generate_assets",
+                    "approve_visual_prompt",
+                    "approve_storyboard_prompt",
+                    "generate_storyboard",
+                }:
+                    play_completion_sound()
                 _safe_client_navigation(client)
                 return
             _safe_refresh(conversation)
