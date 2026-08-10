@@ -35,4 +35,5 @@ async def record_approval(
     elif decision in {ApprovalDecision.REJECTED, ApprovalDecision.CHANGES_REQUESTED}:
         artifact.status = ArtifactStatus.REJECTED
 
+    await session.commit()
     return approval

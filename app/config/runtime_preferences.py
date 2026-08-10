@@ -7,6 +7,12 @@ from typing import Any
 
 from app.config.provider_policy import SUPPORTED_AI_PROVIDERS
 
+# Limitação conhecida: as preferências são persistidas em .runtime/preferences.json
+# (JSON em disco) com cache em memória (lru_cache + get_settings.cache_clear()).
+# Isso é suficiente para uso local em processo único, mas NÃO sincroniza entre
+# múltiplos processos/workers: uma instância não enxerga alterações feitas por outra.
+# Se a aplicação evoluir para multi-processo, migrar este armazenamento para o banco.
+
 PREFERENCE_KEYS = {
     "AI_PROVIDER",
     "TEXT_PROVIDER",

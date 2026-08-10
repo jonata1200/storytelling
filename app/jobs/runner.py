@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.enums import ProjectStep
 from app.database.session import AsyncSessionLocal
 from app.dubbing.service import start_project_dubbing
 from app.finalization.models import Export
@@ -259,7 +260,7 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
         )
         try:
             await mark_job_progress(session, job, progress=20, message=f"Executando {step}.")
-            if step == "initial_script":
+            if step == ProjectStep.INITIAL_SCRIPT:
                 await mark_job_progress(
                     session,
                     job,
@@ -267,7 +268,7 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
                     message="Criando roteiro inicial.",
                 )
                 response = await _run_initial_script(session, job.project_id, payload)
-            elif step == "ideas":
+            elif step == ProjectStep.IDEAS:
                 await mark_job_progress(
                     session,
                     job,
@@ -276,7 +277,7 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
                 )
                 ideas = await generate_story_ideas(session, job.project_id)
                 response = {"idea_count": len(ideas or [])}
-            elif step == "script":
+            elif step == ProjectStep.SCRIPT:
                 await mark_job_progress(
                     session,
                     job,
@@ -284,7 +285,7 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
                     message="Escrevendo roteiro cinematográfico.",
                 )
                 response = await _run_script(session, job.project_id)
-            elif step == "scenes":
+            elif step == ProjectStep.SCENES:
                 await mark_job_progress(
                     session,
                     job,
@@ -292,17 +293,17 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
                     message="Separando roteiro em cenas e planos.",
                 )
                 response = await _run_scenes(session, job.project_id)
-            elif step == "visual":
+            elif step == ProjectStep.VISUAL:
                 response = await _run_visual(session, job.project_id)
-            elif step == "storyboard":
+            elif step == ProjectStep.STORYBOARD:
                 response = await _run_storyboard(session, job.project_id)
-            elif step == "video":
+            elif step == ProjectStep.VIDEO:
                 response = await _run_video(session, job.project_id, payload)
-            elif step == "dubbing":
+            elif step == ProjectStep.DUBBING:
                 response = await _run_dubbing(session, job.project_id, payload)
-            elif step == "finalization":
+            elif step == ProjectStep.FINALIZATION:
                 response = await _run_finalization(session, job.project_id)
-            elif step == "quality":
+            elif step == ProjectStep.QUALITY:
                 response = await _run_quality(session, job.project_id)
             else:
                 raise ValueError(f"Etapa de job inválida: {step}")

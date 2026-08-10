@@ -2,6 +2,7 @@
 import hashlib
 import json
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
@@ -11,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.api_keys import require_api_keys_for_creation_step
-from app.core.enums import GenerationJobStatus, GenerationJobType
+from app.core.enums import GenerationJobStatus, GenerationJobType, ProjectStep
 from app.production.service import get_or_create_production_settings
 from app.projects.repository import ProjectRepository
 from app.video_generation.models import GenerationJob
@@ -19,16 +20,16 @@ from app.video_generation.models import GenerationJob
 logger = logging.getLogger(__name__)
 
 PROJECT_STEP_JOB_TYPES = {
-    "initial_script": GenerationJobType.ANALYSIS,
-    "ideas": GenerationJobType.ANALYSIS,
-    "script": GenerationJobType.ANALYSIS,
-    "scenes": GenerationJobType.ANALYSIS,
-    "visual": GenerationJobType.IMAGE,
-    "storyboard": GenerationJobType.IMAGE,
-    "video": GenerationJobType.VIDEO,
-    "dubbing": GenerationJobType.SPEECH,
-    "finalization": GenerationJobType.RENDER,
-    "quality": GenerationJobType.ANALYSIS,
+    ProjectStep.INITIAL_SCRIPT: GenerationJobType.ANALYSIS,
+    ProjectStep.IDEAS: GenerationJobType.ANALYSIS,
+    ProjectStep.SCRIPT: GenerationJobType.ANALYSIS,
+    ProjectStep.SCENES: GenerationJobType.ANALYSIS,
+    ProjectStep.VISUAL: GenerationJobType.IMAGE,
+    ProjectStep.STORYBOARD: GenerationJobType.IMAGE,
+    ProjectStep.VIDEO: GenerationJobType.VIDEO,
+    ProjectStep.DUBBING: GenerationJobType.SPEECH,
+    ProjectStep.FINALIZATION: GenerationJobType.RENDER,
+    ProjectStep.QUALITY: GenerationJobType.ANALYSIS,
 }
 
 TERMINAL_JOB_STATUSES = {
@@ -38,12 +39,24 @@ TERMINAL_JOB_STATUSES = {
 PENDING_JOB_REDISPATCH_AFTER = timedelta(minutes=2)
 
 
-def normalize_step(value: str) -> str:
+@dataclass(frozen=True)
+class JobEnqueueDecision:
+    """Resultado do enqueue: o job e se ele deve ser despachado agora.
+
+    Substitui o antigo atributo dinâmico ``_should_dispatch_after_enqueue`` colado no
+    modelo SQLAlchemy, que era perdido quando o objeto era relido da sessão.
+    """
+
+    job: GenerationJob
+    should_dispatch: bool
+
+
+def normalize_step(value: str) -> ProjectStep:
     step = str(value or "").strip().lower().replace("-", "_")
     if step not in PROJECT_STEP_JOB_TYPES:
         allowed = ", ".join(sorted(PROJECT_STEP_JOB_TYPES))
         raise ValueError(f"Etapa de job inválida: {step or '<vazia>'}. Use: {allowed}.")
-    return step
+    return ProjectStep(step)
 
 
 def job_idempotency_key(project_id: UUID, step: str, payload: dict) -> str:
@@ -150,14 +163,14 @@ async def create_or_resume_project_job(
     provider: str = "system",
     model: str = "pipeline",
     max_attempts: int = 3,
-) -> GenerationJob:
+) -> JobEnqueueDecision:
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         raise ValueError("Projeto não encontrado.")
     normalized_step = normalize_step(step)
-    require_api_keys_for_creation_step(normalized_step)
+    require_api_keys_for_creation_step(normalized_step.value)
     clean_payload = dict(payload or {})
-    request_payload = {"step": normalized_step, "payload": clean_payload}
+    request_payload = {"step": normalized_step.value, "payload": clean_payload}
     idempotency_key = job_idempotency_key(project_id, normalized_step, clean_payload)
     result = await session.execute(
         select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
@@ -220,8 +233,7 @@ async def create_or_resume_project_job(
     )
     await session.commit()
     await session.refresh(job)
-    cast(Any, job)._should_dispatch_after_enqueue = should_dispatch
-    return job
+    return JobEnqueueDecision(job=job, should_dispatch=should_dispatch)
 
 
 async def mark_job_running(session: AsyncSession, job: GenerationJob, message: str) -> None:
@@ -319,11 +331,9 @@ async def enqueue_project_step(
     *,
     dispatch: bool = True,
 ) -> GenerationJob:
-    job = await create_or_resume_project_job(session, project_id, step, payload)
-    should_dispatch = bool(
-        getattr(job, "_should_dispatch_after_enqueue", project_job_can_run(job))
-    )
-    if dispatch and should_dispatch and project_job_can_run(job):
+    decision = await create_or_resume_project_job(session, project_id, step, payload)
+    job = decision.job
+    if dispatch and decision.should_dispatch and project_job_can_run(job):
         dispatch_project_job(job.id)
     return job
 

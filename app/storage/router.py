@@ -51,7 +51,6 @@ async def post_storage_reconciliation(
         summary = await reconcile_local_storage(session, kind=kind)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    await session.commit()
     return summary
 
 
@@ -65,7 +64,6 @@ async def post_project_storage_reconciliation(
         summary = await reconcile_local_storage(session, project_id=project_id, kind=kind)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
-    await session.commit()
     return summary
 
 

@@ -163,7 +163,6 @@ async def post_artifact_approval(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    await session.commit()
     await session.refresh(approval)
     return ApprovalRead.model_validate(approval)
 

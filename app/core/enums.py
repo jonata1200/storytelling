@@ -1,6 +1,25 @@
 from enum import StrEnum
 
 
+class ProjectStep(StrEnum):
+    """Etapas do pipeline de projeto executadas como jobs internos.
+
+    Fonte única de verdade para os nomes de etapa usados em jobs, runner e UI
+    (antes eram strings espalhadas por vários módulos).
+    """
+
+    INITIAL_SCRIPT = "initial_script"
+    IDEAS = "ideas"
+    SCRIPT = "script"
+    SCENES = "scenes"
+    VISUAL = "visual"
+    STORYBOARD = "storyboard"
+    VIDEO = "video"
+    DUBBING = "dubbing"
+    FINALIZATION = "finalization"
+    QUALITY = "quality"
+
+
 class ProjectStatus(StrEnum):
     DRAFT = "DRAFT"
     IDEA_GENERATION = "IDEA_GENERATION"

@@ -1,129 +1,133 @@
 # Arquitetura e Dívida Técnica
 
+> Status: **revisado em 10/08/2026** — itens da prioridade do relatório corrigidos; os
+> demais foram verificados (já resolvidos em rodadas anteriores) ou documentados como
+> trabalho futuro.
+
 ---
 
 ## 9.1 Dois sistemas de autenticação
 
-**Arquivos:** `app/auth/user_store.py` (JSON file) vs `app/auth/service.py` + `passwords.py`
-(PostgreSQL). O primeiro é órfão (só testes). Consolidar em um só — ver
-`04-codigo-morto-e-legado.md` item 4.1.
+**Status: ✅ JÁ RESOLVIDO** (rodada `04-codigo-morto-e-legado.md`)
+
+`app/auth/` não contém mais `user_store.py` — apenas o sistema PostgreSQL
+(`service.py`, `passwords.py`, `session.py`, `ui_middleware.py`, `csrf.py`).
 
 ## 9.2 Ponte UI frágil via `getattr` em módulo
 
-**Arquivos:** `app/ui/pages.py` e `app/ui/page_runtime.py`
+**Status: ✅ RESOLVIDO**
 
-`page_runtime._page_attr(name)` faz `getattr(sys.modules["app.ui.pages"], name)`. Todos os
-símbolos da UI são re-exportados com `# noqa: F401` e acessados **por nome de string**.
-Consequências:
+`app/ui/page_runtime.py` — a ponte `_page_attr` (`getattr(sys.modules[...], name)`) foi
+**eliminada**:
 
-- Renomear qualquer função quebra em **runtime** (AttributeError em uma página inteira),
-  sem erro estático.
-- O vulture aponta dezenas de "unused imports" (falsos positivos) que poluem a análise.
-- A cadeia de dependência é difícil de seguir (pages → page_runtime → routes → workspace).
-
-**Sugestão:** passar as funções como parâmetros já é o mecanismo usado em `register_*_pages`.
-Eliminar a camada `_page_attr`/re-export e passar referências diretas na montagem
-(`create_app`), ou mover a lógica de orquestração para um único módulo de composição.
+- Novo `_PagesFacade` (Protocol tipado) descreve o módulo `app.ui.pages`; renomes de
+  símbolos agora quebram em tempo de análise, não em runtime.
+- `register_ui_pages(pages: _PagesFacade)` recebe o **módulo pages** diretamente
+  (`factory.py` passa `ui_pages`); o wiring usa atributos (`pages._body_style`, etc.) e
+  as funções do próprio runtime são passadas por referência direta.
+- Helpers (`_notify_ai_action_failure_once`, `_sync_ai_action_events_to_chat`, `_asset_url`,
+  `_render_*_area`) leem o módulo via `_ui_pages()`, com **resolução lazy** (sem dependência
+  de ordem de execução nos testes — import em tempo de chamada evita circular import).
+- `# noqa: F401` dos re-exports em `pages.py` foram mantidos (são a superfície pública do
+  módulo consumida por factory e outros módulos).
 
 ## 9.3 Commit espalhado nos routers
 
-**Arquivos:** `app/projects/router.py` (~linha 166, `post_artifact_approval` faz
-`session.commit()`), `app/storage/router.py` (linhas 54, 68), `app/finalization/router.py`.
+**Status: ✅ RESOLVIDO**
 
-O padrão do projeto é "services fazem commit"; alguns endpoints commitam no router.
-Manter consistência (tudo em services) evita commits parciais quando o fluxo evoluir.
+- `storage/service.reconcile_local_storage` e `approvals/service.record_approval` agora
+  fazem o `commit`; removidos os commits redundantes de `storage/router.py` (2 endpoints),
+  `projects/router.py` (`post_artifact_approval`) e o caller `visual_bible/service.py`.
+- Padrão "services fazem commit" restaurado; o caminho de erro 409 do approval continua
+  sem commit (o `ValueError` é levantado antes).
 
 ## 9.4 Execução de jobs dentro do processo
 
-**Arquivos:** `app/jobs/service.py`, `app/jobs/runner.py`
+**Status: ✅ RECUPERAÇÃO FEITA; separação de modelos documentada como futuro**
 
-- `asyncio.create_task(run_job())` executa no mesmo processo do servidor.
-- Sem worker externo, sem persistência da fila e sem recuperação no startup
-  (ver `01-bugs-criticos.md` item 1.2).
-- `GenerationJob` é **sobrecarregado**: serve tanto para "etapas de projeto"
-  (`PROJECT_STEP_JOB_TYPES`) quanto para jobs de vídeo (`video_generation`).
-
-**Sugestão:** a) adicionar recuperação de PENDING no startup; b) se houver plano de
-escala, migrar para ARQ/RQ/Celery; c) separar o modelo de "project step" do de "media job".
+- Recuperação de PENDING/RUNNING no startup implementada (`schedule_stale_job_recovery`
+  registrada no `factory.py`) e testada (ver `docs/08` item 8.4.3).
+- Migração para worker externo (ARQ/RQ/Celery) e separação do modelo
+  "project step" vs "media job": **trabalho futuro** (mudança de arquitetura grande).
 
 ## 9.5 Hack de atributo dinâmico em modelo SQLAlchemy
 
-**Arquivo:** `app/jobs/service.py`
+**Status: ✅ RESOLVIDO**
 
-```python
-cast(Any, job)._should_dispatch_after_enqueue = should_dispatch
-```
-
-Atributo definido dinamicamente após `session.refresh(job)` para comunicar à
-`enqueue_project_step` se deve despachar. Funciona, mas é frágil (o atributo é perdido se
-o objeto for re-lido). Melhor: retornar uma tupla/dataclass `(job, should_dispatch)`.
+`cast(Any, job)._should_dispatch_after_enqueue` removido. `create_or_resume_project_job`
+agora retorna a dataclass **`JobEnqueueDecision(job, should_dispatch)`** (frozen), e
+`enqueue_project_step` a desempacota. Sem atributos mágicos perdidos em re-leituras.
 
 ## 9.6 Duplicações de código
 
-- `ffmpeg_exporter.render_timeline_video_with_audio` vs `finalization.service._render_timeline_video_with_audio`.
-- `redact_secrets` em `observability/redaction.py` e `quality/security.py`.
-- Laço duplicado em `video_generation/service.py`.
+**Status: ✅ JÁ RESOLVIDO** (rodadas `04` e `05`)
 
-Ver `04-codigo-morto-e-legado.md` itens 4.2 e 4.8 e `01-bugs-criticos.md` item 1.4.
+- `redact_secrets` existe apenas em `observability/redaction.py` (o duplicado em
+  `quality/security.py` foi removido).
+- `render_timeline_video_with_audio` existe apenas em `finalization/service.py` (o do
+  `ffmpeg_exporter.py` foi removido).
+- O laço duplicado de vídeo foi unificado na rodada de performance (`docs/06`, item 6.1).
 
 ## 9.7 Arquivos monolíticos
 
-| Arquivo | ~Linhas | Conteúdo |
-|---------|--------|----------|
-| `app/ui/routes/home_pages.py` | ~900 | home + criação de projeto + idea lab |
-| `app/ui/pages.py` | ~700 | ponte + lógica de criação |
-| `app/storytelling/service.py` | ~600 | ideias, roteiro, cenas |
-| `app/video_generation/service.py` | ~900 | planejamento + execução + persistência |
-| `app/finalization/service.py` | ~830 | timeline + fala + export |
+**Status: ⏳ TRABALHO FUTURO (documentado)**
 
-Sugestão: extrair módulos por responsabilidade (ex.: `video_generation/executor.py`,
-`finalization/render.py`) à medida que forem alterados.
+Extrações por responsabilidade (`video_generation/executor.py`, `finalization/render.py`,
+etc.) devem ocorrer **à medida que os arquivos forem alterados**, como recomenda o relatório.
 
 ## 9.8 Nomes mágicos de etapas
 
-**Arquivos:** `app/jobs/service.py` (`PROJECT_STEP_JOB_TYPES`), `app/config/api_keys.py`
-(`*_CREATION_STEPS`), `app/jobs/runner.py` (`if step == "script": ...`), `app/ui/*`.
+**Status: ✅ RESOLVIDO (escopo principal)**
 
-Os nomes de etapa (`script`, `visual`, `storyboard`, `video`...) são strings espalhadas por
-vários módulos. Adicionar um enum central (`app/core/enums.py` já existe) e tipar os
-payloads de job evita erros de digitação e facilita renomear.
+Novo **`ProjectStep`** (`StrEnum`) em `app/core/enums.py` com os 10 passos do pipeline.
+Usado como fonte única em:
+
+- `jobs/service.py`: `PROJECT_STEP_JOB_TYPES` chaveado por `ProjectStep` e
+  `normalize_step` retorna `ProjectStep`.
+- `jobs/runner.py`: dispatch `if step == ProjectStep.SCRIPT:` etc.
+- Payloads guardam `step.value` (string) — sem impacto em persistência/JSON.
+
+`api_keys.CREATION_STEPS` mantém strings (incluem sub-etapas além do pipeline:
+`generate_ideas`, `revise_script`, etc.) — extensão do enum para esses casos fica como
+trabalho futuro.
 
 ## 9.9 Configuração de providers redundante
 
-- `settings.ai_provider` + `settings.text_provider` + `image_provider` + `video_provider`
-  + `speech_provider` + `dubbing_provider` — com regras de "legacy default" em
-  `effective_provider_for_channel` e `_optional_provider` (parâmetro morto).
-- `provider_policy.provider_requires_api_key` sempre retorna `True`.
+**Status: ✅ PARCIALMENTE RESOLVIDO / FUTURO**
 
-Simplificar: uma única tabela canal→provider→modelo por projeto (já existe
-`project_model_settings` e `production_settings`) e derivar os defaults de forma única.
+- `provider_requires_api_key` já não retorna sempre `True` (retorna `False` para mocks).
+- `_optional_provider` permanece como normalizador real das variáveis de provider.
+- A simplificação para tabela única canal→provider→modelo por projeto já existe em parte
+  (`project_model_settings`/`production_settings`); consolidar os defaults legados é
+  **trabalho futuro**.
 
 ## 9.10 Tipagem dos modelos (`Base` sem `id`)
 
-`app/database/base.py` expõe `UUIDPrimaryKeyMixin`/`TimestampMixin`, mas várias funções
-genéricas tipam o modelo como `Base` e acessam `.id` — origem dos erros de mypy
-(`"Base" has no attribute "id"`) em `storyboards/prompts.py` e
-`visual_bible/reference_status.py`. Criar um `Protocol`/classe base tipada com `id`
-resolve o problema de forma sistemática.
+**Status: ✅ JÁ RESOLVIDO (mypy verde)**
+
+Os erros `"Base" has no attribute "id"` foram corrigidos na rodada `03` (mypy passa nos
+280 arquivos). O Protocol sugerido é um refinamento opcional futuro.
 
 ## 9.11 Config em arquivo JSON em vez de banco
 
-`.runtime/preferences.json` guarda chaves e preferências com `lru_cache` +
-`get_settings.cache_clear()`. Para aplicação multi-processo isso não sincroniza; para uso
-local é suficiente. Documentar a limitação.
+**Status: ✅ DOCUMENTADO**
+
+`app/config/runtime_preferences.py` ganhou comentário no topo documentando a limitação:
+JSON em disco + cache em memória é suficiente para **processo único**; não sincroniza
+entre múltiplos processos — migrar para o banco se a aplicação evoluir para multi-worker.
 
 ## 9.12 NiceGUI: upgrade 1.4 → 3.14
 
-O código evoluiu junto com NiceGUI (agora 3.14), mas o piso no `pyproject.toml` ficou para
-trás (ver `07-infraestrutura-e-ci.md` item 7.5). Recomenda-se fixar a versão e revisar
-usos de API deprecada (ex.: `ui.refreshable`, `ui.navigate.reload`) periodicamente.
+**Status: ✅ JÁ RESOLVIDO** (rodada `07`, item 7.5) — piso `nicegui>=3.14.0` no pyproject.
 
 ---
 
-## Prioridade sugerida de refatoração
+## Resumo da rodada
 
-1. **Destravar o CI** (mypy/ruff — itens 9.10 + fixes pontuais).
-2. **Unificar autenticação** (9.1) e remover código morto (item 4).
-3. **Recuperação de jobs** no startup (9.4).
-4. **Eliminar a ponte `_page_attr`** (9.2).
-5. **Enum de etapas** (9.8) e simplificação de providers (9.9).
+- **6 itens corrigidos** (9.2, 9.3, 9.5, 9.8, 9.11 + 9.9 parcial), **5 já resolvidos em
+  rodadas anteriores** (9.1, 9.4-recuperação, 9.6, 9.10, 9.12), **2 documentados como
+  futuro** (9.7, 9.4-migração, 9.9-consolidação).
+- Validação: **ruff** ✅ · **mypy** (280 arquivos) ✅ · **pytest** completo ✅ (1 skip).
+- Revisor pegou 1 problema real (dependência de ordem nos testes por causa do módulo
+  global `_pages`) — corrigido com resolução lazy; 2 testes que rodavam em isolamento
+  voltaram a passar.

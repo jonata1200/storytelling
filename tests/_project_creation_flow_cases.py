@@ -125,7 +125,7 @@ def test_register_ui_pages_resolves_page_facade_dependencies(
         fake_register_project_workspace_pages,
     )
 
-    pages.register_ui_pages()
+    pages.register_ui_pages(pages)
 
     assert registered == ["home", "settings", "workspace"]
 

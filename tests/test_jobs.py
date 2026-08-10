@@ -89,7 +89,7 @@ async def test_enqueue_project_step_does_not_dispatch_exhausted_failed_job(
         payload: dict[str, Any] | None = None,
     ) -> Any:
         _ = (session, project_id, step, payload)
-        return job
+        return jobs_service.JobEnqueueDecision(job=cast(Any, job), should_dispatch=False)
 
     monkeypatch.setattr(
         jobs_service,

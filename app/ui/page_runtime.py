@@ -1,6 +1,6 @@
-import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID
 
 from nicegui import ui
@@ -24,13 +24,57 @@ from app.ui.workspace.storyboard_video_area import (
 INITIAL_SCRIPT_PROGRESS_KEYS = ("scripts", "scenes", "shots", "characters", "frames", "clips")
 
 
-def _page_attr(name: str) -> Any:
-    pages = sys.modules["app.ui.pages"]
-    return getattr(pages, name)
+class _PagesFacade(Protocol):
+    """Fachada do módulo ``app.ui.pages`` usada pela camada de runtime.
+
+    Tipada para que renomes de símbolos quebrem em tempo de análise (e não em runtime,
+    como acontecia com a antiga ponte ``_page_attr`` via ``getattr`` por string).
+    """
+
+    nicegui_app: Any
+    # get_settings é um wrapper lru_cache (Settings) — `Any` evita conflito de
+    # variance com o Protocol; os demais membros continuam estritamente tipados.
+    get_settings: Any
+    _body_style: Callable[..., Any]
+    _project_cards: Callable[..., Any]
+    _render_project_card: Callable[..., Any]
+    _create_project_from_chat_prompt: Callable[..., Any]
+    _create_project_from_idea: Callable[..., Any]
+    _delete_lab_idea_from_ui: Callable[..., Any]
+    _clean_idea_title: Callable[..., Any]
+    _home_sidebar: Callable[..., Any]
+    _studio_logo: Callable[..., Any]
+    _theme_toggle: Callable[..., Any]
+    _user_avatar: Callable[..., Any]
+    _settings_tab_key: Callable[..., Any]
+    _save_avatar_file: Callable[..., Any]
+    _purge_application_data_from_ui: Callable[..., Any]
+    _purge_all_ideas_from_ui: Callable[..., Any]
+    _purge_all_projects_from_ui: Callable[..., Any]
+    _show_ai_error_popup: Callable[..., Any]
+    _generation_loading_dialog: Callable[..., Any]
+    _retry_initial_script_from_ui: Callable[..., Any]
+    _project_summary: Callable[..., Any]
+    _workspace_section_access: Callable[..., Any]
+    _first_available_workspace_section: Callable[..., Any]
+    _workspace_header: Callable[..., Any]
+
+
+_pages: _PagesFacade | None = None
+
+
+def _ui_pages() -> _PagesFacade:
+    if _pages is None:
+        # Resolução lazy (import em tempo de chamada) evita import circular em
+        # module-load e não depende da ordem de execução dos testes.
+        from app.ui import pages as pages_module
+
+        return pages_module
+    return _pages
 
 
 def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) -> None:
-    nicegui_app = _page_attr("nicegui_app")
+    nicegui_app = _ui_pages().nicegui_app
     ai_action = _project_ai_action(summary)
     if str(ai_action.get("status") or "") != "failed":
         return
@@ -43,10 +87,10 @@ def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) ->
         return
     seen.append(notification_key)
     nicegui_app.storage.user["seen_ai_error_notifications"] = seen[-80:]
-    _page_attr("_show_ai_error_popup")(
+    _ui_pages()._show_ai_error_popup(
         error or "A IA não respondeu. Tente novamente ou escolha outro modelo.",
         details=error,
-            )
+    )
 
 
 def _play_ai_action_completion_sound_once(project_id: UUID, ai_action: dict[str, Any]) -> None:
@@ -56,7 +100,7 @@ def _play_ai_action_completion_sound_once(project_id: UUID, ai_action: dict[str,
     updated_at = str(ai_action.get("updated_at") or "")
     message = str(ai_action.get("message") or "")
     sound_key = f"{project_id}:{action}:{updated_at}:{message}"
-    nicegui_app = _page_attr("nicegui_app")
+    nicegui_app = _ui_pages().nicegui_app
     store = nicegui_app.storage.user.setdefault("heard_ai_completion_sounds", [])
     heard = [str(item) for item in store if isinstance(item, str)]
     if sound_key in heard:
@@ -67,7 +111,7 @@ def _play_ai_action_completion_sound_once(project_id: UUID, ai_action: dict[str,
 
 
 def _sync_ai_action_events_to_chat(project_id: UUID, summary_or_action: dict[str, Any]) -> None:
-    nicegui_app = _page_attr("nicegui_app")
+    nicegui_app = _ui_pages().nicegui_app
     assistant_state.nicegui_app = nicegui_app
     summary = summary_or_action if "production_settings" in summary_or_action else {}
     ai_action = (
@@ -113,7 +157,7 @@ def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> 
         project_id,
         active,
         summary,
-        loading_dialog_factory=_page_attr("_generation_loading_dialog"),
+        loading_dialog_factory=_ui_pages()._generation_loading_dialog,
         project_ai_action=_project_ai_action,
         sync_ai_action_events_to_chat=_sync_ai_action_events_to_chat,
         notify_ai_action_failure_once=_notify_ai_action_failure_once,
@@ -171,8 +215,7 @@ def _ordered_scenes(scenes: list[Any]) -> list[Any]:
 
 
 def _asset_url(storage_uri: str) -> str:
-    settings_factory = _page_attr("get_settings")
-    return _visual_asset_url(storage_uri, settings_factory().local_storage_path)
+    return _visual_asset_url(storage_uri, _ui_pages().get_settings().local_storage_path)
 
 
 async def _save_script_from_ui(
@@ -190,8 +233,8 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
         summary,
         project_ai_action=_project_ai_action,
         ai_action_is_stale=_ai_action_is_stale,
-        loading_dialog_factory=_page_attr("_generation_loading_dialog"),
-        retry_initial_script_from_ui=_page_attr("_retry_initial_script_from_ui"),
+        loading_dialog_factory=_ui_pages()._generation_loading_dialog,
+        retry_initial_script_from_ui=_ui_pages()._retry_initial_script_from_ui,
         section_title=_section_title,
     )
 
@@ -201,7 +244,7 @@ def _render_assets_area(project_id: UUID, summary: dict[str, Any]) -> None:
         project_id,
         summary,
         section_title=_section_title,
-        loading_dialog_factory=_page_attr("_generation_loading_dialog"),
+        loading_dialog_factory=_ui_pages()._generation_loading_dialog,
     )
 
 
@@ -210,7 +253,7 @@ def _render_storyboard_area(project_id: UUID, summary: dict[str, Any]) -> None:
         project_id,
         summary,
         section_title=_section_title,
-        loading_dialog_factory=_page_attr("_generation_loading_dialog"),
+        loading_dialog_factory=_ui_pages()._generation_loading_dialog,
     )
 
 
@@ -219,7 +262,7 @@ def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
         project_id,
         summary,
         section_title=_section_title,
-        loading_dialog_factory=_page_attr("_generation_loading_dialog"),
+        loading_dialog_factory=_ui_pages()._generation_loading_dialog,
     )
 
 
@@ -228,7 +271,7 @@ def _render_finalization_area(project_id: UUID, summary: dict[str, Any]) -> None
         project_id,
         summary,
         section_title=_section_title,
-        loading_dialog_factory=_page_attr("_generation_loading_dialog"),
+        loading_dialog_factory=_ui_pages()._generation_loading_dialog,
     )
 
 
@@ -237,48 +280,50 @@ def _render_dubbing_area(project_id: UUID, summary: dict[str, Any]) -> None:
         project_id,
         summary,
         section_title=_section_title,
-        loading_dialog_factory=_page_attr("_generation_loading_dialog"),
+        loading_dialog_factory=_ui_pages()._generation_loading_dialog,
     )
 
 
-def register_ui_pages() -> None:
+def register_ui_pages(pages: _PagesFacade) -> None:
+    global _pages
+    _pages = pages
     register_home_pages(
-        body_style=_page_attr("_body_style"),
-        project_cards=_page_attr("_project_cards"),
-        render_project_card=_page_attr("_render_project_card"),
-        create_project_from_chat_prompt=_page_attr("_create_project_from_chat_prompt"),
-        create_project_from_idea=_page_attr("_create_project_from_idea"),
-        delete_lab_idea_from_ui=_page_attr("_delete_lab_idea_from_ui"),
-        loading_dialog_factory=_page_attr("_generation_loading_dialog"),
-        clean_idea_title=_page_attr("_clean_idea_title"),
-        home_sidebar=_page_attr("_home_sidebar"),
-        studio_logo=_page_attr("_studio_logo"),
-        theme_toggle=_page_attr("_theme_toggle"),
-        user_avatar=_page_attr("_user_avatar"),
+        body_style=pages._body_style,
+        project_cards=pages._project_cards,
+        render_project_card=pages._render_project_card,
+        create_project_from_chat_prompt=pages._create_project_from_chat_prompt,
+        create_project_from_idea=pages._create_project_from_idea,
+        delete_lab_idea_from_ui=pages._delete_lab_idea_from_ui,
+        loading_dialog_factory=pages._generation_loading_dialog,
+        clean_idea_title=pages._clean_idea_title,
+        home_sidebar=pages._home_sidebar,
+        studio_logo=pages._studio_logo,
+        theme_toggle=pages._theme_toggle,
+        user_avatar=pages._user_avatar,
     )
     register_settings_page(
-        body_style=_page_attr("_body_style"),
-        settings_tab_key=_page_attr("_settings_tab_key"),
-        project_cards=_page_attr("_project_cards"),
-        home_sidebar=_page_attr("_home_sidebar"),
-        theme_toggle=_page_attr("_theme_toggle"),
-        user_avatar=_page_attr("_user_avatar"),
-        save_avatar_file=_page_attr("_save_avatar_file"),
-        purge_application_data_from_ui=_page_attr("_purge_application_data_from_ui"),
-        purge_all_ideas_from_ui=_page_attr("_purge_all_ideas_from_ui"),
-        purge_all_projects_from_ui=_page_attr("_purge_all_projects_from_ui"),
+        body_style=pages._body_style,
+        settings_tab_key=pages._settings_tab_key,
+        project_cards=pages._project_cards,
+        home_sidebar=pages._home_sidebar,
+        theme_toggle=pages._theme_toggle,
+        user_avatar=pages._user_avatar,
+        save_avatar_file=pages._save_avatar_file,
+        purge_application_data_from_ui=pages._purge_application_data_from_ui,
+        purge_all_ideas_from_ui=pages._purge_all_ideas_from_ui,
+        purge_all_projects_from_ui=pages._purge_all_projects_from_ui,
     )
     register_project_workspace_pages(
-        body_style=_page_attr("_body_style"),
-        project_summary=_page_attr("_project_summary"),
-        workspace_section_access=_page_attr("_workspace_section_access"),
-        first_available_workspace_section=_page_attr("_first_available_workspace_section"),
-        workspace_header=_page_attr("_workspace_header"),
-        render_script_area=_page_attr("_render_script_area"),
-        render_assets_area=_page_attr("_render_assets_area"),
-        render_storyboard_area=_page_attr("_render_storyboard_area"),
-        render_video_area=_page_attr("_render_video_area"),
-        render_finalization_area=_page_attr("_render_finalization_area"),
-        render_dubbing_area=_page_attr("_render_dubbing_area"),
-        assistant_panel=_page_attr("_assistant_panel"),
+        body_style=pages._body_style,
+        project_summary=pages._project_summary,
+        workspace_section_access=pages._workspace_section_access,
+        first_available_workspace_section=pages._first_available_workspace_section,
+        workspace_header=pages._workspace_header,
+        render_script_area=_render_script_area,
+        render_assets_area=_render_assets_area,
+        render_storyboard_area=_render_storyboard_area,
+        render_video_area=_render_video_area,
+        render_finalization_area=_render_finalization_area,
+        render_dubbing_area=_render_dubbing_area,
+        assistant_panel=_assistant_panel,
     )

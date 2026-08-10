@@ -660,7 +660,6 @@ async def approve_visual_target(
         ApprovalDecision.APPROVED,
         notes="Perfil visual aprovado para criacao de vistas multiplas.",
     )
-    await session.commit()
     return True
 
 

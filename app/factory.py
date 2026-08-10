@@ -53,6 +53,7 @@ def create_app(include_ui: bool = True) -> FastAPI:
     if include_ui:
         from nicegui import ui
 
+        from app.ui import pages as ui_pages
         from app.ui.pages import register_ui_pages
 
         settings.local_storage_path.mkdir(parents=True, exist_ok=True)
@@ -67,7 +68,7 @@ def create_app(include_ui: bool = True) -> FastAPI:
                 StaticFiles(directory=settings.local_storage_path),
                 name="storage",
             )
-        register_ui_pages()
+        register_ui_pages(ui_pages)
         ui.run_with(
             app,
             mount_path="/",

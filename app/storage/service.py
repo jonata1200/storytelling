@@ -312,6 +312,7 @@ async def reconcile_local_storage(
         if changed:
             summary.updated_asset_count += 1
     await session.flush()
+    await session.commit()
     return summary
 
 

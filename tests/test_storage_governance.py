@@ -48,12 +48,16 @@ class _FakeAssetSession:
     def __init__(self, rows: list[Any]) -> None:
         self.rows = rows
         self.flush_count = 0
+        self.commit_count = 0
 
     async def execute(self, statement: Any) -> Any:
         return SimpleNamespace(scalars=lambda: self.rows)
 
     async def flush(self) -> None:
         self.flush_count += 1
+
+    async def commit(self) -> None:
+        self.commit_count += 1
 
 
 @pytest.mark.asyncio
