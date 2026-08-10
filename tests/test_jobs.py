@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
@@ -243,3 +244,115 @@ async def test_set_project_job_action_dedupes_identical_consecutive_events(
         message="Novo progresso.",
     )
     assert len(settings.metadata_json["ai_action"]["events"]) == 2
+
+
+class _FakeStaleJobSession:
+    """Sessão falsa que devolve uma lista fixa de jobs (simula o filtro SQL)."""
+
+    def __init__(self, jobs: list[Any]) -> None:
+        self.jobs = jobs
+
+    async def execute(self, statement: object) -> "_FakeStaleJobResult":
+        _ = statement
+        return _FakeStaleJobResult(self.jobs)
+
+
+class _FakeStaleJobResult:
+    def __init__(self, jobs: list[Any]) -> None:
+        self.jobs = jobs
+
+    def scalars(self) -> list[Any]:
+        return self.jobs
+
+
+@pytest.mark.asyncio
+async def test_list_stale_pending_jobs_returns_only_stale_pending_jobs() -> None:
+    now = datetime.now(UTC)
+    stale = SimpleNamespace(
+        status=GenerationJobStatus.PENDING,
+        updated_at=now - timedelta(minutes=3),
+        created_at=now - timedelta(minutes=3),
+    )
+    fresh = SimpleNamespace(
+        status=GenerationJobStatus.PENDING,
+        updated_at=now - timedelta(seconds=15),
+        created_at=now - timedelta(seconds=15),
+    )
+    session = _FakeStaleJobSession([stale, fresh])
+
+    result = await jobs_service.list_stale_pending_jobs(cast(AsyncSession, session))
+
+    assert result == [stale]
+
+
+@pytest.mark.asyncio
+async def test_list_stale_running_jobs_returns_abandoned_running_jobs() -> None:
+    now = datetime.now(UTC)
+    stale = SimpleNamespace(
+        status=GenerationJobStatus.RUNNING,
+        updated_at=now - timedelta(minutes=3),
+        created_at=now - timedelta(minutes=3),
+    )
+    fresh = SimpleNamespace(
+        status=GenerationJobStatus.RUNNING,
+        updated_at=now - timedelta(seconds=15),
+        created_at=now - timedelta(seconds=15),
+    )
+    session = _FakeStaleJobSession([stale, fresh])
+
+    result = await jobs_service.list_stale_running_jobs(cast(AsyncSession, session))
+
+    assert result == [stale]
+
+
+@pytest.mark.asyncio
+async def test_schedule_stale_job_recovery_redispatchs_stale_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stale_pending = SimpleNamespace(id=uuid4())
+    stale_running = SimpleNamespace(id=uuid4())
+
+    async def fake_list_stale_pending_jobs(
+        session: object, limit: int = 50
+    ) -> list[Any]:
+        _ = (session, limit)
+        return [stale_pending]
+
+    async def fake_list_stale_running_jobs(
+        session: object, limit: int = 50
+    ) -> list[Any]:
+        _ = (session, limit)
+        return [stale_running]
+
+    dispatched: list[UUID] = []
+
+    class _FakeRecoverySession:
+        def __init__(self) -> None:
+            self._session = object()
+
+        async def __aenter__(self) -> Any:
+            return self._session
+
+        async def __aexit__(self, *args: Any) -> None:
+            _ = args
+
+    monkeypatch.setattr(
+        jobs_service, "list_stale_pending_jobs", fake_list_stale_pending_jobs
+    )
+    monkeypatch.setattr(
+        jobs_service, "list_stale_running_jobs", fake_list_stale_running_jobs
+    )
+    monkeypatch.setattr(jobs_service, "dispatch_project_job", dispatched.append)
+    monkeypatch.setattr(
+        "app.database.session.AsyncSessionLocal",
+        _FakeRecoverySession,
+    )
+    monkeypatch.setattr(
+        "app.config.settings.get_settings",
+        lambda: SimpleNamespace(app_env="local"),
+    )
+
+    jobs_service.schedule_stale_job_recovery()
+    await asyncio.sleep(0.05)
+
+    assert dispatched == [stale_pending.id, stale_running.id]

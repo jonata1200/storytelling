@@ -62,6 +62,9 @@ jobs:
       - name: Validate migrations
         run: alembic upgrade head
 
+      - name: Check for model/migration drift
+        run: alembic check
+
       - name: Lint
         run: ruff check .
 

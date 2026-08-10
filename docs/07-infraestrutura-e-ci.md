@@ -1,109 +1,115 @@
 # Infraestrutura, Configuração e CI
 
+> Status: **revisado em 10/08/2026** — todos os itens acionáveis foram corrigidos.
+
 ---
 
 ## 7.1 CI está vermelho — nenhum push passa
 
-**Arquivo:** `.github/workflows/ci.yml`
+**Status: ✅ RESOLVIDO** (pelas correções de `03-erros-de-tipagem-e-lint.md`)
 
-```yaml
-- name: Lint
-  run: ruff check .                    # 1 erro (I001) — falha
-- name: Type check
-  run: mypy app tests                  # 27 erros em 14 arquivos — falha
-```
+- `ruff check .` → `All checks passed!` ✅
+- `mypy app tests` → `Success: no issues found in 280 source files` ✅
+- `pip check` → `No broken requirements found.` ✅
+- `pytest --collect-only -q -m "unit or integration or provider or ui or security"` → ✅
+- Suíte completa `pytest -m "not smoke"` → ✅ passando (1 skip esperado)
 
-Nenhum dos dois passos passa hoje (ver `03-erros-de-tipagem-e-lint.md`). O CI está
-efetivamente quebrado e não está protegendo o `main`.
-
-**Ações:**
-1. Corrigir os 27 erros de mypy e o de ruff, **ou**
-2. Enquanto isso, rodar com `continue-on-error`/`--no-error-on-unused-ignores` para não
-   bloquear, mas isso esconde o problema.
+O CI voltou a proteger o `main`.
 
 ---
 
 ## 7.2 Variáveis de ambiente legadas no CI
 
-`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` e `OPENROUTER_API_KEY` não existem mais no
-código (não há Celery nem OpenRouter). Remover para não enganar quem configura o ambiente.
+**Status: ✅ JÁ RESOLVIDO** (remoção ocorreu na rodada de código morto, `04/4.1`)
+
+Busca completa em `.github/workflows/ci.yml`, `scripts/*.ps1`, `README.md`, `.env.example`,
+`alembic.ini`, `docker-compose.yml` e `app/` **não encontra mais** `CELERY_BROKER_URL`,
+`CELERY_RESULT_BACKEND` nem `OPENROUTER_API_KEY`. Restam apenas artefatos `.pyc` órfãos
+em `__pycache__` de provedores `openrouter` já removidos (sem efeito em runtime).
 
 ---
 
 ## 7.3 `pypdf` ausente das dependências
 
-**Arquivo:** `app/storytelling/script_upload.py`
+**Status: ✅ RESOLVIDO**
 
-`_extract_pdf_with_pypdf` tenta `from pypdf import PdfReader` e, se não existir, cai no
-parser regex (`_extract_pdf_text_fallback`), que extrai bem menos texto. **`pypdf` não está
-em `requirements.lock`** nem no `pyproject.toml`, então a extração de PDF roda sempre no
-modo degradado.
+- `pyproject.toml` → adicionado `"pypdf>=6.15.0"` (em ordem alfabética)
+- `requirements.lock` → adicionado `pypdf==6.15.0` (entre `Pygments` e `pytest`; BOM e
+  CRLF preservados, diff de 1 linha)
+- Instalado no ambiente de dev; `pip check` limpo
 
-**Ação:** adicionar `pypdf` (ou `pypdfium2`) às dependências.
+A extração de PDFs agora roda com o parser completo (`PdfReader`). O fallback regex
+(`_extract_pdf_text_fallback`) permanece para PDFs degenerados: o teste
+`test_extract_script_text_from_textual_pdf_fallback` continua exercitando o fallback
+(verificado — o `pypdf` lança `PdfReadError` no PDF sintético do teste, caindo no fallback).
+O `try/except ModuleNotFoundError` foi mantido como proteção defensiva.
 
 ---
 
 ## 7.4 Porta padrão do PostgreSQL inconsistente
 
-- `app/config/settings.py`: `DATABASE_URL = postgresql+asyncpg://...@localhost:5432/...`
-- `docker-compose.yml`: porta exposta **5433:5432**
-- `.env.example`: usa 5433
+**Status: ✅ RESOLVIDO**
 
-Sem `.env` (ou com `.env` desatualizado), a aplicação tenta conectar em `localhost:5432` e
-falha. O `.env.example` corrige, mas o default do `settings.py` é uma armadilha.
+`app/config/settings.py` — default de `DATABASE_URL` alterado de
+`localhost:5432` → `localhost:5433`, alinhado ao `docker-compose.yml`
+(`${POSTGRES_PORT:-5433}:5432`) e ao `.env.example` (5433).
 
-**Ação:** alinhar o default de `settings.py` para 5433 ou padronizar o compose para 5432.
+O CI não é afetado (define `DATABASE_URL` explicitamente com 5432 no serviço do job).
 
 ---
 
 ## 7.5 Versão mínima do NiceGUI desatualizada
 
-`pyproject.toml`: `nicegui>=1.4.29` — mas `requirements.lock` fixa `nicegui==3.14.0`.
-O código usa APIs recentes (ex.: `ui.upload(max_file_size=...)`, `response_timeout`,
-`ui.dialog().props(...)`, dark theme). O piso de versão está muito abaixo e qualquer
-instalação com `pip install -e . --no-deps` + resolução livre pode quebrar a UI.
+**Status: ✅ RESOLVIDO**
 
-**Ação:** atualizar o piso para a versão do lock (ex.: `nicegui>=3.14`).
+`pyproject.toml` — `nicegui>=1.4.29` → `nicegui>=3.14.0` (piso alinhado ao lock `3.14.0`).
 
 ---
 
 ## 7.6 Migrações Alembic — OK, mas sem checagem de drift
 
-- 21 migrações em `alembic/versions/`, cabeça em `202608080021_project_model_settings.py`.
-- `alembic/env.py` importa todos os modelos — correto.
-- O CI roda apenas `alembic upgrade head`; **não** roda `alembic check` (autogenerate diff).
+**Status: ✅ RESOLVIDO**
 
-**Ação recomendada:** adicionar `alembic check` no CI para detectar modelos fora de sincronia.
+- Adicionado passo `Check for model/migration drift` ao `.github/workflows/ci.yml`,
+  executando `alembic check` logo após `alembic upgrade head`.
+- Análise estática prévia: nenhum `models.py` mudou desde a última migração
+  (cabeça `202608080021_project_model_settings.py`, commit de 2026-08-08) e não há
+  mudanças não commitadas. Os enums nativos PG foram autogerados das mesmas metadata;
+  `compare_type` não está habilitado no `env.py` (comparação mais leniente).
+- ⚠️ Não foi possível validar localmente (sem Docker/Postgres nesta máquina). O primeiro
+  push do CI é o validador real. Se o `alembic check` acusar drift, o procedimento é
+  gerar uma migração com `alembic revision --autogenerate` e revisá-la.
 
 ---
 
 ## 7.7 Docker Compose — sem problemas críticos
 
-`docker-compose.yml` sobe PostgreSQL (pgvector/pg16) e Redis 7 com healthchecks e volumes
-persistentes. Nada a corrigir; nota: a porta do Postgres (5433) deveria ser a mesma do
-default do `settings.py` (item 7.4).
+**Status: ✅ SEM AÇÃO NECESSÁRIA**
+
+Nota do relatório (porta 5433 vs default do settings) foi resolvida pelo item 7.4.
 
 ---
 
 ## 7.8 Scripts PowerShell
 
-- `scripts/story.ps1` é robusto (detecta Docker, aguarda healthcheck, gerencia migrações e
-  background). Aprovado.
-- `scripts/app.ps1`, `executar.ps1`, `finalizar.ps1` são wrappers de compatibilidade
-  (conforme README).
+**Status: ✅ SEM AÇÃO NECESSÁRIA** — aprovado (robusto, gerencia Docker, healthcheck,
+migrações e background).
 
 ---
 
 ## 7.9 `requirements.lock` vs `pyproject.toml`
 
-- `requirements.lock` tem `playwright==1.61.0` (dev). OK.
-- O `pyproject.toml` não lista `pypdf` (item 7.3) nem as versões reais de fastapi
-  (0.139.2), nicegui (3.14.0) etc. — o lock é a fonte de verdade, mas o piso do pyproject
-  está desatualizado (7.5).
+**Status: ✅ RESOLVIDO (parcialmente coberto)**
+
+- `pypdf` adicionado (item 7.3) ✅
+- Piso do NiceGUI atualizado (item 7.5) ✅
+- Piso do `fastapi` também atualizado: `>=0.111.0` → `>=0.139.0` (lock `0.139.2`) ✅
+- Demais pisos (alembic, pydantic, sqlalchemy, etc.) ficam abaixo do lock, o que é
+  intencional: o lock é a fonte de verdade para instalações reprodutíveis, e pisos
+  permissivos permitem upgrades — desde que a CI (instalando a partir do lock) valide.
 
 ---
 
 ## 7.10 Arquivos de runtime
 
-- `.runtime/preferences.json` e `.runtime/users.json` — gitignored, bom.
-- Permissões de arquivo em texto puro com chaves de API — ver `05-seguranca.md` item 5.2.7.
+**Status: ✅ SEM AÇÃO NECESSÁRIA** — gitignored; permissões tratadas em `05-seguranca.md` (5.2.7).

@@ -159,6 +159,10 @@ Rodar testes:
 .\scripts\story.ps1 tools test
 ```
 
+> Os testes exigem PostgreSQL e Redis rodando. Antes de executar a suíte, suba a
+> infraestrutura com `docker compose up -d` (ou `.\scripts\story.ps1 run`). Sem ela,
+> a suíte falha no setup.
+
 Rodar checks completos:
 
 ```powershell

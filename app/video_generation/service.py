@@ -494,6 +494,20 @@ def _is_transient_video_error(error: str) -> bool:
     return any(marker in normalized for marker in transient_markers)
 
 
+def _video_job_needs_generation(existing_job: GenerationJob | None) -> bool:
+    """True quando um job de vídeo deve ser gerado (e contabilizado no orçamento).
+
+    Um job existente só dispensa nova geração quando não é retentável: concluído, em
+    andamento ou FAILED com tentativas esgotadas. Um job FAILED com tentativas restantes
+    é regerado (retry) e contabilizado novamente no custo estimado.
+    """
+    if existing_job is None:
+        return True
+    if existing_job.status != GenerationJobStatus.FAILED:
+        return False
+    return existing_job.attempts < existing_job.max_attempts
+
+
 async def _generate_video_clips_concurrent(
     session: AsyncSession,
     project_id: UUID,
@@ -560,10 +574,7 @@ async def _generate_video_clips_concurrent(
                 select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
             )
             existing_job = existing.scalars().first()
-            if existing_job is not None and (
-                existing_job.status != GenerationJobStatus.FAILED
-                or existing_job.attempts >= existing_job.max_attempts
-            ):
+            if existing_job is not None and not _video_job_needs_generation(existing_job):
                 jobs.append(existing_job)
                 existing_clip = await session.execute(
                     select(VideoClip).where(VideoClip.generation_job_id == existing_job.id)

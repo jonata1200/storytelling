@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     app_debug: bool = True
     app_secret_key: str = Field(default=DEFAULT_APP_SECRET_KEY, repr=False)
 
-    database_url: str = "postgresql+asyncpg://storytelling:storytelling@localhost:5432/storytelling"
+    database_url: str = "postgresql+asyncpg://storytelling:storytelling@localhost:5433/storytelling"
     redis_url: str = "redis://localhost:6379/0"
 
     storage_backend: str = "local"

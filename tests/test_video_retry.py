@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+from typing import Any, cast
 from uuid import uuid4
 
+from app.core.enums import GenerationJobStatus
 from app.providers.video.mock import MockVideoProvider
 from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
@@ -12,7 +15,11 @@ from app.video_generation.planning import (
     video_idempotency_key,
 )
 from app.video_generation.retry import exponential_backoff_seconds
-from app.video_generation.service import _is_transient_video_error, video_generation_concurrency
+from app.video_generation.service import (
+    _is_transient_video_error,
+    _video_job_needs_generation,
+    video_generation_concurrency,
+)
 
 
 def test_exponential_backoff_caps_delay() -> None:
@@ -203,6 +210,42 @@ def test_video_generation_validation_reports_bad_frame_inputs() -> None:
     assert "imagem fonte ausente" in errors
     assert "duração 99s não suportada pelo provider" in errors
     assert "aspect_ratio 16:9 não suportado pelo provider" in errors
+
+
+def test_video_job_needs_generation_bills_retryable_failed_job() -> None:
+    retryable = SimpleNamespace(
+        status=GenerationJobStatus.FAILED,
+        attempts=2,
+        max_attempts=3,
+    )
+
+    assert _video_job_needs_generation(cast(Any, retryable)) is True
+
+
+def test_video_job_needs_generation_is_false_for_reusable_jobs() -> None:
+    succeeded = SimpleNamespace(
+        status=GenerationJobStatus.SUCCEEDED,
+        attempts=1,
+        max_attempts=3,
+    )
+    running = SimpleNamespace(
+        status=GenerationJobStatus.RUNNING,
+        attempts=1,
+        max_attempts=3,
+    )
+    exhausted = SimpleNamespace(
+        status=GenerationJobStatus.FAILED,
+        attempts=3,
+        max_attempts=3,
+    )
+
+    assert _video_job_needs_generation(cast(Any, succeeded)) is False
+    assert _video_job_needs_generation(cast(Any, running)) is False
+    assert _video_job_needs_generation(cast(Any, exhausted)) is False
+
+
+def test_video_job_needs_generation_is_true_without_existing_job() -> None:
+    assert _video_job_needs_generation(None) is True
 
 
 def test_video_generation_validation_uses_effective_video_prompt() -> None:
