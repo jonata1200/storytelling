@@ -162,7 +162,7 @@ PRODUCTION_STEPS = [
 
 WORKSPACE_TABS = [
     ("Roteiro", "script"),
-    ("Personagens", "assets"),
+    ("Biblioteca Visual", "assets"),
     ("Storyboard", "storyboard"),
     ("Vídeo", "video"),
     ("Finalização", "finalization"),

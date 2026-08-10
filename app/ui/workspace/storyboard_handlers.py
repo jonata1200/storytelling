@@ -149,19 +149,32 @@ async def approve_storyboard_prompt_from_ui(
                 ),
             )
             approved = await approve_storyboard_prompt(session, project_id, script_id, shot_id)
-            generated_count = (
-                await generate_storyboards_when_prompts_are_ready(
+            if approved:
+                frames = await generate_storyboard_frames(
                     session,
                     project_id,
                     script_id,
+                    shot_id=shot_id,
+                    approved_only=True,
                     progress_callback=progress_callback,
                 )
-                if approved
-                else None
-            )
+                generated_count = len(frames or [])
+                if not await storyboard_frames_need_generation(session, project_id, script_id):
+                    await _emit_progress(
+                        progress_callback,
+                        generated_count,
+                        max(generated_count, 1),
+                        (
+                            "Agora: atualizando o animatic com todos os quadros gerados.\n"
+                            "Falta: recarregar a etapa de storyboard."
+                        ),
+                    )
+                    await generate_animatic_bundle(session, project_id, script_id)
+            else:
+                generated_count = None
         if generated_count is not None:
             ui.notify(
-                f"Ultimo prompt aprovado. {generated_count} storyboard(s) gerado(s).",
+                f"Prompt aprovado. {generated_count} storyboard(s) gerado(s).",
                 color="positive",
             )
             play_completion_sound()

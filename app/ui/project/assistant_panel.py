@@ -8,7 +8,6 @@ from nicegui import ui
 
 from app.database.session import AsyncSessionLocal
 from app.generation.project_agent import classify_project_chat_action, handle_project_chat
-from app.generation.project_agent_visual import _requests_generation_after_approval
 from app.ui.shared.assistant_state import clear_assistant_draft as _clear_assistant_draft
 from app.ui.shared.assistant_state import clear_assistant_messages as _clear_assistant_messages
 from app.ui.shared.assistant_state import load_assistant_draft as _load_assistant_draft
@@ -20,7 +19,6 @@ from app.ui.shared.assistant_state import save_assistant_messages as _save_assis
 from app.ui.shared.generation_progress import generation_progress_dialog
 from app.ui.shared.page_config import (
     action_loading_copy,
-    block_if_missing_api_keys_for_channels,
     block_if_missing_api_keys_for_step,
     friendly_ai_error,
     play_completion_sound,
@@ -199,12 +197,6 @@ def render_assistant_panel(
             predicted_action = classify_project_chat_action(user_message, active)
             if predicted_action == "chat":
                 if block_if_missing_api_keys_for_step("director_agent_chat"):
-                    return
-            elif (
-                predicted_action == "approve_visual_prompt"
-                and _requests_generation_after_approval(user_message)
-            ):
-                if block_if_missing_api_keys_for_channels(("image",)):
                     return
             elif block_if_missing_api_keys_for_step(predicted_action):
                 return

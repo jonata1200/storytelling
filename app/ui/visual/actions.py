@@ -533,11 +533,12 @@ async def _approve_video_prompts_from_ui(
             )
         await _emit_visual_batch_progress(
             progress_callback,
-            len(frame_ids),
-            len(frame_ids),
+            1,
+            len(frame_ids) + 1,
             (
-                "Agora: processando os clipes de video.\n"
-                "Os videos serao gerados em segundo plano. Acompanhe o progresso abaixo."
+                f"Job de video enfileirado.\n"
+                f"Os {len(frame_ids)} clipe(s) serao gerados em segundo plano.\n"
+                "A pagina sera atualizada automaticamente."
             ),
         )
         ui.notify(

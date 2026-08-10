@@ -1,5 +1,6 @@
 ﻿from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dubbing.models import DubbingJob
@@ -58,6 +59,7 @@ from app.generation.project_agent_visual import (  # noqa: E402,F401
     _visual_reference_views_for_target,
     _visual_target_kind_from_message,
 )
+from app.jobs.service import enqueue_project_step
 from app.projects.versioning import (
     mark_dependents_stale,
     resolve_stale_artifacts_after_regeneration,
@@ -407,18 +409,46 @@ async def _ensure_video_pipeline(
             changed,
         )
 
-    clips = await _count(session, VideoClip, project_id)
-    if not force and clips > 0:
+    pending_frame_ids = await _pending_video_frame_ids(session, project_id)
+    if not force and not pending_frame_ids:
         return ProjectChatResult(
             "Os clipes de vídeo já existem para este storyboard.",
             "generate_video",
             changed,
         )
-    return ProjectChatResult(
-        "Storyboard pronto. Revise e aprove os prompts na aba Vídeo para gerar os clipes.",
-        "generate_video",
-        changed,
+    target_frame_ids = [frame.id for frame in frames] if force else pending_frame_ids
+    await _emit_progress(progress, "Prompts de vídeo aprovados. Vou enfileirar os clipes.")
+    await enqueue_project_step(
+        session,
+        project_id,
+        "video",
+        {
+            "frame_ids": [str(frame_id) for frame_id in target_frame_ids],
+            "include_canonical_references": False,
+        },
     )
+    return ProjectChatResult(
+        f"{len(target_frame_ids)} prompt(s) de vídeo aprovado(s) e enviado(s) para geração.",
+        "generate_video",
+        True,
+    )
+
+
+async def _pending_video_frame_ids(session: AsyncSession, project_id: UUID) -> list[UUID]:
+    generated_frame_result = await session.execute(
+        select(VideoClip.storyboard_frame_id).where(VideoClip.project_id == project_id)
+    )
+    generated_frame_ids = set(generated_frame_result.scalars())
+    frame_result = await session.execute(
+        select(StoryboardFrame.id)
+        .where(StoryboardFrame.project_id == project_id)
+        .order_by(StoryboardFrame.frame_number)
+    )
+    return [
+        frame_id
+        for frame_id in frame_result.scalars()
+        if frame_id not in generated_frame_ids
+    ]
 
 
 async def _approve_storyboard_prompts_from_chat(
@@ -426,7 +456,7 @@ async def _approve_storyboard_prompts_from_chat(
     project_id: UUID,
     progress: ProgressCallback | None = None,
     scene_number: int | None = None,
-    generate_after_approval: bool = False,
+    generate_after_approval: bool = True,
 ) -> ProjectChatResult:
     script = await _latest(session, Script, project_id)
     if script is None:
@@ -455,26 +485,6 @@ async def _approve_storyboard_prompts_from_chat(
         script.id,
         scene_number=scene_number,
     )
-    if not generate_after_approval:
-        if approved_count:
-            return ProjectChatResult(
-                (
-                    f"Aprovei {approved_count} prompt(s) de storyboard{scene_copy}. "
-                    "Nenhum quadro foi gerado; peça explicitamente para gerar os "
-                    "storyboards quando quiser."
-                ),
-                "approve_storyboard_prompt",
-                True,
-            )
-        return ProjectChatResult(
-            (
-                f"Os prompts de storyboard{scene_copy} já estavam aprovados. "
-                "Nenhum quadro foi gerado; peça explicitamente para gerar os "
-                "storyboards quando quiser."
-            ),
-            "approve_storyboard_prompt",
-            False,
-        )
     generated_frames: list[StoryboardFrame] = []
     if await storyboard_frames_need_generation(session, project_id, script.id):
         if await storyboard_prompts_need_approval(
@@ -793,7 +803,6 @@ async def handle_project_chat(
             project_id,
             progress=progress,
             scene_number=_requested_storyboard_scene_number(message),
-            generate_after_approval=_requests_generation_after_approval(message),
         )
     if action == "generate_storyboard":
         scene_number = _requested_storyboard_scene_number(message)

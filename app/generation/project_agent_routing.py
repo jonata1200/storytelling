@@ -127,7 +127,15 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
     actionable = wants_generation or wants_revision
 
     wants_prompt_approval = _requests_visual_prompt_approval(message)
-    if wants_prompt_approval and any(term in normalized for term in storyboard_terms):
+    explicit_video_prompt = "prompt de video" in normalized or "prompts de video" in normalized
+    has_storyboard_term = any(term in normalized for term in storyboard_terms)
+    if wants_prompt_approval and (
+        active == "video"
+        or explicit_video_prompt
+        or (any(term in normalized for term in video_terms) and not has_storyboard_term)
+    ):
+        return "generate_video"
+    if wants_prompt_approval and has_storyboard_term:
         return "approve_storyboard_prompt"
     if wants_prompt_approval and active == "storyboard":
         return "approve_storyboard_prompt"
@@ -265,6 +273,23 @@ def _contextual_project_chat_intent(
         or "enquadramento" in normalized
         or active == "storyboard"
     )
+    explicit_video_prompt = "prompt de video" in normalized or "prompts de video" in normalized
+    video_context = (
+        "video" in normalized
+        or "clipe" in normalized
+        or "clipes" in normalized
+        or active == "video"
+    )
+    if wants_prompt_approval and (
+        active == "video"
+        or explicit_video_prompt
+        or (video_context and not storyboard_context)
+    ):
+        return ProjectChatIntent(
+            "generate_video",
+            1.0,
+            "pedido explicito de aprovacao de prompts de video",
+        )
     if wants_prompt_approval and storyboard_context:
         return ProjectChatIntent(
             "approve_storyboard_prompt",

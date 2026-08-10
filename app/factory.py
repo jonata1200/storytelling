@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.router import api_router
 from app.auth.ui_middleware import UIBasicAuthMiddleware
 from app.auth.ui_routes import router as auth_ui_router
-from app.config.settings import get_settings, insecure_default_secret_key_warning
+from app.config.settings import get_settings
 from app.observability.middleware import CorrelationIdMiddleware
 from app.runtime import install_asyncio_exception_filter
 from app.workflows.state_machine import WorkflowStateError
@@ -20,9 +20,6 @@ logger = logging.getLogger(__name__)
 
 def create_app(include_ui: bool = True) -> FastAPI:
     settings = get_settings()
-    secret_key_warning = insecure_default_secret_key_warning()
-    if secret_key_warning:
-        logger.warning(secret_key_warning)
     docs_enabled = settings.app_env.lower() in LOCAL_DOCS_ENVS
     app = FastAPI(
         title=settings.app_name,

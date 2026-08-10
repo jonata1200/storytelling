@@ -30,9 +30,11 @@ TEXT_CREATION_STEPS = {
     "director_agent_chat",
 }
 IMAGE_CREATION_STEPS = {
+    "approve_visual_prompt",
     "visual_images",
     "visual_references",
     "approve_visual_prompt_with_generation",
+    "approve_storyboard_prompt",
     "storyboard",
     "generate_storyboard",
     "storyboard_frames",

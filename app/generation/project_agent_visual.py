@@ -17,9 +17,6 @@ from app.generation.project_agent_types import (
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.prompts import allowed_views_for
 from app.visual_bible.service import (
-    approve_visual_target as approve_visual_target_only,
-)
-from app.visual_bible.service import (
     approve_visual_target_and_generate_views,
     default_views_for_profile,
     initial_view_for_profile,
@@ -264,10 +261,6 @@ async def _approve_visual_prompt_from_chat(
         "approve_visual_target_and_generate_views",
         approve_visual_target_and_generate_views,
     )
-    approve_visual_target_without_generation = _facade_attr(
-        "approve_visual_target", approve_visual_target_only
-    )
-    should_generate = _requests_generation_after_approval(message)
     targets = await visual_chat_targets(session, project_id, target_kind)
     if not targets:
         return ProjectChatResult(
@@ -309,19 +302,6 @@ async def _approve_visual_prompt_from_chat(
         if not view_types:
             approved_count += 1
             continue
-        if not should_generate:
-            await _emit_progress(progress, f"Aprovando prompt visual de {target.name}.")
-            approved = await approve_visual_target_without_generation(
-                session,
-                project_id,
-                target.kind,
-                target.id,
-            )
-            if approved is None:
-                continue
-            approved_count += 1
-            continue
-
         await _emit_progress(progress, f"Aprovando {target.name} e gerando imagem.")
         references = await approve_visual_target_with_generation(
             session,
@@ -346,7 +326,7 @@ async def _approve_visual_prompt_from_chat(
         return ProjectChatResult(
             (
                 f"Aprovei {approved_count} ativo(s) visual(is). "
-                "Nenhuma imagem foi gerada; peça explicitamente para gerar quando quiser."
+                "Todas as imagens solicitadas já estavam criadas."
             ),
             "approve_visual_prompt",
             True,

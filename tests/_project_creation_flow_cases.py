@@ -1114,12 +1114,10 @@ async def test_approve_last_storyboard_prompt_generates_frames(
         calls.append("approve_prompt")
         return True
 
-    async def fake_prompts_need_approval(*args: object, **kwargs: object) -> bool:
-        calls.append("prompts_need_approval")
-        return False
-
     async def fake_generate_frames(*args: object, **kwargs: object) -> list[object]:
         calls.append("generate_frames")
+        assert kwargs["shot_id"] == shot_id
+        assert kwargs["approved_only"] is True
         return [object()]
 
     async def fake_frames_need_generation(*args: object, **kwargs: object) -> bool:
@@ -1128,11 +1126,6 @@ async def test_approve_last_storyboard_prompt_generates_frames(
 
     monkeypatch.setattr(storyboard_video_area, "AsyncSessionLocal", lambda: FakeSessionContext())
     monkeypatch.setattr(storyboard_video_area, "approve_storyboard_prompt", fake_approve_prompt)
-    monkeypatch.setattr(
-        storyboard_video_area,
-        "storyboard_prompts_need_approval",
-        fake_prompts_need_approval,
-    )
     monkeypatch.setattr(storyboard_video_area, "generate_storyboard_frames", fake_generate_frames)
     monkeypatch.setattr(
         storyboard_video_area,
@@ -1154,11 +1147,10 @@ async def test_approve_last_storyboard_prompt_generates_frames(
 
     assert calls == [
         "approve_prompt",
-        "prompts_need_approval",
         "generate_frames",
         "frames_need_generation",
     ]
-    assert notifications == ["Ultimo prompt aprovado. 1 storyboard(s) gerado(s)."]
+    assert notifications == ["Prompt aprovado. 1 storyboard(s) gerado(s)."]
 
 
 @pytest.mark.asyncio
