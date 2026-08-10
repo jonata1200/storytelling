@@ -1,4 +1,4 @@
-﻿from uuid import UUID
+﻿from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -469,6 +469,7 @@ async def _ensure_video_pipeline(
         {
             "frame_ids": [str(frame_id) for frame_id in target_frame_ids],
             "include_canonical_references": False,
+            "request_id": uuid4().hex,
         },
     )
     return ProjectChatResult(

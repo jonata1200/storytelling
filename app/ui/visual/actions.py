@@ -3,7 +3,7 @@ import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from nicegui import ui
 from sqlalchemy import select
@@ -522,13 +522,14 @@ async def _approve_video_prompts_from_ui(
             ),
         )
         async with AsyncSessionLocal() as session:
-            job = await enqueue_project_step(
+            await enqueue_project_step(
                 session,
                 project_id,
                 "video",
                 {
                     "frame_ids": [str(frame_id) for frame_id in frame_ids],
                     "include_canonical_references": include_canonical_references,
+                    "request_id": uuid4().hex,
                 },
             )
         await _emit_visual_batch_progress(

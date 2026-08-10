@@ -997,6 +997,74 @@ def test_video_clip_asset_url_uses_asset_content_endpoint() -> None:
     )
 
 
+def test_video_progress_rows_use_latest_job_for_each_frame() -> None:
+    frame_id = uuid4()
+    now = datetime.now(UTC)
+    frame = SimpleNamespace(id=frame_id, frame_number=1, duration_seconds=8)
+    view_model = SimpleNamespace(sorted_frames=[frame], clip_frame_ids=set())
+    older_failed_job = SimpleNamespace(
+        request_payload={"storyboard_frame_id": str(frame_id)},
+        status="failed",
+        progress=0,
+        created_at=now,
+    )
+    newer_running_job = SimpleNamespace(
+        request_payload={"storyboard_frame_id": str(frame_id)},
+        status="running",
+        progress=35,
+        created_at=now + timedelta(seconds=1),
+    )
+
+    rows = storyboard_video_area._video_frame_progress_rows(
+        view_model,
+        [older_failed_job, newer_running_job],
+    )
+
+    assert rows[0]["state"] == "running"
+    assert rows[0]["label"] == "Processando 35%"
+
+
+def test_video_view_model_counts_clip_jobs_before_parent_job() -> None:
+    first_frame_id = uuid4()
+    second_frame_id = uuid4()
+    first_frame = SimpleNamespace(
+        id=first_frame_id,
+        frame_number=1,
+        duration_seconds=8,
+    )
+    second_frame = SimpleNamespace(
+        id=second_frame_id,
+        frame_number=2,
+        duration_seconds=8,
+    )
+    clip = SimpleNamespace(storyboard_frame_id=first_frame_id)
+    parent_job = SimpleNamespace(
+        request_payload={
+            "step": "video",
+            "payload": {"frame_ids": [str(first_frame_id), str(second_frame_id)]},
+        },
+        status="succeeded",
+    )
+    clip_job = SimpleNamespace(
+        request_payload={"storyboard_frame_id": str(second_frame_id)},
+        status="running",
+    )
+
+    view_model = storyboard_video_area.build_storyboard_video_view_model(
+        {
+            "frames": [second_frame, first_frame],
+            "clips": [clip],
+            "video_prompt_previews": [],
+            "video_jobs": [parent_job, clip_job],
+        }
+    )
+
+    assert view_model.generated_count == 1
+    assert view_model.pending_frames == [second_frame]
+    assert view_model.running_video_jobs == 1
+    assert view_model.queued_video_jobs == 0
+
+
 @pytest.mark.asyncio
 async def test_approve_all_storyboard_prompts_generates_frames_when_ready(
     monkeypatch: pytest.MonkeyPatch,
