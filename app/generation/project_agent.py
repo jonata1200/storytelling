@@ -134,6 +134,18 @@ def _script_agent_edit_blocked_message(blockers: dict[str, int]) -> str:
     )
 
 
+def _is_partial_storyboard_generation_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "continuar de onde parou" in message or "quadro(s) já ficaram salvo" in message
+
+
+def _partial_storyboard_generation_message() -> str:
+    return (
+        "A geração foi interrompida, mas os quadros concluídos foram salvos. "
+        "Tente novamente para continuar de onde parou."
+    )
+
+
 async def _ensure_script_pipeline(
     session: AsyncSession,
     project_id: UUID,
@@ -334,14 +346,24 @@ async def _ensure_storyboard_pipeline(
                 progress,
                 f"Vou transformar a cena {scene_number} em frames de storyboard.",
             )
-        generated_frames = await generate_storyboard_frames(
-            session,
-            project_id,
-            script.id,
-            scene_number=scene_number,
-            force=force,
-            progress_callback=_storyboard_frame_progress(progress),
-        )
+        try:
+            generated_frames = await generate_storyboard_frames(
+                session,
+                project_id,
+                script.id,
+                scene_number=scene_number,
+                force=force,
+                progress_callback=_storyboard_frame_progress(progress),
+            )
+        except RuntimeError as exc:
+            if not _is_partial_storyboard_generation_error(exc):
+                raise
+            return ProjectChatResult(
+                _partial_storyboard_generation_message(),
+                "generate_storyboard",
+                True,
+                True,
+            )
         if generated_frames is None:
             return ProjectChatResult(
                 "Não consegui gerar o storyboard.",
@@ -523,14 +545,24 @@ async def _approve_storyboard_prompts_from_chat(
                 "approve_storyboard_prompt",
                 approved_count > 0,
             )
-        frames = await generate_storyboard_frames(
-            session,
-            project_id,
-            script.id,
-            scene_number=scene_number,
-            approved_only=True,
-            progress_callback=_storyboard_frame_progress(progress),
-        )
+        try:
+            frames = await generate_storyboard_frames(
+                session,
+                project_id,
+                script.id,
+                scene_number=scene_number,
+                approved_only=True,
+                progress_callback=_storyboard_frame_progress(progress),
+            )
+        except RuntimeError as exc:
+            if not _is_partial_storyboard_generation_error(exc):
+                raise
+            return ProjectChatResult(
+                _partial_storyboard_generation_message(),
+                "approve_storyboard_prompt",
+                True,
+                True,
+            )
         if frames is None:
             return ProjectChatResult(
                 "Aprovei os prompts, mas não consegui gerar os quadros de storyboard.",

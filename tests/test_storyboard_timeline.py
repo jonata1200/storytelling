@@ -1,5 +1,7 @@
 ﻿import asyncio
+from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
 
@@ -30,6 +32,7 @@ from app.storyboards.prompts import (
 from app.storyboards.service import (
     _animatic_fingerprint,
     _local_storage_file_exists,
+    _storyboard_orphan_image_result,
     approve_storyboard_prompt,
     generate_storyboard_frames,
     storyboard_coverage_errors,
@@ -414,6 +417,113 @@ async def test_generate_storyboard_plan_images_respects_concurrency_limit(
 
 
 @pytest.mark.asyncio
+async def test_generate_storyboard_plan_images_stops_after_provider_failure(
+    tmp_path: Path,
+) -> None:
+    captured_requests: list[ImageGenerationRequest] = []
+
+    class FakeProvider:
+        async def generate(self, request: ImageGenerationRequest) -> ImageResult:
+            captured_requests.append(request)
+            if len(captured_requests) == 2:
+                raise RuntimeError("limite do provedor")
+            file_path = tmp_path / f"{request.target_id}.png"
+            file_path.write_bytes(b"image")
+            return ImageResult(
+                file_path=file_path,
+                storage_uri=file_path.as_posix(),
+                sha256=request.target_id,
+                content_type="image/png",
+                provider="fake",
+                model=request.model,
+                prompt=request.prompt,
+            )
+
+        async def edit(self, request: object) -> ImageResult:
+            raise NotImplementedError
+
+    scene = Scene(id=uuid4(), scene_number=1)
+    plans = [
+        StoryboardFrameGenerationPlan(
+            shot=Shot(id=uuid4(), shot_number=index + 1, artifact_id=uuid4()),
+            scene=scene,
+            frame_number=index + 1,
+            prompt=f"Prompt {index + 1}",
+            existing_frame=None,
+            needs_image=True,
+            asset_artifact_id=uuid4(),
+        )
+        for index in range(4)
+    ]
+
+    await generate_storyboard_plan_images(
+        FakeProvider(),
+        plans,
+        output_dir=tmp_path,
+        image_resolution="1K",
+        image_aspect_ratio="9:16",
+        image_model="fake-model",
+        concurrency=1,
+    )
+
+    assert len(captured_requests) == 2
+    assert plans[0].image is not None
+    assert isinstance(plans[1].error, RuntimeError)
+    assert plans[2].image is None
+    assert plans[3].image is None
+
+
+@pytest.mark.asyncio
+async def test_generate_storyboard_plan_images_skips_recovered_images(
+    tmp_path: Path,
+) -> None:
+    captured_requests: list[ImageGenerationRequest] = []
+
+    class FakeProvider:
+        async def generate(self, request: ImageGenerationRequest) -> ImageResult:
+            captured_requests.append(request)
+            raise AssertionError("imagem recuperada não deve chamar o provider")
+
+        async def edit(self, request: object) -> ImageResult:
+            raise NotImplementedError
+
+    scene = Scene(id=uuid4(), scene_number=1)
+    image_path = tmp_path / "recovered.png"
+    image_path.write_bytes(b"image")
+    plan = StoryboardFrameGenerationPlan(
+        shot=Shot(id=uuid4(), shot_number=1, artifact_id=uuid4()),
+        scene=scene,
+        frame_number=1,
+        prompt="Prompt recuperado",
+        existing_frame=None,
+        needs_image=True,
+        asset_artifact_id=uuid4(),
+        image=ImageResult(
+            file_path=image_path,
+            storage_uri=image_path.as_posix(),
+            sha256="sha",
+            content_type="image/png",
+            provider="fake",
+            model="fake-model",
+            prompt="Prompt recuperado",
+        ),
+    )
+
+    await generate_storyboard_plan_images(
+        FakeProvider(),
+        [plan],
+        output_dir=tmp_path,
+        image_resolution="1K",
+        image_aspect_ratio="9:16",
+        image_model="fake-model",
+        concurrency=1,
+    )
+
+    assert captured_requests == []
+    assert plan.image is not None
+
+
+@pytest.mark.asyncio
 async def test_approve_storyboard_prompt_stores_single_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -554,6 +664,26 @@ def test_local_storage_file_exists_checks_storage_root(
     assert not _local_storage_file_exists("google_ai_storyboards/missing.png")
 
 
+def test_storyboard_orphan_image_result_recovers_matching_file(tmp_path: Path) -> None:
+    shot_id = uuid4()
+    orphan_file = tmp_path / f"{shot_id}_storyboard_003_abcd1234.png"
+    orphan_file.write_bytes(b"orphan-image")
+
+    result = _storyboard_orphan_image_result(
+        tmp_path,
+        shot_id,
+        3,
+        provider_name="google_ai",
+        image_model="gemini-image",
+        prompt="Prompt recuperado",
+    )
+
+    assert result is not None
+    assert result.storage_uri == orphan_file.as_posix()
+    assert result.estimated_cost == "0.000000"
+    assert result.content_type == "image/png"
+
+
 @pytest.mark.asyncio
 async def test_generate_storyboard_frames_requires_complete_visual_references(
     monkeypatch: pytest.MonkeyPatch,
@@ -638,6 +768,222 @@ async def test_generate_storyboard_frames_requires_shots(
 
     with pytest.raises(ValueError, match="Nenhum plano"):
         await generate_storyboard_frames(cast(AsyncSession, FakeSession()), project_id, script.id)
+
+
+@pytest.mark.asyncio
+async def test_generate_storyboard_frames_persists_successful_frames_before_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project_id = uuid4()
+    script = Script(
+        id=uuid4(),
+        project_id=project_id,
+        artifact_id=uuid4(),
+        story_idea_id=uuid4(),
+        title="Roteiro",
+        language="pt-BR",
+        target_duration_seconds=16,
+        word_count=120,
+        content="FADE IN:\n\nCENA 01\nINT. CASA - DIA\n\nClara observa a carta.",
+    )
+    scene = Scene(
+        id=uuid4(),
+        project_id=project_id,
+        artifact_id=uuid4(),
+        script_id=script.id,
+        scene_number=1,
+        title="Casa",
+        summary="Clara observa a carta.",
+        duration_seconds=16,
+        payload={},
+    )
+    first_shot = Shot(
+        id=uuid4(),
+        project_id=project_id,
+        artifact_id=uuid4(),
+        scene_id=scene.id,
+        shot_number=1,
+        duration_seconds=8,
+        narration_text="Clara respira fundo.",
+        dialogue_text="",
+        action="Clara encara a carta sobre a mesa.",
+        emotion="tensão",
+        visual_composition="Plano médio vertical com mesa ao fundo.",
+        camera_movement="push-in lento",
+        generation_type="image_to_video",
+        payload={},
+    )
+    second_shot = Shot(
+        id=uuid4(),
+        project_id=project_id,
+        artifact_id=uuid4(),
+        scene_id=scene.id,
+        shot_number=2,
+        duration_seconds=8,
+        narration_text="Ela decide abrir o envelope.",
+        dialogue_text="",
+        action="Clara toca o envelope com cuidado.",
+        emotion="decisão",
+        visual_composition="Close vertical das mãos e do envelope.",
+        camera_movement="camera fixa",
+        generation_type="image_to_video",
+        payload={},
+    )
+
+    class FakeProjectRepository:
+        def __init__(self, session: object) -> None:
+            self.session = session
+
+        async def get_project(self, requested_project_id: object) -> object:
+            assert requested_project_id == project_id
+            return SimpleNamespace(id=project_id)
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.added: list[object] = []
+            self.commits = 0
+
+        async def get(self, model: object, requested_id: object) -> object | None:
+            if model is Script and requested_id == script.id:
+                return script
+            return None
+
+        def add(self, item: object) -> None:
+            self.added.append(item)
+
+        async def flush(self) -> None:
+            for item in self.added:
+                if getattr(item, "id", None) is None:
+                    item.id = uuid4()
+
+        async def commit(self) -> None:
+            await self.flush()
+            self.commits += 1
+
+        async def refresh(self, item: object) -> None:
+            return None
+
+    async def fake_generate_plan_images(*args: object, **kwargs: object) -> None:
+        plans = args[1]
+        first_image_path = tmp_path / "frame-001.png"
+        first_image_path.write_bytes(b"image")
+        plans[0].image = ImageResult(
+            file_path=first_image_path,
+            storage_uri=first_image_path.as_posix(),
+            sha256="frame-001",
+            content_type="image/png",
+            provider="fake",
+            model="fake-model",
+            prompt=plans[0].prompt,
+        )
+        plans[0].duration_ms = 10
+        plans[1].error = RuntimeError("limite do provedor")
+
+    async def fake_selected_shots(*args: object, **kwargs: object) -> tuple[
+        list[tuple[Shot, Scene]],
+        list[tuple[Shot, Scene]],
+        dict[object, int],
+    ]:
+        shot_rows = [(first_shot, scene), (second_shot, scene)]
+        return shot_rows, shot_rows, {first_shot.id: 1, second_shot.id: 2}
+
+    async def fake_approved_prompts(*args: object, **kwargs: object) -> dict[object, str]:
+        return {
+            first_shot.id: "Prompt cinematográfico completo para o primeiro quadro do storyboard.",
+            second_shot.id: "Prompt cinematográfico completo para o segundo quadro do storyboard.",
+        }
+
+    async def fake_create_artifact(*args: object, **kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(id=uuid4(), name=str(args[3] if len(args) > 3 else "Storyboard"))
+
+    async def fake_visual_report(*args: object, **kwargs: object) -> dict[str, object]:
+        return {"complete": True, "missing_categories": [], "missing_views": 0}
+
+    async def fake_production_settings(*args: object, **kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            aspect_ratio="9:16",
+            image_resolution="1K",
+            metadata_json={},
+        )
+
+    async def fake_visual_context(*args: object, **kwargs: object) -> dict[str, object]:
+        return {}
+
+    async def fake_image_provider(*args: object, **kwargs: object) -> tuple[object, str, str]:
+        return object(), "fake-model", "storyboards"
+
+    async def fake_existing_frames(*args: object, **kwargs: object) -> list[StoryboardFrame]:
+        return []
+
+    async def fake_reference_uris(*args: object, **kwargs: object) -> list[str]:
+        return []
+
+    async def fake_add_dependency(*args: object, **kwargs: object) -> None:
+        return None
+
+    fake_session = FakeSession()
+    monkeypatch.setattr(storyboard_service, "ProjectRepository", FakeProjectRepository)
+    monkeypatch.setattr(
+        storyboard_service,
+        "visual_reference_completion_report",
+        fake_visual_report,
+    )
+    monkeypatch.setattr(storyboard_service, "_selected_storyboard_shots", fake_selected_shots)
+    monkeypatch.setattr(
+        storyboard_service,
+        "get_or_create_production_settings",
+        fake_production_settings,
+    )
+    monkeypatch.setattr(storyboard_service, "_storyboard_visual_context", fake_visual_context)
+    monkeypatch.setattr(
+        storyboard_service,
+        "_ensure_storyboard_prompts_approved",
+        fake_approved_prompts,
+    )
+    monkeypatch.setattr(
+        storyboard_service,
+        "_image_provider_for_project",
+        fake_image_provider,
+    )
+    monkeypatch.setattr(
+        storyboard_service,
+        "get_settings",
+        lambda: SimpleNamespace(local_storage_path=tmp_path, storyboard_image_concurrency=1),
+    )
+    monkeypatch.setattr(storyboard_service, "list_storyboard_frames", fake_existing_frames)
+    monkeypatch.setattr(
+        storyboard_service,
+        "_storyboard_reference_uris_for_shot",
+        fake_reference_uris,
+    )
+    monkeypatch.setattr(
+        storyboard_service,
+        "generate_storyboard_plan_images",
+        fake_generate_plan_images,
+    )
+    monkeypatch.setattr(storyboard_service, "_create_artifact", fake_create_artifact)
+    monkeypatch.setattr(storyboard_service, "_add_dependency", fake_add_dependency)
+    monkeypatch.setattr(
+        storyboard_service,
+        "estimate_operation_cost",
+        lambda *args, **kwargs: SimpleNamespace(
+            estimated=Decimal("0.010000"),
+            quantity=Decimal("1"),
+            unit="imagem",
+            unit_cost=Decimal("0.010000"),
+            currency="USD",
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="continuar de onde parou"):
+        await generate_storyboard_frames(fake_session, project_id, script.id)
+
+    saved_frames = [
+        item for item in fake_session.added if isinstance(item, StoryboardFrame)
+    ]
+    assert fake_session.commits == 1
+    assert [frame.shot_id for frame in saved_frames] == [first_shot.id]
 
 
 def test_animatic_fingerprint_changes_when_frame_asset_changes() -> None:

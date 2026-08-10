@@ -25,6 +25,11 @@ from app.ui.shared.page_config import (
 ProgressCallback = Any
 
 
+def _is_partial_storyboard_generation_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "continuar de onde parou" in message or "quadro(s) já ficaram salvo" in message
+
+
 async def _emit_progress(
     callback: ProgressCallback | None,
     completed: int,
@@ -120,6 +125,8 @@ async def approve_storyboard_prompts_from_ui(
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+        if _is_partial_storyboard_generation_error(exc):
+            ui.navigate.reload()
     finally:
         if loading_dialog is not None:
             safe_close_ui_element(loading_dialog)
@@ -193,6 +200,8 @@ async def approve_storyboard_prompt_from_ui(
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+        if _is_partial_storyboard_generation_error(exc):
+            ui.navigate.reload()
     finally:
         if loading_dialog is not None:
             safe_close_ui_element(loading_dialog)
@@ -284,6 +293,8 @@ async def generate_storyboards_from_ui(
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+        if _is_partial_storyboard_generation_error(exc):
+            ui.navigate.reload()
     finally:
         if loading_dialog is not None:
             safe_close_ui_element(loading_dialog)

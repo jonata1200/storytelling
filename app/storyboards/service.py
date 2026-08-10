@@ -28,6 +28,7 @@ from app.storyboards.animatic import (
 from app.storyboards.assets import (
     _delete_local_storage_file,
     _storyboard_frame_asset_available,
+    _storyboard_orphan_image_result,
 )
 from app.storyboards.assets import (
     _local_storage_file_exists as _local_storage_file_exists,
@@ -213,6 +214,20 @@ async def generate_storyboard_frames(
                 reference_uris=reference_uris,
             )
         )
+        if needs_image and not force:
+            plan = frame_plans[-1]
+            recovered_image = _storyboard_orphan_image_result(
+                output_dir,
+                shot.id,
+                frame_number,
+                provider_name=str(getattr(provider, "provider_name", "recovered")),
+                image_model=image_model,
+                prompt=prompt,
+            )
+            if recovered_image is not None:
+                plan.image = recovered_image
+                plan.fallback_metadata = {"recovered_from_orphan": True}
+                plan.duration_ms = 1
 
     await generate_storyboard_plan_images(
         provider,
@@ -228,6 +243,7 @@ async def generate_storyboard_frames(
     )
 
     frames: list[StoryboardFrame] = []
+    generation_errors: list[str] = []
     for plan in frame_plans:
         shot = plan.shot
         scene = plan.scene
@@ -238,7 +254,11 @@ async def generate_storyboard_frames(
         if needs_image:
             image = plan.image
             if image is None:
-                raise RuntimeError("A geração do storyboard não retornou imagem.")
+                detail = str(plan.error) if plan.error is not None else "imagem não retornada"
+                generation_errors.append(
+                    f"Cena {scene.scene_number}.{shot.shot_number}: {detail}"
+                )
+                continue
             duration_ms = plan.duration_ms or 1
             generation_metadata = {
                 "resolution": image_resolution,
@@ -451,6 +471,21 @@ async def generate_storyboard_frames(
             )
             session.add(frame)
         frames.append(frame)
+
+    if generation_errors:
+        await session.commit()
+        for frame in frames:
+            await session.refresh(frame)
+        saved_count = len({frame.shot_id for frame in frames})
+        pending_count = len(generation_errors)
+        first_error = generation_errors[0]
+        raise RuntimeError(
+            "Geração de storyboards interrompida. "
+            f"{saved_count} quadro(s) já ficaram salvo(s); "
+            f"{pending_count} quadro(s) continuam pendente(s). "
+            "Tente novamente para continuar de onde parou. "
+            f"Detalhe: {first_error}"
+        )
 
     errors = storyboard_coverage_errors(shot_rows, frames)
     if errors:

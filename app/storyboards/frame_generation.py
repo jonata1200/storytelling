@@ -57,6 +57,7 @@ class StoryboardFrameGenerationPlan:
     image: ImageResult | None = None
     fallback_metadata: dict | None = None
     duration_ms: int | None = None
+    error: Exception | None = None
 
 
 def _storyboard_progress_target(plan: StoryboardFrameGenerationPlan) -> str:
@@ -124,10 +125,11 @@ async def generate_storyboard_plan_images(
 ) -> None:
     safe_concurrency = storyboard_image_concurrency(concurrency)
     semaphore = asyncio.Semaphore(safe_concurrency)
-    plans_to_generate = [plan for plan in plans if plan.needs_image]
+    plans_to_generate = [plan for plan in plans if plan.needs_image and plan.image is None]
     total = len(plans_to_generate)
     completed = 0
     progress_lock = asyncio.Lock()
+    stop_after_error = asyncio.Event()
     await _emit_storyboard_progress(
         progress_callback,
         0,
@@ -145,8 +147,12 @@ async def generate_storyboard_plan_images(
         nonlocal completed
         if not plan.needs_image:
             return
+        if stop_after_error.is_set():
+            return
         try:
             async with semaphore:
+                if stop_after_error.is_set():
+                    return
                 async with progress_lock:
                     await _emit_storyboard_progress(
                         progress_callback,
@@ -183,6 +189,9 @@ async def generate_storyboard_plan_images(
                 plan.image = image
                 plan.fallback_metadata = fallback_metadata
                 plan.duration_ms = max(1, int((perf_counter() - generation_started_at) * 1000))
+        except Exception as exc:
+            plan.error = exc
+            stop_after_error.set()
         finally:
             async with progress_lock:
                 completed += 1

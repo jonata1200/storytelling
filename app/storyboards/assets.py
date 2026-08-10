@@ -1,11 +1,15 @@
+import hashlib
+import mimetypes
 import sys
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset
 from app.config.settings import get_settings
+from app.providers.image.types import ImageResult
 from app.storyboards.models import StoryboardFrame
 
 
@@ -80,3 +84,31 @@ async def _storyboard_frame_asset_available(
     if asset is None:
         return False
     return _local_storage_file_exists(str(asset.storage_uri or ""))
+
+
+def _storyboard_orphan_image_result(
+    output_dir: Path,
+    shot_id: UUID,
+    frame_number: int,
+    *,
+    provider_name: str,
+    image_model: str,
+    prompt: str,
+) -> ImageResult | None:
+    prefix = f"{shot_id}_storyboard_{frame_number:03d}_"
+    candidates = [path for path in output_dir.glob(f"{prefix}*") if path.is_file()]
+    if not candidates:
+        return None
+    file_path = max(candidates, key=lambda path: path.stat().st_mtime)
+    image_bytes = file_path.read_bytes()
+    content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+    return ImageResult(
+        file_path=file_path,
+        storage_uri=file_path.as_posix(),
+        sha256=hashlib.sha256(image_bytes).hexdigest(),
+        content_type=content_type,
+        provider=provider_name,
+        model=image_model,
+        prompt=prompt,
+        estimated_cost="0.000000",
+    )
