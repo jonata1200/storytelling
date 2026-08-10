@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -13,14 +13,14 @@ class _FakeProjectRepository:
 
     async def get_project(self, project_id: object) -> object | None:
         if self.session.project.id == project_id:
-            return self.session.project
+            return cast(object, self.session.project)
         return None
 
 
 class _FakeSession:
     def __init__(self, project: object) -> None:
         self.project = project
-        self.added: list[object] = []
+        self.added: list[Any] = []
         self.commits = 0
         self.refreshed: list[object] = []
 

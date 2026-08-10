@@ -16,6 +16,11 @@ from app.projects.service import (
 )
 
 
+def _record_deleted_storage_uris(target: list[str], storage_uris: list[str]) -> int:
+    target.extend(storage_uris)
+    return len(storage_uris)
+
+
 class _FakeScalarResult:
     def __init__(self, projects: list[SimpleNamespace]) -> None:
         self._projects = projects
@@ -81,7 +86,7 @@ async def test_purge_application_data_truncates_project_graph(
     monkeypatch.setattr(
         project_service,
         "delete_local_storage_files",
-        lambda storage_uris: deleted_storage_uris.extend(storage_uris) or len(storage_uris),
+        lambda storage_uris: _record_deleted_storage_uris(deleted_storage_uris, storage_uris),
     )
 
     counts = await purge_application_data(cast(AsyncSession, session))
@@ -136,7 +141,7 @@ async def test_hard_delete_project_removes_project_graph_physically(
     monkeypatch.setattr(
         project_service,
         "delete_local_storage_files",
-        lambda storage_uris: deleted_storage_uris.extend(storage_uris) or len(storage_uris),
+        lambda storage_uris: _record_deleted_storage_uris(deleted_storage_uris, storage_uris),
     )
 
     deleted = await hard_delete_project(
@@ -175,7 +180,7 @@ async def test_hard_delete_all_story_ideas_removes_db_ideas_and_non_briefing_art
     monkeypatch.setattr(
         project_service,
         "delete_local_storage_files",
-        lambda storage_uris: deleted_storage_uris.extend(storage_uris) or len(storage_uris),
+        lambda storage_uris: _record_deleted_storage_uris(deleted_storage_uris, storage_uris),
     )
 
     counts = await hard_delete_all_story_ideas(cast(AsyncSession, session))

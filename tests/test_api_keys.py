@@ -1,4 +1,7 @@
+from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from app.config import api_keys
 from app.config.api_keys import (
@@ -12,7 +15,7 @@ from app.config.settings import get_settings
 
 
 def _settings(**overrides: object) -> SimpleNamespace:
-    values = {
+    values: dict[str, object] = {
         "ai_provider": "ollama_cloud",
         "text_provider": "ollama_cloud",
         "image_provider": "google_ai",
@@ -82,8 +85,8 @@ def test_missing_key_message_points_user_to_ai_settings() -> None:
 
 
 def test_api_key_validation_refreshes_stale_cached_settings(
-    monkeypatch,
-    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     save_runtime_preferences({"OLLAMA_CLOUD_API_KEY": ""})

@@ -56,7 +56,7 @@ def api_key_variable_name(provider: str) -> str:
 
 def provider_for_creation_channel(settings: Any, channel: CreationChannel) -> str:
     if channel in {"text", "image", "video"}:
-        return effective_provider_for_channel(settings, channel)  # type: ignore[arg-type]
+        return effective_provider_for_channel(settings, channel)
     if channel == "speech":
         return str(getattr(settings, "speech_provider", "") or "elevenlabs").strip().casefold()
     if channel == "dubbing":

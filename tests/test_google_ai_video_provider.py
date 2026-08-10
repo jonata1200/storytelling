@@ -51,7 +51,7 @@ def _http_error(status: int, payload: str) -> urllib.error.HTTPError:
         "veo-3.1-lite-generate-preview:predictLongRunning",
         code=status,
         msg="Error",
-        hdrs={},
+        hdrs=Message(),
         fp=BytesIO(payload.encode("utf-8")),
     )
 

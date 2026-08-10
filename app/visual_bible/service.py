@@ -198,7 +198,8 @@ async def reset_visual_bible(
     asset_ids = {row[2] for row in reference_rows if row[2] is not None}
     artifact_ids = {
         row[1]
-        for row in [*character_rows, *location_rows, *prop_rows, *reference_rows]
+        for rows in (character_rows, location_rows, prop_rows, reference_rows)
+        for row in rows
         if row[1] is not None
     }
 

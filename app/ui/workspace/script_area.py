@@ -328,9 +328,10 @@ def render_script_area(
     if should_recover_missing_scenes:
         script_id = getattr(script, "id", None)
         if isinstance(script_id, UUID):
+            scene_script_id: UUID = script_id
             ui.timer(
                 0.1,
-                lambda: _schedule_missing_scenes_generation(project_id, script_id),
+                lambda: _schedule_missing_scenes_generation(project_id, scene_script_id),
                 once=True,
             )
     if should_resume_stale_script:

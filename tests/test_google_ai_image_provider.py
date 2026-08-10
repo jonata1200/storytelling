@@ -1,6 +1,7 @@
 import base64
 import json
 import urllib.error
+from email.message import Message
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,7 +38,7 @@ def _http_error(status: int, payload: str) -> urllib.error.HTTPError:
         url="https://generativelanguage.googleapis.com/v1beta/interactions",
         code=status,
         msg="Error",
-        hdrs={},
+        hdrs=Message(),
         fp=BytesIO(payload.encode("utf-8")),
     )
 

@@ -382,8 +382,8 @@ async def test_authenticate_user_checks_email_and_password(
 def test_login_and_register_pages_use_email_fields() -> None:
     login_response = _auth_page("login", registration_available=True)
     register_response = _auth_page("register", registration_available=True)
-    login_html = login_response.body.decode()
-    register_html = register_response.body.decode()
+    login_html = bytes(login_response.body).decode()
+    register_html = bytes(register_response.body).decode()
 
     assert login_response.status_code == 200
     assert register_response.status_code == 200

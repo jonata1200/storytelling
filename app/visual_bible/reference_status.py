@@ -1,4 +1,5 @@
 ﻿from collections.abc import Mapping
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -127,6 +128,7 @@ async def visual_reference_completion_report(
             continue
 
         for target in targets:
+            target = cast(Character | Location | Prop, target)
             profile = getattr(target, "canonical_profile", {}) or {}
             expected_views = set(default_views_for_profile(target_kind, profile))
             expected_references += len(expected_views)

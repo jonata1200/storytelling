@@ -167,7 +167,7 @@ def test_visual_profile_merge_filters_markers_and_deduplicates_honorifics() -> N
         {"name": "Sr. Oliveira", "role": "gerente"},
         {"name": "Epílogo", "role": "personagem extraido do roteiro"},
     ]
-    fallback = [
+    fallback: list[dict] = [
         {
             "name": "Oliveira",
             "role": "personagem extraido do roteiro",
@@ -182,7 +182,7 @@ def test_visual_profile_merge_filters_markers_and_deduplicates_honorifics() -> N
 
 
 def test_visual_profile_merge_filters_weak_set_dressing_props_without_evidence() -> None:
-    items = [
+    items: list[dict] = [
         {"name": "Abajur", "narrative_importance": "objeto no quarto"},
         {"name": "Diário Preto", "narrative_importance": "Marta entrega o diário ao gerente."},
         {"name": "Travesseiro", "evidence_text": ["Ela esconde a chave no travesseiro."]},

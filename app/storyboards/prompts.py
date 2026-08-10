@@ -2,6 +2,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -176,6 +177,7 @@ async def _storyboard_reference_uris_for_shot(
             select(model).where(model.project_id == project_id).order_by(model.created_at)
         )
         for item in result.scalars():
+            item = cast(Character | Location | Prop, item)
             name = str(getattr(item, "name", "") or "")
             score = 20 if _name_is_mentioned(name, normalized_text) else 0
             target_rows.append((target_kind, item.id, name, score - kind_priority))

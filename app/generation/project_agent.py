@@ -65,6 +65,7 @@ from app.projects.versioning import (
 from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
 from app.storyboards.service import (
+    StoryboardProgressCallback,
     approve_storyboard_prompts,
     generate_animatic_bundle,
     generate_storyboard_frames,
@@ -474,7 +475,7 @@ async def _approve_storyboard_prompts_from_chat(
             "approve_storyboard_prompt",
             False,
         )
-    generated_frames = []
+    generated_frames: list[StoryboardFrame] = []
     if await storyboard_frames_need_generation(session, project_id, script.id):
         if await storyboard_prompts_need_approval(
             session,
@@ -490,7 +491,7 @@ async def _approve_storyboard_prompts_from_chat(
                 "approve_storyboard_prompt",
                 approved_count > 0,
             )
-        generated_frames = await generate_storyboard_frames(
+        frames = await generate_storyboard_frames(
             session,
             project_id,
             script.id,
@@ -498,13 +499,14 @@ async def _approve_storyboard_prompts_from_chat(
             approved_only=True,
             progress_callback=_storyboard_frame_progress(progress),
         )
-        if generated_frames is None:
+        if frames is None:
             return ProjectChatResult(
                 "Aprovei os prompts, mas não consegui gerar os quadros de storyboard.",
                 "approve_storyboard_prompt",
                 approved_count > 0,
                 True,
             )
+        generated_frames = frames
 
     if not await storyboard_frames_need_generation(session, project_id, script.id):
         await _emit_progress(progress, "Vou atualizar o animatic com os quadros aprovados.")
@@ -529,7 +531,7 @@ async def _approve_storyboard_prompts_from_chat(
 
 def _storyboard_frame_progress(
     progress: ProgressCallback | None,
-):
+) -> StoryboardProgressCallback | None:
     if progress is None:
         return None
 
