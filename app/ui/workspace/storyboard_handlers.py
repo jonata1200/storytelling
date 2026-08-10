@@ -15,6 +15,7 @@ from app.storyboards.service import (
     update_storyboard_prompt,
 )
 from app.ui.shared.page_config import (
+    block_if_missing_api_keys_for_channels,
     friendly_ai_error,
     play_completion_sound,
     safe_close_ui_element,
@@ -73,6 +74,8 @@ async def approve_storyboard_prompts_from_ui(
     loading_dialog: Any | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> None:
+    if block_if_missing_api_keys_for_channels(("image",)):
+        return
     if loading_dialog is not None:
         loading_dialog.open()
     try:
@@ -130,6 +133,8 @@ async def approve_storyboard_prompt_from_ui(
     loading_dialog: Any | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> None:
+    if block_if_missing_api_keys_for_channels(("image",)):
+        return
     if loading_dialog is not None:
         loading_dialog.open()
     try:
@@ -219,6 +224,8 @@ async def generate_storyboards_from_ui(
     loading_dialog: Any | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> None:
+    if block_if_missing_api_keys_for_channels(("image",)):
+        return
     if loading_dialog is not None:
         loading_dialog.open()
     try:

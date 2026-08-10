@@ -13,6 +13,7 @@ from app.ui.shared.assistant_state import (
     append_assistant_message_to_chat as _append_assistant_message_to_chat,
 )
 from app.ui.shared.page_config import (
+    block_if_missing_api_keys_for_step,
     friendly_ai_error,
     safe_close_ui_element,
     show_ai_error_popup,
@@ -40,6 +41,8 @@ async def _run_step(
         "finalization": "Finalizando projeto.",
         "quality": "Revisando qualidade.",
     }
+    if block_if_missing_api_keys_for_step(step_key):
+        return
     if loading_dialog is not None:
         loading_dialog.open()
     try:

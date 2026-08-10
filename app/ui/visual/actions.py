@@ -12,6 +12,8 @@ from app.database.session import AsyncSessionLocal
 from app.jobs.service import enqueue_project_step
 from app.storytelling.models import Script
 from app.ui.shared.page_config import (
+    block_if_missing_api_keys_for_channels,
+    block_if_missing_api_keys_for_step,
     friendly_ai_error,
     is_deleted_ui_context_error,
     play_completion_sound,
@@ -61,6 +63,8 @@ async def _approve_visual_target_from_ui(
     target_id: UUID,
     view_types: list[str],
 ) -> None:
+    if block_if_missing_api_keys_for_channels(("image",)):
+        return
     try:
         async with AsyncSessionLocal() as session:
             references = await approve_visual_target_and_generate_views(
@@ -154,6 +158,8 @@ async def _regenerate_visual_reference_from_ui(
     target_id: UUID,
     view_type: str,
 ) -> None:
+    if block_if_missing_api_keys_for_channels(("image",)):
+        return
     try:
         async with AsyncSessionLocal() as session:
             reference = await regenerate_visual_reference(
@@ -228,6 +234,8 @@ async def _generate_all_visual_prompts_with_progress_from_ui(
     *,
     progress_callback: VisualBatchProgressCallback | None = None,
 ) -> None:
+    if block_if_missing_api_keys_for_step("generate_visual_bible"):
+        return
     total_groups = len(VISUAL_PROMPT_GROUP_LABELS)
     try:
         await _emit_visual_batch_progress(
@@ -360,6 +368,8 @@ async def _approve_all_visual_targets_from_ui(
     *,
     progress_callback: VisualBatchProgressCallback | None = None,
 ) -> None:
+    if block_if_missing_api_keys_for_channels(("image",)):
+        return
     try:
         current_requests = requests or await _current_visual_batch_requests(project_id)
         if not current_requests:
@@ -497,6 +507,8 @@ async def _approve_video_prompts_from_ui(
     loading_dialog: Any | None = None,
     progress_callback: VisualBatchProgressCallback | None = None,
 ) -> None:
+    if block_if_missing_api_keys_for_step("video"):
+        return
     if loading_dialog is not None:
         loading_dialog.open()
     try:

@@ -1,10 +1,17 @@
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
 from nicegui import core, ui
 
+from app.config.api_keys import (
+    CreationChannel,
+    format_missing_api_key_message,
+    missing_api_key_messages_for_channels,
+    missing_api_key_messages_for_creation_step,
+)
 from app.visual_bible.prompts import default_views_for
 
 logger = logging.getLogger(__name__)
@@ -619,3 +626,19 @@ def show_ai_error_popup(
             if not is_deleted_ui_context_error(notify_exc):
                 raise
             logger.warning("Could not show AI error because the page context was removed.")
+
+
+def show_missing_api_keys_popup(messages: Iterable[str]) -> bool:
+    message = format_missing_api_key_message(messages)
+    if not message:
+        return False
+    show_ai_error_popup(message, title="Chaves de API ausentes")
+    return True
+
+
+def block_if_missing_api_keys_for_step(step: str) -> bool:
+    return show_missing_api_keys_popup(missing_api_key_messages_for_creation_step(step))
+
+
+def block_if_missing_api_keys_for_channels(channels: Iterable[CreationChannel]) -> bool:
+    return show_missing_api_keys_popup(missing_api_key_messages_for_channels(channels))

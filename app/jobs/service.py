@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.api_keys import require_api_keys_for_creation_step
 from app.core.enums import GenerationJobStatus, GenerationJobType
 from app.production.service import get_or_create_production_settings
 from app.projects.repository import ProjectRepository
@@ -126,6 +127,7 @@ async def create_or_resume_project_job(
     if project is None:
         raise ValueError("Projeto não encontrado.")
     normalized_step = normalize_step(step)
+    require_api_keys_for_creation_step(normalized_step)
     clean_payload = dict(payload or {})
     request_payload = {"step": normalized_step, "payload": clean_payload}
     idempotency_key = job_idempotency_key(project_id, normalized_step, clean_payload)

@@ -41,6 +41,7 @@ from app.ui.shared.page_config import (
     IDEA_COUNT_OPTIONS,
     IDEA_GENRES,
     STORY_DURATION_OPTIONS,
+    block_if_missing_api_keys_for_step,
     friendly_ai_error,
     play_completion_sound,
     safe_close_ui_element,
@@ -761,6 +762,8 @@ def register_home_pages(
                     )
 
                     async def generate() -> None:
+                        if block_if_missing_api_keys_for_step("ideas"):
+                            return
                         expected_count = int(idea_count_select.value or 10)
                         progress_state: dict[str, Any] = {
                             "completed": 0,

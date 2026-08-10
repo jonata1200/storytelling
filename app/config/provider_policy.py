@@ -56,6 +56,7 @@ def provider_display_name(provider: str) -> str:
     names = {
         "ollama_cloud": "Ollama Cloud",
         "google_ai": "Google AI",
+        "elevenlabs": "ElevenLabs",
     }
     return names.get(provider, provider)
 

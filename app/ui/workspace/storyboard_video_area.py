@@ -25,6 +25,8 @@ from app.storyboards.service import (
 from app.ui.shared.generation_progress import generation_progress_dialog, progress_ratio
 from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
+    block_if_missing_api_keys_for_channels,
+    block_if_missing_api_keys_for_step,
     friendly_ai_error,
     loading_status_message,
     safe_close_ui_element,
@@ -146,6 +148,8 @@ async def _enqueue_dubbing_from_ui(
     *,
     loading_dialog: Any | None = None,
 ) -> None:
+    if block_if_missing_api_keys_for_step("dubbing"):
+        return
     if loading_dialog is not None:
         loading_dialog.open()
     try:
@@ -165,6 +169,8 @@ async def _enqueue_finalization_from_ui(
     *,
     loading_dialog: Any | None = None,
 ) -> None:
+    if block_if_missing_api_keys_for_step("finalization"):
+        return
     if loading_dialog is not None:
         loading_dialog.open()
     try:
@@ -185,6 +191,8 @@ async def _refresh_dubbing_from_ui(
     *,
     loading_dialog: Any | None = None,
 ) -> None:
+    if block_if_missing_api_keys_for_channels(("dubbing",)):
+        return
     if loading_dialog is not None:
         loading_dialog.open()
     try:
