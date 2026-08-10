@@ -106,12 +106,10 @@ class Settings(BaseSettings):
         self.image_provider = self._optional_provider(
             self.image_provider,
             "IMAGE_PROVIDER",
-            legacy_default="google_ai",
         )
         self.video_provider = self._optional_provider(
             self.video_provider,
             "VIDEO_PROVIDER",
-            legacy_default="google_ai",
         )
         if self.app_env.lower() not in {"local", "development", "test"}:
             if self.app_secret_key == "change-me-in-development":
@@ -124,12 +122,9 @@ class Settings(BaseSettings):
     def _optional_provider(
         value: str | None,
         field_name: str,
-        *,
-        legacy_default: str = "ollama_cloud",
     ) -> str | None:
         if not str(value or "").strip():
             return None
-        _ = legacy_default
         return normalize_provider_name(value, field_name)
 
 

@@ -38,7 +38,7 @@ def build_idea_lab_prompt(
     retry_guidance: str = "",
     avoidance_memory: str = "",
 ) -> str:
-    duration = f"{IDEA_LAB_DURATION_MINUTES:g}"
+    duration = f"{coerce_duration_minutes(duration_minutes):g}"
     genre_instruction = (
         f"Gênero obrigatório: todas as ideias devem ser de {genre}."
         if genre
@@ -85,7 +85,7 @@ def build_idea_lab_prompt(
         "familiar, a menos que haja uma abordagem muito especifica.\n"
         "- O hook deve prender nos primeiros segundos; a premise deve explicar a "
         "historia em 2 ou 3 frases objetivas.\n"
-        "- Estruture a ideia para um roteiro curto de 5 minutos, com escala objetiva "
+        f"- Estruture a ideia para um roteiro curto de {duration} minutos, com escala objetiva "
         "e produção enxuta.\n\n"
         "Retorne somente JSON válido, sem markdown, sem comentarios e sem texto fora "
         'do objeto. O objeto raiz deve ter a chave "ideas". Cada item em "ideas" '
@@ -105,7 +105,7 @@ async def generate_freeform_ideas(
     theme: str = "",
     count: int = 10,
     genre: str = "",
-    target_duration_minutes: float = 5.0,
+    target_duration_minutes: float = IDEA_LAB_DURATION_MINUTES,
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     provider, model, configured_provider = configured_text_llm_provider(settings)
@@ -114,7 +114,7 @@ async def generate_freeform_ideas(
         provider=configured_provider,
     )
     count = max(1, min(10, int(count)))
-    duration = IDEA_LAB_DURATION_MINUTES
+    duration = coerce_duration_minutes(target_duration_minutes)
     return await _generate_freeform_idea_batch(
         provider,
         model,
@@ -129,7 +129,7 @@ async def generate_freeform_idea_batches(
     theme: str = "",
     count: int = 10,
     genre: str = "",
-    target_duration_minutes: float = 5.0,
+    target_duration_minutes: float = IDEA_LAB_DURATION_MINUTES,
     *,
     batch_size: int = IDEA_PROGRESS_BATCH_SIZE,
 ) -> AsyncIterator[list[dict[str, Any]]]:
@@ -140,7 +140,7 @@ async def generate_freeform_idea_batches(
         provider=configured_provider,
     )
     total = max(1, min(10, int(count)))
-    duration = IDEA_LAB_DURATION_MINUTES
+    duration = coerce_duration_minutes(target_duration_minutes)
     safe_batch_size = max(1, min(total, int(batch_size)))
     generated: list[dict[str, Any]] = []
     while len(generated) < total:
@@ -357,13 +357,12 @@ def delete_saved_idea(idea_id: str, path: Path = SAVED_IDEAS_PATH) -> None:
 
 def _normalize_idea(
     idea: dict[str, Any],
-    default_duration_minutes: float = 5.0,
+    default_duration_minutes: float = IDEA_LAB_DURATION_MINUTES,
     created_at: str | None = None,
 ) -> dict[str, Any]:
     normalized = normalize_story_idea_payload(
         idea, default_duration_minutes=default_duration_minutes
     )
-    normalized["duration_minutes"] = IDEA_LAB_DURATION_MINUTES
     normalized.setdefault("id", uuid.uuid4().hex)
     normalized.setdefault("created_at", created_at or datetime.now(UTC).isoformat())
     return normalized

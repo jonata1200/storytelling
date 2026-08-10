@@ -77,3 +77,20 @@ def test_provider_policy_supports_google_ai_media_provider() -> None:
     assert provider_model(settings, "google_ai", "image") == "gemini-3.1-flash-lite-image"
     assert provider_model(settings, "google_ai", "video") == "veo-3.1-lite-generate-preview"
     assert provider_requires_api_key(settings, "google_ai") is True
+
+
+def test_provider_requires_api_key_distinguishes_mock_and_unknown_providers() -> None:
+    settings = Settings(
+        text_provider="ollama_cloud",
+        ollama_cloud_api_key="ollama-secret",
+        google_ai_api_key="google-secret",
+        elevenlabs_api_key="eleven-secret",
+    )
+
+    assert provider_requires_api_key(settings, "ollama_cloud") is True
+    assert provider_requires_api_key(settings, "google_ai") is True
+    assert provider_requires_api_key(settings, "elevenlabs") is True
+    assert provider_requires_api_key(settings, "mock") is False
+    assert provider_requires_api_key(settings, "mock-video") is False
+    assert provider_requires_api_key(settings, "unknown_provider") is False
+    assert provider_requires_api_key(settings, "") is False

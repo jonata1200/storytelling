@@ -3,17 +3,7 @@ from uuid import UUID
 
 from nicegui import app as nicegui_app
 
-LEGACY_EXTERNAL_QUEUE_MESSAGE = "Etapa enfileirada para execução pelo " + "w" + "orker."
-INTERNAL_QUEUE_MESSAGE = "Etapa agendada para execução interna."
 HIDDEN_AI_ACTION_CHAT_EVENTS = {("create_initial_script", "queued")}
-
-
-def _normalize_legacy_ai_message(content: str) -> str:
-    return (
-        INTERNAL_QUEUE_MESSAGE
-        if content.strip() == LEGACY_EXTERNAL_QUEUE_MESSAGE
-        else content
-    )
 
 
 def assistant_initial_message(
@@ -78,7 +68,7 @@ def load_assistant_messages(
         if not isinstance(item, dict):
             continue
         role = str(item.get("role") or "")
-        content = _normalize_legacy_ai_message(str(item.get("content") or ""))
+        content = str(item.get("content") or "")
         if role == "assistant_pending":
             continue
         if is_legacy_assistant_greeting(role, content):
@@ -114,7 +104,7 @@ def clear_assistant_messages(project_id: UUID) -> None:
 
 
 def append_assistant_message_to_chat(project_id: UUID, content: str) -> None:
-    message = _normalize_legacy_ai_message(content).strip()
+    message = content.strip()
     if not message:
         return
     store = assistant_chat_store()
@@ -180,7 +170,7 @@ def sync_ai_action_events_to_chat(project_id: UUID, ai_action: dict[str, Any]) -
         event_id = str(event.get("id") or "")
         event_action = str(event.get("action") or "")
         event_status = str(event.get("status") or "")
-        message = _normalize_legacy_ai_message(str(event.get("message") or "")).strip()
+        message = str(event.get("message") or "").strip()
         if (
             not event_id
             or not event_action

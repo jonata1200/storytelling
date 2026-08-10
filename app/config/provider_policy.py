@@ -88,11 +88,10 @@ def provider_channel_base_url(settings: Any, provider: str, channel: ProviderCha
 
 
 def provider_requires_api_key(settings: Any, provider: str) -> bool:
-    if provider == "ollama_cloud":
-        return True
-    if provider == "google_ai":
-        return True
-    return True
+    provider_name = str(provider or "").strip().casefold()
+    if not provider_name or provider_name in MOCK_MODEL_IDS:
+        return False
+    return provider_name in SUPPORTED_AI_PROVIDERS or provider_name == "elevenlabs"
 
 
 def normalize_model_name(value: object, field_name: str = "modelo") -> str:

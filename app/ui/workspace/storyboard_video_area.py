@@ -1213,6 +1213,7 @@ def render_finalization_area(
     timeline_items = list(summary.get("timeline_items", []))
     export = summary.get("export")
     export_status = str(getattr(export, "status", "") or "").upper()
+    manifest_only = export is not None and export_status == "MANIFEST_ONLY"
     export_url = _export_asset_url(export) if export is not None else ""
     export_filename = _export_filename(export) if export is not None else "storytelling-final.mp4"
     clip_duration = sum(int(getattr(clip, "duration_seconds", 0) or 0) for clip in clips)
@@ -1254,11 +1255,20 @@ def render_finalization_area(
                     "Custo de IA previsto: US$ 0.000000. Esta etapa usa processamento local."
                 ).classes("text-xs text-[#8d938e]")
             ui.badge(
-                export_status or ("timeline pronta" if timeline is not None else "pendente")
+                "manifest sem vídeo"
+                if manifest_only
+                else (
+                    export_status
+                    or ("timeline pronta" if timeline is not None else "pendente")
+                )
             ).classes(
-                "bg-[#26301f] text-white"
-                if export_status == "RENDERED"
-                else "blue-status-badge bg-[#243342]"
+                "bg-[#4b2a2a] text-[#ffd4d4]"
+                if manifest_only
+                else (
+                    "bg-[#26301f] text-white"
+                    if export_status == "RENDERED"
+                    else "blue-status-badge bg-[#243342]"
+                )
             )
         ui.linear_progress(value=progress_value, show_value=False).classes("w-full mt-3").props(
             "instant-feedback rounded"
@@ -1270,7 +1280,7 @@ def render_finalization_area(
             with ui.row().classes("gap-2"):
                 if export_url:
                     ui.button(
-                        "Baixar final",
+                        "Baixar manifest (JSON)" if manifest_only else "Baixar final",
                         icon="download",
                         on_click=lambda url=export_url, filename=export_filename: ui.download(
                             url,
@@ -1289,6 +1299,18 @@ def render_finalization_area(
             ui.label(f"Arquivo: {getattr(export, 'output_uri', '')}").classes(
                 "text-xs text-[#8d938e] mt-2 break-all"
             )
+            if manifest_only:
+                with ui.element("div").classes(
+                    "border border-red-900 bg-red-950/40 rounded-xl px-4 py-3 mt-3"
+                ):
+                    ui.label(
+                        "Exportação incompleta: nenhum vídeo foi gerado. "
+                        "O arquivo disponível é um manifest JSON com os metadados da montagem."
+                    ).classes("text-sm font-semibold text-red-100")
+                    ui.label(
+                        "O FFmpeg não produziu o MP4 final. Verifique o motivo abaixo, "
+                        "corrija o ambiente e gere novamente."
+                    ).classes("text-xs text-red-200/80 mt-1")
             render_log = str(getattr(export, "render_log", "") or "").strip()
             if render_log:
                 ui.label(render_log[:420]).classes("text-xs text-[#8d938e] mt-1")

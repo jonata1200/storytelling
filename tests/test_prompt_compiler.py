@@ -117,6 +117,75 @@ def test_creative_narrative_tasks_do_not_allow_runtime_mock_fallback() -> None:
     assert generation_service.allow_runtime_mock_fallback("director_agent_chat", True) is False
 
 
+class _FakePromptScalars:
+    def __init__(self, template: object | None) -> None:
+        self._template = template
+
+    def first(self) -> object | None:
+        return self._template
+
+
+class _FakePromptResult:
+    def __init__(self, template: object | None) -> None:
+        self._scalars = _FakePromptScalars(template)
+
+    def scalars(self) -> _FakePromptScalars:
+        return self._scalars
+
+
+class _FakePromptSession:
+    def __init__(self, existing: object | None = None) -> None:
+        self._existing = existing
+        self.added: list[object] = []
+        self.flushed = False
+
+    async def execute(self, statement: object) -> _FakePromptResult:
+        return _FakePromptResult(self._existing)
+
+    def add(self, item: object) -> None:
+        self.added.append(item)
+
+    async def flush(self) -> None:
+        self.flushed = True
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_prompt_template_creates_fallback_for_unknown_task() -> None:
+    session = _FakePromptSession()
+
+    template = await generation_service.get_or_create_prompt_template(
+        session,  # type: ignore[arg-type]
+        "task_desconhecida",
+    )
+
+    assert template.task == "task_desconhecida"
+    assert template.template_text == "{prompt}"
+    assert template.active is True
+    assert session.flushed is True
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_prompt_template_keeps_persisted_unknown_task() -> None:
+    existing = SimpleNamespace(
+        id=uuid4(),
+        version=3,
+        name="Custom Name",
+        template_text="texto persistido antigo",
+        output_schema={"type": "object"},
+        active=True,
+    )
+    session = _FakePromptSession(existing=existing)
+
+    template = await generation_service.get_or_create_prompt_template(
+        session,  # type: ignore[arg-type]
+        "task_legada",
+    )
+
+    assert template is existing
+    assert template.template_text == "texto persistido antigo"
+    assert session.flushed is False
+
+
 @pytest.mark.asyncio
 async def test_director_generation_reports_provider_runtime_error_without_mock_fallback(
     monkeypatch: pytest.MonkeyPatch,

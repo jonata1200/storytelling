@@ -21,10 +21,6 @@ from app.ui.workspace.storyboard_video_area import (
     render_video_area,
 )
 
-LEGACY_EXTERNAL_QUEUE_MESSAGE = "Etapa enfileirada para execução pelo " + "w" + "orker."
-INTERNAL_QUEUE_MESSAGE = "Etapa agendada para execução interna."
-
-
 INITIAL_SCRIPT_PROGRESS_KEYS = ("scripts", "scenes", "shots", "characters", "frames", "clips")
 
 
@@ -39,9 +35,8 @@ def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) ->
     if str(ai_action.get("status") or "") != "failed":
         return
     action = str(ai_action.get("action") or "ai_action")
-    updated_at = str(ai_action.get("updated_at") or "")
     error = str(ai_action.get("error") or ai_action.get("message") or "").strip()
-    notification_key = f"{project_id}:{action}:{updated_at}:{error}"
+    notification_key = f"{project_id}:{action}:{error}"
     store = nicegui_app.storage.user.setdefault("seen_ai_error_notifications", [])
     seen = [str(item) for item in store if isinstance(item, str)]
     if notification_key in seen:
@@ -101,10 +96,16 @@ def _sync_ai_action_events_to_chat(project_id: UUID, summary_or_action: dict[str
 
 
 def _positive_count(value: object) -> bool:
-    try:
-        return int(value or 0) > 0
-    except (TypeError, ValueError):
-        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value > 0
+    if isinstance(value, str):
+        try:
+            return int(value) > 0
+        except ValueError:
+            return False
+    return False
 
 
 def _assistant_panel(project_id: UUID, active: str, summary: dict[str, Any]) -> None:
@@ -137,18 +138,13 @@ def _project_ai_action(summary: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(action, dict):
         return {}
     normalized = dict(action)
-    if normalized.get("message") == LEGACY_EXTERNAL_QUEUE_MESSAGE:
-        normalized["message"] = INTERNAL_QUEUE_MESSAGE
     raw_events = normalized.get("events")
     if isinstance(raw_events, list):
         events: list[dict[str, Any]] = []
         for event in raw_events:
             if not isinstance(event, dict):
                 continue
-            clean_event = dict(event)
-            if clean_event.get("message") == LEGACY_EXTERNAL_QUEUE_MESSAGE:
-                clean_event["message"] = INTERNAL_QUEUE_MESSAGE
-            events.append(clean_event)
+            events.append(dict(event))
         normalized["events"] = events
     return normalized
 

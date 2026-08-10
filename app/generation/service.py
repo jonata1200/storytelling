@@ -412,11 +412,16 @@ async def get_or_create_prompt_template(session: AsyncSession, task: str) -> Pro
         .where(PromptTemplate.task == task, PromptTemplate.active.is_(True))
         .order_by(PromptTemplate.version.desc())
     )
+    default_text = DEFAULT_TEMPLATES.get(task)
     template = result.scalars().first()
     if template is not None:
         default_name = DEFAULT_TEMPLATE_NAMES.get(task, task.replace("_", " ").title())
-        if template.name == default_name and template.template_text != DEFAULT_TEMPLATES[task]:
-            template.template_text = DEFAULT_TEMPLATES[task]
+        if (
+            default_text is not None
+            and template.name == default_name
+            and template.template_text != default_text
+        ):
+            template.template_text = default_text
             template.output_schema = {}
             template.version += 1
             await session.flush()
@@ -426,7 +431,7 @@ async def get_or_create_prompt_template(session: AsyncSession, task: str) -> Pro
         name=DEFAULT_TEMPLATE_NAMES.get(task, task.replace("_", " ").title()),
         task=task,
         version=1,
-        template_text=DEFAULT_TEMPLATES[task],
+        template_text=default_text or "{prompt}",
         output_schema={},
         active=True,
     )
