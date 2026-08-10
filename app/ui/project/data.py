@@ -2,7 +2,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset
@@ -80,18 +80,55 @@ async def active_many(
     return list(result.scalars())
 
 
-async def active_count(session: AsyncSession, model: type[Any], project_id: UUID) -> int:
-    statement = (
-        select(func.count())
-        .select_from(model)
-        .join(Artifact, model.artifact_id == Artifact.id)
-        .where(
-            model.project_id == project_id,
-            Artifact.status.notin_(INACTIVE_DERIVED_STATUSES),
+def project_counts_statement(project_id: UUID) -> Any:
+    """Todas as contagens do workspace em uma única query agregada (UNION ALL)."""
+
+    def _plain(label: str, model: type[Any]) -> Any:
+        return (
+            select(literal(label).label("label"), func.count().label("value"))
+            .select_from(model)
+            .where(model.project_id == project_id)
         )
+
+    def _active(label: str, model: type[Any]) -> Any:
+        return (
+            select(literal(label).label("label"), func.count().label("value"))
+            .select_from(model)
+            .join(Artifact, model.artifact_id == Artifact.id)
+            .where(
+                model.project_id == project_id,
+                Artifact.status.notin_(INACTIVE_DERIVED_STATUSES),
+            )
+        )
+
+    return union_all(
+        _plain("briefings", Briefing),
+        _plain("ideas", StoryIdea),
+        _plain("scripts", Script),
+        _active("scenes", Scene),
+        _active("shots", Shot),
+        _active("characters", Character),
+        _active("locations", Location),
+        _active("props", Prop),
+        _active("visual_refs", VisualReference),
+        _active("frames", StoryboardFrame),
+        _plain("animatics", Animatic),
+        _plain("clips", VideoClip),
+        _plain("exports", Export),
+        _plain("dubbing_jobs", DubbingJob),
+        _plain("qa_issues", ContinuityIssue),
+        select(literal("stale_artifacts").label("label"), func.count().label("value"))
+        .select_from(Artifact)
+        .where(
+            Artifact.project_id == project_id,
+            Artifact.status == ArtifactStatus.STALE,
+        ),
     )
-    value = await session.scalar(statement)
-    return int(value or 0)
+
+
+async def project_counts(session: AsyncSession, project_id: UUID) -> dict[str, int]:
+    result = await session.execute(project_counts_statement(project_id))
+    return {str(label): int(value) for label, value in result.all()}
 
 
 async def project_cards() -> list[Project]:
@@ -102,27 +139,27 @@ async def project_cards() -> list[Project]:
         return []
 
 
+def dashboard_metrics_statement() -> Any:
+    """Métricas do dashboard em uma única query agregada (UNION ALL)."""
+    return union_all(
+        select(literal("Projetos").label("metric"), func.count()).select_from(Project),
+        select(literal("Artefatos").label("metric"), func.count()).select_from(Artifact),
+        select(literal("Jobs").label("metric"), func.count()).select_from(GenerationJob),
+        select(literal("Exports").label("metric"), func.count()).select_from(Export),
+        select(literal("Alertas QA").label("metric"), func.count())
+        .select_from(ContinuityIssue)
+        .where(ContinuityIssue.accepted.is_(False)),
+    )
+
+
 async def dashboard_metrics() -> dict[str, str]:
     try:
         async with AsyncSessionLocal() as session:
-            project_count = await scalar_count(session, Project)
-            artifact_count = await scalar_count(session, Artifact)
-            job_count = await scalar_count(session, GenerationJob)
-            open_issues = await session.scalar(
-                select(func.count())
-                .select_from(ContinuityIssue)
-                .where(ContinuityIssue.accepted.is_(False))
-            )
-            exports = await scalar_count(session, Export)
+            metrics = await session.execute(dashboard_metrics_statement())
+            values = {str(row[0]): str(int(row[1])) for row in metrics.all()}
     except Exception as exc:
         return {"Banco": "indisponível", "Detalhe": type(exc).__name__}
-    return {
-        "Projetos": str(project_count),
-        "Artefatos": str(artifact_count),
-        "Jobs": str(job_count),
-        "Alertas QA": str(open_issues or 0),
-        "Exports": str(exports),
-    }
+    return values
 
 
 async def project_summary(project_id: UUID, section: str = "script") -> dict[str, Any] | None:
@@ -267,34 +304,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
         return {
             "project": project,
             "production_settings": production_settings,
-            "counts": {
-                "briefings": await scalar_count(session, Briefing, project_id),
-                "ideas": await scalar_count(session, StoryIdea, project_id),
-                "scripts": await scalar_count(session, Script, project_id),
-                "scenes": await active_count(session, Scene, project_id),
-                "shots": await active_count(session, Shot, project_id),
-                "characters": await active_count(session, Character, project_id),
-                "locations": await active_count(session, Location, project_id),
-                "props": await active_count(session, Prop, project_id),
-                "visual_refs": await active_count(session, VisualReference, project_id),
-                "frames": await active_count(session, StoryboardFrame, project_id),
-                "animatics": await scalar_count(session, Animatic, project_id),
-                "clips": await scalar_count(session, VideoClip, project_id),
-                "exports": await scalar_count(session, Export, project_id),
-                "dubbing_jobs": await scalar_count(session, DubbingJob, project_id),
-                "qa_issues": await scalar_count(session, ContinuityIssue, project_id),
-                "stale_artifacts": int(
-                    await session.scalar(
-                        select(func.count())
-                        .select_from(Artifact)
-                        .where(
-                            Artifact.project_id == project_id,
-                            Artifact.status == ArtifactStatus.STALE,
-                        )
-                    )
-                    or 0
-                ),
-            },
+            "counts": await project_counts(session, project_id),
             "cost_total": str(cost_summary.total_cost or Decimal("0.000000")),
             "cost_summary": cost_summary,
             "quality": latest_quality,

@@ -224,3 +224,57 @@ def test_validate_asset_uri_size_raises_for_large_local_asset(
 
     with pytest.raises(ValueError, match="excede o limite"):
         storage_service.validate_asset_uri_size(asset.as_posix())
+
+
+@pytest.mark.asyncio
+async def test_list_orphan_storage_files_scopes_scan_to_project_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage_root = tmp_path / "storage"
+    project_id = uuid4()
+    project_dir = storage_root / "visual" / str(project_id)
+    project_dir.mkdir(parents=True)
+    (project_dir / "orphan.png").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(storage_service, "get_settings", lambda: _settings(storage_root))
+    scanned_roots: list[Path] = []
+
+    def fake_orphan_files(referenced_paths: Any, root: Path | None = None) -> list[Any]:
+        scanned_roots.append(root or storage_root)
+        return []
+
+    monkeypatch.setattr(storage_service, "orphan_storage_files", fake_orphan_files)
+    session = _FakeAssetSession([])
+
+    await storage_service.list_orphan_storage_files(
+        cast(AsyncSession, session),
+        project_id=project_id,
+    )
+
+    # Com project_id, o scan não varre a raiz inteira — só o diretório do projeto.
+    assert scanned_roots == [project_dir.resolve()]
+
+
+@pytest.mark.asyncio
+async def test_list_orphan_storage_files_finds_project_orphans_without_global_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage_root = tmp_path / "storage"
+    project_id = uuid4()
+    other_project_id = uuid4()
+    (storage_root / "visual" / str(project_id)).mkdir(parents=True)
+    (storage_root / "visual" / str(other_project_id)).mkdir(parents=True)
+    orphan = storage_root / "visual" / str(project_id) / "orphan.png"
+    other_orphan = storage_root / "visual" / str(other_project_id) / "other.png"
+    orphan.write_text("x", encoding="utf-8")
+    other_orphan.write_text("y", encoding="utf-8")
+    monkeypatch.setattr(storage_service, "get_settings", lambda: _settings(storage_root))
+    session = _FakeAssetSession([])
+
+    files = await storage_service.list_orphan_storage_files(
+        cast(AsyncSession, session),
+        project_id=project_id,
+    )
+
+    assert [item.path for item in files] == [orphan.resolve().as_posix()]

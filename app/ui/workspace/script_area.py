@@ -30,6 +30,7 @@ from app.ui.shared.page_config import (
     loading_status_message,
     play_completion_sound,
     safe_close_ui_element,
+    script_progress_poll_interval,
 )
 
 LoadingDialogFactory = Callable[[str, Any], Any]
@@ -209,6 +210,7 @@ async def _update_script_generation_progress(
     project_id: UUID,
     loading_dialog: Any,
     update_progress: Callable[[int, int, str], None],
+    attempt: int = 0,
 ) -> None:
     completed, total, detail, terminal = await _script_generation_progress_state(project_id)
     update_progress(completed, total, detail)
@@ -217,6 +219,17 @@ async def _update_script_generation_progress(
         if completed >= total:
             play_completion_sound()
         ui.navigate.reload()
+        return
+    ui.timer(
+        script_progress_poll_interval(attempt + 1),
+        lambda: _update_script_generation_progress(
+            project_id,
+            loading_dialog,
+            update_progress,
+            attempt + 1,
+        ),
+        once=True,
+    )
 
 
 async def save_script_from_ui(
@@ -392,6 +405,7 @@ def render_script_area(
                 loading_dialog,
                 update_script_progress,
             ),
+            once=True,
         )
     edit_dialog = None
     if script is not None:
@@ -482,6 +496,7 @@ def render_script_area(
                             retry_loading_dialog,
                             update_retry_progress,
                         ),
+                        once=True,
                     )
 
                 with ui.element("div").classes(

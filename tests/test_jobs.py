@@ -180,3 +180,66 @@ async def test_scenes_job_uses_latest_script(monkeypatch: pytest.MonkeyPatch) ->
 
     assert result == {"script_id": str(script_id), "scene_count": 2}
     assert calls == ["scenes"]
+
+
+@pytest.mark.asyncio
+async def test_set_project_job_action_dedupes_identical_consecutive_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = SimpleNamespace(metadata_json={})
+    fetched: list[UUID] = []
+
+    async def fake_get_or_create(session: Any, project_id: UUID) -> Any:
+        fetched.append(project_id)
+        return settings
+
+    monkeypatch.setattr(
+        jobs_service,
+        "get_or_create_production_settings",
+        fake_get_or_create,
+    )
+
+    class _FlushSession:
+        def __init__(self) -> None:
+            self.flushes = 0
+
+        async def flush(self) -> None:
+            self.flushes += 1
+
+    flush_session = _FlushSession()
+    session = cast(AsyncSession, flush_session)
+    job = cast(
+        Any,
+        SimpleNamespace(
+            id=uuid4(),
+            project_id=uuid4(),
+            request_payload={"step": "script"},
+        ),
+    )
+
+    await jobs_service._set_project_job_action(
+        session,
+        job,
+        status="running",
+        message="Executando script.",
+    )
+    first_updated_at = settings.metadata_json["ai_action"]["updated_at"]
+    await jobs_service._set_project_job_action(
+        session,
+        job,
+        status="running",
+        message="Executando script.",
+    )
+
+    action = settings.metadata_json["ai_action"]
+    assert len(action["events"]) == 1  # evento identico nao duplica o historico
+    assert len(fetched) == 1  # settings buscadas apenas uma vez por execução
+    assert action["updated_at"] >= first_updated_at  # updated_at mantido fresco
+
+    await jobs_service._set_project_job_action(
+        session,
+        job,
+        status="running",
+        message="Novo progresso.",
+    )
+    assert len(settings.metadata_json["ai_action"]["events"]) == 2

@@ -22,6 +22,7 @@ STORY_DURATION_OPTIONS = [5]
 IDEA_COUNT_OPTIONS = list(range(1, 11))
 BLOCKING_DIALOG_PROPS = "persistent no-esc-dismiss no-backdrop-dismiss"
 UI_GENERATION_TIMEOUT_SECONDS = 300
+UI_SCRIPT_PROGRESS_POLL_INTERVALS = (2.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0)
 SETTINGS_DATA_URL = "/settings?tab=data"
 IDEA_TITLE_PREFIX_RE = re.compile(r"^\s*ideia\s+\d+\s*[:-]\s*", re.IGNORECASE)
 
@@ -552,6 +553,12 @@ def safe_close_ui_element(element: object) -> None:
         if not is_deleted_ui_context_error(exc):
             raise
         logger.warning("Could not close UI element because the page context was removed.")
+
+
+def script_progress_poll_interval(attempt: int) -> float:
+    """Intervalo do proximo poll de progresso da UI, com backoff progressivo."""
+    intervals = UI_SCRIPT_PROGRESS_POLL_INTERVALS
+    return intervals[min(max(attempt, 0), len(intervals) - 1)]
 
 
 def safe_notify(message: str, **kwargs: Any) -> None:

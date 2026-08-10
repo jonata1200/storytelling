@@ -739,8 +739,8 @@ async def test_retry_initial_script_opens_loading_dialog_and_watches_status(
     async def fake_generate_initial_script_in_background(requested_project_id: UUID) -> None:
         background_calls.append(requested_project_id)
 
-    def fake_timer(interval: float, callback: object) -> None:
-        timers.append({"interval": interval, "callback": callback})
+    def fake_timer(interval: float, callback: object, once: bool = False) -> None:
+        timers.append({"interval": interval, "callback": callback, "once": once})
 
     def fake_create_task(coro: object) -> object:
         created_tasks.append(coro)

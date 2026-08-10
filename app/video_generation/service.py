@@ -227,11 +227,6 @@ async def _video_provider_for_project(
     raise ValueError(f"Provider de vídeo não suportado: {provider_name}. Use Google AI.")
 
 
-async def _asset_storage_uri(session: AsyncSession, asset_id: UUID) -> str | None:
-    asset = await session.get(Asset, asset_id)
-    return asset.storage_uri if asset is not None else None
-
-
 def _storyboard_canonical_reference_uris(frame: StoryboardFrame) -> list[str]:
     # O Veo exige clipes de 8s quando referenceImages são usadas; para manter a
     # duração planejada, só anexamos referências extras em planos já compatíveis.
@@ -522,12 +517,20 @@ async def _generate_video_clips_concurrent(
     production_settings = await get_or_create_production_settings(session, project_id)
     production_metadata = production_settings.metadata_json or {}
     shot_context = await _shot_context_for_frames(session, frames)
+    frame_asset_ids = {frame.asset_id for frame in frames if frame.asset_id is not None}
+    assets_by_id: dict[UUID, Asset] = {}
+    if frame_asset_ids:
+        asset_result = await session.execute(
+            select(Asset).where(Asset.id.in_(frame_asset_ids))
+        )
+        assets_by_id = {asset.id: asset for asset in asset_result.scalars()}
     billable_seconds = 0
     jobs: list[GenerationJob] = []
     clips: list[VideoClip] = []
     planned_jobs: list[_PlannedVideoJob] = []
     for frame in frames:
-        source_image_uri = await _asset_storage_uri(session, frame.asset_id)
+        source_asset = assets_by_id.get(frame.asset_id) if frame.asset_id is not None else None
+        source_image_uri = source_asset.storage_uri if source_asset is not None else None
         reference_uris = (
             _storyboard_canonical_reference_uris(frame)
             if include_canonical_references

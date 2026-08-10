@@ -137,6 +137,18 @@ def orphan_storage_files(
     return [item for item in iter_local_storage_files(resolved_root) if item.path not in referenced]
 
 
+def _project_scan_dirs(root: Path, project_id: UUID) -> list[Path]:
+    """Diretórios do projeto no layout local: root/<tipo>/<project_id>."""
+    if not root.is_dir():
+        return []
+    project_name = str(project_id)
+    return [
+        (kind_dir / project_name).resolve()
+        for kind_dir in root.iterdir()
+        if kind_dir.is_dir() and (kind_dir / project_name).is_dir()
+    ]
+
+
 def _normalize_kind(kind: AssetKind | str | None) -> AssetKind | None:
     if kind is None or kind == "":
         return None
@@ -313,7 +325,13 @@ async def list_orphan_storage_files(
     root = storage_root()
     all_assets = await _asset_rows(session)
     normalized_kind = _normalize_kind(kind)
-    candidates = orphan_storage_files(_referenced_paths(all_assets, root), root)
+    referenced_paths = _referenced_paths(all_assets, root)
+    if project_id is not None:
+        candidates: list[LocalStorageFile] = []
+        for project_dir in _project_scan_dirs(root, project_id):
+            candidates.extend(orphan_storage_files(referenced_paths, project_dir))
+    else:
+        candidates = orphan_storage_files(referenced_paths, root)
     return [
         _storage_file_read(item)
         for item in candidates

@@ -189,6 +189,7 @@ from app.ui.shared.page_config import (
     LoadingStatus,
     ProductionStep,
     safe_close_ui_element,
+    script_progress_poll_interval,
     step_loading_copy,
 )
 from app.ui.shared.page_config import IDEA_COUNT_OPTIONS as IDEA_COUNT_OPTIONS  # noqa: F401
@@ -362,10 +363,24 @@ async def _generate_initial_script(
     return script
 
 
-async def _close_loading_dialog_when_script_ready(project_id: UUID, loading_dialog: Any) -> None:
+async def _close_loading_dialog_when_script_ready(
+    project_id: UUID,
+    loading_dialog: Any,
+    attempt: int = 0,
+) -> None:
     ready = await _reload_project_when_script_ready(project_id)
     if ready and hasattr(loading_dialog, "close"):
         safe_close_ui_element(loading_dialog)
+        return
+    ui.timer(
+        script_progress_poll_interval(attempt + 1),
+        lambda: _close_loading_dialog_when_script_ready(
+            project_id,
+            loading_dialog,
+            attempt + 1,
+        ),
+        once=True,
+    )
 
 
 async def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -> None:
@@ -379,7 +394,11 @@ async def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -
             action="create_initial_script",
         )
     asyncio.create_task(_generate_initial_script_in_background(project_id))
-    ui.timer(5.0, lambda: _close_loading_dialog_when_script_ready(project_id, loading_dialog))
+    ui.timer(
+        5.0,
+        lambda: _close_loading_dialog_when_script_ready(project_id, loading_dialog),
+        once=True,
+    )
     ui.notify("Retomando a criação do roteiro.", color="positive")
 
 

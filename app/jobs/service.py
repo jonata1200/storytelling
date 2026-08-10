@@ -84,7 +84,29 @@ async def _set_project_job_action(
     message: str,
     error: str | None = None,
 ) -> None:
-    settings = await get_or_create_production_settings(session, job.project_id)
+    # Nota: o cache assume uma sessao por ciclo de vida do job (o runner recarrega o
+    # job em uma sessao nova a cada execucao), entao o objeto de settings nunca cruza
+    # sessões. Se isso mudar, remova o cache e busque por job em cada chamada.
+    settings = getattr(job, "_project_action_settings", None)
+    if settings is None:
+        settings = await get_or_create_production_settings(session, job.project_id)
+        cast(Any, job)._project_action_settings = settings
+    last_action = getattr(job, "_project_action_last", None)
+    if (
+        last_action is not None
+        and last_action["status"] == status
+        and last_action["message"] == message
+        and last_action["error"] == error
+    ):
+        # Evento identico ao anterior: nao duplica o historico, mas mantem o
+        # updated_at fresco para o timeout da UI nao disparar por engano.
+        metadata = dict(settings.metadata_json or {})
+        previous_action = metadata.get("ai_action")
+        if isinstance(previous_action, dict):
+            previous_action["updated_at"] = datetime.now(UTC).isoformat()
+            settings.metadata_json = metadata
+            await session.flush()
+        return
     metadata = dict(settings.metadata_json or {})
     action = str(job.request_payload.get("step") or "project_step")
     previous_action = metadata.get("ai_action")
@@ -111,6 +133,11 @@ async def _set_project_job_action(
         "events": events[-60:],
     }
     settings.metadata_json = metadata
+    cast(Any, job)._project_action_last = {
+        "status": status,
+        "message": message,
+        "error": error,
+    }
     await session.flush()
 
 
