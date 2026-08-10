@@ -13,6 +13,7 @@ from app.costs.service import estimate_operation_cost
 from app.database.session import AsyncSessionLocal
 from app.dubbing.service import refresh_dubbing_job
 from app.jobs.service import enqueue_project_step
+from app.projects.versioning import resolve_stale_artifacts_after_regeneration
 from app.storyboards.service import (
     approve_storyboard_prompt,
     approve_storyboard_prompts,
@@ -22,6 +23,7 @@ from app.storyboards.service import (
     storyboard_prompts_need_approval,
     update_storyboard_prompt,
 )
+from app.storytelling.service import regenerate_scenes_and_shots
 from app.ui.shared.generation_progress import generation_progress_dialog, progress_ratio
 from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
@@ -141,6 +143,34 @@ async def _generate_storyboards_from_ui(
         loading_dialog=loading_dialog,
         progress_callback=progress_callback,
     )
+
+
+async def _prepare_storyboard_scene_plan_from_ui(
+    project_id: UUID,
+    script_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+) -> None:
+    if block_if_missing_api_keys_for_step("generate_scenes_and_shots"):
+        if loading_dialog is not None:
+            safe_close_ui_element(loading_dialog)
+        return
+    if loading_dialog is not None:
+        loading_dialog.open()
+    try:
+        async with AsyncSessionLocal() as session:
+            scenes = await regenerate_scenes_and_shots(session, project_id, script_id)
+            if scenes is None:
+                ui.notify("Não foi possível criar cenas e planos para o storyboard.", color="negative")
+                return
+            await resolve_stale_artifacts_after_regeneration(session, project_id)
+        ui.notify("Cenas e planos preparados para o storyboard.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            safe_close_ui_element(loading_dialog)
 
 
 async def _enqueue_dubbing_from_ui(
@@ -436,12 +466,54 @@ def render_storyboard_area(
             now="Agora: criando os quadros aprovados do storyboard.",
         ),
     )
+    needs_scene_plan = (
+        script_id is not None
+        and not prompt_previews
+        and not summary["frames"]
+        and (
+            int(summary["counts"].get("scenes") or 0) <= 0
+            or int(summary["counts"].get("shots") or 0) <= 0
+        )
+    )
+    if needs_scene_plan and isinstance(script_id, UUID):
+        scene_plan_dialog, _update_scene_plan_progress = generation_progress_dialog(
+            "Preparando storyboard",
+            1,
+            "etapa",
+            loading_status_message(
+                "storyboard",
+                summary["counts"],
+                now="Agora: separando o roteiro em cenas e planos.",
+            ),
+        )
+        scene_plan_dialog.open()
+        ui.timer(
+            0.1,
+            lambda: _prepare_storyboard_scene_plan_from_ui(
+                project_id,
+                script_id,
+                loading_dialog=scene_plan_dialog,
+            ),
+            once=True,
+        )
+        section_title(
+            "Storyboard",
+            "Preparando cenas e planos a partir do roteiro atual.",
+            None,
+            None,
+        )
+        with ui.element("div").classes(
+            "w-full border border-blue-800 bg-blue-950/40 rounded-xl px-4 py-3"
+        ):
+            with ui.row().classes("w-full items-center gap-3"):
+                ui.spinner(size="sm").classes("text-blue-400")
+                ui.label("A IA está preparando a estrutura do storyboard.").classes(
+                    "text-sm text-blue-200"
+                )
+        return
     prompt_dialog: Any | None = None
     if script_id is not None and prompt_previews:
         active_script_id: UUID = script_id
-        total_duration = sum(
-            int(preview.get('duration_seconds') or 0) for preview in prompt_previews
-        )
         with (
             ui.dialog().props(BLOCKING_DIALOG_PROPS) as prompt_dialog,
             ui.card().classes("entity-card rounded-2xl p-6 w-[min(680px,94vw)] max-h-[80vh]"),

@@ -76,9 +76,9 @@ from app.storyboards.service import (
 )
 from app.storytelling.models import Briefing, Script, StoryIdea
 from app.storytelling.service import (
-    generate_scenes_and_shots,
     generate_script,
     generate_story_ideas,
+    mark_scene_plan_stale,
     regenerate_scenes_and_shots,
     revise_script,
 )
@@ -146,14 +146,7 @@ async def _ensure_script_pipeline(
 
     script = await _latest(session, Script, project_id)
     if script is not None and not force:
-        scene_count = await _active_scene_count_for_script(session, project_id, script.id)
-        if scene_count == 0:
-            await _emit_progress(progress, "O roteiro ja existe. Vou dividir em cenas e planos.")
-            scenes = await generate_scenes_and_shots(session, project_id, script.id)
-            if scenes is None:
-                return script, "O roteiro existe, mas não consegui criar cenas e planos.", True
-            return script, "O roteiro ja existia; criei cenas e planos para ele.", True
-        return script, "O projeto ja tem roteiro e cenas.", False
+        return script, "O projeto ja tem roteiro.", False
 
     idea = await _latest(session, StoryIdea, project_id)
     if idea is None:
@@ -178,21 +171,16 @@ async def _ensure_script_pipeline(
     script = await generate_script(session, project_id, idea.id)
     if script is None:
         return None, "Não consegui gerar o roteiro para este projeto.", False
-    await _emit_progress(progress, "Roteiro criado. Agora vou separar em cenas e planos.")
-    scenes = await generate_scenes_and_shots(session, project_id, script.id)
-    if scenes is None:
-        return script, "Roteiro criado, mas as cenas e planos não foram gerados.", True
     if force:
-        await resolve_stale_artifacts_after_regeneration(session, project_id)
         return (
             script,
             (
-                "Roteiro completo gerado novamente e dividido em cenas e planos. "
-                "Biblioteca Visual não foi atualizada automaticamente."
+                "Roteiro completo gerado novamente. Cenas e planos serão recriados "
+                "quando você abrir ou solicitar o Storyboard."
             ),
             True,
         )
-    return script, "Roteiro criado e dividido em cenas e planos.", True
+    return script, "Roteiro criado.", True
 
 
 async def _ensure_visual_pipeline(
@@ -305,6 +293,21 @@ async def _ensure_storyboard_pipeline(
             changed,
         )
 
+    scene_plan_created = await _ensure_storyboard_scene_plan(
+        session,
+        project_id,
+        script.id,
+        progress,
+    )
+    if scene_plan_created is None:
+        return ProjectChatResult(
+            "Não consegui criar cenas e planos para preparar o storyboard.",
+            "generate_storyboard",
+            changed,
+            True,
+        )
+    changed = changed or scene_plan_created
+
     if (
         scene_number is not None
         or force
@@ -382,6 +385,25 @@ async def _ensure_storyboard_pipeline(
         "generate_storyboard",
         changed,
     )
+
+
+async def _ensure_storyboard_scene_plan(
+    session: AsyncSession,
+    project_id: UUID,
+    script_id: UUID,
+    progress: ProgressCallback | None = None,
+) -> bool | None:
+    if await _active_scene_count_for_script(session, project_id, script_id) > 0:
+        return False
+    await _emit_progress(
+        progress,
+        "Vou separar o roteiro em cenas e planos para preparar o storyboard.",
+    )
+    scenes = await regenerate_scenes_and_shots(session, project_id, script_id)
+    if scenes is None:
+        return None
+    await resolve_stale_artifacts_after_regeneration(session, project_id)
+    return True
 
 
 async def _ensure_video_pipeline(
@@ -755,29 +777,23 @@ async def handle_project_chat(
                 changed,
                 True,
             )
-        await _emit_progress(progress, "Vou recriar cenas e planos a partir do roteiro revisado.")
-        scenes = await regenerate_scenes_and_shots(session, project_id, revised.id)
-        if scenes is None:
-            return ProjectChatResult(
-                "Roteiro revisado, mas não consegui recriar cenas e planos.",
-                action,
-                True,
-                True,
-            )
-        await resolve_stale_artifacts_after_regeneration(session, project_id)
+        await mark_scene_plan_stale(session, project_id, revised.id)
+        commit = getattr(session, "commit", None)
+        if callable(commit):
+            await commit()
         if _requests_specific_script_scenes(message):
             return ProjectChatResult(
                 (
-                    "Cena(s) revisada(s) e cenas/planos recriados. "
-                    "Biblioteca Visual não foi atualizada automaticamente; peça quando quiser."
+                    "Cena(s) revisada(s). Cenas e planos serão recriados quando "
+                    "você abrir ou solicitar o Storyboard."
                 ),
                 action,
                 True,
             )
         return ProjectChatResult(
             (
-                "Roteiro revisado e cenas/planos recriados. "
-                "Biblioteca Visual não foi atualizada automaticamente; peça quando quiser."
+                "Roteiro revisado. Cenas e planos serão recriados quando você "
+                "abrir ou solicitar o Storyboard."
             ),
             action,
             True,

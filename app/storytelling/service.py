@@ -594,6 +594,12 @@ async def _mark_existing_scene_plan_stale(
     await session.flush()
 
 
+async def mark_scene_plan_stale(
+    session: AsyncSession, project_id: UUID, script_id: UUID
+) -> None:
+    await _mark_existing_scene_plan_stale(session, project_id, script_id)
+
+
 async def regenerate_scenes_and_shots(
     session: AsyncSession, project_id: UUID, script_id: UUID
 ) -> list[Scene] | None:

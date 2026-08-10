@@ -43,20 +43,17 @@ def step_ready(step_key: str, counts: dict[str, int]) -> bool:
 
 def workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool, str]:
     script_ready = step_ready("script", counts)
-    scenes_ready = step_ready("scenes", counts)
     assets_ready = step_ready("visual", counts)
     storyboard_ready = step_ready("storyboard", counts)
     if section == "script":
         return True, ""
     if section == "assets":
         if not script_ready:
-            return False, "Crie o roteiro antes de acessar personagens."
+            return False, "Crie o roteiro antes de acessar a Biblioteca Visual."
         return True, ""
     if section == "storyboard":
         if not script_ready:
             return False, "Crie o roteiro antes de acessar o storyboard."
-        if not scenes_ready:
-            return False, "Gere as cenas e planos antes de acessar o storyboard."
         if not assets_ready:
             return (
                 False,

@@ -11,14 +11,11 @@ from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact
 from app.projects.versioning import (
     create_artifact_version,
-    resolve_stale_artifacts_after_regeneration,
 )
-from app.storytelling.models import Scene, Script, ScriptVersion, Shot, StoryIdea
-from app.storytelling.service import regenerate_scenes_and_shots
+from app.storytelling.models import Script, ScriptVersion, StoryIdea
+from app.storytelling.service import mark_scene_plan_stale
 from app.ui.project.data import latest as _latest
-from app.ui.project.data import scalar_count as _scalar_count
 from app.ui.project.workflows import (
-    _generate_missing_scenes_in_background,
     _reload_project_when_script_ready,
     _resume_initial_script_in_background,
 )
@@ -45,32 +42,23 @@ ReloadCallback = Callable[[], None]
 def script_generation_in_progress(
     *,
     script: object | None,
-    scenes: list[Any],
     ai_status: str,
-    should_recover_missing_scenes: bool,
     should_resume_stale_script: bool,
 ) -> bool:
     return (
         (script is None and ai_status in {"queued", "running"})
-        or should_recover_missing_scenes
         or should_resume_stale_script
     )
 
 
 async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID) -> None:
     async with AsyncSessionLocal() as session:
-        scenes = await regenerate_scenes_and_shots(session, project_id, script_id)
-        if scenes is None:
-            raise ValueError("não foi possível recriar cenas e planos para o roteiro.")
-        await resolve_stale_artifacts_after_regeneration(session, project_id)
+        await mark_scene_plan_stale(session, project_id, script_id)
+        await session.commit()
 
 
 def _schedule_initial_script_resume(project_id: UUID) -> None:
     asyncio.create_task(_resume_initial_script_in_background(project_id))
-
-
-def _schedule_missing_scenes_generation(project_id: UUID, script_id: UUID) -> None:
-    asyncio.create_task(_generate_missing_scenes_in_background(project_id, script_id))
 
 
 def script_editor_state(title: object, content: object) -> dict[str, str]:
@@ -142,8 +130,6 @@ async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int,
     async with AsyncSessionLocal() as session:
         idea = await _latest(session, StoryIdea, project_id)
         script = await _latest(session, Script, project_id)
-        scene_count = await _scalar_count(session, Scene, project_id)
-        shot_count = await _scalar_count(session, Shot, project_id)
         settings = await get_or_create_production_settings(session, project_id)
         metadata = settings.metadata_json or {}
         action = metadata.get("ai_action") if isinstance(metadata, dict) else None
@@ -157,15 +143,13 @@ async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int,
         completed = 1
     if script is not None:
         completed = 2
-    if scene_count > 0:
-        completed = 3
     if status == "completed":
-        completed = 3
+        completed = 2
     counts = {
         "ideas": 1 if idea is not None else 0,
         "scripts": 1 if script is not None else 0,
-        "scenes": scene_count,
-        "shots": shot_count,
+        "scenes": 0,
+        "shots": 0,
     }
     failed = status == "failed"
     if action_timeout:
@@ -191,19 +175,13 @@ async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int,
             counts,
             now=message or "Agora: escrevendo o roteiro cinematografico.",
         )
-    elif completed == 2:
-        detail = loading_status_message(
-            "script",
-            counts,
-            now=message or "Agora: separando cenas e planos.",
-        )
     else:
         detail = loading_status_message(
             "script",
             counts,
-            now="Agora: roteiro, cenas e planos prontos.",
+            now="Agora: roteiro pronto.",
         )
-    return completed, 3, detail, completed >= 3 or failed or action_timeout
+    return completed, 2, detail, completed >= 2 or failed or action_timeout
 
 
 async def _update_script_generation_progress(
@@ -289,22 +267,11 @@ async def save_script_from_ui(
             )
             await session.commit()
         notify_user(
-            "Roteiro salvo. Atualizando apenas cenas e planos...",
+            "Roteiro salvo. Cenas e planos serão recriados na etapa Storyboard.",
             "info",
         )
-        try:
-            await _refresh_script_derivatives_from_ui(project_id, script_id)
-        except Exception as exc:
-            notify_user(
-                (
-                    "Roteiro salvo, mas não consegui atualizar automaticamente "
-                    f"cenas e planos: {exc}"
-                ),
-                "warning",
-            )
-            reload_user()
-            return
-        notify_user("Roteiro salvo. Cenas e planos atualizados.", "positive")
+        await _refresh_script_derivatives_from_ui(project_id, script_id)
+        notify_user("Roteiro salvo.", "positive")
         if notify is None:
             play_completion_sound()
         reload_user()
@@ -325,79 +292,46 @@ def render_script_area(
     script = summary["script"]
     ai_action = project_ai_action(summary)
     ai_status = str(ai_action.get("status") or "")
-    ai_action_name = str(ai_action.get("action") or "")
-    missing_scenes = script is not None and not summary["scenes"]
-    scene_generation_failed = (
-        ai_action_name in {"create_script_scenes", "scenes"} and ai_status == "failed"
-    )
-    should_recover_missing_scenes = (
-        missing_scenes and ai_status not in {"queued", "running"} and not scene_generation_failed
-    )
     should_resume_stale_script = (
         script is None
         and ai_status in {"queued", "running"}
         and ai_action_is_stale(ai_action)
     )
-    if should_recover_missing_scenes:
-        script_id = getattr(script, "id", None)
-        if isinstance(script_id, UUID):
-            scene_script_id: UUID = script_id
-            ui.timer(
-                0.1,
-                lambda: _schedule_missing_scenes_generation(project_id, scene_script_id),
-                once=True,
-            )
     if should_resume_stale_script:
         ui.timer(0.1, lambda: _schedule_initial_script_resume(project_id), once=True)
     generation_in_progress = script_generation_in_progress(
         script=script,
-        scenes=summary["scenes"],
         ai_status=ai_status,
-        should_recover_missing_scenes=should_recover_missing_scenes,
         should_resume_stale_script=should_resume_stale_script,
     )
     if generation_in_progress:
         loading_title = (
-            "Gerando cenas"
-            if missing_scenes
-            else (
-                "Retomando roteiro"
-                if should_resume_stale_script
-                else "Gerando roteiro"
-            )
+            "Retomando roteiro" if should_resume_stale_script else "Gerando roteiro"
         )
         loading_message = (
             loading_status_message(
                 "script",
                 summary["counts"],
-                now="Agora: criando cenas e planos para o roteiro.",
+                now="Agora: retomando a criação do roteiro internamente.",
             )
-            if missing_scenes
-            else (
-                loading_status_message(
-                    "script",
-                    summary["counts"],
-                    now="Agora: retomando a criação do roteiro internamente.",
-                )
-                if should_resume_stale_script
-                else loading_status_message(
-                    "script",
-                    summary["counts"],
-                    now=str(
-                        ai_action.get("message")
-                        or "Agora: desenvolvendo o roteiro com base na ideia do projeto."
-                    ),
-                )
+            if should_resume_stale_script
+            else loading_status_message(
+                "script",
+                summary["counts"],
+                now=str(
+                    ai_action.get("message")
+                    or "Agora: desenvolvendo o roteiro com base na ideia do projeto."
+                ),
             )
         )
         loading_dialog, update_script_progress = generation_progress_dialog(
             loading_title,
-            3,
+            2,
             "etapa",
             loading_message,
         )
         loading_dialog.open()
-        update_script_progress(0, 3, loading_message)
+        update_script_progress(0, 2, loading_message)
         ui.timer(
             2.0,
             lambda: _update_script_generation_progress(
@@ -463,13 +397,13 @@ def render_script_area(
                         summary,
                         "generate_script",
                         SCRIPT_TEXT_ESTIMATED_TOKENS,
-                        "ideia, roteiro e cenas",
+                        "ideia e roteiro",
                     )
                 ).classes("text-xs text-[#8d938e]")
             if script is None and ai_status == "failed":
                 retry_loading_dialog, update_retry_progress = generation_progress_dialog(
                     "Retomando roteiro",
-                    3,
+                    2,
                     "etapa",
                     loading_status_message(
                         "script",
@@ -482,7 +416,7 @@ def render_script_area(
                     await retry_initial_script_from_ui(project_id, retry_loading_dialog)
                     update_retry_progress(
                         0,
-                        3,
+                        2,
                         loading_status_message(
                             "script",
                             summary["counts"],

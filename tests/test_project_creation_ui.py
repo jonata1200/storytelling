@@ -49,8 +49,8 @@ test_safe_refresh_ignores_deleted_slot_runtime_error = (
 test_legacy_assistant_greeting_is_removed_from_chat_history = (
     cases.test_legacy_assistant_greeting_is_removed_from_chat_history
 )
-test_script_loading_runs_when_recovering_missing_scenes = (
-    cases.test_script_loading_runs_when_recovering_missing_scenes
+test_script_loading_stops_when_scene_plan_is_deferred_to_storyboard = (
+    cases.test_script_loading_stops_when_scene_plan_is_deferred_to_storyboard
 )
 test_visual_card_detail_formats_character_profile_without_raw_dict = (
     cases.test_visual_card_detail_formats_character_profile_without_raw_dict
@@ -79,7 +79,7 @@ test_scenes_are_ordered_by_scene_number_for_display = (
 test_production_steps_do_not_include_story_bible = (
     cases.test_production_steps_do_not_include_story_bible
 )
-test_storyboard_section_waits_for_scenes_and_shots = (
-    cases.test_storyboard_section_waits_for_scenes_and_shots
+test_storyboard_section_unlocks_before_scenes_and_shots_are_prepared = (
+    cases.test_storyboard_section_unlocks_before_scenes_and_shots_are_prepared
 )
 test_workspace_tabs_start_with_script = cases.test_workspace_tabs_start_with_script

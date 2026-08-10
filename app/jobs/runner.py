@@ -1,7 +1,7 @@
 ﻿from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ProjectStep
@@ -22,15 +22,21 @@ from app.jobs.service import (
 )
 from app.observability.schemas import OperationalEventCreate
 from app.observability.service import emit_project_event
+from app.projects.models import Artifact
+from app.projects.versioning import (
+    INACTIVE_DERIVED_STATUSES,
+    resolve_stale_artifacts_after_regeneration,
+)
 from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic, Timeline
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
-from app.storytelling.models import Script, StoryIdea
+from app.storytelling.models import Scene, Script, StoryIdea
 from app.storytelling.service import (
     create_story_idea_from_payload,
     generate_scenes_and_shots,
     generate_script,
     generate_story_ideas,
+    regenerate_scenes_and_shots,
 )
 from app.video_generation.models import GenerationJob
 from app.video_generation.service import generate_video_clips
@@ -133,6 +139,22 @@ async def _run_visual(session: AsyncSession, project_id: UUID) -> dict[str, Any]
     }
 
 
+async def _active_scene_count_for_script(
+    session: AsyncSession, project_id: UUID, script_id: UUID
+) -> int:
+    value = await session.scalar(
+        select(func.count())
+        .select_from(Scene)
+        .join(Artifact, Artifact.id == Scene.artifact_id)
+        .where(
+            Scene.project_id == project_id,
+            Scene.script_id == script_id,
+            Artifact.status.notin_(INACTIVE_DERIVED_STATUSES),
+        )
+    )
+    return int(value or 0)
+
+
 async def _run_storyboard(session: AsyncSession, project_id: UUID) -> dict[str, Any]:
     script = await _latest(session, Script, project_id)
     if script is None:
@@ -140,6 +162,11 @@ async def _run_storyboard(session: AsyncSession, project_id: UUID) -> dict[str, 
     visual_report = await visual_reference_completion_report(session, project_id)
     if not visual_report["complete"]:
         raise ValueError(visual_reference_completion_message(visual_report))
+    if await _active_scene_count_for_script(session, project_id, script.id) <= 0:
+        scenes = await regenerate_scenes_and_shots(session, project_id, script.id)
+        if scenes is None:
+            raise ValueError("não foi possível gerar cenas e planos")
+        await resolve_stale_artifacts_after_regeneration(session, project_id)
     frames = await generate_storyboard_frames(session, project_id, script.id)
     if frames is None:
         raise ValueError("não foi possível gerar storyboard")

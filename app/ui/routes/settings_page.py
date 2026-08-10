@@ -49,6 +49,7 @@ def register_settings_page(
         active_settings_tab = settings_tab_key(request.query_params.get("tab"))
         saved_idea_count = len(load_saved_ideas())
         generated_idea_count = len(load_generated_ideas())
+        lab_idea_count = saved_idea_count + generated_idea_count
         project_count = len(await project_cards())
         home_sidebar("settings")
         with ui.column().classes("w-full min-h-screen pl-0 md:pl-24"):
@@ -497,9 +498,9 @@ def register_settings_page(
                                     "text-xl font-semibold"
                                 )
                                 ui.label(
-                                    "Isso remove ideias salvas, ideias geradas e registros "
-                                    "de ideias no banco. Projetos serão mantidos, mas "
-                                    "conteúdos derivados das ideias serão removidos."
+                                    "Isso remove as ideias do laboratório e os registros internos "
+                                    "de ideias no banco. Projetos serão mantidos, mas roteiros, "
+                                    "mídias e outros conteúdos derivados dessas ideias serão removidos."
                                 ).classes("text-sm text-[#858b86]")
                                 with ui.row().classes("w-full justify-end gap-2 mt-4"):
                                     ui.button("Cancelar", on_click=ideas_dialog.close).props(
@@ -543,8 +544,8 @@ def register_settings_page(
                                 )
                                 ui.label(
                                     "Isso apaga definitivamente projetos, roteiros, cenas, "
-                                    "storyboards, assets, execuções de prompt e ideias do "
-                                    "laboratório. Usuários e configurações globais serão mantidos."
+                                    "storyboards, assets, execuções de prompt e ideias. Usuários "
+                                    "e configurações globais serão mantidos."
                                 ).classes("text-sm text-[#858b86]")
                                 with ui.row().classes("w-full justify-end gap-2 mt-4"):
                                     ui.button("Cancelar", on_click=purge_dialog.close).props(
@@ -565,8 +566,7 @@ def register_settings_page(
                                     with ui.column().classes("gap-1"):
                                         ui.label("Ideias").classes("font-semibold")
                                         ui.label(
-                                            f"{saved_idea_count} salva(s) e "
-                                            f"{generated_idea_count} gerada(s)."
+                                            f"{lab_idea_count} ideia(s) no laboratório."
                                         ).classes("text-sm text-[#858b86]")
                                     ui.button(
                                         "Apagar todas as ideias",
@@ -600,8 +600,8 @@ def register_settings_page(
                                         ui.label("Projetos e ideias").classes("font-semibold")
                                         ui.label(
                                             f"Remove fisicamente {project_count} projeto(s), "
-                                            f"{saved_idea_count} ideia(s) salva(s) e "
-                                            f"{generated_idea_count} ideia(s) gerada(s)."
+                                            f"{lab_idea_count} ideia(s) do laboratório e os "
+                                            "registros internos relacionados."
                                         ).classes("text-sm text-[#858b86]")
                                     ui.button(
                                         "Apagar definitivamente",

@@ -212,24 +212,17 @@ async def test_initial_script_pipeline_uses_selected_idea_and_creates_script(
         assert args[2] == idea_id
         return SimpleNamespace(id=script_id)
 
-    async def fake_generate_scenes_and_shots(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
-        calls.append("scenes")
-        assert args[1] == project_id
-        assert args[2] == script_id
-        return [SimpleNamespace(id=uuid4())]
-
     monkeypatch.setattr(
         pages, "create_story_idea_from_payload", fake_create_story_idea_from_payload
     )
     monkeypatch.setattr(pages, "generate_script", fake_generate_script)
-    monkeypatch.setattr(pages, "generate_scenes_and_shots", fake_generate_scenes_and_shots)
 
     script = await pages._generate_initial_script(
         cast(AsyncSession, object()), project_id, selected_idea
     )
 
     assert script.id == script_id
-    assert calls == ["idea", "script", "scenes"]
+    assert calls == ["idea", "script"]
 
 
 def test_initial_story_bible_pipeline_was_removed() -> None:
@@ -262,20 +255,14 @@ async def test_project_chat_can_trigger_script_generation(
         assert args[2] == idea_id
         return SimpleNamespace(id=script_id)
 
-    async def fake_generate_scenes_and_shots(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
-        calls.append("scenes")
-        assert args[2] == script_id
-        return [SimpleNamespace(id=uuid4())]
-
     monkeypatch.setattr(pages, "_latest", fake_latest)
     monkeypatch.setattr(pages, "generate_story_ideas", fake_generate_story_ideas)
     monkeypatch.setattr(pages, "generate_script", fake_generate_script)
-    monkeypatch.setattr(pages, "generate_scenes_and_shots", fake_generate_scenes_and_shots)
 
     message, should_reload = await pages._develop_script_for_existing_project(
         cast(AsyncSession, object()), project_id
     )
 
-    assert message == "Roteiro criado e dividido em cenas e planos."
+    assert message == "Roteiro criado."
     assert should_reload is True
-    assert calls == ["ideas", "script", "scenes"]
+    assert calls == ["ideas", "script"]

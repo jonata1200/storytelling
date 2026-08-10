@@ -407,8 +407,8 @@ async def test_manual_script_save_refreshes_scene_plan_without_visual_bible(
     assert calls == ["version", "ScriptVersion", "commit", "refresh_derivatives", "reload"]
     assert notifications == [
         ("Salvando roteiro...", "info"),
-        ("Roteiro salvo. Atualizando apenas cenas e planos...", "info"),
-        ("Roteiro salvo. Cenas e planos atualizados.", "positive"),
+        ("Roteiro salvo. Cenas e planos serão recriados na etapa Storyboard.", "info"),
+        ("Roteiro salvo.", "positive"),
     ]
 
 
@@ -783,9 +783,7 @@ def test_script_loading_stops_when_script_and_scenes_exist() -> None:
     assert (
         script_area.script_generation_in_progress(
             script=object(),
-            scenes=[object()],
             ai_status="running",
-            should_recover_missing_scenes=False,
             should_resume_stale_script=False,
         )
         is False
@@ -796,25 +794,21 @@ def test_script_loading_stops_when_only_scenes_are_missing() -> None:
     assert (
         script_area.script_generation_in_progress(
             script=object(),
-            scenes=[],
             ai_status="running",
-            should_recover_missing_scenes=False,
             should_resume_stale_script=False,
         )
         is False
     )
 
 
-def test_script_loading_runs_when_recovering_missing_scenes() -> None:
+def test_script_loading_stops_when_scene_plan_is_deferred_to_storyboard() -> None:
     assert (
         script_area.script_generation_in_progress(
             script=object(),
-            scenes=[],
             ai_status="completed",
-            should_recover_missing_scenes=True,
             should_resume_stale_script=False,
         )
-        is True
+        is False
     )
 
 
@@ -1459,7 +1453,7 @@ def test_storyboard_section_waits_for_all_visual_references() -> None:
     assert "Gere todas as imagens" in reason
 
 
-def test_storyboard_section_waits_for_scenes_and_shots() -> None:
+def test_storyboard_section_unlocks_before_scenes_and_shots_are_prepared() -> None:
     counts = {
         "briefings": 1,
         "ideas": 1,
@@ -1480,8 +1474,8 @@ def test_storyboard_section_waits_for_scenes_and_shots() -> None:
     allowed, reason = pages._workspace_section_access("storyboard", counts)
 
     assert pages._step_ready("scenes", counts) is False
-    assert allowed is False
-    assert reason == "Gere as cenas e planos antes de acessar o storyboard."
+    assert allowed is True
+    assert reason == ""
 
 
 def test_storyboard_section_unlocks_after_visual_references_are_complete() -> None:

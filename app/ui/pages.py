@@ -32,7 +32,6 @@ from app.projects.service import (
 )
 from app.storytelling.models import (
     Briefing,
-    Scene,
     Script,
     StoryIdea,
 )
@@ -42,7 +41,6 @@ from app.storytelling.service import (
     coerce_duration_minutes,
     create_briefing,
     create_story_idea_from_payload,
-    generate_scenes_and_shots,
     generate_script,
     generate_story_ideas,
 )
@@ -157,9 +155,6 @@ from app.ui.project.data import (
 )
 from app.ui.project.data import (
     project_summary as _project_summary,  # noqa: F401
-)
-from app.ui.project.data import (
-    scalar_count as _scalar_count,
 )
 from app.ui.project.production_steps import _run_step
 from app.ui.project.text import (
@@ -355,11 +350,6 @@ async def _generate_initial_script(
         getattr(script, "title", ""),
         source="script title",
     )
-    if progress is not None:
-        await progress("Roteiro criado. Agora vou separar a história em cenas e planos.")
-    scenes = await generate_scenes_and_shots(session, project_id, script.id)
-    if scenes is None:
-        raise ValueError("não foi possível gerar cenas e planos")
     return script
 
 
@@ -414,12 +404,8 @@ async def _develop_script_for_existing_project(
 
     script = await _latest(session, Script, project_id)
     if script is not None:
-        scenes_count = await _scalar_count(session, Scene, project_id)
-        if scenes_count == 0:
-            await generate_scenes_and_shots(session, project_id, script.id)
-            return "O roteiro já existia; criei as cenas e planos para ele.", True
         return (
-            "Este projeto já tem roteiro e cenas. Posso ajudar a revisar ou ajustar a estrutura.",
+            "Este projeto já tem roteiro. Posso ajudar a revisar ou seguir para a próxima etapa.",
             False,
         )
 
@@ -433,10 +419,7 @@ async def _develop_script_for_existing_project(
     script = await generate_script(session, project_id, idea.id)
     if script is None:
         return "Não consegui gerar o roteiro para este projeto.", False
-    scenes = await generate_scenes_and_shots(session, project_id, script.id)
-    if scenes is None:
-        return "O roteiro foi criado, mas não consegui gerar as cenas e planos.", True
-    return "Roteiro criado e dividido em cenas e planos.", True
+    return "Roteiro criado.", True
 
 
 async def _create_project_from_form(

@@ -19,7 +19,6 @@ from app.storytelling.service import (
     generate_story_ideas,
 )
 from app.ui.project.data import latest as _latest
-from app.ui.project.data import latest_many as _latest_many
 from app.ui.project.data import scalar_count as _scalar_count
 from app.ui.shared.page_config import friendly_ai_error as _friendly_ai_error
 
@@ -99,11 +98,6 @@ async def _generate_initial_script(
         getattr(script, "title", ""),
         source="script title",
     )
-    if progress is not None:
-        await progress("Roteiro criado. Agora vou separar a história em cenas e planos.")
-    scenes = await generate_scenes_and_shots(session, project_id, script.id)
-    if scenes is None:
-        raise ValueError("não foi possível gerar cenas e planos")
     return script
 
 
@@ -228,19 +222,6 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                     getattr(script, "title", ""),
                     source="script title",
                 )
-                existing_scenes = await _latest_many(session, Scene, project_id, 1)
-                if not existing_scenes:
-                    await _set_project_ai_action_status(
-                        session,
-                        project_id,
-                        status="running",
-                        message="Roteiro encontrado. Vou criar cenas e planos.",
-                    )
-                    generated_scenes = await generate_scenes_and_shots(
-                        session, project_id, script.id
-                    )
-                    if generated_scenes is None:
-                        raise ValueError("não foi possível gerar cenas e planos")
                 await _set_project_ai_action_status(
                     session,
                     project_id,
@@ -301,16 +282,6 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                 getattr(script, "title", ""),
                 source="script title",
             )
-
-            await _set_project_ai_action_status(
-                session,
-                project_id,
-                status="running",
-                message="Roteiro criado. Agora vou separar a história em cenas e planos.",
-            )
-            generated_scenes = await generate_scenes_and_shots(session, project_id, script.id)
-            if generated_scenes is None:
-                raise ValueError("não foi possível gerar cenas e planos")
 
             await _set_project_ai_action_status(
                 session,
@@ -432,12 +403,8 @@ async def _develop_script_for_existing_project(
 
     script = await _latest(session, Script, project_id)
     if script is not None:
-        scenes_count = await _scalar_count(session, Scene, project_id)
-        if scenes_count == 0:
-            await generate_scenes_and_shots(session, project_id, script.id)
-            return "O roteiro já existia; criei as cenas e planos para ele.", True
         return (
-            "Este projeto já tem roteiro e cenas. Posso ajudar a revisar ou ajustar a estrutura.",
+            "Este projeto já tem roteiro. Posso ajudar a revisar ou seguir para a próxima etapa.",
             False,
         )
 
@@ -463,9 +430,6 @@ async def _develop_script_for_existing_project(
         getattr(script, "title", ""),
         source="script title",
     )
-    scenes = await generate_scenes_and_shots(session, project_id, script.id)
-    if scenes is None:
-        return "O roteiro foi criado, mas não consegui gerar as cenas e planos.", True
-    return "Roteiro criado e dividido em cenas e planos.", True
+    return "Roteiro criado.", True
 
 

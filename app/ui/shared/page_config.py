@@ -208,7 +208,7 @@ ACTION_LOADING_TITLES = {
 
 ACTION_NOW_COPY = {
     "generate_ideas": "Agora: criando ideias narrativas.",
-    "generate_script": "Agora: criando ou completando roteiro, cenas e planos.",
+    "generate_script": "Agora: criando ou completando o roteiro.",
     "revise_script": "Agora: revisando o roteiro e preservando o que ja existe.",
     "generate_assets": "Agora: criando prompts visuais e preparando referencias.",
     "approve_visual_prompt": "Agora: aprovando os prompts visuais solicitados.",
@@ -266,6 +266,7 @@ def _created_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
         _append_count(created, counts, "ideas", "ideia", "ideias")
     if step_key in {"script", "visual", "storyboard"}:
         _append_count(created, counts, "scripts", "roteiro", "roteiros")
+    if step_key == "storyboard":
         _append_count(created, counts, "scenes", "cena", "cenas")
         _append_count(created, counts, "shots", "plano", "planos")
     if step_key in {"visual", "storyboard"}:
@@ -320,6 +321,7 @@ def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
     if step_key in {"script", "visual", "storyboard"}:
         if scripts <= 0:
             missing.append("roteiro")
+    if step_key == "storyboard":
         if scenes <= 0 or shots <= 0:
             missing.append("cenas e planos")
     if step_key in {"visual", "storyboard"}:
@@ -376,9 +378,7 @@ def _progress_for_step(step_key: str, counts: dict[str, Any]) -> tuple[int, int,
             completed += 1
         if _safe_count(counts, "scripts") > 0:
             completed += 1
-        if _safe_count(counts, "scenes") > 0 and _safe_count(counts, "shots") > 0:
-            completed += 1
-        return completed, 3, "etapa"
+        return completed, 2, "etapa"
 
     if step_key == "visual":
         expected_refs = _expected_visual_references(counts)

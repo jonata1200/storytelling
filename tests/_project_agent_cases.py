@@ -131,15 +131,10 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
         assert kwargs["mark_downstream_stale"] is False
         return SimpleNamespace(id=script_id)
 
-    async def fake_regenerate_scenes(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
-        calls.append("regenerate_scenes")
+    async def fake_mark_scene_plan_stale(*args: Any, **kwargs: Any) -> None:
+        calls.append("mark_scene_plan_stale")
         assert args[1] == project_id
         assert args[2] == script_id
-        return [SimpleNamespace(id=uuid4())]
-
-    async def fake_resolve_stale(*args: Any, **kwargs: Any) -> int:
-        calls.append("resolve_stale")
-        return 3
 
     async def fake_script_blockers(*args: Any, **kwargs: Any) -> dict[str, int]:
         return {}
@@ -148,12 +143,7 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(project_agent, "_script_agent_edit_blockers", fake_script_blockers)
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
     monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
-    monkeypatch.setattr(project_agent, "regenerate_scenes_and_shots", fake_regenerate_scenes)
-    monkeypatch.setattr(
-        project_agent,
-        "resolve_stale_artifacts_after_regeneration",
-        fake_resolve_stale,
-    )
+    monkeypatch.setattr(project_agent, "mark_scene_plan_stale", fake_mark_scene_plan_stale)
 
     result = await handle_project_chat(
         cast(AsyncSession, object()),
@@ -165,8 +155,8 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
 
     assert result == ProjectChatResult(
         (
-            "Roteiro revisado e cenas/planos recriados. "
-            "Biblioteca Visual não foi atualizada automaticamente; peça quando quiser."
+            "Roteiro revisado. Cenas e planos serão recriados quando você "
+            "abrir ou solicitar o Storyboard."
         ),
         "revise_script",
         True,
@@ -174,8 +164,7 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
     assert calls == [
         "ensure_script",
         "revise",
-        "regenerate_scenes",
-        "resolve_stale",
+        "mark_scene_plan_stale",
     ]
 
 
@@ -205,14 +194,9 @@ async def test_project_chat_can_revise_specific_script_scenes(
         assert kwargs["mark_downstream_stale"] is False
         return SimpleNamespace(id=script_id)
 
-    async def fake_regenerate_scenes(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
-        calls.append("regenerate_scenes")
+    async def fake_mark_scene_plan_stale(*args: Any, **kwargs: Any) -> None:
+        calls.append("mark_scene_plan_stale")
         assert args[2] == script_id
-        return [SimpleNamespace(id=uuid4())]
-
-    async def fake_resolve_stale(*args: Any, **kwargs: Any) -> int:
-        calls.append("resolve_stale")
-        return 2
 
     async def fake_script_blockers(*args: Any, **kwargs: Any) -> dict[str, int]:
         return {}
@@ -221,12 +205,7 @@ async def test_project_chat_can_revise_specific_script_scenes(
     monkeypatch.setattr(project_agent, "_script_agent_edit_blockers", fake_script_blockers)
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
     monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
-    monkeypatch.setattr(project_agent, "regenerate_scenes_and_shots", fake_regenerate_scenes)
-    monkeypatch.setattr(
-        project_agent,
-        "resolve_stale_artifacts_after_regeneration",
-        fake_resolve_stale,
-    )
+    monkeypatch.setattr(project_agent, "mark_scene_plan_stale", fake_mark_scene_plan_stale)
 
     result = await handle_project_chat(
         cast(AsyncSession, object()),
@@ -238,8 +217,8 @@ async def test_project_chat_can_revise_specific_script_scenes(
 
     assert result == ProjectChatResult(
         (
-            "Cena(s) revisada(s) e cenas/planos recriados. "
-            "Biblioteca Visual não foi atualizada automaticamente; peça quando quiser."
+            "Cena(s) revisada(s). Cenas e planos serão recriados quando "
+            "você abrir ou solicitar o Storyboard."
         ),
         "revise_script",
         True,
@@ -247,8 +226,7 @@ async def test_project_chat_can_revise_specific_script_scenes(
     assert calls == [
         "ensure_script",
         "revise",
-        "regenerate_scenes",
-        "resolve_stale",
+        "mark_scene_plan_stale",
     ]
 
 
@@ -273,7 +251,7 @@ async def test_project_chat_can_force_full_script_regeneration(
         captured_force.append(force)
         return (
             SimpleNamespace(id=uuid4()),
-            "Roteiro completo gerado novamente e dividido em cenas e planos.",
+            "Roteiro completo gerado novamente.",
             True,
         )
 
@@ -293,7 +271,7 @@ async def test_project_chat_can_force_full_script_regeneration(
     )
 
     assert result == ProjectChatResult(
-        "Roteiro completo gerado novamente e dividido em cenas e planos.",
+        "Roteiro completo gerado novamente.",
         "generate_script",
         True,
     )
@@ -409,36 +387,12 @@ async def test_forced_script_pipeline_does_not_refresh_existing_visual_bible(
         assert requested_idea_id == idea_id
         return SimpleNamespace(id=new_script_id)
 
-    async def fake_generate_scenes_and_shots(
-        session: AsyncSession,
-        requested_project_id: Any,
-        requested_script_id: Any,
-    ) -> list[SimpleNamespace]:
-        calls.append("scenes")
-        assert requested_project_id == project_id
-        assert requested_script_id == new_script_id
-        return [SimpleNamespace(id=uuid4())]
-
-    async def fake_resolve_stale(
-        session: AsyncSession,
-        requested_project_id: Any,
-    ) -> int:
-        calls.append("resolve")
-        assert requested_project_id == project_id
-        return 25
-
     async def collect_progress(message: str) -> None:
         progress_messages.append(message)
 
     monkeypatch.setattr(project_agent, "_latest", fake_latest)
     monkeypatch.setattr(project_agent, "mark_dependents_stale", fake_mark_dependents_stale)
     monkeypatch.setattr(project_agent, "generate_script", fake_generate_script)
-    monkeypatch.setattr(project_agent, "generate_scenes_and_shots", fake_generate_scenes_and_shots)
-    monkeypatch.setattr(
-        project_agent,
-        "resolve_stale_artifacts_after_regeneration",
-        fake_resolve_stale,
-    )
 
     script, message, changed = await project_agent._ensure_script_pipeline(
         cast(AsyncSession, object()),
@@ -451,10 +405,10 @@ async def test_forced_script_pipeline_does_not_refresh_existing_visual_bible(
     assert script.id == new_script_id
     assert changed is True
     assert message == (
-        "Roteiro completo gerado novamente e dividido em cenas e planos. "
-        "Biblioteca Visual não foi atualizada automaticamente."
+        "Roteiro completo gerado novamente. Cenas e planos serão recriados "
+        "quando você abrir ou solicitar o Storyboard."
     )
-    assert calls == ["stale", "script", "scenes", "resolve"]
+    assert calls == ["stale", "script"]
     assert not any("Biblioteca visual atualizada" in item for item in progress_messages)
 
 
@@ -752,11 +706,15 @@ async def test_storyboard_pipeline_requires_prompt_approval(
     async def fake_prompts_need_approval(*args: Any, **kwargs: Any) -> bool:
         return True
 
+    async def fake_scene_plan(*args: Any, **kwargs: Any) -> bool:
+        return False
+
     async def fail_storyboard_generation(*args: Any, **kwargs: Any) -> None:
         raise AssertionError("storyboard não deve ser gerado antes da aprovação")
 
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
     monkeypatch.setattr(project_agent, "visual_reference_completion_report", fake_visual_report)
+    monkeypatch.setattr(project_agent, "_ensure_storyboard_scene_plan", fake_scene_plan)
     monkeypatch.setattr(
         project_agent,
         "storyboard_frames_need_generation",
@@ -802,6 +760,9 @@ async def test_storyboard_pipeline_force_regenerates_frames(
     async def fake_prompts_need_approval(*args: Any, **kwargs: Any) -> bool:
         return False
 
+    async def fake_scene_plan(*args: Any, **kwargs: Any) -> bool:
+        return False
+
     async def fake_generate_storyboard_frames(
         session: AsyncSession,
         requested_project_id: Any,
@@ -828,6 +789,7 @@ async def test_storyboard_pipeline_force_regenerates_frames(
         "storyboard_prompts_need_approval",
         fake_prompts_need_approval,
     )
+    monkeypatch.setattr(project_agent, "_ensure_storyboard_scene_plan", fake_scene_plan)
     monkeypatch.setattr(
         project_agent,
         "generate_storyboard_frames",
@@ -871,6 +833,9 @@ async def test_storyboard_pipeline_reports_frame_progress(
     async def fake_frames_need_generation(*args: Any, **kwargs: Any) -> bool:
         return True
 
+    async def fake_scene_plan(*args: Any, **kwargs: Any) -> bool:
+        return False
+
     async def fake_generate_storyboard_frames(
         *args: Any,
         progress_callback: Any = None,
@@ -892,6 +857,7 @@ async def test_storyboard_pipeline_reports_frame_progress(
 
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
     monkeypatch.setattr(project_agent, "visual_reference_completion_report", fake_visual_report)
+    monkeypatch.setattr(project_agent, "_ensure_storyboard_scene_plan", fake_scene_plan)
     monkeypatch.setattr(
         project_agent,
         "storyboard_prompts_need_approval",
