@@ -439,36 +439,40 @@ def render_storyboard_area(
     prompt_dialog: Any | None = None
     if script_id is not None and prompt_previews:
         active_script_id: UUID = script_id
+        total_duration = sum(
+            int(preview.get('duration_seconds') or 0) for preview in prompt_previews
+        )
         with (
             ui.dialog().props(BLOCKING_DIALOG_PROPS) as prompt_dialog,
-            ui.card().classes("entity-card rounded-2xl p-6 w-[min(920px,94vw)] max-h-[86vh]"),
+            ui.card().classes("entity-card rounded-2xl p-6 w-[min(680px,94vw)] max-h-[80vh]"),
         ):
             ui.label("Aprovar prompts de storyboard").classes("brand-type text-2xl font-bold")
             ui.label(
-                "Revise os prompts por cena e plano antes de liberar a geração das imagens."
+                f"Confirme a aprovação dos prompts para gerar {len(missing_frame_previews)} quadro(s)."
             ).classes("text-sm text-[#8d938e]")
-            ui.label(
-                f"Agora: gerar {len(missing_frame_previews)} e reaproveitar {storyboard_generated}."
-            ).classes("text-xs text-[#8d938e]")
-            with ui.scroll_area().classes("w-full max-h-[58vh] pr-2"):
-                with ui.column().classes("w-full gap-3"):
-                    for preview in prompt_previews:
-                        approved = bool(preview.get("approved"))
-                        with ui.element("div").classes("border border-[#343934] rounded-xl p-4"):
-                            with ui.row().classes("w-full items-center justify-between gap-3"):
-                                ui.label(
-                                    "Cena "
-                                    f"{int(preview.get('scene_number') or 0):02d} · "
-                                    f"Plano {int(preview.get('shot_number') or 0):02d} · "
-                                    f"{int(preview.get('duration_seconds') or 0)}s"
-                                ).classes("text-sm font-semibold")
-                                ui.badge("aprovado" if approved else "pendente").classes(
-                                    "bg-[#26301f] text-white" if approved else "bg-[#5aa3f0]"
-                                )
-                            ui.label(str(preview.get("prompt") or "")).classes(
-                                "text-xs text-[#aeb4af] whitespace-pre-wrap mt-2"
-                            )
-                            _render_continuity_checks(list(preview.get("continuity_checks") or []))
+
+            with ui.element("div").classes(
+                "border border-[#343934] rounded-xl p-4 mt-4"
+            ):
+                with ui.row().classes("w-full items-center justify-between gap-3"):
+                    with ui.column().classes("gap-1"):
+                        ui.label(f"{len(prompt_previews)} prompt(s) total").classes(
+                            "text-sm font-semibold text-[#d8dbd8]"
+                        )
+                        approved_count = sum(
+                            1 for p in prompt_previews if bool(p.get("approved"))
+                        )
+                        ui.label(
+                            f"{approved_count} aprovado(s), {len(pending_prompt_previews)} pendente(s)"
+                        ).classes("text-xs text-[#8d938e]")
+                    ui.badge(
+                        "pendente" if pending_prompt_previews else "aprovado"
+                    ).classes(
+                        "bg-[#5aa3f0]" if pending_prompt_previews else "bg-[#26301f] text-white"
+                    )
+                ui.label(_image_cost_text(len(missing_frame_previews))).classes(
+                    "text-xs text-[#8d938e] mt-2"
+                )
 
             async def confirm_storyboard_prompts() -> None:
                 safe_close_ui_element(prompt_dialog)
@@ -479,11 +483,11 @@ def render_storyboard_area(
                     progress_callback=storyboard_progress_callback,
                 )
 
-            with ui.row().classes("w-full justify-end gap-2 mt-3"):
+            with ui.row().classes("w-full justify-end gap-2 mt-6 pt-4 border-t border-[#343934]"):
                 ui.button("Fechar", on_click=prompt_dialog.close).props("flat no-caps")
                 if pending_prompt_previews:
                     ui.button(
-                        "Aprovar prompts e gerar",
+                        f"Aprovar {len(pending_prompt_previews)} prompt(s) e gerar",
                         icon="check_circle",
                         on_click=confirm_storyboard_prompts,
                     ).props("unelevated no-caps").classes("acid-bg rounded-xl")
@@ -767,6 +771,7 @@ def render_video_area(
     active_video_job_count = view_model.queued_video_jobs + view_model.running_video_jobs
     timeline = summary["timeline"]
     total_duration = view_model.total_duration
+    has_active_jobs = active_video_job_count > 0
     loading_dialog, video_progress_callback = generation_progress_dialog(
         "Gerando clipes",
         len(pending_frames),
@@ -785,7 +790,7 @@ def render_video_area(
         video_detail = "Saída padronizada em 720p."
         if active_video_job_count:
             video_detail = (
-                f"{active_video_job_count} job(s) em fila/processando. Saída padronizada em 720p."
+                f"{active_video_job_count} job(s) em fila/processando. Aguarde a conclusão."
             )
         if view_model.failed_video_jobs:
             video_detail = (
@@ -797,52 +802,55 @@ def render_video_area(
             total_frames,
             video_missing,
             f"{video_detail} {_video_cost_text(len(pending_frames), pending_duration)}",
-            badge="720p",
+            badge="720p" if not active_video_job_count else "processando",
         )
+        if has_active_jobs:
+            with ui.element("div").classes(
+                "w-full border border-blue-800 bg-blue-950/40 rounded-xl px-4 py-3 mb-3"
+            ):
+                with ui.row().classes("w-full items-center gap-3"):
+                    ui.spinner(size="sm").classes("text-blue-400")
+                    ui.label(
+                        f"{active_video_job_count} clipe(s) sendo processado(s). "
+                        "Acompanhe o progresso abaixo."
+                    ).classes("text-sm text-blue-200")
 
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
         with (
             ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_dialog,
-            ui.card().classes("entity-card rounded-2xl p-6 w-[min(920px,94vw)] max-h-[86vh]"),
+            ui.card().classes("entity-card rounded-2xl p-6 w-[min(680px,94vw)] max-h-[80vh]"),
         ):
-            ui.label("Revisar prompts e gerar clipes").classes("brand-type text-2xl font-bold")
+            ui.label("Gerar clipes de vídeo").classes("brand-type text-2xl font-bold")
             ui.label(
-                "Confira os planos que ainda n\u00e3o possuem v\u00eddeo. Ao confirmar, "
-                "a IA gera um clipe para cada plano listado."
+                f"Confirme a geração de {len(pending_frames)} clipe(s) a partir dos storyboards aprovados."
             ).classes("text-sm text-[#8d938e]")
-            ui.label(
-                f"Agora: gerar {len(pending_frames)} e reaproveitar {generated_count}."
-            ).classes("text-xs text-[#8d938e]")
-            ui.label(_video_cost_text(len(pending_frames), pending_duration)).classes(
-                "text-xs text-[#8d938e]"
-            )
+
+            with ui.element("div").classes(
+                "border border-[#343934] rounded-xl p-4 mt-4"
+            ):
+                with ui.row().classes("w-full items-center justify-between gap-3"):
+                    with ui.column().classes("gap-1"):
+                        ui.label(f"{len(pending_frames)} clipe(s) pendente(s)").classes(
+                            "text-sm font-semibold text-[#d8dbd8]"
+                        )
+                        ui.label(
+                            f"Duração total: {pending_duration}s"
+                        ).classes("text-xs text-[#8d938e]")
+                    ui.badge(f"{pending_duration}s").classes(
+                        "blue-status-badge bg-[#243342]"
+                    )
+                ui.label(_video_cost_text(len(pending_frames), pending_duration)).classes(
+                    "text-xs text-[#8d938e] mt-2"
+                )
+
             high_consistency_toggle = ui.checkbox(
                 "Alta consistência visual",
                 value=False,
-            ).props("dense")
+            ).props("dense").classes("mt-4")
             ui.label(
-                "Usa referências canônicas extras somente em planos de 8s; deixe desligado "
-                "para o fluxo mais barato e rápido."
+                "Usa referências extras em planos longos para maior fidelidade visual."
             ).classes("text-xs text-[#8d938e]")
-            with ui.scroll_area().classes("w-full max-h-[52vh] pr-2"):
-                with ui.column().classes("w-full gap-3"):
-                    for frame in pending_frames:
-                        preview = video_prompt_by_frame_id.get(frame.id, {})
-                        with ui.element("div").classes("border border-[#343934] rounded-xl p-4"):
-                            with ui.row().classes("w-full items-start justify-between gap-3"):
-                                ui.label(f"Plano {frame.frame_number:02d}").classes(
-                                    "text-sm font-semibold"
-                                )
-                                ui.badge(f"{frame.duration_seconds}s").classes(
-                                    "blue-status-badge bg-[#243342]"
-                                )
-                            ui.label(_video_clip_cost_text(frame.duration_seconds)).classes(
-                                "text-xs text-[#8d938e] mt-1"
-                            )
-                            ui.label(str(preview.get("prompt") or frame.prompt)).classes(
-                                "text-sm text-[#d8dbd8] whitespace-pre-wrap mt-2 leading-6"
-                            )
 
             async def confirm_video_prompts(frame_ids: list[UUID] = pending_frame_ids) -> None:
                 safe_close_ui_element(video_prompt_dialog)
@@ -854,7 +862,7 @@ def render_video_area(
                     progress_callback=video_progress_callback,
                 )
 
-            with ui.row().classes("w-full justify-end gap-2 mt-3"):
+            with ui.row().classes("w-full justify-end gap-2 mt-6 pt-4 border-t border-[#343934]"):
                 ui.button("Cancelar", on_click=video_prompt_dialog.close).props("flat no-caps")
                 ui.button(
                     f"Gerar {len(pending_frames)} clipe(s)",

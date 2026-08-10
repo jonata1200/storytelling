@@ -306,7 +306,21 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
             elif step == ProjectStep.QUALITY:
                 response = await _run_quality(session, job.project_id)
             else:
-                raise ValueError(f"Etapa de job inválida: {step}")
+                await mark_job_failed(
+                    session,
+                    job,
+                    error=f"Etapa de job inválida: {step or '<vazia>'}",
+                    message=f"Etapa {step or '<vazia>'} invalida e ignorada.",
+                )
+                await _emit_step_event(
+                    session,
+                    job,
+                    step=step,
+                    status="failed",
+                    message=f"Etapa {step or '<vazia>'} invalida e ignorada.",
+                    details={"error": f"Etapa invalida: {step or '<vazia>'}"},
+                )
+                return {}
             await mark_job_succeeded(
                 session,
                 job,

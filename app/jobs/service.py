@@ -51,18 +51,18 @@ class JobEnqueueDecision:
     should_dispatch: bool
 
 
-def normalize_step(value: str) -> ProjectStep:
+def normalize_step(value: str) -> ProjectStep | None:
     step = str(value or "").strip().lower().replace("-", "_")
     if step not in PROJECT_STEP_JOB_TYPES:
-        allowed = ", ".join(sorted(PROJECT_STEP_JOB_TYPES))
-        raise ValueError(f"Etapa de job inválida: {step or '<vazia>'}. Use: {allowed}.")
+        return None
     return ProjectStep(step)
 
 
-def job_idempotency_key(project_id: UUID, step: str, payload: dict) -> str:
+def job_idempotency_key(project_id: UUID, step: str | ProjectStep, payload: dict) -> str:
+    normalized = normalize_step(step) if isinstance(step, str) else step
     body = {
         "project_id": str(project_id),
-        "step": normalize_step(step),
+        "step": normalized.value if normalized is not None else str(step),
         "payload": payload,
     }
     serialized = json.dumps(body, sort_keys=True, ensure_ascii=True, default=str)
@@ -168,6 +168,9 @@ async def create_or_resume_project_job(
     if project is None:
         raise ValueError("Projeto não encontrado.")
     normalized_step = normalize_step(step)
+    if normalized_step is None:
+        allowed = ", ".join(sorted(PROJECT_STEP_JOB_TYPES))
+        raise ValueError(f"Etapa de job inválida: {step or '<vazia>'}. Use: {allowed}.")
     require_api_keys_for_creation_step(normalized_step.value)
     clean_payload = dict(payload or {})
     request_payload = {"step": normalized_step.value, "payload": clean_payload}

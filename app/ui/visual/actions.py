@@ -518,7 +518,7 @@ async def _approve_video_prompts_from_ui(
             len(frame_ids),
             (
                 f"Agora: preparando {len(frame_ids)} clipe(s) para a fila de video.\n"
-                "Falta: registrar os jobs e recarregar a etapa de video."
+                "Falta: registrar os jobs e iniciar o processamento."
             ),
         )
         async with AsyncSessionLocal() as session:
@@ -536,11 +536,14 @@ async def _approve_video_prompts_from_ui(
             len(frame_ids),
             len(frame_ids),
             (
-                "Agora: todos os clipes solicitados foram enviados para a fila.\n"
-                "Falta: acompanhar o processamento ate os arquivos ficarem prontos."
+                "Agora: processando os clipes de video.\n"
+                "Os videos serao gerados em segundo plano. Acompanhe o progresso abaixo."
             ),
         )
-        ui.notify(f"Prompts aprovados. Job de video enfileirado: {job.id}.", color="positive")
+        ui.notify(
+            f"{len(frame_ids)} clipe(s) enviados para geração. Acompanhe o progresso.",
+            color="positive",
+        )
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))

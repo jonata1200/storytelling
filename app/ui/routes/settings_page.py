@@ -16,7 +16,6 @@ from app.config.settings import (
     ELEVENLABS_SPEECH_MODELS,
     OLLAMA_CLOUD_TEXT_MODELS,
     get_settings,
-    insecure_default_secret_key_warning,
     normalize_google_ai_image_model,
     normalize_google_ai_video_model,
     normalize_ollama_cloud_text_model,
@@ -47,7 +46,6 @@ def register_settings_page(
     async def settings_page(request: Request) -> None:
         body_style()
         current = get_settings()
-        secret_key_warning = insecure_default_secret_key_warning()
         active_settings_tab = settings_tab_key(request.query_params.get("tab"))
         saved_idea_count = len(load_saved_ideas())
         generated_idea_count = len(load_generated_ideas())
@@ -65,14 +63,6 @@ def register_settings_page(
                         )
                     with ui.element("div").classes("shrink-0 ml-auto"):
                         theme_toggle()
-
-                if secret_key_warning:
-                    with ui.row().classes(
-                        "w-full items-center gap-2 rounded-lg border border-amber-500/40 "
-                        "bg-amber-500/10 px-4 py-3"
-                    ):
-                        ui.icon("warning").classes("text-amber-400")
-                        ui.label(secret_key_warning).classes("text-sm text-amber-300")
 
                 with (
                     ui.tabs()
