@@ -6,6 +6,7 @@ from app.ui.shared.page_config import (
     is_deleted_ui_context_error,
     play_completion_sound,
     safe_close_ui_element,
+    safe_notify,
 )
 from app.ui.visual.actions import _emit_visual_batch_progress
 
@@ -40,6 +41,15 @@ def test_safe_close_ui_element_ignores_deleted_client() -> None:
             raise RuntimeError("The client this element belongs to has been deleted.")
 
     safe_close_ui_element(DeletedDialog())
+
+
+def test_safe_notify_ignores_deleted_slot(monkeypatch: pytest.MonkeyPatch) -> None:
+    def deleted_notify(_message: str, **_kwargs: object) -> None:
+        raise RuntimeError("The parent element this slot belongs to has been deleted.")
+
+    monkeypatch.setattr(page_config.ui, "notify", deleted_notify)
+
+    safe_notify("Ideia apagada definitivamente.", color="warning")
 
 
 def test_play_completion_sound_runs_browser_audio_script(monkeypatch: pytest.MonkeyPatch) -> None:

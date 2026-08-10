@@ -45,6 +45,7 @@ from app.ui.shared.page_config import (
     friendly_ai_error,
     play_completion_sound,
     safe_close_ui_element,
+    safe_notify,
     show_ai_error_popup,
 )
 
@@ -181,10 +182,10 @@ def register_home_pages(
                                 content = await event.file.read()
                                 extracted = extract_script_text(event.file.name, content)
                             except ScriptUploadError as exc:
-                                ui.notify(str(exc), color="warning")
+                                safe_notify(str(exc), color="warning")
                                 return
                             except Exception as exc:
-                                ui.notify(
+                                safe_notify(
                                     f"Não foi possível ler o arquivo: {exc}", color="negative"
                                 )
                                 return
@@ -197,7 +198,7 @@ def register_home_pages(
                             idea.value = extracted
                             idea.update()
                             attachment_list.refresh()
-                            ui.notify(
+                            safe_notify(
                                 f"Roteiro importado de {event.file.name}.",
                                 color="positive",
                             )
@@ -242,16 +243,16 @@ def register_home_pages(
                                     content,
                                 )
                             except ReferenceUploadError as exc:
-                                ui.notify(str(exc), color="warning")
+                                safe_notify(str(exc), color="warning")
                                 return
                             except Exception as exc:
-                                ui.notify(
+                                safe_notify(
                                     f"Não foi possível anexar a imagem: {exc}", color="negative"
                                 )
                                 return
                             reference_uploads.append(prepared)
                             attachment_list.refresh()
-                            ui.notify(
+                            safe_notify(
                                 "Referência visual anexada.",
                                 color="positive",
                             )
@@ -265,13 +266,13 @@ def register_home_pages(
                                 idea.update()
                             uploaded_script = None
                             attachment_list.refresh()
-                            ui.notify("Roteiro removido.", color="warning")
+                            safe_notify("Roteiro removido.", color="warning")
 
                         def remove_reference_upload(index: int) -> None:
                             if 0 <= index < len(reference_uploads):
                                 reference_uploads.pop(index)
                                 attachment_list.refresh()
-                                ui.notify("Imagem de referência removida.", color="warning")
+                                safe_notify("Imagem de referência removida.", color="warning")
 
                         with ui.element("div").classes("prompt-composer w-full relative"):
 
@@ -299,7 +300,7 @@ def register_home_pages(
                                 ui.upload(
                                     label="Enviar roteiro",
                                     on_upload=upload_script,
-                                    on_rejected=lambda: ui.notify(
+                                    on_rejected=lambda: safe_notify(
                                         "Envie PDF ou DOCX com ate 10 MB.", color="warning"
                                     ),
                                     auto_upload=True,
@@ -308,7 +309,7 @@ def register_home_pages(
                                 ui.upload(
                                     label="Enviar imagens",
                                     on_upload=upload_reference_image,
-                                    on_rejected=lambda: ui.notify(
+                                    on_rejected=lambda: safe_notify(
                                         "Envie JPG, PNG ou WebP com ate 10 MB.", color="warning"
                                     ),
                                     auto_upload=True,
@@ -851,7 +852,7 @@ def register_home_pages(
                                 )
                             refresh_idea_filter_options()
                             saved_results.refresh()
-                            ui.notify(
+                            safe_notify(
                                 f"{len(generated)} ideia(s) gerada(s) e salva(s).",
                                 color="positive",
                             )
@@ -911,7 +912,7 @@ def register_home_pages(
                     ]
                     refresh_idea_filter_options()
                     saved_results.refresh()
-                    ui.notify("Ideia apagada definitivamente.", color="warning")
+                    safe_notify("Ideia apagada definitivamente.", color="warning")
 
                 common_emotions = {
                     "Esperança",

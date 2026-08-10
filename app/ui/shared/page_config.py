@@ -554,6 +554,15 @@ def safe_close_ui_element(element: object) -> None:
         logger.warning("Could not close UI element because the page context was removed.")
 
 
+def safe_notify(message: str, **kwargs: Any) -> None:
+    try:
+        ui.notify(message, **kwargs)
+    except RuntimeError as exc:
+        if not is_deleted_ui_context_error(exc):
+            raise
+        logger.warning("Could not notify because the page context was removed.")
+
+
 COMPLETION_SOUND_JS = """
 (() => {
   try {
