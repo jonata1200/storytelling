@@ -38,9 +38,6 @@ jobs:
       APP_SECRET_KEY: ci-test-secret
       DATABASE_URL: postgresql+asyncpg://storytelling:storytelling@localhost:5432/storytelling
       REDIS_URL: redis://localhost:6379/0
-      CELERY_BROKER_URL: redis://localhost:6379/1
-      CELERY_RESULT_BACKEND: redis://localhost:6379/2
-      OPENROUTER_API_KEY: ""
       RUN_PROVIDER_SMOKE_TESTS: "0"
 
     steps:

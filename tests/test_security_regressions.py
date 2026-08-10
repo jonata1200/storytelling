@@ -7,11 +7,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-import app.auth.user_store as auth_user_store
 import app.providers.media_utils as media_utils
 import app.ui.workspace.assets_area as assets_area
 import app.video_generation.service as video_generation_service
-from app.auth.user_store import create_user, verify_user
 from app.config.runtime_preferences import load_runtime_preferences, save_runtime_preferences
 from app.core.enums import ProjectStatus
 from app.projects.models import Project
@@ -51,20 +49,6 @@ def test_app_without_auth_does_not_mask_endpoint_exceptions() -> None:
     client = TestClient(app)
     with pytest.raises(RuntimeError, match="boom"):
         client.get("/")
-
-
-def test_local_user_store_creates_and_verifies_user(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(auth_user_store, "PBKDF2_ITERATIONS", 1)
-    users_path = tmp_path / "users.json"
-    create_user("Jonata", "senha-segura", users_path)
-
-    assert verify_user("jonata", "senha-segura", users_path)
-    assert not verify_user("jonata", "senha-errada", users_path)
-
-    with pytest.raises(ValueError, match="ja existe"):
-        create_user("jonata", "outra-senha", users_path)
 
 
 def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
@@ -115,10 +99,6 @@ def test_runtime_json_corruption_falls_back_safely(tmp_path: Path) -> None:
     preferences_path = tmp_path / "preferences.json"
     preferences_path.write_text("{broken", encoding="utf-8")
     assert load_runtime_preferences(preferences_path) == {}
-
-    users_path = tmp_path / "users.json"
-    users_path.write_text("{broken", encoding="utf-8")
-    assert not verify_user("jonata", "senha-segura", users_path)
 
     ideas_path = tmp_path / "ideas.json"
     ideas_path.write_text("{broken", encoding="utf-8")

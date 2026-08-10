@@ -1,8 +1,6 @@
 import subprocess
 import tempfile
-from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 
 def resolution_dimensions(resolution: str) -> tuple[int, int]:
@@ -120,50 +118,3 @@ def render_timeline_video_normalized(
         completed = subprocess.run(concat_command, check=True, capture_output=True, text=True)
         logs.append(completed.stderr[-1000:])
     return "FFmpeg normalized incompatible clips before concat. " + "\n".join(logs)[-2000:]
-
-
-def render_timeline_video_with_audio(
-    ffmpeg_path: str,
-    clip_paths: list[Path],
-    audio_assets: Sequence[Any],
-    output_path: Path,
-    profile: dict,
-) -> str:
-    if not audio_assets:
-        return render_timeline_video(ffmpeg_path, clip_paths, output_path, profile)
-    with tempfile.TemporaryDirectory() as temporary_dir:
-        video_only_path = Path(temporary_dir) / "video_only.mp4"
-        video_log = render_timeline_video(ffmpeg_path, clip_paths, video_only_path, profile)
-        command = [ffmpeg_path, "-y", "-i", str(video_only_path)]
-        for audio in audio_assets:
-            command.extend(["-i", str(audio.path)])
-        filter_parts = [
-            f"[{index}:a]adelay={audio.start_ms}:all=1[a{index}]"
-            for index, audio in enumerate(audio_assets, start=1)
-        ]
-        mixed_inputs = "".join(f"[a{index}]" for index in range(1, len(audio_assets) + 1))
-        filter_parts.append(
-            f"{mixed_inputs}amix=inputs={len(audio_assets)}:duration=longest:normalize=0[mix]"
-        )
-        command.extend(
-            [
-                "-filter_complex",
-                ";".join(filter_parts),
-                "-map",
-                "0:v:0",
-                "-map",
-                "[mix]",
-                "-c:v",
-                "copy",
-                "-c:a",
-                str(profile.get("audio_codec") or "aac"),
-                "-shortest",
-                str(output_path),
-            ]
-        )
-        completed = subprocess.run(command, check=True, capture_output=True, text=True)
-    audio_log = completed.stderr[-1000:] if completed.stderr else ""
-    return (
-        "FFmpeg rendered the final timeline with character dialogue audio. "
-        f"{video_log} {audio_log}"
-    )[-2000:]

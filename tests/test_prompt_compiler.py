@@ -10,7 +10,6 @@ from app.generation.prompt_compiler import compile_prompt
 from app.generation.service import (
     DEFAULT_TEMPLATES,
     run_structured_generation,
-    should_fallback_to_mock,
 )
 from app.providers.llm.types import LLMRequest, LLMResult
 
@@ -88,33 +87,6 @@ def test_text_generation_timeout_budget_stays_bounded_for_ui_flows() -> None:
         "revise_script",
     ):
         assert generation_service.TASK_TIMEOUT_SECONDS[task] <= 180
-
-
-def test_generation_fallback_detects_provider_resource_exhaustion() -> None:
-    error = RuntimeError(
-        "Provider retornou erro: upstream service: "
-        "ResourceExhausted: Worker local total request limit reached (32/32)"
-    )
-
-    assert should_fallback_to_mock(error) is True
-
-
-def test_generation_fallback_detects_provider_malformed_model_response() -> None:
-    error = RuntimeError("Provider retornou conteúdo que não é JSON válido")
-
-    assert should_fallback_to_mock(error) is True
-
-
-def test_generation_fallback_ignores_schema_errors() -> None:
-    error = RuntimeError("generate_script: empty field 'content'")
-
-    assert should_fallback_to_mock(error) is False
-
-
-def test_creative_narrative_tasks_do_not_allow_runtime_mock_fallback() -> None:
-    assert generation_service.allow_runtime_mock_fallback("generate_story_ideas", True) is False
-    assert generation_service.allow_runtime_mock_fallback("generate_script", True) is False
-    assert generation_service.allow_runtime_mock_fallback("director_agent_chat", True) is False
 
 
 class _FakePromptScalars:

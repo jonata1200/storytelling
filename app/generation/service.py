@@ -300,38 +300,6 @@ def _raw_response_preview(value: str | None, limit: int = 1200) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
-def should_fallback_to_mock(exc: Exception) -> bool:
-    message = str(exc).lower()
-    transient_terms = (
-        "resourceexhausted",
-        "resource exhausted",
-        "request limit",
-        "rate limit",
-        "limite",
-        "429",
-        "upstream error",
-        "worker local total request limit",
-        "temporarily unavailable",
-        "overloaded",
-        "timeout",
-        "timed out",
-        "urlerror",
-        "network",
-        "connection",
-        "dns",
-        "temporary failure",
-        "remote end closed",
-        "provider retornou resposta fora",
-        "provider retornou resposta sem choices",
-        "provider retornou choices fora",
-        "provider retornou message fora",
-        "provider retornou content vazio",
-        "provider retornou conteúdo que não é json válido",
-        "provider retornou json fora",
-    )
-    return any(term in message for term in transient_terms)
-
-
 def should_fallback_to_text_provider(exc: Exception) -> bool:
     message = str(exc).lower()
     if isinstance(exc, ValueError):
@@ -401,11 +369,6 @@ def text_provider_fallback_names(settings: object, primary_provider: str) -> lis
     return names
 
 
-def allow_runtime_mock_fallback(task: str, requested: bool) -> bool:
-    _ = task, requested
-    return False
-
-
 async def get_or_create_prompt_template(session: AsyncSession, task: str) -> PromptTemplate:
     result = await session.execute(
         select(PromptTemplate)
@@ -467,6 +430,8 @@ async def _generate_with_timeout(
     task: str,
     timeout_seconds: float,
 ) -> LLMResult:
+    # Fallback para mock desativado por design (chaves e qualidade): provedores mock-*
+    # são bloqueados em runtime mesmo se solicitados (ver docs/04 item 4.6).
     if getattr(provider, "provider_name", "") == "mock":
         raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")
     try:

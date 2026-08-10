@@ -69,7 +69,6 @@ from app.storytelling.story_bible_normalization import (
     normalize_story_bible_payload,
     story_bible_quality_report,
     story_bible_validation_errors,
-    validate_story_bible_payload,
 )
 from app.storytelling.story_idea_normalization import (
     STORY_IDEA_REQUIRED_TEXT_FIELDS,

@@ -2,7 +2,7 @@
 from typing import cast
 
 from app.storytelling.models import Briefing
-from app.storytelling.normalization_common import GenerationOutputError, _required_str
+from app.storytelling.normalization_common import _required_str
 from app.storytelling.script_contracts import (
     _story_bible_script_contract,
     _story_bible_visual_contract,
@@ -403,12 +403,6 @@ def story_bible_validation_errors(payload: dict) -> list[str]:
     if int(report["completeness_score"]) < 80:
         errors.append(f"completeness_score abaixo de 80 ({report['completeness_score']})")
     return errors
-
-
-def validate_story_bible_payload(payload: dict, context: str) -> None:
-    errors = story_bible_validation_errors(payload)
-    if errors:
-        raise GenerationOutputError(f"{context}: Story Bible incompleta ({'; '.join(errors)})")
 
 
 def normalize_story_bible_payload(

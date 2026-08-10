@@ -3,135 +3,130 @@
 Código que não é usado pela aplicação (apenas por testes), duplicações com risco de
 divergência e resquícios de arquiteturas antigas.
 
----
-
-## 4.1 Módulo de autenticação órfão: `app/auth/user_store.py`
-
-**Arquivo:** `app/auth/user_store.py` — **não é importado por nenhum código de produção**
-(apenas por `tests/test_security_regressions.py`).
-
-- Implementa um segundo sistema de usuários baseado em arquivo JSON
-  (`.runtime/users.json`) com PBKDF2 de 210.000 iterações e formato próprio de hash.
-- O sistema **ativo** usa PostgreSQL (`app/projects/models.User`) com
-  `app/auth/passwords.py` (PBKDF2 260.000, formato `pbkdf2_sha256$...`).
-
-**Consequência:** dois formatos de senha e duas fontes de verdade. Alguém que tente
-"resolver" autenticação pode mexer no módulo errado.
-
-**Correção sugerida:** remover `user_store.py` e os testes que o exercitam, ou consolidar
-em um único sistema.
+> **Status: ✅ ITENS DE AÇÃO CORRIGIDOS (10/08/2026)**
+> Decisões do usuário: remover módulo órfão (4.1) e remover funções mortas (4.6).
+> `ruff check app tests` limpo · `mypy app tests` 0 erros · suíte pytest passando.
 
 ---
 
-## 4.2 Função duplicada: `render_timeline_video_with_audio`
+## 4.1 Módulo de autenticação órfão: `app/auth/user_store.py` ✅
 
-**Arquivos:** `app/finalization/ffmpeg_exporter.py` (linha 125) e
-`app/finalization/service.py` (`_render_timeline_video_with_audio`, linha ~91)
+**Arquivo:** `app/auth/user_store.py` — **removido** (decisão do usuário).
 
-- A versão de `ffmpeg_exporter.py` **nunca é chamada** em produção.
-- `finalization/service.py` mantém uma cópia quase idêntica (com `_render_timeline_video`).
-
-**Correção sugerida:** remover a cópia não utilizada ou fazer o `service.py` delegar
-integralmente ao `ffmpeg_exporter.py`.
-
----
-
-## 4.3 Código inalcançável em `_approve_video_prompts_from_ui`
-
-**Arquivo:** `app/ui/visual/actions.py` (linhas ~530-546)
-
-Após `ui.navigate.reload(); return`, existe um bloco morto que referencia `result`, `jobs`,
-`clips` (fluxo antigo de geração direta de vídeo, removido em favor da fila de jobs).
-O vulture reporta: `app/ui/visual/actions.py:546: unreachable code after 'return'`.
-
-**Correção sugerida:** remover o bloco morto.
+- Removido o módulo inteiro (segundo sistema de usuários em JSON, formato de hash próprio).
+- Removidos de `tests/test_security_regressions.py`: os imports de `user_store`,
+  o teste `test_local_user_store_creates_and_verifies_user` e a parte de `users.json`
+  do teste `test_runtime_json_corruption_falls_back_safely` (que exercitava
+  `verify_user` com arquivo corrompido). O teste mantém a cobertura de corrupção de
+  `preferences.json` e `ideas.json`.
+- O sistema ativo (PostgreSQL, `app/auth/passwords.py`) permanece intacto — agora há
+  **uma única** fonte de verdade para senhas/usuários.
 
 ---
 
-## 4.4 Parâmetros de duração não utilizados no Idea Lab
+## 4.2 Função duplicada: `render_timeline_video_with_audio` ✅
+
+**Arquivo:** `app/finalization/ffmpeg_exporter.py`
+
+- Removida a cópia não utilizada `render_timeline_video_with_audio` (nunca chamada em
+  produção) e os imports que ficaram órfãos (`Sequence`, `Any`).
+- `finalization/service.py` continua delegando `render_timeline_video` e
+  `concat_file_line` ao exporter, e mantém sua cópia privada `_render_timeline_video_with_audio`
+  (a usada em produção e coberta por `tests/test_finalization_profile.py`).
+
+---
+
+## 4.3 Código inalcançável em `_approve_video_prompts_from_ui` ✅
+
+**Arquivo:** `app/ui/visual/actions.py`
+
+- Já corrigido na rodada de **bugs críticos** (item 1.8): o bloco morto após
+  `ui.navigate.reload(); return` foi removido.
+
+---
+
+## 4.4 Parâmetros de duração não utilizados no Idea Lab ✅
 
 **Arquivo:** `app/storytelling/idea_lab.py`
 
-- `idea_lab.py:37` — `duration_minutes` não usado em `build_idea_lab_prompt`.
-- `idea_lab.py:108` e `:132` — `target_duration_minutes` não usado.
-
-(Comportamento detalhado em `02-bugs-funcionais.md` item 2.1.)
+- Já corrigido na rodada de **bugs funcionais** (item 2.1): `duration_minutes` e
+  `target_duration_minutes` agora são usados (prompt, geradores e `_normalize_idea`).
 
 ---
 
-## 4.5 Import não utilizado
+## 4.5 Import não utilizado ✅
 
-**Arquivo:** `app/storytelling/normalization.py:57` — `validate_story_bible_payload`
-importado e não usado (provável resquício da remoção do story bible, migração
-`202607210012_remove_story_bible.py`).
+**Arquivos:** `app/storytelling/normalization.py`, `app/storytelling/story_bible_normalization.py`
+
+- Removido o import `validate_story_bible_payload` de `normalization.py`.
+- A função estava 100% sem chamadores — **removida** também de
+  `story_bible_normalization.py`, junto com o import de `GenerationOutputError`
+  que ficou órfão. `story_bible_validation_errors` e `story_bible_quality_report`
+  permanecem (usados por `normalization.py`).
 
 ---
 
-## 4.6 Fallback para mock desativado de forma permanente
+## 4.6 Fallback para mock desativado de forma permanente ✅
 
 **Arquivo:** `app/generation/service.py`
 
-- `should_fallback_to_mock(exc)` (linha 303) — **não é chamado** por código de produção.
-- `allow_runtime_mock_fallback(task, requested)` (linha 404) — sempre retorna `False` e
-  só é exercitada por `tests/test_prompt_compiler.py:114`.
-
-**Observação:** o bloqueio de mock é intencional (chaves/qualidade), mas as funções ficaram
-mortas. Manter apenas o que for de fato usado, ou documentar a intenção.
-
----
-
-## 4.7 Função com ramos inúteis
-
-- `app/config/settings.py::_optional_provider` — parâmetro `legacy_default` ignorado
-  (ver `02-bugs-funcionais.md` item 2.4).
-- `app/config/provider_policy.py::provider_requires_api_key` — sempre `True`
-  (ver `02-bugs-funcionais.md` item 2.5).
+- Removidas as funções mortas `should_fallback_to_mock` e `allow_runtime_mock_fallback`
+  (decisão do usuário), e os 4 testes que as exercitavam em
+  `tests/test_prompt_compiler.py` (inclusive o import).
+- A intenção da política ficou **documentada no ponto real de bloqueio**,
+  `_generate_with_timeout`: provedores `mock-*` são bloqueados em runtime
+  (`raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")`).
+- `should_fallback_to_text_provider` (usada em produção e testada) foi **preservada**.
 
 ---
 
-## 4.8 Duplicação de `redact_secrets`
+## 4.7 Função com ramos inúteis ✅
 
-**Arquivos:** `app/observability/redaction.py` e `app/quality/security.py`
-
-Duas implementações independentes de `redact_secrets` com padrões diferentes
-(uma redige chaves estilo `sk-...`, a outra `api_key=...`). As duas são usadas em
-contextos distintos, mas a sobreposição dificulta manter os padrões atualizados.
-
-**Correção sugerida:** unificar em um único módulo (ex.: `observability/redaction.py`) e
-importar nos dois lugares.
+- `app/config/settings.py::_optional_provider` — `legacy_default` removido na rodada
+  de **bugs funcionais** (item 2.4).
+- `app/config/provider_policy.py::provider_requires_api_key` — corrigido na rodada de
+  **bugs funcionais** (item 2.5), agora distingue providers reais de mock/desconhecidos.
 
 ---
 
-## 4.9 Resquícios de Celery/OpenRouter
+## 4.8 Duplicação de `redact_secrets` ✅
 
-- `app/ui/page_runtime.py` — `LEGACY_EXTERNAL_QUEUE_MESSAGE` (mensagem do antigo worker)
-  e a normalização correspondente.
-- `.github/workflows/ci.yml` — variáveis de ambiente `CELERY_BROKER_URL`,
-  `CELERY_RESULT_BACKEND` e `OPENROUTER_API_KEY` que **não existem mais no código**.
-- README já documenta: "Não há dependência de Celery ou worker externo".
+**Arquivos:** `app/observability/redaction.py` (fonte única) e `app/quality/security.py`
 
----
-
-## 4.10 Re-exports da UI (`app/ui/pages.py`) — falsos positivos do vulture
-
-`app/ui/pages.py` re-exporta dezenas de símbolos com `# noqa: F401` para que
-`app/ui/page_runtime.py` os acesse via `getattr(sys.modules["app.ui.pages"], name)`
-(`_page_attr`). O vulture os marca como código morto, mas **são usados dinamicamente**.
-
-**Atenção:** esse padrão de "ponte" via `getattr` é frágil — qualquer renomeação quebra em
-runtime sem erro estático (ver `09-arquitetura-e-divida-tecnica.md`).
+- `quality/security.py` agora **importa** `redact_secrets` de `observability/redaction.py`;
+  removidas a implementação local e a lista `SECRET_PATTERNS`.
+- **Mudança intencional de comportamento:** a versão unificada mantém o nome da chave
+  (`api_key=[REDACTED]`) e não exige comprimento mínimo do valor — a detecção fica
+  **levemente mais agressiva** no `security_scan_text` (valores curtos do tipo
+  `api_key=...` passam a ser sinalizados). Testes de `test_quality_security.py` e
+  `test_observability_events.py` passam.
 
 ---
 
-## 4.11 Outros pontos menores
+## 4.9 Resquícios de Celery/OpenRouter ✅
 
-- `app/providers/llm/mock.py`, `image/mock.py`, `video/mock.py`, `speech/mock.py` — usados
-  apenas por testes/modos smoke. OK manter, mas confirmar que o bloqueio de runtime está
-  ativo (está — `validate_model_name` bloqueia `mock-*`).
-- `scripts/app.ps1`, `scripts/executar.ps1`, `scripts/finalizar.ps1` — wrappers de
-  compatibilidade, conforme README.
-- `app/generation/model_settings.py::SUPPORTED_MODEL_PROVIDERS` é
-  `frozenset(SUPPORTED_TEXT_PROVIDERS)` = `{"ollama_cloud"}` — o campo `provider` de
-  `ProjectModelSetting` só aceita um provider hoje; o restante do código trata
-  `google_ai`/`elevenlabs` como providers de mídia, então não há bug, mas a nomenclatura
-  confunde.
+- `app/ui/page_runtime.py` / `app/ui/shared/assistant_state.py` — a normalização da
+  mensagem legada `LEGACY_EXTERNAL_QUEUE_MESSAGE` foi **removida** na rodada de
+  **bugs funcionais** (item 2.7, decisão do usuário).
+- `.github/workflows/ci.yml` — removidas as variáveis inexistentes no código:
+  `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` e `OPENROUTER_API_KEY`.
+  `REDIS_URL` foi **mantida** (usada por `settings.redis_url` e pelo health check de
+  observabilidade).
+
+---
+
+## 4.10 Re-exports da UI (`app/ui/pages.py`) — sem ação
+
+Falsos positivos do vulture: os símbolos re-exportados com `# noqa: F401` são usados
+dinamicamente via `_page_attr`/`getattr(sys.modules["app.ui.pages"], name)` em
+`app/ui/page_runtime.py`. Mantidos. A fragilidade do padrão de ponte `getattr` está
+documentada em `09-arquitetura-e-divida-tecnica.md`.
+
+---
+
+## 4.11 Outros pontos menores — sem ação
+
+- Providers `mock.py` mantidos (modo smoke/testes) — o bloqueio de runtime está ativo
+  em `_generate_with_timeout` (ver 4.6).
+- `scripts/*.ps1` — wrappers de compatibilidade, conforme README.
+- `SUPPORTED_MODEL_PROVIDERS` — nota de nomenclatura confirmada (sem bug).
