@@ -258,8 +258,10 @@ DEFAULT_TEMPLATES: dict[str, str] = {
     "revise_script": (
         "Revise o roteiro existente atendendo ao pedido do usuario. "
         "Preserve a continuidade da ideia, dos personagens e dos ativos visuais, "
-        "mantendo a duração alvo de "
-        "{target_duration_seconds}s. Pedido do usuario: {instruction}. "
+        "mas ajuste tamanho e duração quando o pedido solicitar. Roteiro atual: "
+        "{current_duration_seconds}s e {current_word_count} palavras. Meta desta revisão: "
+        "{revision_target_duration_seconds}s e aproximadamente {revision_target_word_count} "
+        "palavras. {revision_sizing_guidance} Pedido do usuario: {instruction}. "
         "Contexto do projeto: {project_context}. Roteiro atual: {current_script}. "
         "Se o pedido citar cenas especificas por número, reescreva somente essas cenas "
         "e preserve as demais cenas com o mesmo conteúdo, ordem e numeração. Se o pedido "

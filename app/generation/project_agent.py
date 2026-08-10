@@ -744,14 +744,6 @@ async def handle_project_chat(
             failed=_is_ai_generation_failure_message(result_message),
         )
     if action == "revise_script":
-        blockers = await _script_agent_edit_blockers(session, project_id)
-        if blockers:
-            return ProjectChatResult(
-                _script_agent_edit_blocked_message(blockers),
-                action,
-                False,
-                True,
-            )
         script, result_message, changed = await _ensure_script_pipeline(
             session, project_id, progress
         )

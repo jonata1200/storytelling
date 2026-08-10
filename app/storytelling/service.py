@@ -1,4 +1,6 @@
-﻿from decimal import Decimal
+﻿import re
+import unicodedata
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -102,6 +104,114 @@ SCRIPT_GENERATION_MAX_ATTEMPTS = 3
 
 
 
+
+
+def _revision_match_text(value: str) -> str:
+    without_accents = "".join(
+        char for char in unicodedata.normalize("NFKD", value) if not unicodedata.combining(char)
+    )
+    return re.sub(r"[^a-z0-9]+", " ", without_accents.lower()).strip()
+
+
+def _requested_revision_duration_seconds(instruction: str) -> int | None:
+    normalized = _revision_match_text(instruction)
+    minute_match = re.search(
+        r"\b(\d+(?:[,.]\d+)?)\s*(?:minutos|minuto|mins|min|m)\b",
+        normalized,
+    )
+    if minute_match:
+        return max(15, int(float(minute_match.group(1).replace(",", ".")) * 60))
+    second_match = re.search(
+        r"\b(\d+(?:[,.]\d+)?)\s*(?:segundos|segundo|segs|seg|s)\b",
+        normalized,
+    )
+    if second_match:
+        return max(15, int(float(second_match.group(1).replace(",", "."))))
+    return None
+
+
+def _script_revision_size_targets(
+    instruction: str, current_duration_seconds: int, current_word_count: int
+) -> tuple[int, int, str]:
+    normalized = _revision_match_text(instruction)
+    explicit_duration = _requested_revision_duration_seconds(instruction)
+    current_duration_seconds = max(15, int(current_duration_seconds or 15))
+    current_word_count = max(1, int(current_word_count or 1))
+    shrink_terms = (
+        "reduz",
+        "reduzir",
+        "reduza",
+        "diminu",
+        "encurt",
+        "menor",
+        "mais curto",
+        "curto",
+        "menos extenso",
+        "resum",
+        "compact",
+        "grande",
+        "extensa",
+        "extenso",
+    )
+    expand_terms = (
+        "aument",
+        "expand",
+        "along",
+        "maior",
+        "mais longo",
+        "mais extensa",
+        "mais extenso",
+        "desenvolva mais",
+    )
+    wants_shrink = any(term in normalized for term in shrink_terms)
+    wants_expand = any(term in normalized for term in expand_terms) and not wants_shrink
+    if wants_shrink:
+        target_duration = explicit_duration or max(15, int(current_duration_seconds * 0.65))
+        target_ratio = target_duration / current_duration_seconds if explicit_duration else 0.65
+        target_words = max(80, int(current_word_count * target_ratio))
+        return (
+            target_duration,
+            target_words,
+            (
+                "O pedido é de redução/compactação. Reescreva uma versão claramente "
+                f"mais curta que a atual, com cerca de {target_words} palavras e "
+                f"duração aproximada de {target_duration}s. Corte repetições, cenas "
+                "redundantes e diálogos explicativos, preservando começo, virada dramática "
+                "e desfecho."
+            ),
+        )
+    if wants_expand:
+        target_duration = explicit_duration or int(current_duration_seconds * 1.35)
+        target_words = max(current_word_count + 80, int(current_word_count * 1.35))
+        return (
+            target_duration,
+            target_words,
+            (
+                "O pedido é de ampliação. Reescreva uma versão claramente mais desenvolvida "
+                f"que a atual, com cerca de {target_words} palavras e duração aproximada "
+                f"de {target_duration}s, acrescentando conflito, subtexto e progressão "
+                "dramática sem perder o formato cinematográfico."
+            ),
+        )
+    if explicit_duration is not None:
+        ratio = explicit_duration / current_duration_seconds
+        target_words = max(80, int(current_word_count * ratio))
+        return (
+            explicit_duration,
+            target_words,
+            (
+                f"Ajuste o roteiro para a nova duração solicitada de {explicit_duration}s, "
+                f"com cerca de {target_words} palavras, preservando o contrato narrativo."
+            ),
+        )
+    return (
+        current_duration_seconds,
+        current_word_count,
+        (
+            "Se o pedido não solicitar mudança de tamanho ou duração, mantenha a duração "
+            "e a escala narrativa atuais. Se solicitar, obedeça ao pedido do usuário."
+        ),
+    )
 
 
 def _retry_script_generation_after_runtime_error(exc: Exception) -> bool:
@@ -319,10 +429,22 @@ async def revise_script(
     if artifact is None:
         return None
 
+    revision_target_duration_seconds, revision_target_word_count, revision_sizing_guidance = (
+        _script_revision_size_targets(
+            instruction,
+            script.target_duration_seconds,
+            script.word_count,
+        )
+    )
     variables = {
         "title": script.title,
         "language": script.language,
-        "target_duration_seconds": script.target_duration_seconds,
+        "target_duration_seconds": revision_target_duration_seconds,
+        "current_duration_seconds": script.target_duration_seconds,
+        "current_word_count": script.word_count,
+        "revision_target_duration_seconds": revision_target_duration_seconds,
+        "revision_target_word_count": revision_target_word_count,
+        "revision_sizing_guidance": revision_sizing_guidance,
         "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
         "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
         "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
@@ -358,7 +480,7 @@ async def revise_script(
                 _required_mapping(result.content, "revise_script"),
                 default_title=script.title,
                 language=script.language,
-                target_duration_seconds=script.target_duration_seconds,
+                target_duration_seconds=revision_target_duration_seconds,
             )
             break
         except GenerationOutputError as exc:

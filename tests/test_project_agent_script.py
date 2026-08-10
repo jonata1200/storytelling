@@ -10,8 +10,8 @@ test_project_chat_can_force_full_script_regeneration = (
 test_project_chat_blocks_script_regeneration_after_visual_stage = (
     cases.test_project_chat_blocks_script_regeneration_after_visual_stage
 )
-test_project_chat_blocks_script_revision_after_visual_stage = (
-    cases.test_project_chat_blocks_script_revision_after_visual_stage
+test_project_chat_allows_script_revision_after_visual_stage = (
+    cases.test_project_chat_allows_script_revision_after_visual_stage
 )
 test_forced_script_pipeline_does_not_refresh_existing_visual_bible = (
     cases.test_forced_script_pipeline_does_not_refresh_existing_visual_bible

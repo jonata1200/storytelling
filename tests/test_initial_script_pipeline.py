@@ -229,6 +229,31 @@ def test_initial_story_bible_pipeline_was_removed() -> None:
     assert not hasattr(pages, "_generate_initial_story_bible")
 
 
+def test_script_revision_size_targets_shrink_generic_reduction_request() -> None:
+    duration, words, guidance = storytelling_service._script_revision_size_targets(
+        "poderia reduzir o tamanho desse roteiro, esta muito grande e extensa",
+        300,
+        900,
+    )
+
+    assert duration == 195
+    assert words == 585
+    assert "redução" in guidance
+    assert "mais curta" in guidance
+
+
+def test_script_revision_size_targets_use_explicit_duration() -> None:
+    duration, words, guidance = storytelling_service._script_revision_size_targets(
+        "reduza para 2 minutos",
+        300,
+        900,
+    )
+
+    assert duration == 120
+    assert words == 360
+    assert "120s" in guidance
+
+
 @pytest.mark.asyncio
 async def test_project_chat_can_trigger_script_generation(
     monkeypatch: pytest.MonkeyPatch,

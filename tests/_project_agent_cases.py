@@ -314,10 +314,12 @@ async def test_project_chat_blocks_script_regeneration_after_visual_stage(
 
 
 @pytest.mark.asyncio
-async def test_project_chat_blocks_script_revision_after_visual_stage(
+async def test_project_chat_allows_script_revision_after_visual_stage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
+    script_id = uuid4()
+    calls: list[str] = []
 
     async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
         assert requested_project_id == project_id
@@ -327,12 +329,30 @@ async def test_project_chat_blocks_script_revision_after_visual_stage(
         assert requested_project_id == project_id
         return 1 if model is project_agent.VisualReference else 0
 
-    async def fail_ensure_script(*args: Any, **kwargs: Any) -> tuple[None, str, bool]:
-        raise AssertionError("script should not be revised after visual stage")
+    async def fake_ensure_script(
+        session: AsyncSession, requested_project_id: Any, progress: Any = None
+    ) -> tuple[SimpleNamespace, str, bool]:
+        calls.append("ensure_script")
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=script_id), "pronto", False
+
+    async def fake_revise_script(*args: Any, **kwargs: Any) -> SimpleNamespace:
+        calls.append("revise")
+        assert args[1] == project_id
+        assert args[2] == script_id
+        assert "diálogos" in args[3]
+        return SimpleNamespace(id=script_id)
+
+    async def fake_mark_scene_plan_stale(*args: Any, **kwargs: Any) -> None:
+        calls.append("mark_scene_plan_stale")
+        assert args[1] == project_id
+        assert args[2] == script_id
 
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
     monkeypatch.setattr(project_agent, "_count", fake_count)
-    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fail_ensure_script)
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_ensure_script)
+    monkeypatch.setattr(project_agent, "revise_script", fake_revise_script)
+    monkeypatch.setattr(project_agent, "mark_scene_plan_stale", fake_mark_scene_plan_stale)
 
     result = await handle_project_chat(
         cast(AsyncSession, object()),
@@ -343,8 +363,10 @@ async def test_project_chat_blocks_script_revision_after_visual_stage(
     )
 
     assert result.action == "revise_script"
-    assert result.failed is True
-    assert "Não posso alterar o roteiro pelo agente" in result.message
+    assert result.failed is False
+    assert result.changed is True
+    assert "Roteiro revisado" in result.message
+    assert calls == ["ensure_script", "revise", "mark_scene_plan_stale"]
 
 
 @pytest.mark.asyncio
