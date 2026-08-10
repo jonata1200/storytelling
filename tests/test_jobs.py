@@ -65,6 +65,11 @@ def test_pending_job_is_stale_after_redispatch_window() -> None:
     assert jobs_service.pending_job_is_stale(cast(Any, job), now) is True
 
 
+def test_schedule_stale_job_recovery_is_noop_without_running_loop() -> None:
+    # Fora de um loop assíncrono (ex.: import inicial), a recuperação não deve levantar.
+    jobs_service.schedule_stale_job_recovery()
+
+
 @pytest.mark.asyncio
 async def test_enqueue_project_step_does_not_dispatch_exhausted_failed_job(
     monkeypatch: pytest.MonkeyPatch,

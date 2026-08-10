@@ -12,7 +12,7 @@ from app.observability.middleware import CorrelationIdMiddleware
 from app.runtime import install_asyncio_exception_filter
 from app.workflows.state_machine import WorkflowStateError
 
-LOCAL_STORAGE_MOUNT_ENVS = {"local", "test"}
+LOCAL_STORAGE_MOUNT_ENVS = {"local", "development", "test"}
 LOCAL_DOCS_ENVS = {"local", "development", "test"}
 
 
@@ -31,6 +31,10 @@ def create_app(include_ui: bool = True) -> FastAPI:
     app.include_router(api_router)
     app.include_router(auth_ui_router)
     app.router.on_startup.append(install_asyncio_exception_filter)
+
+    from app.jobs.service import schedule_stale_job_recovery
+
+    app.router.on_startup.append(schedule_stale_job_recovery)
 
     @app.get("/static/widget.js", include_in_schema=False)
     async def empty_injected_widget_script() -> Response:

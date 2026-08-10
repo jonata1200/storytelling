@@ -80,6 +80,18 @@ class _PreparedVideoJob:
     variant_index: int
 
 
+@dataclass(slots=True)
+class _PlannedVideoJob:
+    frame: StoryboardFrame
+    video_prompt: str
+    request_fingerprint: str
+    idempotency_key: str
+    variant_index: int
+    source_image_uri: str | None
+    reference_uris: list[str]
+    existing_job: GenerationJob | None
+
+
 def video_generation_concurrency(value: int | None = None) -> int:
     configured = get_settings().video_generation_concurrency if value is None else value
     return max(
@@ -511,6 +523,9 @@ async def _generate_video_clips_concurrent(
     production_metadata = production_settings.metadata_json or {}
     shot_context = await _shot_context_for_frames(session, frames)
     billable_seconds = 0
+    jobs: list[GenerationJob] = []
+    clips: list[VideoClip] = []
+    planned_jobs: list[_PlannedVideoJob] = []
     for frame in frames:
         source_image_uri = await _asset_storage_uri(session, frame.asset_id)
         reference_uris = (
@@ -546,8 +561,27 @@ async def _generate_video_clips_concurrent(
                 existing_job.status != GenerationJobStatus.FAILED
                 or existing_job.attempts >= existing_job.max_attempts
             ):
+                jobs.append(existing_job)
+                existing_clip = await session.execute(
+                    select(VideoClip).where(VideoClip.generation_job_id == existing_job.id)
+                )
+                clip = existing_clip.scalars().first()
+                if clip is not None:
+                    clips.append(clip)
                 continue
             billable_seconds += frame.duration_seconds
+            planned_jobs.append(
+                _PlannedVideoJob(
+                    frame=frame,
+                    video_prompt=video_prompt,
+                    request_fingerprint=request_fingerprint,
+                    idempotency_key=idempotency_key,
+                    variant_index=variant_index,
+                    source_image_uri=source_image_uri,
+                    reference_uris=reference_uris,
+                    existing_job=existing_job,
+                )
+            )
 
     video_cost_estimate = estimate_operation_cost(
         "image_to_video",
@@ -563,8 +597,6 @@ async def _generate_video_clips_concurrent(
     )
 
     video_dir = get_settings().local_storage_path / video_dir_name / str(project_id)
-    jobs: list[GenerationJob] = []
-    clips: list[VideoClip] = []
     prepared_jobs: list[_PreparedVideoJob] = []
     raw_submitter = getattr(provider, "submit_from_image", None)
     raw_poller = getattr(provider, "poll_submitted_from_image", None)
@@ -575,148 +607,113 @@ async def _generate_video_clips_concurrent(
         else None
     )
 
-    for frame in frames:
-        source_image_uri = await _asset_storage_uri(session, frame.asset_id)
-        reference_uris = (
-            _storyboard_canonical_reference_uris(frame)
-            if include_canonical_references
-            else []
-        )
-        shot, scene = shot_context.get(frame.shot_id, (None, None))
-        video_prompt = _video_effective_prompt(production_metadata, frame, shot, scene)
-        for variant_index in range(1, variants_per_frame + 1):
-            request_fingerprint = _video_request_fingerprint(
-                frame,
-                source_image_uri,
-                resolved_provider,
-                resolved_model,
-                aspect_ratio,
-                video_size,
-                video_prompt,
-                reference_uris,
-            )
-            idempotency_key = video_idempotency_key(
-                frame.id,
-                variant_index,
-                resolved_provider,
-                resolved_model,
-                request_fingerprint,
-            )
-            existing = await session.execute(
-                select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
-            )
-            existing_job = existing.scalars().first()
-            if existing_job is not None:
-                if (
-                    existing_job.status != GenerationJobStatus.FAILED
-                    or existing_job.attempts >= existing_job.max_attempts
-                ):
-                    jobs.append(existing_job)
-                    existing_clip = await session.execute(
-                        select(VideoClip).where(VideoClip.generation_job_id == existing_job.id)
-                    )
-                    clip = existing_clip.scalars().first()
-                    if clip is not None:
-                        clips.append(clip)
-                    continue
-                existing_job.status = GenerationJobStatus.RUNNING
-                existing_job.progress = 5
-                existing_job.attempts += 1
-                existing_job.error = None
-                existing_job.started_at = datetime.now(UTC)
-                existing_job.completed_at = None
-                job = existing_job
-            else:
-                job = GenerationJob(
-                    project_id=project_id,
-                    source_artifact_id=frame.artifact_id,
-                    job_type=GenerationJobType.VIDEO,
-                    status=GenerationJobStatus.RUNNING,
-                    progress=5,
-                    attempts=1,
-                    max_attempts=3,
-                    provider=resolved_provider,
-                    model=resolved_model,
-                    idempotency_key=idempotency_key,
-                    response_payload={},
-                    cost_estimate=calculate_total_cost(
-                        Decimal(frame.duration_seconds),
-                        MOCK_VIDEO_UNIT_COST_PER_SECOND,
-                    ),
-                    started_at=datetime.now(UTC),
-                )
-                session.add(job)
-
-            request_payload = {
-                "storyboard_frame_id": str(frame.id),
-                "frame_number": frame.frame_number,
-                "duration_seconds": frame.duration_seconds,
-                "prompt": video_prompt,
-                "video_prompt": video_prompt,
-                "storyboard_prompt": frame.prompt,
-                "variant_index": variant_index,
-                "source_image_asset_id": str(frame.asset_id),
-                "source_image_uri": source_image_uri,
-                "reference_uris": reference_uris,
-                "reference_count": len(reference_uris),
-                "provider": resolved_provider,
-                "model": resolved_model,
-                "aspect_ratio": aspect_ratio,
-                "size": video_size,
-                "request_fingerprint": request_fingerprint,
-            }
-            job.request_payload = request_payload
-            job.response_payload = job.response_payload or {}
-            await session.flush()
-            await _emit_video_job_event(
-                session,
+    for plan in planned_jobs:
+        frame = plan.frame
+        source_image_uri = plan.source_image_uri
+        reference_uris = plan.reference_uris
+        video_prompt = plan.video_prompt
+        request_fingerprint = plan.request_fingerprint
+        variant_index = plan.variant_index
+        if plan.existing_job is not None:
+            existing_job = plan.existing_job
+            existing_job.status = GenerationJobStatus.RUNNING
+            existing_job.progress = 5
+            existing_job.attempts += 1
+            existing_job.error = None
+            existing_job.started_at = datetime.now(UTC)
+            existing_job.completed_at = None
+            job = existing_job
+        else:
+            job = GenerationJob(
                 project_id=project_id,
-                frame=frame,
-                job=job,
-                status="started",
+                source_artifact_id=frame.artifact_id,
+                job_type=GenerationJobType.VIDEO,
+                status=GenerationJobStatus.RUNNING,
+                progress=5,
+                attempts=1,
+                max_attempts=3,
                 provider=resolved_provider,
                 model=resolved_model,
-                message="Geracao de video iniciada",
-                estimated_cost=video_cost_estimate.estimated,
-                details={"duration_seconds": frame.duration_seconds},
+                idempotency_key=plan.idempotency_key,
+                response_payload={},
+                cost_estimate=calculate_total_cost(
+                    Decimal(frame.duration_seconds),
+                    MOCK_VIDEO_UNIT_COST_PER_SECOND,
+                ),
+                started_at=datetime.now(UTC),
             )
+            session.add(job)
 
-            request = VideoRequest(
-                prompt=video_prompt,
-                duration_seconds=frame.duration_seconds,
-                aspect_ratio=aspect_ratio,
-                size=video_size,
-                source_image_uri=source_image_uri,
-                reference_uris=reference_uris,
-                output_dir=video_dir,
+        request_payload = {
+            "storyboard_frame_id": str(frame.id),
+            "frame_number": frame.frame_number,
+            "duration_seconds": frame.duration_seconds,
+            "prompt": video_prompt,
+            "video_prompt": video_prompt,
+            "storyboard_prompt": frame.prompt,
+            "variant_index": variant_index,
+            "source_image_asset_id": str(frame.asset_id),
+            "source_image_uri": source_image_uri,
+            "reference_uris": reference_uris,
+            "reference_count": len(reference_uris),
+            "provider": resolved_provider,
+            "model": resolved_model,
+            "aspect_ratio": aspect_ratio,
+            "size": video_size,
+            "request_fingerprint": request_fingerprint,
+        }
+        job.request_payload = request_payload
+        job.response_payload = job.response_payload or {}
+        await session.flush()
+        await _emit_video_job_event(
+            session,
+            project_id=project_id,
+            frame=frame,
+            job=job,
+            status="started",
+            provider=resolved_provider,
+            model=resolved_model,
+            message="Geracao de video iniciada",
+            estimated_cost=video_cost_estimate.estimated,
+            details={"duration_seconds": frame.duration_seconds},
+        )
+
+        request = VideoRequest(
+            prompt=video_prompt,
+            duration_seconds=frame.duration_seconds,
+            aspect_ratio=aspect_ratio,
+            size=video_size,
+            source_image_uri=source_image_uri,
+            reference_uris=reference_uris,
+            output_dir=video_dir,
+            model=resolved_model,
+        )
+        item = _PreparedVideoJob(
+            frame=frame,
+            job=job,
+            request=request,
+            request_fingerprint=request_fingerprint,
+            variant_index=variant_index,
+        )
+        validation_errors = video_generation_validation_errors(
+            frame,
+            source_image_uri,
+            provider,
+            aspect_ratio,
+            video_prompt,
+        )
+        if validation_errors:
+            await _mark_video_job_failed(
+                session,
+                project_id=project_id,
+                item=item,
+                reason="; ".join(validation_errors),
+                provider=resolved_provider,
                 model=resolved_model,
             )
-            item = _PreparedVideoJob(
-                frame=frame,
-                job=job,
-                request=request,
-                request_fingerprint=request_fingerprint,
-                variant_index=variant_index,
-            )
-            validation_errors = video_generation_validation_errors(
-                frame,
-                source_image_uri,
-                provider,
-                aspect_ratio,
-                video_prompt,
-            )
-            if validation_errors:
-                await _mark_video_job_failed(
-                    session,
-                    project_id=project_id,
-                    item=item,
-                    reason="; ".join(validation_errors),
-                    provider=resolved_provider,
-                    model=resolved_model,
-                )
-                jobs.append(job)
-                continue
-            prepared_jobs.append(item)
+            jobs.append(job)
+            continue
+        prepared_jobs.append(item)
 
     await session.commit()
 

@@ -542,22 +542,6 @@ async def _approve_video_prompts_from_ui(
         )
         ui.notify(f"Prompts aprovados. Job de video enfileirado: {job.id}.", color="positive")
         ui.navigate.reload()
-        return
-        result = None
-        if result is None:
-            ui.notify("Não encontrei o projeto para gerar os clipes.", color="negative")
-            return
-        jobs, clips = result
-        if clips:
-            ui.notify(f"Prompts aprovados. {len(clips)} clipe(s) criado(s).", color="positive")
-        elif jobs:
-            ui.notify(
-                "Prompts aprovados, mas a geração de vídeo ficou pendente de nova tentativa.",
-                color="warning",
-            )
-        else:
-            ui.notify("Todos os clipes selecionados já estávam criados.", color="positive")
-        ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:

@@ -365,6 +365,61 @@ def test_openai_compatible_provider_reports_timeout(
         )
 
 
+def test_openai_compatible_recovers_plain_text_for_director_chat() -> None:
+    provider = OpenAICompatibleLLMProvider(
+        OpenAICompatibleLLMConfig(
+            provider_name="test_provider",
+            display_name="Provider Teste",
+            base_url="https://provider.test/v1",
+            api_key=None,
+            require_api_key=False,
+        )
+    )
+
+    content, strategy = provider._parse_json_content(
+        "Resposta livre do diretor sem json.",
+        task="director_agent_chat",
+    )
+
+    assert strategy == "plain_text_message"
+    assert content == {"message": "Resposta livre do diretor sem json."}
+
+
+def test_openai_compatible_recovers_non_object_json_for_director_chat() -> None:
+    provider = OpenAICompatibleLLMProvider(
+        OpenAICompatibleLLMConfig(
+            provider_name="test_provider",
+            display_name="Provider Teste",
+            base_url="https://provider.test/v1",
+            api_key=None,
+            require_api_key=False,
+        )
+    )
+
+    content, strategy = provider._parse_json_content(
+        '"apenas uma string json"',
+        task="director_agent_chat",
+    )
+
+    assert strategy == "plain_text_message"
+    assert content == {"message": '"apenas uma string json"'}
+
+
+def test_openai_compatible_still_rejects_non_json_for_other_tasks() -> None:
+    provider = OpenAICompatibleLLMProvider(
+        OpenAICompatibleLLMConfig(
+            provider_name="test_provider",
+            display_name="Provider Teste",
+            base_url="https://provider.test/v1",
+            api_key=None,
+            require_api_key=False,
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="nao e JSON valido"):
+        provider._parse_json_content("texto solto sem json", task="generate_story_ideas")
+
+
 def test_llm_provider_for_name_supports_text_providers() -> None:
     settings = Settings(
         ollama_cloud_api_key="ollama-secret",

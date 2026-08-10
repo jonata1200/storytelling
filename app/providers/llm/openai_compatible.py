@@ -17,6 +17,7 @@ OPENAI_COMPATIBLE_LLM_MIN_HTTP_TIMEOUT_SECONDS = 15
 OPENAI_COMPATIBLE_LLM_MAX_RETRY_ATTEMPTS = 3
 OPENAI_COMPATIBLE_LLM_RETRY_DELAYS_SECONDS = (4.0, 12.0)
 SCRIPT_TEXT_RECOVERY_TASKS = {"generate_script", "revise_script"}
+DIRECTOR_CHAT_TEXT_RECOVERY_TASKS = {"director_agent_chat"}
 TRANSIENT_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
@@ -440,12 +441,18 @@ class OpenAICompatibleLLMProvider:
                 return embedded, "embedded_json"
             if task in SCRIPT_TEXT_RECOVERY_TASKS and self._looks_like_screenplay_text(stripped):
                 return {"content": stripped}, "screenplay_text"
+            if task in DIRECTOR_CHAT_TEXT_RECOVERY_TASKS:
+                # O chat livre do diretor pode responder em texto puro; embrulhe a
+                # resposta em {"message": ...} em vez de falhar a geracao.
+                return {"message": stripped}, "plain_text_message"
             raise OpenAICompatibleResponseFormatError(
                 f"{config.display_name} retornou conteudo que nao e JSON valido",
                 stripped,
                 display_name=config.display_name,
             ) from exc
         if not isinstance(parsed, dict):
+            if task in DIRECTOR_CHAT_TEXT_RECOVERY_TASKS:
+                return {"message": stripped}, "plain_text_message"
             raise OpenAICompatibleResponseFormatError(
                 f"{config.display_name} retornou JSON fora do formato esperado",
                 stripped,

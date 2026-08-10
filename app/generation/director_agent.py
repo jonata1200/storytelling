@@ -39,7 +39,9 @@ async def ask_director_agent(
         "Considere o estado real do projeto, preserve continuidade e sugira o próximo passo. "
         "Se o pedido exigir uma geração, explique claramente qual ação da interface executar. "
         f"Estado do projeto: {project_context}. "
-        f"Conversa recente: {recent_history}. Pedido atual: {message}"
+        f"Conversa recente: {recent_history}. Pedido atual: {message}\n"
+        "Responda somente JSON válido, sem markdown e sem texto fora do objeto, neste "
+        'formato exato: {"message": "sua resposta curta e prática em portugues"}'
     )
     result, _execution = await run_structured_generation(
         session,
@@ -57,5 +59,21 @@ async def ask_director_agent(
         fallback_on_runtime_error=True,
     )
     await session.commit()
-    response = result.content.get("message")
-    return str(response or "Posso ajudar a desenvolver está etapa. O que deseja ajustar?")
+    response = _extract_director_message(result.content, result.raw_content)
+    return response
+
+
+def _extract_director_message(content: dict[str, Any] | None, raw_content: str | None) -> str:
+    """Extrai a resposta do diretor tolerando formatos variados do provider."""
+    fallback = "Posso ajudar a desenvolver esta etapa. O que deseja ajustar?"
+    if not isinstance(content, dict):
+        return fallback
+    for key in ("message", "response", "answer", "reply", "text", "content"):
+        candidate = content.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    if isinstance(raw_content, str) and raw_content.strip():
+        stripped = raw_content.strip()
+        if not stripped.startswith("{"):
+            return stripped[:2000]
+    return fallback

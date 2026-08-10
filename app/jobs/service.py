@@ -7,6 +7,7 @@ from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.api_keys import require_api_keys_for_creation_step
@@ -151,8 +152,19 @@ async def create_or_resume_project_job(
             response_payload={},
         )
         session.add(job)
-        await session.flush()
-        should_dispatch = True
+        try:
+            await session.flush()
+        except IntegrityError:
+            # Outra requisicao concorrente criou o mesmo job (unique idempotency_key).
+            await session.rollback()
+            result = await session.execute(
+                select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
+            )
+            job = result.scalars().first()
+            if job is None:
+                raise
+        else:
+            should_dispatch = True
     elif job.status == GenerationJobStatus.FAILED and job.attempts < job.max_attempts:
         job.status = GenerationJobStatus.PENDING
         job.progress = 0
@@ -287,3 +299,77 @@ async def enqueue_project_step(
     if dispatch and should_dispatch and project_job_can_run(job):
         dispatch_project_job(job.id)
     return job
+
+
+def _job_stale_after_redispatch_window(
+    job: GenerationJob,
+    now: datetime | None = None,
+) -> bool:
+    updated_at = job.updated_at or job.created_at
+    if updated_at is None:
+        return True
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    reference_time = now or datetime.now(UTC)
+    return reference_time - updated_at >= PENDING_JOB_REDISPATCH_AFTER
+
+
+async def list_stale_pending_jobs(session: AsyncSession, limit: int = 50) -> list[GenerationJob]:
+    """Retorna jobs PENDING antigos (> PENDING_JOB_REDISPATCH_AFTER) para redespacho."""
+    result = await session.execute(
+        select(GenerationJob)
+        .where(GenerationJob.status == GenerationJobStatus.PENDING)
+        .order_by(GenerationJob.updated_at.asc())
+        .limit(limit)
+    )
+    return [job for job in result.scalars() if pending_job_is_stale(job)]
+
+
+async def list_stale_running_jobs(session: AsyncSession, limit: int = 50) -> list[GenerationJob]:
+    """Retorna jobs RUNNING abandonados (processo morreu no meio da etapa).
+
+    Apos uma reinicializacao, nenhum outro processo esta executando esses jobs, entao
+    redespacha-los e seguro em uma aplicacao de processo unico.
+    """
+    result = await session.execute(
+        select(GenerationJob)
+        .where(GenerationJob.status == GenerationJobStatus.RUNNING)
+        .order_by(GenerationJob.updated_at.asc())
+        .limit(limit)
+    )
+    return [job for job in result.scalars() if _job_stale_after_redispatch_window(job)]
+
+
+def schedule_stale_job_recovery() -> None:
+    """Redespacha jobs PENDING/RUNNING abandonados (aplicacao reiniciada no meio da etapa).
+
+    Registrada como hook de startup do FastAPI; roda em background para nao bloquear o boot.
+    Ignorada em APP_ENV=test para evitar interferencia com a suíte.
+    """
+    from app.config.settings import get_settings
+
+    if get_settings().app_env.lower() == "test":
+        return
+
+    async def _recover() -> None:
+        try:
+            from app.database.session import AsyncSessionLocal
+
+            async with AsyncSessionLocal() as session:
+                pending = await list_stale_pending_jobs(session)
+                running = await list_stale_running_jobs(session)
+                jobs = [*pending, *running]
+        except Exception as exc:
+            logger.warning("startup_job_recovery_failed: %s", exc)
+            return
+        for job in jobs:
+            try:
+                dispatch_project_job(job.id)
+            except Exception as exc:
+                logger.warning("startup_job_redispatch_failed %s: %s", job.id, exc)
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    asyncio.create_task(_recover(), name="startup-job-recovery")

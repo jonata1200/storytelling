@@ -588,7 +588,10 @@ def register_settings_page(
                                         "text-red-300 border-red-900 rounded-xl"
                                     )
 
-                                with ui.element("div").classes("hidden"):
+                                with ui.element("div").classes(
+                                    "border border-red-950 rounded-2xl p-4 flex flex-col "
+                                    "md:flex-row md:items-center md:justify-between gap-3"
+                                ):
                                     with ui.column().classes("gap-1"):
                                         ui.label("Projetos e ideias").classes("font-semibold")
                                         ui.label(

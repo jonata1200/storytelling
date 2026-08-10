@@ -1,6 +1,7 @@
 ﻿import asyncio
 import hashlib
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -47,6 +48,8 @@ from app.video_generation.models import VideoClip
 from app.visual_bible.models import Character
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CHARACTER_VOICES = (
     "alloy",
@@ -433,6 +436,14 @@ async def _add_dialogue_audio_items(
             duration_ms = max(1, speech_result.duration_seconds) * 1000
             start_ms = min(cursor_ms, max(frame_start_ms, frame_end_ms - 1))
             end_ms = min(frame_end_ms, start_ms + duration_ms)
+            truncated_ms = max(0, (start_ms + duration_ms) - frame_end_ms)
+            if truncated_ms:
+                logger.warning(
+                    "dialogue_truncated frame=%s speaker=%s truncated_ms=%s",
+                    frame.frame_number,
+                    dialogue.speaker,
+                    truncated_ms,
+                )
             alignment = speech_result.alignment or build_word_alignment(
                 dialogue.text,
                 speech_result.duration_seconds,
@@ -508,6 +519,7 @@ async def _add_dialogue_audio_items(
                         "speaker": dialogue.speaker,
                         "voice_profile_id": voice_profile_id,
                         "storyboard_frame_id": str(frame.id),
+                        **({"truncated_ms": truncated_ms} if truncated_ms else {}),
                     },
                 )
             )
@@ -559,6 +571,7 @@ async def _add_dialogue_audio_items(
                         "speaker": dialogue.speaker,
                         "voice_profile_id": voice_profile_id,
                         "storyboard_frame_id": str(frame.id),
+                        **({"truncated_ms": truncated_ms} if truncated_ms else {}),
                     },
                 ),
             )
