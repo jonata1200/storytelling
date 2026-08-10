@@ -1,11 +1,14 @@
 from types import SimpleNamespace
 
+from app.config import api_keys
 from app.config.api_keys import (
     format_missing_api_key_message,
     missing_api_key_messages_for_channels,
     missing_api_key_messages_for_creation_step,
     required_channels_for_creation_step,
 )
+from app.config.runtime_preferences import save_runtime_preferences
+from app.config.settings import get_settings
 
 
 def _settings(**overrides: object) -> SimpleNamespace:
@@ -76,3 +79,17 @@ def test_missing_key_message_points_user_to_ai_settings() -> None:
 
     assert "Configurações de IA" in message
     assert "- GOOGLE_AI_API_KEY não está configurada." in message
+
+
+def test_api_key_validation_refreshes_stale_cached_settings(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    save_runtime_preferences({"OLLAMA_CLOUD_API_KEY": ""})
+    get_settings.cache_clear()
+    assert not get_settings().ollama_cloud_api_key
+
+    save_runtime_preferences({"OLLAMA_CLOUD_API_KEY": "ollama-secret"})
+
+    assert api_keys.missing_api_key_messages_for_creation_step("ideas") == []

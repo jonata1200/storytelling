@@ -64,6 +64,11 @@ def provider_for_creation_channel(settings: Any, channel: CreationChannel) -> st
     return str(channel or "").strip().casefold()
 
 
+def current_settings_for_api_key_validation() -> Any:
+    get_settings.cache_clear()
+    return get_settings()
+
+
 def required_channels_for_creation_step(step: str) -> tuple[CreationChannel, ...]:
     normalized = str(step or "").strip().casefold()
     channels: list[CreationChannel] = []
@@ -82,7 +87,7 @@ def missing_api_key_messages_for_channels(
     channels: Iterable[CreationChannel],
     settings: Any | None = None,
 ) -> list[str]:
-    app_settings = settings or get_settings()
+    app_settings = settings or current_settings_for_api_key_validation()
     messages: list[str] = []
     seen_providers: set[str] = set()
     for channel in channels:
