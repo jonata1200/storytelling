@@ -108,6 +108,12 @@ def save_runtime_preferences(values: dict[str, str], path: Path = PREFERENCES_PA
             handle.flush()
             os.fsync(handle.fileno())
         temporary_path.replace(path)
+        # Arquivo com chaves de API: restringe permissões (mkstemp já usa 0600 no POSIX;
+        # o chmod explícito cobre outros cenários/plataformas de forma defensiva).
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
         logger.info("runtime_preferences_updated", extra={"keys": sorted(normalized)})
     finally:
         temporary_path.unlink(missing_ok=True)

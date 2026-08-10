@@ -3,7 +3,11 @@ from io import BytesIO
 
 import pytest
 
-from app.storytelling.script_upload import ScriptUploadError, extract_script_text
+from app.storytelling.script_upload import (
+    ScriptUploadError,
+    _read_zip_member_capped,
+    extract_script_text,
+)
 
 
 def _minimal_docx(text: str) -> bytes:
@@ -38,3 +42,22 @@ def test_extract_script_text_from_textual_pdf_fallback() -> None:
 def test_extract_script_text_rejects_unsupported_extensions() -> None:
     with pytest.raises(ScriptUploadError, match="PDF ou DOCX"):
         extract_script_text("roteiro.txt", b"texto")
+
+
+def test_extract_script_text_rejects_pdf_without_pdf_signature() -> None:
+    with pytest.raises(ScriptUploadError, match="PDF"):
+        extract_script_text("roteiro.pdf", b"<html>not a pdf</html>")
+
+
+def test_extract_script_text_rejects_docx_without_zip_signature() -> None:
+    with pytest.raises(ScriptUploadError, match="DOCX"):
+        extract_script_text("roteiro.docx", b"not a zip archive")
+
+
+def test_docx_member_read_is_capped_against_zip_bomb() -> None:
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", "x" * 4096)
+    with zipfile.ZipFile(BytesIO(buffer.getvalue())) as archive:
+        with pytest.raises(ScriptUploadError, match="muito grande"):
+            _read_zip_member_capped(archive, "word/document.xml", cap=1024)

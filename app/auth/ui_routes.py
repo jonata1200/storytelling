@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 _AUTH_ATTEMPTS: dict[str, list[float]] = {}
 AUTH_RATE_LIMIT_WINDOW_SECONDS = 60
 AUTH_RATE_LIMIT_MAX_ATTEMPTS = 8
+AUTH_RATE_LIMIT_SWEEP_THRESHOLD = 500
 
 
 def _auth_page(
@@ -135,7 +136,18 @@ def _rate_limited(key: str) -> bool:
     limited = len(attempts) >= AUTH_RATE_LIMIT_MAX_ATTEMPTS
     attempts.append(now)
     _AUTH_ATTEMPTS[key] = attempts[-AUTH_RATE_LIMIT_MAX_ATTEMPTS:]
+    if len(_AUTH_ATTEMPTS) > AUTH_RATE_LIMIT_SWEEP_THRESHOLD:
+        _prune_stale_auth_attempts(window_start)
     return limited
+
+
+def _prune_stale_auth_attempts(window_start: float) -> None:
+    for existing_key in list(_AUTH_ATTEMPTS):
+        remaining = [item for item in _AUTH_ATTEMPTS[existing_key] if item >= window_start]
+        if remaining:
+            _AUTH_ATTEMPTS[existing_key] = remaining
+        else:
+            _AUTH_ATTEMPTS.pop(existing_key, None)
 
 
 def _csrf_valid(cookie_token: str | None, form_token: str | None) -> bool:

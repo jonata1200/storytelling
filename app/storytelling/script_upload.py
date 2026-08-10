@@ -4,8 +4,12 @@ from io import BytesIO
 from typing import Any
 from xml.etree import ElementTree
 
+from app.providers.media_utils import docx_signature_matches, pdf_signature_matches
+
 SUPPORTED_SCRIPT_EXTENSIONS = {".pdf", ".docx"}
 MAX_SCRIPT_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_DOCX_MEMBER_BYTES = 5 * 1024 * 1024
+MAX_DOCX_EXTRACTED_CHARS = 2_000_000
 
 
 class ScriptUploadError(ValueError):
@@ -18,6 +22,10 @@ def extract_script_text(filename: str, content: bytes) -> str:
         raise ScriptUploadError("Envie um arquivo PDF ou DOCX.")
     if len(content) > MAX_SCRIPT_UPLOAD_BYTES:
         raise ScriptUploadError("O arquivo deve ter no maximo 10 MB.")
+    if extension == ".pdf" and not pdf_signature_matches(content):
+        raise ScriptUploadError("O arquivo enviado não é um PDF válido.")
+    if extension == ".docx" and not docx_signature_matches(content):
+        raise ScriptUploadError("O arquivo enviado não é um DOCX válido.")
     if extension == ".docx":
         text = _extract_docx_text(content)
     else:
@@ -37,6 +45,23 @@ def _extension(filename: str) -> str:
     return "." + lowered.rsplit(".", 1)[-1]
 
 
+def _read_zip_member_capped(archive: zipfile.ZipFile, name: str, cap: int) -> bytes:
+    with archive.open(name) as member:
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = member.read(64 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > cap:
+                raise ScriptUploadError(
+                    "DOCX muito grande. Conteúdo descomprimido acima do limite."
+                )
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+
 def _extract_docx_text(content: bytes) -> str:
     try:
         with zipfile.ZipFile(BytesIO(content)) as archive:
@@ -49,7 +74,18 @@ def _extract_docx_text(content: bytes) -> str:
                 )
                 if name in archive.namelist()
             ]
-            return "\n".join(_text_from_docx_xml(archive.read(name)) for name in document_names)
+            parts: list[str] = []
+            total_chars = 0
+            for name in document_names:
+                member = _read_zip_member_capped(archive, name, MAX_DOCX_MEMBER_BYTES)
+                part = _text_from_docx_xml(member)
+                total_chars += len(part)
+                if total_chars > MAX_DOCX_EXTRACTED_CHARS:
+                    raise ScriptUploadError(
+                        "DOCX muito grande. Limite de texto extraído excedido."
+                    )
+                parts.append(part)
+            return "\n".join(parts)
     except (OSError, KeyError, zipfile.BadZipFile, ElementTree.ParseError) as exc:
         raise ScriptUploadError("DOCX inválido ou corrompido.") from exc
 

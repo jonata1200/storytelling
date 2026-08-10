@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -7,17 +8,21 @@ from fastapi.staticfiles import StaticFiles
 from app.api.router import api_router
 from app.auth.ui_middleware import UIBasicAuthMiddleware
 from app.auth.ui_routes import router as auth_ui_router
-from app.config.settings import get_settings
+from app.config.settings import get_settings, insecure_default_secret_key_warning
 from app.observability.middleware import CorrelationIdMiddleware
 from app.runtime import install_asyncio_exception_filter
 from app.workflows.state_machine import WorkflowStateError
 
 LOCAL_STORAGE_MOUNT_ENVS = {"local", "development", "test"}
 LOCAL_DOCS_ENVS = {"local", "development", "test"}
+logger = logging.getLogger(__name__)
 
 
 def create_app(include_ui: bool = True) -> FastAPI:
     settings = get_settings()
+    secret_key_warning = insecure_default_secret_key_warning()
+    if secret_key_warning:
+        logger.warning(secret_key_warning)
     docs_enabled = settings.app_env.lower() in LOCAL_DOCS_ENVS
     app = FastAPI(
         title=settings.app_name,
@@ -53,7 +58,7 @@ def create_app(include_ui: bool = True) -> FastAPI:
         settings.local_storage_path.mkdir(parents=True, exist_ok=True)
         app.mount(
             "/ui-assets",
-            StaticFiles(directory=Path(__file__).parent / "ui"),
+            StaticFiles(directory=Path(__file__).parent / "ui" / "static"),
             name="ui-assets",
         )
         if settings.app_env.lower() in LOCAL_STORAGE_MOUNT_ENVS:
@@ -67,7 +72,7 @@ def create_app(include_ui: bool = True) -> FastAPI:
             app,
             mount_path="/",
             title=settings.app_name,
-            favicon=Path(__file__).parent / "ui" / "favicon.png",
+            favicon=Path(__file__).parent / "ui" / "static" / "favicon.png",
             language="pt-BR",
             dark=None,
             storage_secret=settings.app_secret_key,

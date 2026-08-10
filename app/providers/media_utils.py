@@ -104,6 +104,25 @@ def local_uri_to_data_url(uri: str) -> str:
     return f"data:{media_type};base64,{encoded}"
 
 
+def image_signature_matches(content: bytes, extension: str) -> bool:
+    normalized = str(extension or "").strip().lower()
+    if normalized == ".png":
+        return content.startswith(b"\x89PNG\r\n\x1a\n")
+    if normalized in {".jpg", ".jpeg"}:
+        return content.startswith(b"\xff\xd8\xff")
+    if normalized == ".webp":
+        return len(content) >= 12 and content.startswith(b"RIFF") and content[8:12] == b"WEBP"
+    return False
+
+
+def pdf_signature_matches(content: bytes) -> bool:
+    return content.startswith(b"%PDF-")
+
+
+def docx_signature_matches(content: bytes) -> bool:
+    return content.startswith(b"PK\x03\x04")
+
+
 def extension_from_media_type(media_type: str) -> str:
     normalized = str(media_type or "").split(";", 1)[0].strip().lower()
     explicit_extensions = {

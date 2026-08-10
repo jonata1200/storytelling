@@ -3,116 +3,132 @@
 Pontos fortes e fragilidades identificados na revisão manual dos módulos de auth, upload,
 storage e providers.
 
+> **Status: ✅ FRAGILIDADES CORRIGIDAS (10/08/2026)**
+> Decisões do usuário: aviso no lugar de auto-geração de segredo (5.2.1) e remoção do
+> token stateless (5.2.2). `ruff check app tests` limpo · `mypy app tests` 0 erros ·
+> suíte pytest passando.
+
 ---
 
 ## 5.1 Pontos fortes (o que está correto)
 
+Sem mudanças — itens confirmados:
+
 - **Cookies de sessão:** `HttpOnly=True`, `SameSite=Lax`, `Secure` fora de
   local/development/test (`app/auth/ui_routes.py`).
 - **CSRF:** token em cookie + formulário, assinado com HMAC do `APP_SECRET_KEY`
-  (`app/auth/csrf.py`); validado em login/registro (desativado apenas em local/test, por
-  design).
+  (`app/auth/csrf.py`); validado em login/registro (desativado apenas em local/test).
 - **Senhas:** PBKDF2-HMAC-SHA256 com 260.000 iterações e salt por usuário
   (`app/auth/passwords.py`).
-- **Rate limit:** 8 tentativas/60s por host+email em memória (`ui_routes.py`).
+- **Rate limit:** 8 tentativas/60s por host+email em memória (`ui_routes.py`), agora com
+  limpeza de chaves expiradas (ver 5.2.8).
 - **Sessões persistentes:** token aleatório armazenado com **hash SHA-256** no banco,
-  com revogação e expiração (`app/auth/session.py`).
+  com revogação e expiração (`app/auth/session.py`). **Único** mecanismo de sessão ativo
+  (ver 5.2.2).
 - **Bypass de auth** restrito a `APP_ENV=local|test` (`app/auth/dependencies.py`), com
   validação que **rejeita** `APP_SECRET_KEY`/`APP_DEBUG` inseguros fora de ambientes locais
   (`app/config/settings.py::reject_insecure_non_local_defaults`).
 - **Redação de segredos** em logs e mensagens de erro dos providers
-  (`app/observability/redaction.py`).
+  (`app/observability/redaction.py`), unificada (ver 04/4.8).
 - **Escaneamento de injeção de prompt** em briefing e roteiro
   (`app/quality/security.py`, usado em `app/quality/service.py`).
 - **Traversal de caminho:** `resolve_storage_path` valida que o arquivo fica dentro do
   storage root (`app/storage/service.py`), e `_local_video_asset_path`
   (`finalization/service.py`) também restringe.
-- **Uploads:** validação de extensão e tamanho (script 10 MB; referência 10 MB; avatar
-  5 MB).
+- **Uploads:** validação de extensão, tamanho **e magic bytes** (ver 5.2.4).
 
 ---
 
 ## 5.2 Fragilidades e recomendações
 
-### 5.2.1 `APP_SECRET_KEY` padrão em ambientes locais
+### 5.2.1 `APP_SECRET_KEY` padrão em ambientes locais ✅
 
-`app/config/settings.py` usa default `change-me-in-development`. Em `APP_ENV=local` não há
-validação. O `APP_SECRET_KEY` assina tokens de sessão estateless
-(`verify_session_token`) e CSRF — se o deploy local subir com o default, qualquer pessoa
-com acesso à rede pode **forjar tokens válidos** (o valor é público no repositório).
+`app/config/settings.py` usa default `change-me-in-development` (agora a constante
+`DEFAULT_APP_SECRET_KEY`). Em `APP_ENV=local` não há validação.
 
-**Recomendação:** gerar um segredo aleatório automaticamente no primeiro boot
-(se ainda for o default e `APP_ENV=local`), ou ao menos exibir um aviso na UI/console.
+**Correção aplicada (decisão do usuário: aviso):**
+- Nova função `insecure_default_secret_key_warning()` em `settings.py` — retorna a
+  mensagem de alerta quando o segredo ainda é o default.
+- **Console:** `factory.py` loga `logger.warning(...)` no startup.
+- **UI:** banner âmbar na página Configurações (`settings_page.py`) com o aviso.
 
-### 5.2.2 Token de sessão "stateless" legado sem revogação
+### 5.2.2 Token de sessão "stateless" legado sem revogação ✅
 
-`app/auth/session.py::verify_session_token` — tokens HMAC com payload
-`username:expires_at` não têm revogação no servidor e são aceitos até expirar (7 dias).
-O logout só revoga a sessão **persistente** (`UserSession`).
+**Correção aplicada (decisão do usuário: remover):** o mecanismo stateless
+(`create_session_token`/`verify_session_token`, HMAC `username:expires_at` sem revogação)
+foi **removido**. Agora a aplicação aceita **apenas sessões persistentes** revogáveis
+(`UserSession` no banco):
+- `app/auth/session.py` — funções stateless removidas (e `import time` órfão).
+- `app/auth/dependencies.py` e `app/auth/ui_middleware.py` — fallback stateless removido.
+- `tests/test_auth.py` — teste do middleware reescrito com monkeypatch de
+  `verify_persistent_session_token`.
+- Efeito: cookies emitidos por versões antigas (máx. 7 dias) deixam de autenticar; o
+  usuário refaz o login uma vez e recebe uma sessão persistente.
 
-**Recomendação:** descontinuar o token stateless (mantido só por compatibilidade) e aceitar
-apenas sessões persistentes.
-
-### 5.2.3 Auth completamente desligada em local/test
+### 5.2.3 Auth completamente desligada em local/test — sem ação (documentado)
 
 `require_authenticated_user` retorna `"local-user"` sem verificar nada quando
-`APP_ENV ∈ {local, test}`. Isso é documentado e aceitável para uso local, mas **qualquer
-máquina na rede pode acessar a aplicação sem senha** se ela subir com `APP_ENV=local`
-(não é o caso do compose/script, que usam local — avaliar risco no seu ambiente).
+`APP_ENV ∈ {local, test}`. Comportamento documentado e aceitável para uso local; avaliar o
+risco de exposição na rede ao subir com `APP_ENV=local` (não é o caso do compose/script).
 
-### 5.2.4 Validação de uploads apenas por extensão
+### 5.2.4 Validação de uploads apenas por extensão ✅
 
-`reference_upload.py`, `script_upload.py` e o avatar em `settings_page.py` validam a
-**extensão do nome do arquivo**, mas não conferem "magic bytes". Um `.png` com payload
-HTML/JS é aceito e servido por `/storage` (montado em local/test) com o Content-Type
-derivado da extensão. Para uso local o risco é baixo, mas convém validar o cabeçalho real
-do arquivo.
+**Correção aplicada:** validação de **magic bytes** adicionada:
+- `app/providers/media_utils.py` — novos helpers compartilhados
+  `image_signature_matches` (PNG/JPEG/WEBP), `pdf_signature_matches` (`%PDF-`) e
+  `docx_signature_matches` (`PK\x03\x04`).
+- `app/storytelling/reference_upload.py` — `prepare_reference_upload` rejeita conteúdo
+  que não corresponde à extensão.
+- `app/storytelling/script_upload.py` — rejeita PDF/DOCX com assinatura incorreta.
+- Avatar: `app/ui/layout/navigation.py::save_avatar_file` valida a assinatura e
+  `settings_page.py` exibe notificação de erro (`try/except ValueError`).
+- Testes atualizados com bytes reais de assinatura + novos testes de rejeição.
 
-### 5.2.5 `document.xml` de DOCX sem limite de tamanho descomprimido
+### 5.2.5 `document.xml` de DOCX sem limite de tamanho descomprimido ✅
 
-`app/storytelling/script_upload.py::_extract_docx_text` lê `word/document.xml`,
-`footnotes.xml` e `endnotes.xml` e os junta sem limitar o tamanho descomprimido — um DOCX
-"zip bomb" pode inflar o uso de memória (o limite de 10 MB é sobre o arquivo compactado).
+**Correção aplicada** em `app/storytelling/script_upload.py`:
+- `_read_zip_member_capped` lê cada membro (document/footnotes/endnotes) em chunks de
+  64 KB com **teto de 5 MB por membro** (mitigação real de zip bomb via `archive.open()`).
+- Limite de **2 milhões de caracteres** para o texto total extraído.
+- Exceder qualquer limite aborta com `ScriptUploadError` descritivo.
+- Teste `test_docx_member_read_is_capped_against_zip_bomb` cobre o cap.
 
-**Recomendação:** limitar o tamanho total do texto extraído (ex.: 1-2 MB) e abortar acima
-disso.
+### 5.2.6 Arquivos-fonte da UI servidos publicamente ✅
 
-### 5.2.6 Arquivos-fonte da UI servidos publicamente
+**Correção aplicada:** `/ui-assets` agora aponta apenas para `app/ui/static`
+(`factory.py`), que contém somente o `favicon.png` (movido com `git mv`). Os arquivos
+`.py` do pacote `app/ui` **não são mais baixáveis**. Referências
+(`/ui-assets/favicon.png`) permanecem válidas.
 
-`app/factory.py` monta `/ui-assets` apontando para o diretório `app/ui` — que contém
-**arquivos `.py`**. Em qualquer ambiente, `/ui-assets/*.py` é baixável sem autenticação
-(pequeno vazamento de implementação). Em local/test, `/storage` também é público.
+### 5.2.7 Chaves de API em texto puro em `.runtime/preferences.json` ✅
 
-**Recomendação:** servir apenas `app/ui/static` (ou um subdiretório de assets), não o
-pacote inteiro.
+**Correção aplicada** em `app/config/runtime_preferences.py`: `os.chmod(path, 0o600)`
+após a gravação (o `mkstemp` já usa 0600 no POSIX; o chmod explícito é defensivo e
+documentado). `.runtime/` continua gitignored.
 
-### 5.2.7 Chaves de API em texto puro em `.runtime/preferences.json`
+### 5.2.8 Rate limit em memória sem limpeza ✅
 
-`save_runtime_preferences` grava as chaves (`OLLAMA_CLOUD_API_KEY`, etc.) em JSON em disco.
-O diretório `.runtime/` é gitignored (bom), mas o arquivo não tem permissões restritas.
+**Correção aplicada** em `app/auth/ui_routes.py`: nova função
+`_prune_stale_auth_attempts` remove chaves `host:email` sem atividade nos últimos 60s,
+acionada quando o dicionário passa de 500 chaves. Teste adicionado
+(`test_auth_rate_limit_prunes_stale_attempt_keys`).
 
-**Recomendação:** aplicar permissões `0600` ao arquivo de preferências.
+### 5.2.9 Código de teste exercitando módulo morto ✅
 
-### 5.2.8 Rate limit em memória sem limpeza
-
-`_AUTH_ATTEMPTS` (`ui_routes.py`) acumula chaves `host:email` sem expiração — crescimento
-lento, irrelevante para uso local, mas digno de nota se a aplicação for exposta.
-
-### 5.2.9 Código de teste exercitando módulo morto
-
-`tests/test_security_regressions.py` valida `user_store.py` (módulo morto — ver
-`04-codigo-morto-e-legado.md`). Isso cria **falsa sensação de cobertura** de autenticação:
-o sistema de senha realmente usado (PostgreSQL) tem cobertura menor.
+Resolvido na rodada de **código morto** (04/4.1): `user_store.py` removido e os testes
+que o exercitavam eliminados. O sistema de senha real (PostgreSQL) segue coberto por
+`test_auth.py`/`test_security_regressions.py`.
 
 ---
 
 ## 5.3 Checklist rápido
 
-- [ ] Trocar `APP_SECRET_KEY` real no `.env` (não usar o default).
-- [ ] Avaliar se `APP_ENV=local` com auth desligada é aceitável na sua rede.
-- [ ] Validar magic bytes em uploads de imagem/PDF.
-- [ ] Limitar texto extraído de DOCX.
-- [ ] Restringir `/ui-assets` a assets estáticos.
-- [ ] Chmod 0600 em `.runtime/preferences.json` e `.runtime/users.json`.
-- [ ] Unificar `redact_secrets` (duplicado entre `observability/redaction.py` e
-      `quality/security.py`).
+- [ ] **Usuário:** trocar `APP_SECRET_KEY` real no `.env` (não usar o default) — o app
+      agora avisa no console e nas Configurações enquanto o default estiver ativo.
+- [ ] **Usuário:** avaliar se `APP_ENV=local` com auth desligada é aceitável na sua rede.
+- [x] Validar magic bytes em uploads de imagem/PDF (5.2.4).
+- [x] Limitar texto extraído de DOCX (5.2.5).
+- [x] Restringir `/ui-assets` a assets estáticos (5.2.6).
+- [x] Chmod 0600 em `.runtime/preferences.json` (5.2.7) — `.runtime/users.json` não
+      existe mais (módulo removido em 04/4.1).
+- [x] Unificar `redact_secrets` (04/4.8).

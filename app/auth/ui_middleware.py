@@ -7,7 +7,6 @@ from app.auth.dependencies import authentication_required
 from app.auth.session import (
     SESSION_COOKIE_NAME,
     verify_persistent_session_token,
-    verify_session_token,
 )
 from app.database.session import AsyncSessionLocal
 
@@ -65,7 +64,7 @@ async def _session_username(scope: Scope) -> str | None:
             username = await verify_persistent_session_token(session, token)
     except Exception:
         username = None
-    return username or verify_session_token(token)
+    return username
 
 
 def _cookie_token(raw_cookie: str) -> str | None:

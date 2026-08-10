@@ -1,10 +1,15 @@
+import pytest
+
 from app.config.provider_policy import effective_provider_for_channel
 from app.config.settings import (
+    DEFAULT_APP_SECRET_KEY,
     ELEVENLABS_SPEECH_MODELS,
     GOOGLE_AI_IMAGE_MODELS,
     GOOGLE_AI_VIDEO_MODELS,
     OLLAMA_CLOUD_TEXT_MODELS,
     Settings,
+    get_settings,
+    insecure_default_secret_key_warning,
 )
 
 
@@ -134,3 +139,27 @@ def test_settings_rejects_unknown_ai_provider() -> None:
         assert "AI_PROVIDER" in str(exc)
     else:
         raise AssertionError("Settings should reject unsupported providers")
+
+
+def test_insecure_default_secret_key_warning_emitted_for_default_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv("APP_SECRET_KEY", DEFAULT_APP_SECRET_KEY)
+    get_settings.cache_clear()
+    try:
+        assert insecure_default_secret_key_warning() is not None
+    finally:
+        get_settings.cache_clear()
+
+
+def test_insecure_default_secret_key_warning_silent_for_custom_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv("APP_SECRET_KEY", "custom-secret")
+    get_settings.cache_clear()
+    try:
+        assert insecure_default_secret_key_warning() is None
+    finally:
+        get_settings.cache_clear()

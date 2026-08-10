@@ -13,9 +13,13 @@ from app.storytelling.reference_upload import (
     prepare_reference_upload,
 )
 
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+JPEG_SIGNATURE = b"\xff\xd8\xff\xe0" + b"\x00" * 16
+WEBP_SIGNATURE = b"RIFF" + b"\x00\x00\x00\x00" + b"WEBPVP8 " + b"\x00" * 16
+
 
 def test_prepare_reference_upload_accepts_image_category() -> None:
-    prepared = prepare_reference_upload("hero.png", b"image-bytes", "character")
+    prepared = prepare_reference_upload("hero.png", PNG_SIGNATURE, "character")
 
     assert prepared["filename"] == "hero.png"
     assert prepared["category"] == "character"
@@ -25,7 +29,7 @@ def test_prepare_reference_upload_accepts_image_category() -> None:
 
 
 def test_prepare_reference_upload_defaults_to_auto_reference() -> None:
-    prepared = prepare_reference_upload("moodboard.jpg", b"image-bytes")
+    prepared = prepare_reference_upload("moodboard.jpg", JPEG_SIGNATURE)
 
     assert prepared["filename"] == "moodboard.jpg"
     assert prepared["category"] == "auto"
@@ -36,6 +40,11 @@ def test_prepare_reference_upload_defaults_to_auto_reference() -> None:
 def test_prepare_reference_upload_rejects_non_image() -> None:
     with pytest.raises(ReferenceUploadError, match="JPG, PNG ou WebP"):
         prepare_reference_upload("roteiro.pdf", b"not-image", "prop")
+
+
+def test_prepare_reference_upload_rejects_content_mismatching_extension() -> None:
+    with pytest.raises(ReferenceUploadError, match="não corresponde"):
+        prepare_reference_upload("hero.png", JPEG_SIGNATURE)
 
 
 class _FakeAssetSession:
@@ -68,7 +77,7 @@ async def test_persist_reference_upload_writes_asset_inside_project_storage(
     session = _FakeAssetSession()
     project_id = uuid4()
     artifact_id = uuid4()
-    prepared = prepare_reference_upload("portal.webp", b"image-bytes", "location")
+    prepared = prepare_reference_upload("portal.webp", WEBP_SIGNATURE, "location")
 
     asset = await persist_reference_upload(
         cast(AsyncSession, session),
@@ -96,7 +105,7 @@ async def test_persist_reference_upload_accepts_auto_reference_category(
     )
     session = _FakeAssetSession()
     project_id = uuid4()
-    prepared = prepare_reference_upload("referência.png", b"image-bytes")
+    prepared = prepare_reference_upload("referência.png", PNG_SIGNATURE)
 
     asset = await persist_reference_upload(
         cast(AsyncSession, session),

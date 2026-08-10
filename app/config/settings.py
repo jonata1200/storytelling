@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.config.provider_policy import normalize_api_key, normalize_provider_name
 
+DEFAULT_APP_SECRET_KEY = "change-me-in-development"
+
 OLLAMA_CLOUD_TEXT_MODELS = (
     "deepseek-v4-flash:cloud",
     "gemma4:cloud",
@@ -36,7 +38,7 @@ class Settings(BaseSettings):
     app_name: str = "Storytelling"
     app_env: str = "local"
     app_debug: bool = True
-    app_secret_key: str = Field(default="change-me-in-development", repr=False)
+    app_secret_key: str = Field(default=DEFAULT_APP_SECRET_KEY, repr=False)
 
     database_url: str = "postgresql+asyncpg://storytelling:storytelling@localhost:5432/storytelling"
     redis_url: str = "redis://localhost:6379/0"
@@ -112,7 +114,7 @@ class Settings(BaseSettings):
             "VIDEO_PROVIDER",
         )
         if self.app_env.lower() not in {"local", "development", "test"}:
-            if self.app_secret_key == "change-me-in-development":
+            if self.app_secret_key == DEFAULT_APP_SECRET_KEY:
                 raise ValueError("APP_SECRET_KEY must be changed outside local environments")
             if self.app_debug:
                 raise ValueError("APP_DEBUG must be false outside local environments")
@@ -154,3 +156,14 @@ def get_settings() -> Settings:
     from app.config.runtime_preferences import load_runtime_preferences
 
     return Settings(**cast(dict[str, Any], load_runtime_preferences()))
+
+
+def insecure_default_secret_key_warning() -> str | None:
+    settings = get_settings()
+    if settings.app_secret_key != DEFAULT_APP_SECRET_KEY:
+        return None
+    return (
+        "APP_SECRET_KEY ainda usa o valor padrão de desenvolvimento. Qualquer pessoa com "
+        "acesso ao repositório pode forjar tokens de sessão e CSRF. Defina um segredo "
+        "próprio antes de expor a aplicação."
+    )

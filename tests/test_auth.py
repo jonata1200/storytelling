@@ -1,4 +1,5 @@
-﻿from collections.abc import Iterator
+﻿import time
+from collections.abc import Iterator
 from typing import cast
 
 import pytest
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.auth.passwords as auth_passwords
 import app.auth.service as auth_service
+import app.auth.ui_middleware as auth_ui_middleware
 from app.auth.csrf import create_csrf_token, verify_csrf_token
 from app.auth.passwords import (
     hash_password,
@@ -19,7 +21,6 @@ from app.auth.passwords import (
 from app.auth.session import (
     SESSION_COOKIE_NAME,
     create_persistent_session_token,
-    create_session_token,
     revoke_persistent_session_token,
     verify_persistent_session_token,
 )
@@ -174,6 +175,17 @@ def test_ui_middleware_redirects_unauthenticated_users_outside_local(
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("APP_DEBUG", "false")
     monkeypatch.setenv("APP_SECRET_KEY", "test-secret-for-production")
+
+    async def fake_verify_persistent_session(
+        _session: object, _token: str
+    ) -> str | None:
+        return "jonata"
+
+    monkeypatch.setattr(
+        auth_ui_middleware,
+        "verify_persistent_session_token",
+        fake_verify_persistent_session,
+    )
     get_settings.cache_clear()
     try:
         app = FastAPI()
@@ -193,12 +205,31 @@ def test_ui_middleware_redirects_unauthenticated_users_outside_local(
         assert blocked.headers["location"] == "/login"
         assert client.get("/login").status_code == 200
 
-        token = create_session_token("jonata")
-        client.cookies.set(SESSION_COOKIE_NAME, token)
+        client.cookies.set(SESSION_COOKIE_NAME, "sid-persistent-token")
         allowed = client.get("/settings", follow_redirects=False)
         assert allowed.status_code == 200
     finally:
         get_settings.cache_clear()
+
+
+def test_auth_rate_limit_prunes_stale_attempt_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.auth import ui_routes as auth_ui_routes
+
+    monkeypatch.setattr(
+        auth_ui_routes,
+        "_AUTH_ATTEMPTS",
+        {
+            "stale:user": [time.monotonic() - 300],
+            "active:user": [time.monotonic()],
+        },
+    )
+
+    auth_ui_routes._prune_stale_auth_attempts(time.monotonic() - 60)
+
+    assert "stale:user" not in auth_ui_routes._AUTH_ATTEMPTS
+    assert "active:user" in auth_ui_routes._AUTH_ATTEMPTS
 
 
 def test_docs_are_not_public_outside_local(monkeypatch: pytest.MonkeyPatch) -> None:

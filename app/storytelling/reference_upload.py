@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.assets.models import Asset, AssetVersion
 from app.config.settings import get_settings
 from app.core.enums import AssetKind
+from app.providers.media_utils import image_signature_matches
 
 REFERENCE_CATEGORIES = {
     "auto": "Referência visual",
@@ -41,6 +42,10 @@ def prepare_reference_upload(
         raise ReferenceUploadError("A imagem deve ter no maximo 10 MB.")
     if not content:
         raise ReferenceUploadError("A imagem enviada está vazia.")
+    if not image_signature_matches(content, extension):
+        raise ReferenceUploadError(
+            "O conteúdo do arquivo não corresponde ao formato da extensão."
+        )
     return {
         "filename": Path(filename).name,
         "category": normalized_category,
