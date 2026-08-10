@@ -130,6 +130,13 @@ def _requested_revision_duration_seconds(instruction: str) -> int | None:
     return None
 
 
+def _veo_compatible_total_duration_seconds(duration_seconds: int) -> int:
+    duration = max(VIDEO_CLIP_MIN_SECONDS, int(duration_seconds))
+    if duration % 2 != 0:
+        duration += 1
+    return duration
+
+
 def _script_revision_size_targets(
     instruction: str, current_duration_seconds: int, current_word_count: int
 ) -> tuple[int, int, str]:
@@ -166,8 +173,10 @@ def _script_revision_size_targets(
     wants_shrink = any(term in normalized for term in shrink_terms)
     wants_expand = any(term in normalized for term in expand_terms) and not wants_shrink
     if wants_shrink:
-        target_duration = explicit_duration or max(15, int(current_duration_seconds * 0.65))
-        target_ratio = target_duration / current_duration_seconds if explicit_duration else 0.65
+        target_duration = _veo_compatible_total_duration_seconds(
+            explicit_duration or max(15, int(current_duration_seconds * 0.65))
+        )
+        target_ratio = target_duration / current_duration_seconds
         target_words = max(80, int(current_word_count * target_ratio))
         return (
             target_duration,
@@ -181,8 +190,13 @@ def _script_revision_size_targets(
             ),
         )
     if wants_expand:
-        target_duration = explicit_duration or int(current_duration_seconds * 1.35)
-        target_words = max(current_word_count + 80, int(current_word_count * 1.35))
+        target_duration = _veo_compatible_total_duration_seconds(
+            explicit_duration or int(current_duration_seconds * 1.35)
+        )
+        target_words = max(
+            current_word_count + 80,
+            int(current_word_count * (target_duration / current_duration_seconds)),
+        )
         return (
             target_duration,
             target_words,
@@ -194,6 +208,7 @@ def _script_revision_size_targets(
             ),
         )
     if explicit_duration is not None:
+        explicit_duration = _veo_compatible_total_duration_seconds(explicit_duration)
         ratio = explicit_duration / current_duration_seconds
         target_words = max(80, int(current_word_count * ratio))
         return (
@@ -205,13 +220,23 @@ def _script_revision_size_targets(
             ),
         )
     return (
-        current_duration_seconds,
+        _veo_compatible_total_duration_seconds(current_duration_seconds),
         current_word_count,
         (
             "Se o pedido não solicitar mudança de tamanho ou duração, mantenha a duração "
             "e a escala narrativa atuais. Se solicitar, obedeça ao pedido do usuário."
         ),
     )
+
+
+async def _ensure_script_video_duration_compatible(session: AsyncSession, script: Script) -> int:
+    target_duration_seconds = _veo_compatible_total_duration_seconds(
+        script.target_duration_seconds
+    )
+    if target_duration_seconds != script.target_duration_seconds:
+        script.target_duration_seconds = target_duration_seconds
+        await session.flush()
+    return target_duration_seconds
 
 
 def _retry_script_generation_after_runtime_error(exc: Exception) -> bool:
@@ -312,7 +337,9 @@ async def generate_script(
     ):
         return None
 
-    target_duration_seconds = int(briefing.desired_duration_minutes * Decimal("60"))
+    target_duration_seconds = _veo_compatible_total_duration_seconds(
+        int(briefing.desired_duration_minutes * Decimal("60"))
+    )
     clip_durations = video_clip_durations(target_duration_seconds)
     scene_count = expected_script_scene_count(target_duration_seconds)
     narrative_contract = _idea_script_contract(idea, briefing)
@@ -551,7 +578,8 @@ async def generate_scenes_and_shots(
     if project is None or script is None or script.project_id != project_id:
         return None
 
-    clip_durations = video_clip_durations(script.target_duration_seconds)
+    target_duration_seconds = await _ensure_script_video_duration_compatible(session, script)
+    clip_durations = video_clip_durations(target_duration_seconds)
     embedded_plan = await _script_embedded_production_plan(session, script)
 
     scenes: list[Scene] = []
@@ -559,7 +587,7 @@ async def generate_scenes_and_shots(
         try:
             content = normalize_scene_plan_payload_from_script(
                 embedded_plan,
-                script.target_duration_seconds,
+                target_duration_seconds,
                 script.content,
             )
         except GenerationOutputError:
@@ -567,7 +595,7 @@ async def generate_scenes_and_shots(
     if embedded_plan is None:
         local_plan = scene_plan_payload_from_script_content(
             script.content,
-            script.target_duration_seconds,
+            target_duration_seconds,
         )
         if local_plan is not None:
             content = local_plan
@@ -582,7 +610,7 @@ async def generate_scenes_and_shots(
                 "generate_scenes_and_shots",
                 {
                     "script": script.content,
-                    "target_duration_seconds": script.target_duration_seconds,
+                    "target_duration_seconds": target_duration_seconds,
                     "clip_min_seconds": VIDEO_CLIP_MIN_SECONDS,
                     "clip_max_seconds": VIDEO_CLIP_MAX_SECONDS,
                     "clip_target_seconds": VIDEO_CLIP_TARGET_SECONDS,
@@ -594,7 +622,7 @@ async def generate_scenes_and_shots(
             )
             content = normalize_scene_plan_payload_from_script(
                 _required_mapping(result.content, "generate_scenes_and_shots"),
-                script.target_duration_seconds,
+                target_duration_seconds,
                 script.content,
             )
     for scene_index, raw_scene_payload in enumerate(

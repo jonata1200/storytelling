@@ -634,23 +634,6 @@ def _render_loading_status(status: LoadingStatus) -> None:
             ui.label(f"{round(status.ratio * 100)}%")
         progress_bar = ui.linear_progress(value=status.ratio, show_value=False).classes("w-full")
         progress_bar.props("instant-feedback rounded")
-    if status.created:
-        with ui.row().classes("w-full items-center justify-center gap-2 flex-wrap"):
-            ui.icon("check_circle").classes("text-emerald-300 text-lg")
-            for item in status.created[:4]:
-                ui.label(item.label).classes(
-                    "text-xs px-2 py-1 rounded-md bg-emerald-950 text-emerald-200 "
-                    "border border-emerald-800"
-                )
-    if status.missing:
-        with ui.row().classes("w-full items-center justify-center gap-2 flex-wrap"):
-            ui.icon("pending").classes("text-amber-300 text-lg")
-            for item in status.missing[:4]:
-                ui.label(item.label).classes(
-                    "text-xs px-2 py-1 rounded-md bg-slate-900 text-slate-300 "
-                    "border border-slate-700"
-                )
-
 
 def _generation_loading_dialog(title: str, message: str | LoadingStatus) -> Any:
     with (

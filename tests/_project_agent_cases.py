@@ -154,10 +154,7 @@ async def test_project_chat_can_revise_script(monkeypatch: pytest.MonkeyPatch) -
     )
 
     assert result == ProjectChatResult(
-        (
-            "Roteiro revisado. Cenas e planos serão recriados quando você "
-            "abrir ou solicitar o Storyboard."
-        ),
+        "Roteiro revisado.",
         "revise_script",
         True,
     )
@@ -215,14 +212,7 @@ async def test_project_chat_can_revise_specific_script_scenes(
         [],
     )
 
-    assert result == ProjectChatResult(
-        (
-            "Cena(s) revisada(s). Cenas e planos serão recriados quando "
-            "você abrir ou solicitar o Storyboard."
-        ),
-        "revise_script",
-        True,
-    )
+    assert result == ProjectChatResult("Cena revisada.", "revise_script", True)
     assert calls == [
         "ensure_script",
         "revise",

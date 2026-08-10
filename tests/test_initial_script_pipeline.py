@@ -236,8 +236,8 @@ def test_script_revision_size_targets_shrink_generic_reduction_request() -> None
         900,
     )
 
-    assert duration == 195
-    assert words == 585
+    assert duration == 196
+    assert words == 588
     assert "redução" in guidance
     assert "mais curta" in guidance
 
@@ -252,6 +252,23 @@ def test_script_revision_size_targets_use_explicit_duration() -> None:
     assert duration == 120
     assert words == 360
     assert "120s" in guidance
+
+
+def test_script_revision_size_targets_round_odd_explicit_seconds_for_video_clips() -> None:
+    duration, words, guidance = storytelling_service._script_revision_size_targets(
+        "reduza para 195 segundos",
+        300,
+        900,
+    )
+
+    assert duration == 196
+    assert words == 588
+    assert "196s" in guidance
+
+
+def test_video_compatible_total_duration_rounds_odd_values() -> None:
+    assert storytelling_service._veo_compatible_total_duration_seconds(195) == 196
+    assert storytelling_service._veo_compatible_total_duration_seconds(196) == 196
 
 
 @pytest.mark.asyncio

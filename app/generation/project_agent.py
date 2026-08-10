@@ -775,18 +775,12 @@ async def handle_project_chat(
             await commit()
         if _requests_specific_script_scenes(message):
             return ProjectChatResult(
-                (
-                    "Cena(s) revisada(s). Cenas e planos serão recriados quando "
-                    "você abrir ou solicitar o Storyboard."
-                ),
+                "Cena revisada.",
                 action,
                 True,
             )
         return ProjectChatResult(
-            (
-                "Roteiro revisado. Cenas e planos serão recriados quando você "
-                "abrir ou solicitar o Storyboard."
-            ),
+            "Roteiro revisado.",
             action,
             True,
         )
