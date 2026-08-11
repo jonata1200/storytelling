@@ -66,6 +66,44 @@ SectionTitle = Callable[[str, str, str | None, Any | None], None]
 LoadingDialogFactory = Callable[[str, Any], Any]
 
 
+def _safe_notify(message: str, **kwargs: Any) -> bool:
+    try:
+        ui.notify(message, **kwargs)
+    except (AssertionError, RuntimeError) as exc:
+        if is_deleted_ui_context_error(exc):
+            return False
+        raise
+    return True
+
+
+def _safe_reload() -> bool:
+    try:
+        ui.navigate.reload()
+    except (AssertionError, RuntimeError) as exc:
+        if is_deleted_ui_context_error(exc):
+            return False
+        raise
+    return True
+
+
+def _safe_close_ui_element_quietly(element: object | None) -> None:
+    if element is None:
+        return
+    try:
+        close = getattr(element, "close", None)
+        if callable(close):
+            close()
+    except (AssertionError, RuntimeError) as exc:
+        if not is_deleted_ui_context_error(exc):
+            raise
+
+
+def _show_ai_error_unless_context_gone(exc: Exception) -> None:
+    if is_deleted_ui_context_error(exc):
+        return
+    show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+
+
 def _sync_storyboard_handler_dependencies() -> None:
     _storyboard_handlers.AsyncSessionLocal = AsyncSessionLocal
     _storyboard_handlers.approve_storyboard_prompt = approve_storyboard_prompt
@@ -253,17 +291,20 @@ async def _generate_continuous_video_segments_from_ui(
                 failed[0].metadata_json if isinstance(failed[0].metadata_json, dict) else {}
             )
             message = str(metadata.get("error") or "A fila parou no segmento com falha.")
-            ui.notify(message, color="negative")
+            notified = _safe_notify(message, color="negative")
         elif jobs:
-            ui.notify("Fila de v\u00eddeo cont\u00ednuo conclu\u00edda.", color="positive")
+            notified = _safe_notify(
+                "Fila de v\u00eddeo cont\u00ednuo conclu\u00edda.",
+                color="positive",
+            )
         else:
-            ui.notify("Nenhum segmento pendente para gerar.", color="info")
-        ui.navigate.reload()
+            notified = _safe_notify("Nenhum segmento pendente para gerar.", color="info")
+        if notified:
+            _safe_reload()
     except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+        _show_ai_error_unless_context_gone(exc)
     finally:
-        if loading_dialog is not None:
-            safe_close_ui_element(loading_dialog)
+        _safe_close_ui_element_quietly(loading_dialog)
 
 
 async def _generate_next_continuous_video_segment_from_ui(
@@ -284,16 +325,16 @@ async def _generate_next_continuous_video_segment_from_ui(
                 retry_failed=True,
                 progress_callback=progress_callback,
             )
-        ui.notify(
+        notified = _safe_notify(
             "Pr\u00f3ximo segmento enviado para revis\u00e3o." if jobs else "Nada pendente agora.",
             color="positive" if jobs else "info",
         )
-        ui.navigate.reload()
+        if notified:
+            _safe_reload()
     except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+        _show_ai_error_unless_context_gone(exc)
     finally:
-        if loading_dialog is not None:
-            safe_close_ui_element(loading_dialog)
+        _safe_close_ui_element_quietly(loading_dialog)
 
 
 async def _approve_continuous_video_segment_from_ui(
@@ -305,12 +346,12 @@ async def _approve_continuous_video_segment_from_ui(
             segment = await approve_continuous_video_segment(session, project_id, segment_id)
             await session.commit()
         if segment is None:
-            ui.notify("Segmento n\u00e3o encontrado.", color="warning")
+            _safe_notify("Segmento n\u00e3o encontrado.", color="warning")
             return
-        ui.notify("Segmento aprovado. O pr\u00f3ximo j\u00e1 pode usar este frame final.", color="positive")
-        ui.navigate.reload()
+        _safe_notify("Segmento aprovado. O pr\u00f3ximo bloco j\u00e1 pode continuar daqui.", color="positive")
+        _safe_reload()
     except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+        _show_ai_error_unless_context_gone(exc)
 
 
 async def _reject_continuous_video_segment_from_ui(
@@ -322,12 +363,12 @@ async def _reject_continuous_video_segment_from_ui(
             segment = await reject_continuous_video_segment(session, project_id, segment_id)
             await session.commit()
         if segment is None:
-            ui.notify("Segmento n\u00e3o encontrado.", color="warning")
+            _safe_notify("Segmento n\u00e3o encontrado.", color="warning")
             return
-        ui.notify("Segmento rejeitado. A continuidade downstream foi bloqueada.", color="warning")
-        ui.navigate.reload()
+        _safe_notify("Segmento rejeitado. A continuidade downstream foi bloqueada.", color="warning")
+        _safe_reload()
     except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+        _show_ai_error_unless_context_gone(exc)
 
 
 async def _retry_continuous_video_segment_from_ui(
@@ -349,13 +390,12 @@ async def _retry_continuous_video_segment_from_ui(
                 segment_id,
                 progress_callback=progress_callback,
             )
-        ui.notify("Segmento reenviado para revis\u00e3o.", color="positive")
-        ui.navigate.reload()
+        _safe_notify("Segmento reenviado para revis\u00e3o.", color="positive")
+        _safe_reload()
     except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+        _show_ai_error_unless_context_gone(exc)
     finally:
-        if loading_dialog is not None:
-            safe_close_ui_element(loading_dialog)
+        _safe_close_ui_element_quietly(loading_dialog)
 
 
 async def _regenerate_rejected_continuous_video_segment_from_ui(
@@ -377,13 +417,12 @@ async def _regenerate_rejected_continuous_video_segment_from_ui(
                 segment_id,
                 progress_callback=progress_callback,
             )
-        ui.notify("Segmento regenerado para nova revis\u00e3o.", color="positive")
-        ui.navigate.reload()
+        _safe_notify("Segmento regenerado para nova revis\u00e3o.", color="positive")
+        _safe_reload()
     except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+        _show_ai_error_unless_context_gone(exc)
     finally:
-        if loading_dialog is not None:
-            safe_close_ui_element(loading_dialog)
+        _safe_close_ui_element_quietly(loading_dialog)
 
 
 async def _generate_storyboards_from_ui(
@@ -1288,16 +1327,6 @@ def render_video_area(
     loading_dialog_factory: LoadingDialogFactory | None = None,
 ) -> None:
     continuous_view_model = build_continuous_video_view_model(summary)
-    section_title(
-        "Produ\u00e7\u00e3o de v\u00eddeo",
-        (
-            "Gere blocos sequenciais com Veo Fast a partir do roteiro e da Biblioteca Visual."
-            if continuous_view_model.is_continuous_mode
-            else "Transforme cada quadro aprovado em clipes e acompanhe a montagem final."
-        ),
-        None,
-        None,
-    )
     view_model = build_storyboard_video_view_model(summary)
     pending_frames = view_model.pending_frames
     video_prompt_by_frame_id = view_model.video_prompt_by_frame_id
@@ -1340,19 +1369,37 @@ def render_video_area(
         _continuous_queue_progress_dialog(continuous_view_model)
     )
 
+    if continuous_view_model.is_continuous_mode:
+        with ui.row().classes("w-full items-start justify-between gap-4 mb-2"):
+            with ui.column().classes("gap-1 min-w-0"):
+                ui.label("Produ\u00e7\u00e3o de v\u00eddeo").classes("brand-type text-3xl font-bold")
+                ui.label(
+                    "Gere blocos sequenciais com Veo Fast a partir do roteiro e da Biblioteca Visual."
+                ).classes("text-sm text-[#8e948f]")
+            with ui.column().classes("items-end gap-2 shrink-0"):
+                ui.button(
+                    "Replanejar" if continuous_segments else "Planejar segmentos",
+                    icon="view_timeline",
+                    on_click=lambda: _plan_continuous_video_segments_from_ui(
+                        project_id,
+                        loading_dialog=segment_plan_dialog,
+                    ),
+                ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                if continuous_segments:
+                    ui.label(
+                        f"Custo restante: US$ {continuous_view_model.remaining_cost}"
+                    ).classes("text-xs text-[#8d938e]")
+    else:
+        section_title(
+            "Produ\u00e7\u00e3o de v\u00eddeo",
+            "Transforme cada quadro aprovado em clipes e acompanhe a montagem final.",
+            None,
+            None,
+        )
+
     with ui.element("div").classes(
         "w-full mt-2" if continuous_view_model.is_continuous_mode else "hidden"
     ):
-        with ui.row().classes("w-full items-center justify-end gap-3"):
-            ui.button(
-                "Replanejar" if continuous_segments else "Planejar segmentos",
-                icon="view_timeline",
-                on_click=lambda: _plan_continuous_video_segments_from_ui(
-                    project_id,
-                    loading_dialog=segment_plan_dialog,
-                ),
-            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-
         if continuous_segments:
             with ui.row().classes("w-full items-center justify-between flex-wrap gap-3 mt-3"):
                 with ui.row().classes("flex-wrap gap-2"):
@@ -1364,9 +1411,6 @@ def render_video_area(
                     )
                     ui.badge("Veo 3.1 Fast").classes("blue-status-badge bg-[#30362b]")
                 with ui.column().classes("gap-2 items-end"):
-                    ui.label(
-                        f"Custo restante: US$ {continuous_view_model.remaining_cost}"
-                    ).classes("text-xs text-[#8d938e]")
                     with ui.row().classes("gap-2 justify-end flex-wrap"):
                         next_button = ui.button(
                             "Gerar pr\u00f3ximo",
@@ -1557,6 +1601,11 @@ def render_video_area(
                             ui.label(str(metadata.get("error"))[:240]).classes(
                                 "text-xs text-[#ffb4b4] mt-2"
                             )
+                        if metadata.get("final_frame_error"):
+                            ui.label(
+                                "Frame final indispon\u00edvel: "
+                                + str(metadata.get("final_frame_error"))[:220]
+                            ).classes("text-xs text-[#ffddb4] mt-2")
                         if metadata.get("continuity_source_summary"):
                             ui.label(str(metadata.get("continuity_source_summary"))[:260]).classes(
                                 "text-xs text-[#8d938e] mt-2"

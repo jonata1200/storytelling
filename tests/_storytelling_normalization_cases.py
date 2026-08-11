@@ -39,7 +39,7 @@ from app.video_generation.durations import VIDEO_CLIP_ALLOWED_SECONDS
 
 
 def test_idea_lab_duration_and_count_options_match_generation_controls() -> None:
-    assert pages.STORY_DURATION_OPTIONS == [5]
+    assert pages.STORY_DURATION_OPTIONS == [2, 5]
     assert pages.IDEA_COUNT_OPTIONS == list(range(1, 11))
     assert "Documentário" not in pages.IDEA_GENRES
     assert "Histórias familiares emocionantes" not in pages.IDEA_GENRES
@@ -78,6 +78,8 @@ def test_story_idea_payload_preserves_selected_duration() -> None:
     )
 
     assert payload["duration_minutes"] == 7
+    assert coerce_duration_minutes("1") == 2.0
+    assert coerce_duration_minutes("2") == 2.0
     assert coerce_duration_minutes("20") == 20.0
     assert coerce_duration_minutes("30") == 25.0
 

@@ -110,7 +110,7 @@ def coerce_duration_minutes(value: object, default: float = 5.0) -> float:
         duration = float(str(value).replace(",", "."))
     except ValueError:
         return default
-    return max(5.0, min(25.0, duration))
+    return max(2.0, min(25.0, duration))
 
 
 def _coerce_positive_int(value: object, default: int) -> int:

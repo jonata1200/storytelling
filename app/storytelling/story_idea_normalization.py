@@ -66,8 +66,8 @@ def story_idea_validation_errors(payload: dict) -> list[str]:
         errors.append("protagonist precisa ser específico, não placeholder")
 
     duration = coerce_duration_minutes(payload.get("duration_minutes"))
-    if not 5 <= duration <= 25:
-        errors.append("duration_minutes deve ficar entre 5 e 25")
+    if not 2 <= duration <= 25:
+        errors.append("duration_minutes deve ficar entre 2 e 25")
 
     for field in ("retention_potential", "cliche_risk", "production_complexity"):
         value = payload.get(field)

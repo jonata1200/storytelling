@@ -78,9 +78,9 @@ async def test_developing_story_idea_starts_initial_script_pipeline(
     assert captured["generate_initial_script"] is True
     assert captured["generate_initial_story_bible"] is False
     assert captured["source_idea"] is idea
-    assert captured["form"]["duration"] == 5.0
-    assert "5 minutos" in captured["form"]["objective"]
-    assert "adequar para 5 minutos" in captured["form"]["constraints"]
+    assert captured["form"]["duration"] == 7.0
+    assert "7 minutos" in captured["form"]["objective"]
+    assert "adequar para 7 minutos" in captured["form"]["constraints"]
     assert captured["form"]["source_idea_payload"] == idea
     assert "Obstáculos: culpa antiga, silencio familiar" in captured["form"]["one_line_idea"]
     assert "Virada: O segredo protegeu a protagonista." in captured["form"]["one_line_idea"]

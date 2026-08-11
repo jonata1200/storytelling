@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 BRAND_MARK_URL = "/ui-assets/favicon.png"
 DEFAULT_STORY_DURATION_MINUTES = 5.0
-STORY_DURATION_OPTIONS = [5]
+STORY_DURATION_OPTIONS = [2, 5]
 IDEA_COUNT_OPTIONS = list(range(1, 11))
 BLOCKING_DIALOG_PROPS = "persistent no-esc-dismiss no-backdrop-dismiss"
 UI_GENERATION_TIMEOUT_SECONDS = 300

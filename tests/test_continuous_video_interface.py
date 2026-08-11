@@ -267,6 +267,39 @@ async def test_generate_continuous_video_ui_handler_passes_queue_options(
 
 
 @pytest.mark.asyncio
+async def test_generate_continuous_video_ui_handler_ignores_removed_page_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+
+    class FakeSessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    async def fake_generate(*_args: Any, **_kwargs: Any) -> tuple:
+        return [object()], [_segment(1, GenerationJobStatus.SUCCEEDED)]
+
+    def stale_notify(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("The client this element belongs to has been deleted.")
+
+    monkeypatch.setattr(storyboard_video_area, "AsyncSessionLocal", lambda: FakeSessionContext())
+    monkeypatch.setattr(
+        storyboard_video_area,
+        "generate_continuous_video_segments",
+        fake_generate,
+    )
+    monkeypatch.setattr(storyboard_video_area.ui, "notify", stale_notify)
+
+    await storyboard_video_area._generate_continuous_video_segments_from_ui(
+        project_id,
+        progress_callback=lambda *_args: None,
+    )
+
+
+@pytest.mark.asyncio
 async def test_video_workflow_mode_ui_handler_saves_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

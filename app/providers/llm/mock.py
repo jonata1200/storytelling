@@ -285,7 +285,7 @@ class MockLLMProvider:
                             if selected_genre and selected_genre != "gênero livre criado pela IA"
                             else idea_specs[(index - 1) % len(idea_specs)]["genre"]
                         ),
-                        "duration_minutes": max(5, min(25, target_duration)),
+                        "duration_minutes": max(2, min(25, target_duration)),
                         "retention_potential": min(95, 75 + index),
                         "cliche_risk": 12 + index,
                         "production_complexity": 30 + index,
