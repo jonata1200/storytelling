@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
@@ -243,6 +244,25 @@ def test_video_job_needs_generation_is_false_for_reusable_jobs() -> None:
     assert _video_job_needs_generation(cast(Any, running)) is False
     assert _video_job_needs_generation(cast(Any, exhausted)) is False
     assert _video_job_needs_generation(cast(Any, exhausted), retry_failed=True) is True
+
+
+def test_video_job_needs_generation_retries_stale_running_job_only_when_requested() -> None:
+    stale_running = SimpleNamespace(
+        status=GenerationJobStatus.RUNNING,
+        attempts=3,
+        max_attempts=3,
+        updated_at=datetime.now(UTC) - timedelta(minutes=12),
+    )
+    fresh_running = SimpleNamespace(
+        status=GenerationJobStatus.RUNNING,
+        attempts=1,
+        max_attempts=3,
+        updated_at=datetime.now(UTC),
+    )
+
+    assert _video_job_needs_generation(cast(Any, stale_running)) is False
+    assert _video_job_needs_generation(cast(Any, stale_running), retry_failed=True) is True
+    assert _video_job_needs_generation(cast(Any, fresh_running), retry_failed=True) is False
 
 
 def test_video_job_needs_generation_is_true_without_existing_job() -> None:

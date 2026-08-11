@@ -1098,6 +1098,32 @@ def test_video_view_model_counts_active_parent_when_clip_jobs_are_only_failures(
     assert view_model.running_video_jobs == 0
 
 
+def test_video_view_model_treats_stale_running_clip_jobs_as_failed() -> None:
+    frame_id = uuid4()
+    frame = SimpleNamespace(
+        id=frame_id,
+        frame_number=1,
+        duration_seconds=8,
+    )
+    stale_running_job = SimpleNamespace(
+        request_payload={"storyboard_frame_id": str(frame_id)},
+        status="running",
+        updated_at=datetime.now(UTC) - timedelta(minutes=12),
+    )
+
+    view_model = storyboard_video_area.build_storyboard_video_view_model(
+        {
+            "frames": [frame],
+            "clips": [],
+            "video_prompt_previews": [],
+            "video_jobs": [stale_running_job],
+        }
+    )
+
+    assert view_model.running_video_jobs == 0
+    assert view_model.failed_video_jobs == 1
+
+
 @pytest.mark.asyncio
 async def test_approve_video_prompts_retries_failed_clip_jobs_from_ui(
     monkeypatch: pytest.MonkeyPatch,

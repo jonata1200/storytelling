@@ -1,7 +1,7 @@
 ﻿import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
@@ -494,6 +494,17 @@ def _is_transient_video_error(error: str) -> bool:
     return any(marker in normalized for marker in transient_markers)
 
 
+def _stale_running_video_job(job: GenerationJob, *, after_minutes: int = 10) -> bool:
+    if job.status != GenerationJobStatus.RUNNING:
+        return False
+    updated_at = job.updated_at or job.started_at or job.created_at
+    if updated_at is None:
+        return True
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    return datetime.now(UTC) - updated_at >= timedelta(minutes=after_minutes)
+
+
 def _video_job_needs_generation(
     existing_job: GenerationJob | None,
     *,
@@ -506,6 +517,8 @@ def _video_job_needs_generation(
     é regerado (retry) e contabilizado novamente no custo estimado.
     """
     if existing_job is None:
+        return True
+    if retry_failed and _stale_running_video_job(existing_job):
         return True
     if existing_job.status != GenerationJobStatus.FAILED:
         return False
