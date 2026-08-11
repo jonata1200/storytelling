@@ -24,8 +24,8 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     video_resolution: Mapped[str] = mapped_column(String(40), default="720p", nullable=False)
     workflow_mode: Mapped[str] = mapped_column(
         String(80),
-        default="keyframes_i2v",
-        server_default="keyframes_i2v",
+        default="continuous_fast",
+        server_default="continuous_fast",
         nullable=False,
     )
     image_model: Mapped[str] = mapped_column(

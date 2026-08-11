@@ -56,7 +56,7 @@ class ContinuousVideoViewModel:
 
 def production_workflow_mode(settings: Any) -> str:
     mode = str(getattr(settings, "workflow_mode", "") or "").strip()
-    return mode or CONTROL_VISUAL_WORKFLOW_MODE
+    return mode or CONTINUOUS_VIDEO_WORKFLOW_MODE
 
 
 def is_continuous_video_mode(settings: Any) -> bool:

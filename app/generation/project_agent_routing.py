@@ -208,8 +208,11 @@ def _context_counts(project_context: dict[str, Any]) -> dict[str, int]:
 def _project_workflow_mode(project_context: dict[str, Any]) -> str:
     settings = project_context.get("production_settings")
     if not isinstance(settings, dict):
-        return "keyframes_i2v"
-    return str(settings.get("workflow_mode") or "keyframes_i2v").strip() or "keyframes_i2v"
+        return CONTINUOUS_VIDEO_WORKFLOW_MODE
+    return (
+        str(settings.get("workflow_mode") or CONTINUOUS_VIDEO_WORKFLOW_MODE).strip()
+        or CONTINUOUS_VIDEO_WORKFLOW_MODE
+    )
 
 
 def _workflow_progression_requested(message: str) -> bool:

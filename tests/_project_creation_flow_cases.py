@@ -1721,7 +1721,11 @@ def test_finalization_section_waits_for_video_clips() -> None:
         "qa_issues": 0,
     }
 
-    allowed, reason = pages._workspace_section_access("finalization", counts)
+    allowed, reason = pages._workspace_section_access(
+        "finalization",
+        counts,
+        "keyframes_i2v",
+    )
 
     assert allowed is False
     assert reason == "Gere pelo menos um clipe antes de acessar finalização."
@@ -1746,7 +1750,11 @@ def test_finalization_section_unlocks_after_video_clips() -> None:
         "qa_issues": 0,
     }
 
-    allowed, reason = pages._workspace_section_access("finalization", counts)
+    allowed, reason = pages._workspace_section_access(
+        "finalization",
+        counts,
+        "keyframes_i2v",
+    )
 
     assert allowed is True
     assert reason == ""
@@ -1771,7 +1779,11 @@ def test_dubbing_section_waits_for_video_clips() -> None:
         "qa_issues": 0,
     }
 
-    allowed, reason = pages._workspace_section_access("dubbing", counts)
+    allowed, reason = pages._workspace_section_access(
+        "dubbing",
+        counts,
+        "keyframes_i2v",
+    )
 
     assert allowed is False
     assert reason == "Gere pelo menos um clipe antes de acessar dublagem."
@@ -1796,7 +1808,11 @@ def test_dubbing_section_unlocks_after_video_clips() -> None:
         "qa_issues": 0,
     }
 
-    allowed, reason = pages._workspace_section_access("dubbing", counts)
+    allowed, reason = pages._workspace_section_access(
+        "dubbing",
+        counts,
+        "keyframes_i2v",
+    )
 
     assert allowed is True
     assert reason == ""

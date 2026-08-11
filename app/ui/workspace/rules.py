@@ -43,7 +43,8 @@ def step_ready(step_key: str, counts: dict[str, int]) -> bool:
 
 
 def is_continuous_video_workflow(workflow_mode: object) -> bool:
-    return str(workflow_mode or "").strip() == CONTINUOUS_VIDEO_WORKFLOW_MODE
+    mode = str(workflow_mode or "").strip()
+    return not mode or mode == CONTINUOUS_VIDEO_WORKFLOW_MODE
 
 
 def continuous_video_ready(counts: dict[str, int]) -> bool:

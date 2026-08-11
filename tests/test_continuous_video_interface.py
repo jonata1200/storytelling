@@ -69,7 +69,11 @@ def _segment(number: int, status: GenerationJobStatus) -> ContinuousVideoSegment
 def test_continuous_mode_unlocks_video_without_storyboard() -> None:
     counts = _counts_without_storyboard()
 
-    default_allowed, default_reason = workspace_section_access("video", counts)
+    default_allowed, default_reason = workspace_section_access(
+        "video",
+        counts,
+        CONTROL_VISUAL_WORKFLOW_MODE,
+    )
     continuous_allowed, continuous_reason = workspace_section_access(
         "video",
         counts,
@@ -80,6 +84,13 @@ def test_continuous_mode_unlocks_video_without_storyboard() -> None:
     assert "storyboard" in default_reason
     assert continuous_allowed is True
     assert continuous_reason == ""
+
+
+def test_missing_workflow_mode_defaults_to_continuous_video() -> None:
+    allowed, reason = workspace_section_access("video", _counts_without_storyboard())
+
+    assert allowed is True
+    assert reason == ""
 
 
 def test_legacy_project_with_storyboards_keeps_classic_video_access() -> None:
