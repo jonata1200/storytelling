@@ -91,7 +91,7 @@ class ClipReviewRead(BaseModel):
 class ContinuousVideoPlanCreate(BaseModel):
     mode: str = "continuous_fast"
     target_duration_seconds: int = Field(default=0, ge=0)
-    segment_duration_seconds: int = Field(default=7, ge=1)
+    segment_duration_seconds: int = Field(default=8, ge=1)
     segment_count: int = Field(default=0, ge=0)
     status: str = "draft"
     metadata_json: dict = Field(default_factory=dict)
@@ -161,7 +161,7 @@ class ContinuousVideoSegmentRead(BaseModel):
 
 
 class ContinuousVideoPlanSegmentsRequest(BaseModel):
-    segment_duration_seconds: int = Field(default=7, ge=1, le=12)
+    segment_duration_seconds: int = Field(default=8, ge=1, le=12)
     provider: str = "google_ai"
     model: str = "veo-3.1-fast-generate-preview"
     replace_existing: bool = False

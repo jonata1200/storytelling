@@ -172,7 +172,7 @@ class GoogleAIVideoProvider:
         )
         parameters: dict[str, Any] = {
             "aspectRatio": self._normalized_aspect_ratio(request.aspect_ratio),
-            "durationSeconds": str(duration_seconds),
+            "durationSeconds": duration_seconds,
             "resolution": resolution,
             **({"seed": request.seed} if request.seed is not None else {}),
         }

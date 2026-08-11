@@ -62,7 +62,7 @@ ContinuousVideoProgressCallback = Callable[
 
 CONTINUOUS_VIDEO_DEFAULT_PROVIDER = "google_ai"
 CONTINUOUS_VIDEO_FAST_MODEL = "veo-3.1-fast-generate-preview"
-CONTINUOUS_VIDEO_DEFAULT_SEGMENT_SECONDS = 7
+CONTINUOUS_VIDEO_DEFAULT_SEGMENT_SECONDS = 8
 CONTINUOUS_VIDEO_REVIEW_PENDING = "pending"
 CONTINUOUS_VIDEO_REVIEW_GENERATING = "generating"
 CONTINUOUS_VIDEO_REVIEW_READY = "ready_for_review"
@@ -551,16 +551,32 @@ def _segment_prompt(
     source_text: str,
     visual_context: dict[str, list[dict[str, str]]],
     continuity: str,
+    duration_seconds: int,
 ) -> str:
     action = source_text.strip() or "acao visual principal do roteiro"
     return (
-        f"Segmento {segment_number:02d} de video vertical 9:16, cinematografico e realista.\n"
-        f"Acao principal: {action}.\n"
-        f"Continuidade temporal: {continuity}.\n"
-        "Preserve rigorosamente identidade, figurino, idade aparente, escala, luz, "
-        "paleta e ambiente definidos na Biblioteca Visual.\n"
-        f"{_visual_reference_text(visual_context)}\n"
-        "Execute uma acao principal clara, natural e filmavel, sem reiniciar a cena. "
+        f"Prompt Veo 3.1 Fast - Segmento {segment_number:02d}\n\n"
+        "OBJETIVO\n"
+        "Gerar um unico trecho cinematografico continuo, realista e filmavel para "
+        "compor uma sequencia maior.\n\n"
+        "FORMATO\n"
+        f"- Duracao: {int(duration_seconds)} segundos.\n"
+        "- Enquadramento: vertical 9:16, composicao limpa para mobile.\n"
+        "- Estilo: live action cinematografico, realista, luz natural/controlada, "
+        "movimento suave, sem cortes abruptos.\n\n"
+        "SUJEITO E ACAO PRINCIPAL\n"
+        f"{action}.\n\n"
+        "CONTINUIDADE TEMPORAL\n"
+        f"{continuity}. Preserve posicao, direcao do movimento, estado emocional, "
+        "figurino, idade aparente, escala, paleta, luz e ambiente definidos pela "
+        "Biblioteca Visual.\n\n"
+        "CAMERA E MOVIMENTO\n"
+        "Use uma acao principal clara, natural e executavel em camera. Priorize "
+        "movimento de camera sutil, transicoes corporais consistentes e continuidade "
+        "espacial. Nao reinicie a cena.\n\n"
+        "Biblioteca Visual canonica\n"
+        f"{_visual_reference_text(visual_context)}\n\n"
+        "RESTRICOES NEGATIVAS\n"
         f"{CONTINUOUS_VIDEO_NEGATIVE_PROMPT}"
     )
 
@@ -601,6 +617,7 @@ def build_continuous_video_segment_payloads(
             source_text=source_text,
             visual_context=visual_context,
             continuity=continuity,
+            duration_seconds=segment_duration_seconds,
         )
         metadata = {
             "action": source_text,
@@ -758,6 +775,28 @@ async def plan_continuous_video_segments(
         segment.segment_number: segment
         for segment in await list_continuous_video_segments(session, project_id)
     }
+    if replace_existing:
+        max_segment_number = len(payloads)
+        stale_segments = [
+            segment
+            for segment_number, segment in existing_segments.items()
+            if (
+                segment_number > max_segment_number
+                and segment.status != GenerationJobStatus.SUCCEEDED
+            )
+        ]
+        stale_segment_ids = {segment.id for segment in stale_segments}
+        for segment in existing_segments.values():
+            if segment.source_segment_id in stale_segment_ids:
+                segment.source_segment_id = None
+                segment.source_video_asset_id = None
+                segment.source_frame_asset_id = None
+        if stale_segment_ids:
+            await session.flush()
+        for segment_number, segment in list(existing_segments.items()):
+            if segment.id in stale_segment_ids:
+                await session.delete(segment)
+                existing_segments.pop(segment_number, None)
     planned_segments: list[ContinuousVideoSegment] = []
     previous_segment: ContinuousVideoSegment | None = None
     for payload in payloads:

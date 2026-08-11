@@ -1359,8 +1359,10 @@ def render_video_area(
                     ui.badge(f"{len(continuous_segments)} segmento(s)").classes(
                         "blue-status-badge bg-[#243342]"
                     )
-                    ui.badge(f"{segment_total_duration}s").classes("bg-[#26301f] text-[#eaf878]")
-                    ui.badge("Veo 3.1 Fast").classes("bg-[#30362b] text-[#eaf878]")
+                    ui.badge(f"{segment_total_duration}s").classes(
+                        "blue-status-badge bg-[#26301f]"
+                    )
+                    ui.badge("Veo 3.1 Fast").classes("blue-status-badge bg-[#30362b]")
                 with ui.column().classes("gap-2 items-end"):
                     ui.label(
                         f"Custo restante: US$ {continuous_view_model.remaining_cost}"
@@ -1644,7 +1646,9 @@ def render_video_area(
                                             pause_after_current=pause_after_current,
                                         )
                                     ),
-                                ).props("unelevated dense no-caps").classes("acid-bg rounded-xl")
+                                ).props("unelevated dense no-caps").classes(
+                                    "acid-bg rounded-xl min-w-[104px]"
+                                )
                                 if not can_use_previous:
                                     generate_button.props("disable")
                                     generate_button.tooltip(

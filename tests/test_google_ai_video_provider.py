@@ -137,11 +137,12 @@ async def test_google_ai_video_provider_submits_polls_and_saves_inline_video(
     assert "inlineData" not in submitted_image
     assert captured["submit_body"]["parameters"] == {
         "aspectRatio": "16:9",
-        "durationSeconds": "8",
+        "durationSeconds": 8,
         "personGeneration": "allow_adult",
         "resolution": "720p",
         "seed": 123,
     }
+    assert isinstance(captured["submit_body"]["parameters"]["durationSeconds"], int)
     assert captured["poll_urls"] == [
         "https://generativelanguage.googleapis.com/v1beta/operations/video-1",
         "https://generativelanguage.googleapis.com/v1beta/operations/video-1",
@@ -218,7 +219,7 @@ def test_google_ai_video_request_coerces_legacy_resolution_to_720p() -> None:
         image_to_video=False,
     )
 
-    assert body["parameters"]["durationSeconds"] == "4"
+    assert body["parameters"]["durationSeconds"] == 4
     assert body["parameters"]["resolution"] == "720p"
 
 
@@ -243,7 +244,7 @@ def test_google_ai_video_request_keeps_720p_image_input_duration(
         image_to_video=True,
     )
 
-    assert body["parameters"]["durationSeconds"] == "4"
+    assert body["parameters"]["durationSeconds"] == 4
     assert body["parameters"]["resolution"] == "720p"
 
 
@@ -277,7 +278,7 @@ def test_google_ai_video_request_sends_reference_images(
     assert reference_images[0]["image"]["mimeType"] == "image/png"
     assert "bytesBase64Encoded" in reference_images[0]["image"]
     assert "inlineData" not in reference_images[0]["image"]
-    assert body["parameters"]["durationSeconds"] == "8"
+    assert body["parameters"]["durationSeconds"] == 8
     assert body["parameters"]["personGeneration"] == "allow_adult"
 
 
