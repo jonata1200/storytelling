@@ -583,12 +583,7 @@ async def _generate_video_clips_concurrent(
     for frame in frames:
         source_asset = assets_by_id.get(frame.asset_id) if frame.asset_id is not None else None
         source_image_uri = source_asset.storage_uri if source_asset is not None else None
-        reference_uris = (
-            _storyboard_canonical_reference_uris(frame)
-            if include_canonical_references
-            and _video_model_supports_reference_images(resolved_provider, resolved_model)
-            else []
-        )
+        reference_uris: list[str] = []
         shot, scene = shot_context.get(frame.shot_id, (None, None))
         video_prompt = _video_effective_prompt(production_metadata, frame, shot, scene)
         for variant_index in range(1, variants_per_frame + 1):

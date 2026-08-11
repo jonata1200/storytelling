@@ -964,20 +964,11 @@ def render_video_area(
                     "text-xs text-[#8d938e] mt-2"
                 )
 
-            high_consistency_toggle = ui.checkbox(
-                "Alta consistência visual",
-                value=False,
-            ).props("dense").classes("mt-4")
-            ui.label(
-                "Usa referências extras em planos longos para maior fidelidade visual."
-            ).classes("text-xs text-[#8d938e]")
-
             async def confirm_video_prompts(frame_ids: list[UUID] = pending_frame_ids) -> None:
                 safe_close_ui_element(video_prompt_dialog)
                 await _approve_video_prompts_from_ui(
                     project_id,
                     frame_ids,
-                    include_canonical_references=bool(high_consistency_toggle.value),
                     loading_dialog=loading_dialog,
                     progress_callback=video_progress_callback,
                 )

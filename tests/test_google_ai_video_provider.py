@@ -129,9 +129,12 @@ async def test_google_ai_video_provider_submits_polls_and_saves_inline_video(
     )
     assert captured["submit_headers"]["X-goog-api-key"] == "google-secret"
     assert captured["submit_body"]["instances"][0]["prompt"] == "Animar a cena"
-    assert captured["submit_body"]["instances"][0]["image"]["inlineData"]["mimeType"] == (
-        "image/png"
+    submitted_image = captured["submit_body"]["instances"][0]["image"]
+    assert submitted_image["mimeType"] == "image/png"
+    assert submitted_image["bytesBase64Encoded"] == base64.b64encode(b"source-frame").decode(
+        "ascii"
     )
+    assert "inlineData" not in submitted_image
     assert captured["submit_body"]["parameters"] == {
         "aspectRatio": "16:9",
         "durationSeconds": "8",
@@ -272,6 +275,9 @@ def test_google_ai_video_request_sends_reference_images(
     reference_images = body["instances"][0]["referenceImages"]
     assert len(reference_images) == 1
     assert reference_images[0]["referenceType"] == "asset"
+    assert reference_images[0]["image"]["mimeType"] == "image/png"
+    assert "bytesBase64Encoded" in reference_images[0]["image"]
+    assert "inlineData" not in reference_images[0]["image"]
     assert body["parameters"]["durationSeconds"] == "8"
     assert body["parameters"]["personGeneration"] == "allow_adult"
 

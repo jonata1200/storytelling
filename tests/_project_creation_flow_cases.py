@@ -449,7 +449,9 @@ def test_expected_ai_timeout_logs_warning_without_traceback(
     assert "demorou demais" in caplog.records[-1].getMessage()
 
 
-def test_ai_failure_notification_is_shown_once(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ai_failure_notification_does_not_popup_on_page_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     project_id = uuid4()
     storage: dict[str, Any] = {}
     popups: list[tuple[str, str | None]] = []
@@ -476,7 +478,7 @@ def test_ai_failure_notification_is_shown_once(monkeypatch: pytest.MonkeyPatch) 
                     "status": "failed",
                     "message": "A IA não conseguiu criar o roteiro inicial.",
                     "error": "O modelo de IA demorou demais para responder.",
-                    "updated_at": "2026-07-22T10:00:00+00:00",
+                    "updated_at": datetime.now(UTC).isoformat(),
                 }
             }
         )
@@ -485,12 +487,7 @@ def test_ai_failure_notification_is_shown_once(monkeypatch: pytest.MonkeyPatch) 
     pages._notify_ai_action_failure_once(project_id, summary)
     pages._notify_ai_action_failure_once(project_id, summary)
 
-    assert popups == [
-        (
-            "O modelo de IA demorou demais para responder.",
-            "O modelo de IA demorou demais para responder.",
-        )
-    ]
+    assert popups == []
 
 
 def test_ai_action_sync_adds_only_one_chat_message_per_action(

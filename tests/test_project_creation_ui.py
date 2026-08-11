@@ -26,7 +26,9 @@ test_friendly_ai_error_explains_timeout = cases.test_friendly_ai_error_explains_
 test_expected_ai_timeout_logs_warning_without_traceback = (
     cases.test_expected_ai_timeout_logs_warning_without_traceback
 )
-test_ai_failure_notification_is_shown_once = cases.test_ai_failure_notification_is_shown_once
+test_ai_failure_notification_does_not_popup_on_page_load = (
+    cases.test_ai_failure_notification_does_not_popup_on_page_load
+)
 test_ai_action_sync_adds_only_one_chat_message_per_action = (
     cases.test_ai_action_sync_adds_only_one_chat_message_per_action
 )

@@ -151,15 +151,15 @@ class GoogleAIVideoProvider:
     def _request_body(self, request: VideoRequest, image_to_video: bool) -> dict[str, Any]:
         instance: dict[str, Any] = {"prompt": request.prompt}
         if image_to_video and request.source_image_uri:
-            inline_image = self._inline_image(request.source_image_uri)
-            if inline_image is not None:
-                instance["image"] = inline_image
+            image = self._image_payload(request.source_image_uri)
+            if image is not None:
+                instance["image"] = image
         references = []
         if self._model_supports_reference_images(request.model):
             for reference in request.reference_uris[: self.capabilities.max_reference_images]:
-                inline_image = self._inline_image(reference)
-                if inline_image is not None:
-                    references.append({"image": inline_image, "referenceType": "asset"})
+                image = self._image_payload(reference)
+                if image is not None:
+                    references.append({"image": image, "referenceType": "asset"})
         if references:
             instance["referenceImages"] = references
         resolution = self._resolution(request.resolution or request.size)
@@ -189,12 +189,12 @@ class GoogleAIVideoProvider:
         return normalized == "veo-3.1-generate-preview"
 
     @staticmethod
-    def _inline_image(uri: str) -> dict[str, Any] | None:
+    def _image_payload(uri: str) -> dict[str, Any] | None:
         parts = data_url_parts(uri)
         if parts is None:
             return None
         media_type, encoded = parts
-        return {"inlineData": {"mimeType": media_type, "data": encoded}}
+        return {"mimeType": media_type, "bytesBase64Encoded": encoded}
 
     @staticmethod
     def _normalized_aspect_ratio(value: str) -> str:

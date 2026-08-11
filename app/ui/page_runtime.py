@@ -74,23 +74,11 @@ def _ui_pages() -> _PagesFacade:
 
 
 def _notify_ai_action_failure_once(project_id: UUID, summary: dict[str, Any]) -> None:
-    nicegui_app = _ui_pages().nicegui_app
+    _ = project_id
     ai_action = _project_ai_action(summary)
     if str(ai_action.get("status") or "") != "failed":
         return
-    action = str(ai_action.get("action") or "ai_action")
-    error = str(ai_action.get("error") or ai_action.get("message") or "").strip()
-    notification_key = f"{project_id}:{action}:{error}"
-    store = nicegui_app.storage.user.setdefault("seen_ai_error_notifications", [])
-    seen = [str(item) for item in store if isinstance(item, str)]
-    if notification_key in seen:
-        return
-    seen.append(notification_key)
-    nicegui_app.storage.user["seen_ai_error_notifications"] = seen[-80:]
-    _ui_pages()._show_ai_error_popup(
-        error or "A IA não respondeu. Tente novamente ou escolha outro modelo.",
-        details=error,
-    )
+    return
 
 
 def _play_ai_action_completion_sound_once(project_id: UUID, ai_action: dict[str, Any]) -> None:
