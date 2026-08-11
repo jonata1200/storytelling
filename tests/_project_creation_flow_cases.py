@@ -431,6 +431,19 @@ def test_friendly_ai_error_explains_provider_model_not_available() -> None:
     assert "chave ou conta do provider" in message
 
 
+def test_friendly_ai_error_explains_image_safety_block() -> None:
+    message = pages._friendly_ai_error(
+        RuntimeError(
+            "Google AI Images HTTP 400: Image generation blocked due to safety violations. "
+            "The image was filtered out because it violated Google's Generative AI "
+            "Prohibited Use policy."
+        )
+    )
+
+    assert "politica de seguranca" in message
+    assert "Revise o prompt" in message
+
+
 def test_expected_ai_timeout_logs_warning_without_traceback(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

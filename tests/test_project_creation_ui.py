@@ -23,6 +23,9 @@ test_project_ai_action_reads_production_metadata = (
     cases.test_project_ai_action_reads_production_metadata
 )
 test_friendly_ai_error_explains_timeout = cases.test_friendly_ai_error_explains_timeout
+test_friendly_ai_error_explains_image_safety_block = (
+    cases.test_friendly_ai_error_explains_image_safety_block
+)
 test_expected_ai_timeout_logs_warning_without_traceback = (
     cases.test_expected_ai_timeout_logs_warning_without_traceback
 )

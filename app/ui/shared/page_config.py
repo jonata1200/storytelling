@@ -506,6 +506,18 @@ def friendly_ai_error(exc: BaseException) -> str:
             "O provedor de IA recusou a chamada por limite de uso. Aguarde alguns minutos "
             "ou troque para um modelo com mais disponibilidade."
         )
+    if (
+        "safety violation" in normalized
+        or "blocked due to safety" in normalized
+        or "prohibited use policy" in normalized
+        or "violated google" in normalized
+        or "filtered out" in normalized
+    ):
+        return (
+            "O provedor de imagem bloqueou esta geracao por politica de seguranca. "
+            "Revise o prompt do ativo, removendo descricoes sensiveis de sofrimento, "
+            "risco medico ou vulnerabilidade, e tente gerar novamente."
+        )
     if "http 404" in normalized and (
         "not found for account" in normalized or "modelo selecionado" in normalized
     ):
