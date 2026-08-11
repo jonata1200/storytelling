@@ -31,6 +31,7 @@ class GoogleAIVideoProvider:
         return ProviderCapabilities(
             text_to_video=True,
             image_to_video=True,
+            video_extension=False,
             reference_images=True,
             first_frame=True,
             last_frame=True,

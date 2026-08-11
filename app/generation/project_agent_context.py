@@ -7,13 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import ArtifactStatus
 from app.dubbing.models import DubbingJob
 from app.finalization.models import Export
+from app.production.service import get_or_create_production_settings
 from app.projects.models import Artifact
 from app.projects.repository import ProjectRepository
 from app.projects.versioning import INACTIVE_DERIVED_STATUSES
 from app.quality.models import ContinuityIssue, QualityCheck
 from app.storyboards.models import Animatic, StoryboardFrame, Timeline
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
-from app.video_generation.models import VideoClip
+from app.video_generation.models import ContinuousVideoSegment, VideoClip
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 
 
@@ -81,6 +82,7 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
     briefing = await _latest(session, Briefing, project_id)
     idea = await _latest(session, StoryIdea, project_id)
     script = await _latest(session, Script, project_id)
+    production_settings = await get_or_create_production_settings(session, project_id)
     stale_count = await session.scalar(
         select(func.count())
         .select_from(Artifact)
@@ -118,6 +120,11 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
             if script is not None
             else None
         ),
+        "production_settings": {
+            "workflow_mode": production_settings.workflow_mode,
+            "video_model": production_settings.video_model,
+            "video_resolution": production_settings.video_resolution,
+        },
         "counts": {
             "ideas": await _count(session, StoryIdea, project_id),
             "scripts": await _count(session, Script, project_id),
@@ -130,6 +137,11 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
             "frames": await _count(session, StoryboardFrame, project_id),
             "animatics": await _count(session, Animatic, project_id),
             "clips": await _count(session, VideoClip, project_id),
+            "continuous_video_segments": await _count(
+                session,
+                ContinuousVideoSegment,
+                project_id,
+            ),
             "timelines": await _count(session, Timeline, project_id),
             "exports": await _count(session, Export, project_id),
             "dubbing_jobs": await _count(session, DubbingJob, project_id),

@@ -10,9 +10,9 @@ from app.projects.models import Project
 
 BodyStyle = Callable[[], None]
 ProjectSummaryLoader = Callable[[UUID, str], Awaitable[dict[str, Any] | None]]
-WorkspaceAccessChecker = Callable[[str, dict[str, int]], tuple[bool, str]]
-WorkspaceFallbackResolver = Callable[[dict[str, int]], str]
-WorkspaceHeaderRenderer = Callable[[Project, str, dict[str, int]], None]
+WorkspaceAccessChecker = Callable[[str, dict[str, int], object], tuple[bool, str]]
+WorkspaceFallbackResolver = Callable[[dict[str, int], object], str]
+WorkspaceHeaderRenderer = Callable[[Project, str, dict[str, int], object], None]
 WorkspaceAreaRenderer = Callable[[UUID, dict[str, Any]], None]
 AssistantPanelRenderer = Callable[[UUID, str, dict[str, Any]], None]
 
@@ -58,13 +58,15 @@ def register_project_workspace_pages(
             return
         project: Project = summary["project"]
         counts: dict[str, int] = summary["counts"]
-        allowed, reason = workspace_section_access(section, counts)
+        production_settings = summary.get("production_settings")
+        workflow_mode = getattr(production_settings, "workflow_mode", None)
+        allowed, reason = workspace_section_access(section, counts, workflow_mode)
         if not allowed:
-            fallback = first_available_workspace_section(counts)
+            fallback = first_available_workspace_section(counts, workflow_mode)
             ui.notify(reason, color="warning")
             ui.navigate.to(f"/projects/{project_id}/{fallback}")
             return
-        workspace_header(project, section, counts)
+        workspace_header(project, section, counts, workflow_mode)
         with ui.element("div").classes(
             "workspace-layout flex w-full items-start flex-nowrap gap-0"
         ):

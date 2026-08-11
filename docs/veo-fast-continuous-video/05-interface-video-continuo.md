@@ -14,21 +14,21 @@ Criar uma experiencia clara para revisar, gerar e acompanhar video continuo, man
 
 ## Checklist
 
-- [ ] Adicionar seletor de modo: Controle visual ou Video continuo economico.
-- [ ] Ajustar navegacao para permitir pular Storyboard no modo continuo.
-- [ ] Criar tela/lista de segmentos planejados.
-- [ ] Criar edicao de prompt por segmento.
-- [ ] Criar botao "Gerar proximo segmento".
-- [ ] Criar botao "Gerar todos em sequencia".
-- [ ] Criar botao "Continuar de onde parou".
-- [ ] Criar popup de progresso com estados por segmento.
-- [ ] Mostrar custo estimado antes de gerar.
-- [ ] Mostrar custo restante durante a fila.
-- [ ] Permitir pausar apos o segmento atual.
-- [ ] Remover controles redundantes de consistencia visual.
-- [ ] Mostrar mensagens simples de erro.
-- [ ] Criar testes de view model.
-- [ ] Criar testes dos handlers de UI.
+- [x] Adicionar seletor de modo: Controle visual ou Video continuo economico.
+- [x] Ajustar navegacao para permitir pular Storyboard no modo continuo.
+- [x] Criar tela/lista de segmentos planejados.
+- [x] Criar edicao de prompt por segmento.
+- [x] Criar botao "Gerar proximo segmento".
+- [x] Criar botao "Gerar todos em sequencia".
+- [x] Criar botao "Continuar de onde parou".
+- [x] Criar popup de progresso com estados por segmento.
+- [x] Mostrar custo estimado antes de gerar.
+- [x] Mostrar custo restante durante a fila.
+- [x] Permitir pausar apos o segmento atual.
+- [x] Remover controles redundantes de consistencia visual.
+- [x] Mostrar mensagens simples de erro.
+- [x] Criar testes de view model.
+- [x] Criar testes dos handlers de UI.
 
 ## Estados do popup
 

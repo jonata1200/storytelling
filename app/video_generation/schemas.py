@@ -168,3 +168,16 @@ class ContinuousVideoPlanningRead(BaseModel):
     plan: ContinuousVideoPlanRead
     segments: list[ContinuousVideoSegmentRead]
     validation_errors: dict[int, list[str]] = Field(default_factory=dict)
+
+
+class ContinuousVideoGenerateRequest(BaseModel):
+    segment_ids: list[UUID] | None = None
+    provider: str = "auto"
+    model: str | None = None
+    retry_failed: bool = False
+    max_segments: int | None = Field(default=None, ge=1)
+
+
+class ContinuousVideoGenerationRead(BaseModel):
+    jobs: list[GenerationJobRead]
+    segments: list[ContinuousVideoSegmentRead]

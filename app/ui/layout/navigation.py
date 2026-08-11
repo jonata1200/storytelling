@@ -155,7 +155,12 @@ def home_sidebar(active: str = "") -> None:
             ui.label("Sair").classes("mobile-nav-label")
 
 
-def workspace_header(project: Project, active: str, counts: dict[str, int]) -> None:
+def workspace_header(
+    project: Project,
+    active: str,
+    counts: dict[str, int],
+    workflow_mode: object = None,
+) -> None:
     with ui.element("header").classes(
         "workspace-header sticky top-0 z-30 w-full border-b border-[#242824] bg-[#090b0a]"
     ):
@@ -175,7 +180,7 @@ def workspace_header(project: Project, active: str, counts: dict[str, int]) -> N
                 ).tooltip("Alguns artefatos derivados precisam ser regenerados.")
         with ui.row().classes("workspace-nav desktop-nav items-center gap-1"):
             for label, key in WORKSPACE_TABS:
-                allowed, reason = workspace_section_access(key, counts)
+                allowed, reason = workspace_section_access(key, counts, workflow_mode)
                 button = ui.button(
                     label,
                     icon=None if allowed else "lock",
@@ -190,7 +195,7 @@ def workspace_header(project: Project, active: str, counts: dict[str, int]) -> N
             theme_toggle()
     with ui.element("nav").classes("mobile-bottom-nav mobile-workspace-nav"):
         for label, key in WORKSPACE_TABS:
-            allowed, reason = workspace_section_access(key, counts)
+            allowed, reason = workspace_section_access(key, counts, workflow_mode)
             item_classes = "mobile-nav-item"
             if active == key:
                 item_classes += " mobile-nav-active"

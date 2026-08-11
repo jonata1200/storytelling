@@ -1,24 +1,60 @@
+import asyncio
 import hashlib
 import json
+import logging
 import math
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from inspect import isawaitable
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import GenerationJobStatus
-from app.costs.service import estimate_operation_cost
+from app.assets.models import Asset, AssetVersion
+from app.config.provider_policy import effective_provider_for_channel
+from app.config.settings import get_settings
+from app.core.enums import (
+    AssetKind,
+    CostEntryType,
+    GenerationJobStatus,
+    GenerationJobType,
+    ProjectStatus,
+)
+from app.costs.models import CostEntry
+from app.costs.service import (
+    assert_project_budget_allows,
+    cost_audit_metadata,
+    estimate_operation_cost,
+    final_budget_cost,
+)
+from app.observability.schemas import OperationalEventCreate
+from app.observability.service import emit_project_event
+from app.production.service import (
+    get_or_create_production_settings,
+    normalize_video_resolution,
+)
 from app.projects.repository import ProjectRepository
+from app.providers.video.google_ai import GoogleAIVideoProvider
+from app.providers.video.types import VideoProvider, VideoRequest, VideoResult
+from app.storage.service import apply_asset_storage_metadata
 from app.storytelling.models import Scene, Script, Shot
-from app.video_generation.models import ContinuousVideoPlan, ContinuousVideoSegment
+from app.video_generation.models import ContinuousVideoPlan, ContinuousVideoSegment, GenerationJob
+from app.video_generation.retry import exponential_backoff_seconds
 from app.video_generation.schemas import (
     ContinuousVideoPlanCreate,
     ContinuousVideoSegmentCreate,
 )
 from app.visual_bible.models import Character, Location, Prop
+from app.workflows.state_machine import advance_project_status
+
+logger = logging.getLogger(__name__)
+ContinuousVideoProgressCallback = Callable[
+    [list[dict[str, Any]], Decimal],
+    Awaitable[None] | None,
+]
 
 CONTINUOUS_VIDEO_DEFAULT_PROVIDER = "google_ai"
 CONTINUOUS_VIDEO_FAST_MODEL = "veo-3.1-fast-generate-preview"
@@ -701,7 +737,7 @@ async def plan_continuous_video_segments(
                 )
             )
             existing.cost_estimate = estimate_operation_cost(
-                "image_to_video",
+                "text_to_video",
                 Decimal(existing.duration_seconds),
                 provider=existing.provider,
                 model=existing.model,
@@ -721,6 +757,778 @@ async def plan_continuous_video_segments(
     }
     await session.flush()
     return plan, planned_segments, validation_errors
+
+
+async def _continuous_video_provider_for_project(
+    session: AsyncSession,
+    project_id: UUID,
+    provider_name: str,
+    model: str | None,
+) -> tuple[VideoProvider, str, str, str, str]:
+    app_settings = get_settings()
+    production_settings = await get_or_create_production_settings(session, project_id)
+    requested_provider = str(provider_name or "auto").strip().casefold()
+    resolved_provider = (
+        effective_provider_for_channel(app_settings, "video")
+        if requested_provider == "auto"
+        else requested_provider
+    )
+    if resolved_provider != "google_ai":
+        raise ValueError("Provider de video continuo nao suportado. Use Google AI.")
+    resolved_model = str(model or app_settings.google_ai_video_fast_model).strip()
+    if not resolved_model:
+        resolved_model = CONTINUOUS_VIDEO_FAST_MODEL
+    return (
+        GoogleAIVideoProvider(),
+        "google_ai",
+        resolved_model,
+        production_settings.aspect_ratio,
+        normalize_video_resolution(production_settings.video_resolution),
+    )
+
+
+async def _active_continuous_video_segment(
+    session: AsyncSession,
+    project_id: UUID,
+) -> ContinuousVideoSegment | None:
+    result = await session.execute(
+        select(ContinuousVideoSegment)
+        .where(
+            ContinuousVideoSegment.project_id == project_id,
+            ContinuousVideoSegment.status == GenerationJobStatus.RUNNING,
+        )
+        .order_by(ContinuousVideoSegment.segment_number)
+    )
+    for segment in result.scalars():
+        if not continuous_video_segment_is_stale_running(segment):
+            return segment
+    return None
+
+
+def _continuous_video_job_idempotency_key(segment: ContinuousVideoSegment) -> str:
+    return f"continuous-video:{segment.idempotency_key}"
+
+
+async def _continuous_video_generation_job(
+    session: AsyncSession,
+    segment: ContinuousVideoSegment,
+    *,
+    provider: str,
+    model: str,
+    operation: str,
+    aspect_ratio: str,
+    resolution: str,
+    continuation_mode: str,
+) -> GenerationJob:
+    idempotency_key = _continuous_video_job_idempotency_key(segment)
+    result = await session.execute(
+        select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
+    )
+    job = result.scalars().first()
+    if job is None:
+        job = GenerationJob(
+            project_id=segment.project_id,
+            job_type=GenerationJobType.VIDEO,
+            status=GenerationJobStatus.RUNNING,
+            progress=5,
+            attempts=1,
+            max_attempts=3,
+            provider=provider,
+            model=model,
+            idempotency_key=idempotency_key,
+            request_payload={},
+            response_payload={},
+            cost_estimate=segment.cost_estimate,
+            started_at=datetime.now(UTC),
+        )
+        session.add(job)
+    else:
+        job.status = GenerationJobStatus.RUNNING
+        job.progress = 5
+        job.attempts += 1
+        job.error = None
+        job.completed_at = None
+        job.provider = provider
+        job.model = model
+        job.started_at = datetime.now(UTC)
+    job.request_payload = {
+        "step": "continuous_video",
+        "segment_id": str(segment.id),
+        "segment_number": segment.segment_number,
+        "duration_seconds": segment.duration_seconds,
+        "prompt": segment.prompt,
+        "provider": provider,
+        "model": model,
+        "operation": operation,
+        "aspect_ratio": aspect_ratio,
+        "resolution": resolution,
+        "source_segment_id": str(segment.source_segment_id) if segment.source_segment_id else None,
+        "source_video_asset_id": (
+            str(segment.source_video_asset_id) if segment.source_video_asset_id else None
+        ),
+        "continuation_mode": continuation_mode,
+        "request_fingerprint": segment.request_fingerprint,
+    }
+    await session.flush()
+    segment.generation_job_id = job.id
+    return job
+
+
+async def _emit_continuous_video_segment_event(
+    session: AsyncSession,
+    *,
+    segment: ContinuousVideoSegment,
+    status: str,
+    provider: str,
+    model: str,
+    message: str,
+    job: GenerationJob | None = None,
+    estimated_cost: Decimal | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    payload = {
+        "segment_id": str(segment.id),
+        "segment_number": segment.segment_number,
+        "duration_seconds": segment.duration_seconds,
+    }
+    if details:
+        payload.update(details)
+    await emit_project_event(
+        session,
+        OperationalEventCreate(
+            project_id=segment.project_id,
+            job_id=job.id if job is not None else segment.generation_job_id,
+            event_type="continuous_video_segment",
+            status=status,
+            provider=provider,
+            model=model,
+            operation="text_to_video",
+            estimated_cost=estimated_cost,
+            message=message,
+            details=payload,
+        ),
+    )
+
+
+def _is_transient_continuous_video_error(error: str) -> bool:
+    normalized = error.casefold()
+    return any(
+        marker in normalized
+        for marker in (
+            "timeout",
+            "network",
+            "connection",
+            "internal error",
+            "api_error",
+            "rate limit",
+            "429",
+            "500",
+            "502",
+            "503",
+            "504",
+        )
+    )
+
+
+async def _mark_continuous_video_segment_failed(
+    session: AsyncSession,
+    *,
+    segment: ContinuousVideoSegment,
+    job: GenerationJob | None,
+    reason: str,
+    provider: str,
+    model: str,
+) -> None:
+    segment.status = GenerationJobStatus.FAILED
+    metadata = dict(segment.metadata_json or {})
+    metadata["error"] = reason
+    metadata["failed_at"] = datetime.now(UTC).isoformat()
+    segment.metadata_json = metadata
+    if job is not None:
+        job.status = GenerationJobStatus.FAILED
+        job.progress = 100
+        job.error = reason
+        job.completed_at = datetime.now(UTC)
+        job.response_payload = {
+            **(job.response_payload or {}),
+            "error": reason,
+            "segment_id": str(segment.id),
+        }
+    logger.warning(
+        "continuous_video_generation_failed project_id=%s segment_number=%s "
+        "provider=%s model=%s reason=%s",
+        segment.project_id,
+        segment.segment_number,
+        provider,
+        model,
+        reason,
+    )
+    await _emit_continuous_video_segment_event(
+        session,
+        segment=segment,
+        job=job,
+        status="failed",
+        provider=provider,
+        model=model,
+        message=reason,
+    )
+
+
+async def _persist_continuous_video_segment_success(
+    session: AsyncSession,
+    *,
+    segment: ContinuousVideoSegment,
+    job: GenerationJob,
+    result: VideoResult,
+    resumed_external_operation: bool,
+) -> Asset:
+    asset = Asset(
+        project_id=segment.project_id,
+        artifact_id=None,
+        kind=AssetKind.VIDEO,
+        name=f"Continuous segment {segment.segment_number:03d}",
+        storage_uri=result.storage_uri or "",
+        content_type=result.content_type,
+        sha256=result.sha256,
+        metadata_json={
+            **result.metadata,
+            "segment_id": str(segment.id),
+            "segment_number": segment.segment_number,
+            "request_fingerprint": segment.request_fingerprint,
+        },
+    )
+    apply_asset_storage_metadata(asset)
+    session.add(asset)
+    await session.flush()
+    session.add(
+        AssetVersion(
+            asset_id=asset.id,
+            version_number=1,
+            storage_uri=asset.storage_uri,
+            sha256=asset.sha256,
+            metadata_json=asset.metadata_json,
+        )
+    )
+    estimate = estimate_operation_cost(
+        "text_to_video",
+        Decimal(segment.duration_seconds),
+        provider=result.provider,
+        model=result.model,
+    )
+    provider_cost = Decimal(str(result.estimated_cost or "0.000000"))
+    total_cost = final_budget_cost(estimate.estimated, provider_cost)
+    segment.asset_id = asset.id
+    segment.external_operation_id = result.external_job_id
+    segment.provider = result.provider
+    segment.model = result.model
+    segment.status = GenerationJobStatus.SUCCEEDED
+    segment.cost_estimate = total_cost
+    metadata = dict(segment.metadata_json or {})
+    metadata["asset_id"] = str(asset.id)
+    metadata["external_operation_id"] = result.external_job_id
+    metadata["completed_at"] = datetime.now(UTC).isoformat()
+    metadata["resumed_external_operation"] = resumed_external_operation
+    segment.metadata_json = metadata
+    job.status = GenerationJobStatus.SUCCEEDED
+    job.progress = 100
+    job.external_job_id = result.external_job_id
+    job.response_payload = result.metadata
+    job.cost_estimate = total_cost
+    job.completed_at = datetime.now(UTC)
+    session.add(
+        CostEntry(
+            project_id=segment.project_id,
+            artifact_id=None,
+            entry_type=CostEntryType.ESTIMATE,
+            provider=result.provider,
+            model=result.model,
+            operation="text_to_video",
+            quantity=Decimal(segment.duration_seconds),
+            unit="second",
+            unit_cost=estimate.unit_cost,
+            total_cost=total_cost,
+            currency="USD",
+            metadata_json=cost_audit_metadata(
+                estimated_cost=estimate.estimated,
+                provider_reported_cost=provider_cost,
+                final_budget_cost=total_cost,
+                stage="continuous_video",
+                extra={
+                    "job_id": str(job.id),
+                    "segment_id": str(segment.id),
+                    "segment_number": segment.segment_number,
+                    "external_job_id": result.external_job_id,
+                    "resumed_external_operation": resumed_external_operation,
+                },
+            ),
+        )
+    )
+    await _emit_continuous_video_segment_event(
+        session,
+        segment=segment,
+        job=job,
+        status="succeeded",
+        provider=result.provider,
+        model=result.model,
+        message="Segmento de video continuo concluido",
+        estimated_cost=total_cost,
+        details={
+            "asset_id": str(asset.id),
+            "external_job_id": result.external_job_id,
+            "resumed_external_operation": resumed_external_operation,
+        },
+    )
+    await session.flush()
+    return asset
+
+
+async def _run_continuous_video_provider_request(
+    provider: VideoProvider,
+    request: VideoRequest,
+    *,
+    external_operation_id: str | None = None,
+    previous_video_uri: str | None = None,
+) -> tuple[VideoResult | None, str | None, str | None]:
+    resumed_operation = external_operation_id
+    if external_operation_id:
+        poller = getattr(provider, "poll_submitted", None)
+        if not callable(poller):
+            return None, None, "Provider nao permite retomar operacao de video."
+        try:
+            return await poller(request, external_operation_id), resumed_operation, None
+        except Exception as exc:
+            return None, resumed_operation, str(exc)
+    if previous_video_uri:
+        extension_generator = getattr(provider, "generate_extension", None)
+        if callable(extension_generator):
+            try:
+                return await extension_generator(request, previous_video_uri), None, None
+            except Exception as exc:
+                return None, None, str(exc)
+        extension_submitter = getattr(provider, "submit_extension", None)
+        extension_poller = getattr(provider, "poll_submitted", None)
+        if callable(extension_submitter) and callable(extension_poller):
+            try:
+                operation_id = await extension_submitter(request, previous_video_uri)
+                result = await extension_poller(request, operation_id)
+            except Exception as exc:
+                return None, None, str(exc)
+            return result, operation_id, None
+        return (
+            None,
+            None,
+            "Provider nao permite estender video anterior para continuidade temporal.",
+        )
+    submitter = getattr(provider, "submit_from_text", None)
+    poller = getattr(provider, "poll_submitted", None)
+    if callable(submitter) and callable(poller):
+        for attempt in range(1, 3):
+            try:
+                operation_id = await submitter(request)
+                result = await poller(request, operation_id)
+            except Exception as exc:
+                error = str(exc)
+                if attempt == 2 or not _is_transient_continuous_video_error(error):
+                    return None, None, error
+                await asyncio.sleep(
+                    exponential_backoff_seconds(attempt, base_seconds=1, cap_seconds=8)
+                )
+                continue
+            return result, operation_id, None
+    try:
+        return await provider.generate_from_text(request), None, None
+    except Exception as exc:
+        return None, None, str(exc)
+
+
+async def _continuous_video_assets_by_id(
+    session: AsyncSession,
+    asset_ids: set[UUID],
+) -> dict[UUID, Asset]:
+    if not asset_ids:
+        return {}
+    result = await session.execute(select(Asset).where(Asset.id.in_(asset_ids)))
+    return {asset.id: asset for asset in result.scalars()}
+
+
+def _continuous_video_progress_rows(
+    segments: list[ContinuousVideoSegment],
+    *,
+    preexisting_succeeded_ids: set[UUID],
+    active_segment_id: UUID | None = None,
+    active_state: str | None = None,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for segment in segments:
+        status = str(getattr(segment.status, "value", segment.status)).lower()
+        if segment.id == active_segment_id and active_state:
+            state = active_state
+        elif status == "succeeded" and segment.id in preexisting_succeeded_ids:
+            state = "skipped"
+        elif status == "succeeded":
+            state = "done"
+        elif status == "failed":
+            state = "failed"
+        elif status == "running":
+            state = "processing"
+        else:
+            state = "pending"
+        rows.append(
+            {
+                "segment_id": str(segment.id),
+                "segment_number": segment.segment_number,
+                "title": segment.title or f"Segmento {segment.segment_number:02d}",
+                "state": state,
+                "duration_seconds": segment.duration_seconds,
+                "cost_estimate": str(segment.cost_estimate or Decimal("0")),
+                "error": (
+                    (segment.metadata_json or {}).get("error")
+                    if isinstance(segment.metadata_json, dict)
+                    else None
+                ),
+            }
+        )
+    return rows
+
+
+def _continuous_video_remaining_cost(segments: list[ContinuousVideoSegment]) -> Decimal:
+    return sum(
+        (
+            Decimal(str(segment.cost_estimate or "0"))
+            for segment in segments
+            if segment.status
+            not in {
+                GenerationJobStatus.SUCCEEDED,
+                GenerationJobStatus.CANCELLED,
+            }
+        ),
+        Decimal("0.000000"),
+    )
+
+
+async def _publish_continuous_video_progress(
+    callback: ContinuousVideoProgressCallback | None,
+    segments: list[ContinuousVideoSegment],
+    *,
+    preexisting_succeeded_ids: set[UUID],
+    active_segment_id: UUID | None = None,
+    active_state: str | None = None,
+) -> None:
+    if callback is None:
+        return
+    result = callback(
+        _continuous_video_progress_rows(
+            segments,
+            preexisting_succeeded_ids=preexisting_succeeded_ids,
+            active_segment_id=active_segment_id,
+            active_state=active_state,
+        ),
+        _continuous_video_remaining_cost(segments),
+    )
+    if isawaitable(result):
+        await result
+
+
+async def generate_continuous_video_segments(
+    session: AsyncSession,
+    project_id: UUID,
+    *,
+    segment_ids: list[UUID] | None = None,
+    provider_name: str = "auto",
+    model: str | None = None,
+    retry_failed: bool = False,
+    max_segments: int | None = None,
+    pause_after_current: Callable[[], bool] | None = None,
+    progress_callback: ContinuousVideoProgressCallback | None = None,
+) -> tuple[list[GenerationJob], list[ContinuousVideoSegment]]:
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        raise ValueError("Projeto nao encontrado.")
+    active_segment = await _active_continuous_video_segment(session, project_id)
+    if active_segment is not None:
+        raise RuntimeError(
+            f"Segmento {active_segment.segment_number} ja esta em geracao. "
+            "Aguarde finalizar ou retome depois."
+        )
+    segments = await list_continuous_video_segments(session, project_id)
+    if not segments:
+        _plan, segments, validation_errors = await plan_continuous_video_segments(
+            session,
+            project_id,
+            replace_existing=False,
+        )
+        if validation_errors:
+            first_segment_number = min(validation_errors)
+            raise ValueError(
+                "Revise o planejamento antes de gerar: "
+                + "; ".join(validation_errors[first_segment_number])
+            )
+    selected_ids = set(segment_ids or [])
+    if selected_ids:
+        segments = [segment for segment in segments if segment.id in selected_ids]
+    if not segments:
+        return [], []
+    preexisting_succeeded_ids = {
+        segment.id for segment in segments if segment.status == GenerationJobStatus.SUCCEEDED
+    }
+    provider, resolved_provider, resolved_model, aspect_ratio, resolution = (
+        await _continuous_video_provider_for_project(session, project_id, provider_name, model)
+    )
+    billable_segments = [
+        segment
+        for segment in segments
+        if continuous_video_segment_needs_generation(segment, retry_failed=retry_failed)
+        and not segment.external_operation_id
+        and segment.status != GenerationJobStatus.SUCCEEDED
+    ]
+    if max_segments is not None:
+        billable_segments = billable_segments[: max(0, max_segments)]
+    billable_seconds = sum(
+        int(segment.duration_seconds or 0) for segment in billable_segments
+    )
+    estimate = estimate_operation_cost(
+        "text_to_video",
+        Decimal(billable_seconds),
+        provider=resolved_provider,
+        model=resolved_model,
+    )
+    await assert_project_budget_allows(
+        session,
+        project_id,
+        estimate.estimated,
+        stage="continuous_video",
+    )
+    video_dir = get_settings().local_storage_path / "google_ai_continuous_videos" / str(project_id)
+    jobs: list[GenerationJob] = []
+    processed: list[ContinuousVideoSegment] = []
+    attempted_segments = 0
+    previous_segment: ContinuousVideoSegment | None = None
+    existing_asset_ids = {
+        segment.asset_id for segment in await list_continuous_video_segments(session, project_id)
+        if segment.asset_id is not None
+    }
+    assets_by_id = await _continuous_video_assets_by_id(session, existing_asset_ids)
+    provider_supports_extension = bool(
+        getattr(getattr(provider, "capabilities", None), "video_extension", False)
+    )
+    await _publish_continuous_video_progress(
+        progress_callback,
+        segments,
+        preexisting_succeeded_ids=preexisting_succeeded_ids,
+    )
+    for segment in segments:
+        if max_segments is not None and attempted_segments >= max(0, max_segments):
+            break
+        all_project_segments = await list_continuous_video_segments(session, project_id)
+        previous_by_number = {
+            item.segment_number: item for item in all_project_segments
+        }.get(segment.segment_number - 1)
+        if segment.segment_number > 1 and previous_by_number is not None:
+            if previous_by_number.status != GenerationJobStatus.SUCCEEDED:
+                message = (
+                    f"Segmento {segment.segment_number} depende do segmento "
+                    f"{previous_by_number.segment_number} concluido."
+                )
+                await _mark_continuous_video_segment_failed(
+                    session,
+                    segment=segment,
+                    job=None,
+                    reason=message,
+                    provider=resolved_provider,
+                    model=resolved_model,
+                )
+                await session.commit()
+                processed.append(segment)
+                break
+            segment.source_segment_id = previous_by_number.id
+            segment.source_video_asset_id = previous_by_number.asset_id
+            previous_segment = previous_by_number
+        elif segment.segment_number > 1 and previous_segment is None:
+            raise ValueError(
+                f"Segmento {segment.segment_number} nao possui segmento anterior planejado."
+            )
+        if segment.status == GenerationJobStatus.SUCCEEDED:
+            processed.append(segment)
+            continue
+        if not continuous_video_segment_needs_generation(segment, retry_failed=retry_failed):
+            processed.append(segment)
+            continue
+        attempted_segments += 1
+        validation_errors = continuous_video_segment_validation_errors(segment)
+        previous_asset = (
+            assets_by_id.get(segment.source_video_asset_id)
+            if segment.source_video_asset_id is not None
+            else None
+        )
+        previous_video_uri = (
+            str(previous_asset.storage_uri or "").strip() if previous_asset is not None else ""
+        )
+        continuation_mode = (
+            "video_extension"
+            if previous_video_uri and provider_supports_extension
+            else "prompt_continuity"
+        )
+        job = await _continuous_video_generation_job(
+            session,
+            segment,
+            provider=resolved_provider,
+            model=resolved_model,
+            operation="text_to_video",
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            continuation_mode=continuation_mode,
+        )
+        job.request_payload = {
+            **(job.request_payload or {}),
+            "source_video_uri": previous_video_uri or None,
+        }
+        jobs.append(job)
+        if validation_errors:
+            await _mark_continuous_video_segment_failed(
+                session,
+                segment=segment,
+                job=job,
+                reason="; ".join(validation_errors),
+                provider=resolved_provider,
+                model=resolved_model,
+            )
+            await session.commit()
+            processed.append(segment)
+            await _publish_continuous_video_progress(
+                progress_callback,
+                segments,
+                preexisting_succeeded_ids=preexisting_succeeded_ids,
+                active_segment_id=segment.id,
+                active_state="failed",
+            )
+            break
+        segment.status = GenerationJobStatus.RUNNING
+        segment.provider = resolved_provider
+        segment.model = resolved_model
+        metadata = dict(segment.metadata_json or {})
+        metadata["continuation_mode"] = continuation_mode
+        metadata["started_at"] = datetime.now(UTC).isoformat()
+        segment.metadata_json = metadata
+        await _publish_continuous_video_progress(
+            progress_callback,
+            segments,
+            preexisting_succeeded_ids=preexisting_succeeded_ids,
+            active_segment_id=segment.id,
+            active_state="sending",
+        )
+        await _emit_continuous_video_segment_event(
+            session,
+            segment=segment,
+            job=job,
+            status="started",
+            provider=resolved_provider,
+            model=resolved_model,
+            message="Segmento de video continuo iniciado",
+            estimated_cost=estimate.estimated,
+            details={"continuation_mode": continuation_mode},
+        )
+        await session.commit()
+        request = VideoRequest(
+            prompt=segment.prompt,
+            duration_seconds=segment.duration_seconds,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            size=resolution,
+            output_dir=video_dir,
+            model=resolved_model,
+        )
+        resumed_external_operation = bool(segment.external_operation_id)
+        result, operation_id, error = await _run_continuous_video_provider_request(
+            provider,
+            request,
+            external_operation_id=segment.external_operation_id,
+            previous_video_uri=(
+                previous_video_uri if continuation_mode == "video_extension" else None
+            ),
+        )
+        if operation_id:
+            segment.external_operation_id = operation_id
+            job.external_job_id = operation_id
+            job.progress = max(job.progress, 25)
+            job.response_payload = {
+                **(job.response_payload or {}),
+                "external_operation_id": operation_id,
+            }
+            await _emit_continuous_video_segment_event(
+                session,
+                segment=segment,
+                job=job,
+                status="submitted",
+                provider=resolved_provider,
+                model=resolved_model,
+                message="Segmento enviado ao provider",
+                details={
+                    "external_operation_id": operation_id,
+                    "resumed_external_operation": resumed_external_operation,
+                },
+            )
+            await session.commit()
+        await _publish_continuous_video_progress(
+            progress_callback,
+            segments,
+            preexisting_succeeded_ids=preexisting_succeeded_ids,
+            active_segment_id=segment.id,
+            active_state="processing",
+        )
+        if error is not None or result is None:
+            await _mark_continuous_video_segment_failed(
+                session,
+                segment=segment,
+                job=job,
+                reason=error or "Provider nao retornou video para o segmento.",
+                provider=resolved_provider,
+                model=resolved_model,
+            )
+            await session.commit()
+            processed.append(segment)
+            await _publish_continuous_video_progress(
+                progress_callback,
+                segments,
+                preexisting_succeeded_ids=preexisting_succeeded_ids,
+                active_segment_id=segment.id,
+                active_state="failed",
+            )
+            break
+        job.progress = 90
+        asset = await _persist_continuous_video_segment_success(
+            session,
+            segment=segment,
+            job=job,
+            result=result,
+            resumed_external_operation=resumed_external_operation,
+        )
+        assets_by_id[asset.id] = asset
+        processed.append(segment)
+        await session.commit()
+        await _publish_continuous_video_progress(
+            progress_callback,
+            segments,
+            preexisting_succeeded_ids=preexisting_succeeded_ids,
+            active_segment_id=segment.id,
+            active_state="done",
+        )
+        if pause_after_current is not None and pause_after_current():
+            break
+    all_segments = await list_continuous_video_segments(session, project_id)
+    if all_segments and all(
+        segment.status == GenerationJobStatus.SUCCEEDED for segment in all_segments
+    ):
+        plan = await get_or_create_continuous_video_plan(session, project_id)
+        plan.status = "completed"
+        advance_project_status(project, ProjectStatus.VIDEO_REVIEW)
+    elif processed:
+        plan = await get_or_create_continuous_video_plan(session, project_id)
+        plan.status = "generating"
+        advance_project_status(project, ProjectStatus.VIDEO_GENERATION)
+    await session.commit()
+    for item in [*jobs, *processed]:
+        await session.refresh(item)
+    return jobs, processed
 
 
 async def update_continuous_video_segment_prompt(

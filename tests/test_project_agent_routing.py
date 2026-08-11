@@ -21,6 +21,12 @@ test_project_chat_uses_project_state_for_progression_requests = (
 test_project_chat_routes_script_finalization_and_quality = (
     cases.test_project_chat_routes_script_finalization_and_quality
 )
+test_project_chat_uses_continuous_video_pipeline_when_mode_is_continuous = (
+    cases.test_project_chat_uses_continuous_video_pipeline_when_mode_is_continuous
+)
+test_continuous_video_pipeline_plans_and_enqueues_generation = (
+    cases.test_continuous_video_pipeline_plans_and_enqueues_generation
+)
 test_project_chat_routes_visual_prompt_approval = (
     cases.test_project_chat_routes_visual_prompt_approval
 )

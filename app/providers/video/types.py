@@ -9,6 +9,7 @@ from app.core.enums import GenerationJobStatus
 class ProviderCapabilities(BaseModel):
     text_to_video: bool = False
     image_to_video: bool = False
+    video_extension: bool = False
     reference_images: bool = False
     character_reference: bool = False
     first_frame: bool = False

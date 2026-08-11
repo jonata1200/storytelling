@@ -39,7 +39,7 @@ IMAGE_CREATION_STEPS = {
     "generate_storyboard",
     "storyboard_frames",
 }
-VIDEO_CREATION_STEPS = {"video", "generate_video", "video_clips"}
+VIDEO_CREATION_STEPS = {"video", "generate_video", "video_clips", "continuous_video"}
 ELEVENLABS_CREATION_STEPS = {
     "speech",
     "finalization",

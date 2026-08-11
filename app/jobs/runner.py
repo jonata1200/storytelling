@@ -38,6 +38,7 @@ from app.storytelling.service import (
     generate_story_ideas,
     regenerate_scenes_and_shots,
 )
+from app.video_generation.continuous import generate_continuous_video_segments
 from app.video_generation.models import GenerationJob
 from app.video_generation.service import generate_video_clips
 from app.visual_bible.service import (
@@ -211,6 +212,41 @@ async def _run_video(
     return {"job_count": len(jobs), "clip_count": len(clips)}
 
 
+async def _run_continuous_video(
+    session: AsyncSession,
+    project_id: UUID,
+    payload: dict,
+) -> dict[str, Any]:
+    raw_segment_ids = payload.get("segment_ids")
+    segment_ids = (
+        [UUID(str(item)) for item in raw_segment_ids]
+        if isinstance(raw_segment_ids, list)
+        else None
+    )
+    jobs, segments = await generate_continuous_video_segments(
+        session,
+        project_id,
+        segment_ids=segment_ids,
+        provider_name=str(payload.get("provider") or "auto"),
+        model=payload.get("model"),
+        retry_failed=bool(payload.get("retry_failed")),
+    )
+    failed_segments = [
+        segment
+        for segment in segments
+        if str(getattr(getattr(segment, "status", ""), "value", segment.status)).lower()
+        == "failed"
+    ]
+    if failed_segments:
+        metadata = (
+            failed_segments[0].metadata_json
+            if isinstance(failed_segments[0].metadata_json, dict)
+            else {}
+        )
+        raise RuntimeError(str(metadata.get("error") or "segmento de video falhou"))
+    return {"job_count": len(jobs), "segment_count": len(segments)}
+
+
 async def _run_dubbing(
     session: AsyncSession,
     project_id: UUID,
@@ -336,6 +372,8 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
                 response = await _run_storyboard(session, job.project_id)
             elif step == ProjectStep.VIDEO:
                 response = await _run_video(session, job.project_id, payload)
+            elif step == ProjectStep.CONTINUOUS_VIDEO:
+                response = await _run_continuous_video(session, job.project_id, payload)
             elif step == ProjectStep.DUBBING:
                 response = await _run_dubbing(session, job.project_id, payload)
             elif step == ProjectStep.FINALIZATION:

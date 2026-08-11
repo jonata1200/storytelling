@@ -14,21 +14,21 @@ Implementar uma fila de geracao sequencial para video continuo, com capacidade d
 
 ## Checklist
 
-- [ ] Criar job type ou step especifico para video continuo.
-- [ ] Garantir execucao sequencial por projeto.
-- [ ] Criar submit/poll para Veo 3.1 Fast.
-- [ ] Adicionar suporte a extensao de video quando disponivel.
-- [ ] Salvar `external_operation_id` por segmento.
-- [ ] Salvar asset de video por segmento concluido.
-- [ ] Marcar segmento como `failed` com erro legivel.
-- [ ] Permitir retry do segmento com falha.
-- [ ] Permitir continuar a partir do ultimo segmento concluido.
-- [ ] Evitar regerar segmentos concluidos.
-- [ ] Detectar jobs `running` antigos e permitir retomada segura.
-- [ ] Registrar eventos de observabilidade por segmento.
-- [ ] Criar testes de fila sequencial.
-- [ ] Criar testes de falha no segmento do meio.
-- [ ] Criar testes de retomada sem duplicar custo de segmentos prontos.
+- [x] Criar job type ou step especifico para video continuo.
+- [x] Garantir execucao sequencial por projeto.
+- [x] Criar submit/poll para Veo 3.1 Fast.
+- [x] Adicionar suporte a extensao de video quando disponivel.
+- [x] Salvar `external_operation_id` por segmento.
+- [x] Salvar asset de video por segmento concluido.
+- [x] Marcar segmento como `failed` com erro legivel.
+- [x] Permitir retry do segmento com falha.
+- [x] Permitir continuar a partir do ultimo segmento concluido.
+- [x] Evitar regerar segmentos concluidos.
+- [x] Detectar jobs `running` antigos e permitir retomada segura.
+- [x] Registrar eventos de observabilidade por segmento.
+- [x] Criar testes de fila sequencial.
+- [x] Criar testes de falha no segmento do meio.
+- [x] Criar testes de retomada sem duplicar custo de segmentos prontos.
 
 ## Regras de continuidade
 

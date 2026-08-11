@@ -22,7 +22,12 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     aspect_ratio: Mapped[str] = mapped_column(String(20), default="9:16", nullable=False)
     image_resolution: Mapped[str] = mapped_column(String(40), default="720x1280", nullable=False)
     video_resolution: Mapped[str] = mapped_column(String(40), default="720p", nullable=False)
-    workflow_mode: Mapped[str] = mapped_column(String(80), default="keyframes_i2v", nullable=False)
+    workflow_mode: Mapped[str] = mapped_column(
+        String(80),
+        default="keyframes_i2v",
+        server_default="keyframes_i2v",
+        nullable=False,
+    )
     image_model: Mapped[str] = mapped_column(
         String(160),
         default="gemini-3.1-flash-lite-image",
@@ -31,6 +36,7 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     video_model: Mapped[str] = mapped_column(
         String(160),
         default="veo-3.1-generate-preview",
+        server_default="veo-3.1-generate-preview",
         nullable=False,
     )
     audio_mode: Mapped[str] = mapped_column(

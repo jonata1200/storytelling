@@ -15,6 +15,7 @@ class ProjectStep(StrEnum):
     VISUAL = "visual"
     STORYBOARD = "storyboard"
     VIDEO = "video"
+    CONTINUOUS_VIDEO = "continuous_video"
     DUBBING = "dubbing"
     FINALIZATION = "finalization"
     QUALITY = "quality"

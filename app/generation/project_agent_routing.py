@@ -19,6 +19,8 @@ from app.generation.project_agent_visual import (
 )
 from app.generation.service import run_structured_generation
 
+CONTINUOUS_VIDEO_WORKFLOW_MODE = "continuous_fast"
+
 
 def classify_project_chat_action(message: str, active: str) -> ProjectChatAction:
     normalized = _normalize_match_text(message)
@@ -203,6 +205,13 @@ def _context_counts(project_context: dict[str, Any]) -> dict[str, int]:
     return normalized
 
 
+def _project_workflow_mode(project_context: dict[str, Any]) -> str:
+    settings = project_context.get("production_settings")
+    if not isinstance(settings, dict):
+        return "keyframes_i2v"
+    return str(settings.get("workflow_mode") or "keyframes_i2v").strip() or "keyframes_i2v"
+
+
 def _workflow_progression_requested(message: str) -> bool:
     normalized = _normalize_match_text(message)
     terms = (
@@ -236,13 +245,17 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
     clips = counts.get("clips", 0)
     exports = counts.get("exports", 0)
     dubbing_jobs = counts.get("dubbing_jobs", 0)
+    continuous_mode = _project_workflow_mode(project_context) == CONTINUOUS_VIDEO_WORKFLOW_MODE
+    continuous_segments = counts.get("continuous_video_segments", 0)
 
     if scripts == 0:
         return "generate_script"
-    if scenes == 0 or shots == 0:
+    if not continuous_mode and (scenes == 0 or shots == 0):
         return "generate_script"
     if characters == 0 or locations == 0 or props == 0:
         return "generate_assets"
+    if continuous_mode and (continuous_segments == 0 or clips == 0):
+        return "generate_video"
     if frames == 0:
         return "generate_storyboard"
     if clips == 0:

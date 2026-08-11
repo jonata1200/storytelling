@@ -27,6 +27,7 @@ def test_project_counts_statement_compiles_on_supported_dialects() -> None:
         assert "union all" in sql.lower()
 
 
-def test_project_counts_statement_has_sixteen_unioned_selects() -> None:
+def test_project_counts_statement_has_seventeen_unioned_selects() -> None:
     sql = str(project_counts_statement(uuid4()).compile(dialect=postgresql.dialect()))
-    assert sql.lower().count("union all") == 15  # 16 selects -> 15 unions
+    assert sql.lower().count("union all") == 16  # 17 selects -> 16 unions
+    assert "continuous_video_segments" in sql

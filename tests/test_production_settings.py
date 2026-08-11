@@ -11,6 +11,7 @@ from app.production.service import (
 
 def test_workflow_mode_label_uses_known_name() -> None:
     assert workflow_mode_label("keyframes_i2v") == WORKFLOW_MODES["keyframes_i2v"]
+    assert workflow_mode_label("continuous_fast") == WORKFLOW_MODES["continuous_fast"]
 
 
 def test_workflow_mode_label_falls_back_to_raw_value() -> None:
@@ -35,6 +36,12 @@ def test_production_payload_normalizes_video_resolution_to_720p() -> None:
     payload = _validated_production_payload({"video_resolution": "1080x1920"})
 
     assert payload["video_resolution"] == "720p"
+
+
+def test_production_payload_accepts_continuous_video_mode() -> None:
+    payload = _validated_production_payload({"workflow_mode": "continuous_fast"})
+
+    assert payload["workflow_mode"] == "continuous_fast"
 
 
 def test_production_payload_normalizes_image_aspect_and_resolution() -> None:

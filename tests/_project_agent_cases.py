@@ -1000,6 +1000,126 @@ async def test_video_pipeline_enqueues_pending_frames_after_prompt_approval(
 
 
 @pytest.mark.asyncio
+async def test_project_chat_uses_continuous_video_pipeline_when_mode_is_continuous(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    calls: list[str] = []
+
+    async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
+        assert requested_project_id == project_id
+        return {
+            "production_settings": {"workflow_mode": "continuous_fast"},
+            "counts": {
+                "scripts": 1,
+                "characters": 1,
+                "locations": 1,
+                "props": 1,
+                "continuous_video_segments": 0,
+            },
+        }
+
+    async def fake_continuous_video(
+        session: AsyncSession,
+        requested_project_id: Any,
+        force: bool = False,
+        progress: Any = None,
+    ) -> ProjectChatResult:
+        calls.append("continuous")
+        assert requested_project_id == project_id
+        assert force is False
+        return ProjectChatResult("continuo ok", "generate_video", True)
+
+    async def fail_classic_video(*args: Any, **kwargs: Any) -> ProjectChatResult:
+        raise AssertionError("modo continuo nao deve acionar pipeline classica")
+
+    monkeypatch.setattr(project_agent, "build_project_context", fake_context)
+    monkeypatch.setattr(
+        project_agent,
+        "_ensure_continuous_video_pipeline",
+        fake_continuous_video,
+    )
+    monkeypatch.setattr(project_agent, "_ensure_video_pipeline", fail_classic_video)
+
+    result = await handle_project_chat(
+        cast(AsyncSession, object()),
+        project_id,
+        "video",
+        "gerar video",
+        [],
+    )
+
+    assert result == ProjectChatResult("continuo ok", "generate_video", True)
+    assert calls == ["continuous"]
+
+
+@pytest.mark.asyncio
+async def test_continuous_video_pipeline_plans_and_enqueues_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    calls: list[str] = []
+    captured_payload: dict[str, Any] = {}
+    segments = [
+        SimpleNamespace(id=uuid4(), status="PENDING"),
+        SimpleNamespace(id=uuid4(), status="PENDING"),
+    ]
+
+    async def fake_script(
+        session: AsyncSession,
+        requested_project_id: Any,
+        progress: Any = None,
+    ) -> tuple[SimpleNamespace, str, bool]:
+        calls.append("script")
+        assert requested_project_id == project_id
+        return SimpleNamespace(id=uuid4()), "script ok", False
+
+    async def fake_visual_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        calls.append("visual_report")
+        return {"complete": True, "missing_categories": [], "missing_views": 0}
+
+    async def fake_list_segments(*args: Any, **kwargs: Any) -> list[Any]:
+        calls.append("list")
+        return []
+
+    async def fake_plan(*args: Any, **kwargs: Any) -> tuple[Any, list[Any], dict[int, list[str]]]:
+        calls.append("plan")
+        return object(), segments, {}
+
+    async def fake_enqueue(
+        session: AsyncSession,
+        requested_project_id: Any,
+        step: str,
+        payload: dict[str, Any],
+    ) -> SimpleNamespace:
+        calls.append("enqueue")
+        assert requested_project_id == project_id
+        assert step == "continuous_video"
+        captured_payload.update(payload)
+        return SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
+    monkeypatch.setattr(project_agent, "visual_reference_completion_report", fake_visual_report)
+    monkeypatch.setattr(project_agent, "list_continuous_video_segments", fake_list_segments)
+    monkeypatch.setattr(project_agent, "plan_continuous_video_segments", fake_plan)
+    monkeypatch.setattr(project_agent, "enqueue_project_step", fake_enqueue)
+
+    result = await project_agent._ensure_continuous_video_pipeline(
+        cast(AsyncSession, object()),
+        project_id,
+    )
+
+    assert result == ProjectChatResult(
+        "2 segmento(s) enviado(s) para geração contínua.",
+        "generate_video",
+        True,
+    )
+    assert captured_payload["retry_failed"] is True
+    assert isinstance(captured_payload["request_id"], str)
+    assert calls == ["script", "visual_report", "list", "plan", "enqueue"]
+
+
+@pytest.mark.asyncio
 async def test_project_chat_routes_script_finalization_and_quality(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

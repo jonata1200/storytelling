@@ -1,6 +1,7 @@
 from app.visual_bible.prompts import default_views_for
 
 WORKSPACE_SECTIONS = ("script", "assets", "storyboard", "video", "finalization", "dubbing")
+CONTINUOUS_VIDEO_WORKFLOW_MODE = "continuous_fast"
 VISUAL_REFERENCE_VIEW_COUNTS = {
     "characters": len(default_views_for("character")),
     "locations": len(default_views_for("location")),
@@ -41,10 +42,19 @@ def step_ready(step_key: str, counts: dict[str, int]) -> bool:
     return readiness[step_key]
 
 
-def workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool, str]:
+def is_continuous_video_workflow(workflow_mode: object) -> bool:
+    return str(workflow_mode or "").strip() == CONTINUOUS_VIDEO_WORKFLOW_MODE
+
+
+def workspace_section_access(
+    section: str,
+    counts: dict[str, int],
+    workflow_mode: object = None,
+) -> tuple[bool, str]:
     script_ready = step_ready("script", counts)
     assets_ready = step_ready("visual", counts)
     storyboard_ready = step_ready("storyboard", counts)
+    continuous_mode = is_continuous_video_workflow(workflow_mode)
     if section == "script":
         return True, ""
     if section == "assets":
@@ -68,18 +78,18 @@ def workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool
                 False,
                 "Gere todas as imagens de personagens, locais e objetos antes de acessar vídeo.",
             )
-        if not storyboard_ready:
+        if not storyboard_ready and not continuous_mode:
             return False, "Crie o storyboard antes de acessar vídeo."
         return True, ""
     if section == "dubbing":
-        allowed, reason = workspace_section_access("video", counts)
+        allowed, reason = workspace_section_access("video", counts, workflow_mode)
         if not allowed:
             return False, reason
         if not step_ready("video", counts):
             return False, "Gere pelo menos um clipe antes de acessar dublagem."
         return True, ""
     if section == "finalization":
-        allowed, reason = workspace_section_access("video", counts)
+        allowed, reason = workspace_section_access("video", counts, workflow_mode)
         if not allowed:
             return False, reason
         if not step_ready("video", counts):
@@ -88,9 +98,12 @@ def workspace_section_access(section: str, counts: dict[str, int]) -> tuple[bool
     return False, "Etapa desconhecida."
 
 
-def first_available_workspace_section(counts: dict[str, int]) -> str:
+def first_available_workspace_section(
+    counts: dict[str, int],
+    workflow_mode: object = None,
+) -> str:
     for section in WORKSPACE_SECTIONS:
-        allowed, _ = workspace_section_access(section, counts)
+        allowed, _ = workspace_section_access(section, counts, workflow_mode)
         if allowed:
             return section
     return "script"

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.costs.service import CostBudgetExceededError
 from app.database.session import get_session
 from app.video_generation.continuous import (
+    generate_continuous_video_segments,
     list_continuous_video_segments,
     plan_continuous_video_segments,
     update_continuous_video_segment_prompt,
@@ -14,6 +15,8 @@ from app.video_generation.continuous import (
 from app.video_generation.schemas import (
     ClipReviewCreate,
     ClipReviewRead,
+    ContinuousVideoGenerateRequest,
+    ContinuousVideoGenerationRead,
     ContinuousVideoPlanningRead,
     ContinuousVideoPlanRead,
     ContinuousVideoPlanSegmentsRequest,
@@ -73,6 +76,32 @@ async def post_plan_continuous_video_segments(
         plan=ContinuousVideoPlanRead.model_validate(plan),
         segments=[ContinuousVideoSegmentRead.model_validate(segment) for segment in segments],
         validation_errors=validation_errors,
+    )
+
+
+@router.post("/{project_id}/continuous/generate", response_model=ContinuousVideoGenerationRead)
+async def post_generate_continuous_video_segments(
+    project_id: UUID,
+    payload: ContinuousVideoGenerateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContinuousVideoGenerationRead:
+    try:
+        jobs, segments = await generate_continuous_video_segments(
+            session,
+            project_id,
+            segment_ids=payload.segment_ids,
+            provider_name=payload.provider,
+            model=payload.model,
+            retry_failed=payload.retry_failed,
+            max_segments=payload.max_segments,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return ContinuousVideoGenerationRead(
+        jobs=[GenerationJobRead.model_validate(job) for job in jobs],
+        segments=[ContinuousVideoSegmentRead.model_validate(segment) for segment in segments],
     )
 
 

@@ -114,6 +114,7 @@ def project_counts_statement(project_id: UUID) -> Any:
         _active("frames", StoryboardFrame),
         _plain("animatics", Animatic),
         _plain("clips", VideoClip),
+        _plain("continuous_video_segments", ContinuousVideoSegment),
         _plain("exports", Export),
         _plain("dubbing_jobs", DubbingJob),
         _plain("qa_issues", ContinuityIssue),

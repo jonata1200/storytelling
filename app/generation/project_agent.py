@@ -1,4 +1,5 @@
-﻿from uuid import UUID, uuid4
+﻿from typing import Any
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,6 +61,7 @@ from app.generation.project_agent_visual import (  # noqa: E402,F401
     _visual_target_kind_from_message,
 )
 from app.jobs.service import enqueue_project_step
+from app.production.service import get_or_create_production_settings
 from app.projects.versioning import (
     mark_dependents_stale,
     resolve_stale_artifacts_after_regeneration,
@@ -82,7 +84,11 @@ from app.storytelling.service import (
     regenerate_scenes_and_shots,
     revise_script,
 )
-from app.video_generation.models import VideoClip
+from app.video_generation.continuous import (
+    list_continuous_video_segments,
+    plan_continuous_video_segments,
+)
+from app.video_generation.models import ContinuousVideoSegment, VideoClip
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (  # noqa: F401
     approve_visual_target as approve_visual_target,
@@ -107,10 +113,13 @@ SCRIPT_AGENT_EDIT_BLOCKER_MODELS = (
     ("timeline", Timeline),
     ("faixas de audio", AudioTrack),
     ("clipes de video", VideoClip),
+    ("segmentos de video continuo", ContinuousVideoSegment),
     ("exportacoes", Export),
     ("legendas", SubtitleTrack),
     ("dublagem", DubbingJob),
 )
+
+CONTINUOUS_VIDEO_WORKFLOW_MODE = "continuous_fast"
 
 
 async def _script_agent_edit_blockers(
@@ -475,6 +484,96 @@ async def _ensure_video_pipeline(
     )
     return ProjectChatResult(
         f"{len(target_frame_ids)} prompt(s) de vídeo aprovado(s) e enviado(s) para geração.",
+        "generate_video",
+        True,
+    )
+
+
+async def _project_uses_continuous_video_mode(
+    session: AsyncSession,
+    project_id: UUID,
+    project_context: dict[str, Any] | None = None,
+) -> bool:
+    context_settings = (
+        project_context.get("production_settings")
+        if isinstance(project_context, dict)
+        else None
+    )
+    if isinstance(context_settings, dict):
+        mode = str(context_settings.get("workflow_mode") or "").strip()
+        if mode:
+            return mode == CONTINUOUS_VIDEO_WORKFLOW_MODE
+    if isinstance(project_context, dict):
+        return False
+    settings = await get_or_create_production_settings(session, project_id)
+    return str(settings.workflow_mode or "").strip() == CONTINUOUS_VIDEO_WORKFLOW_MODE
+
+
+async def _ensure_continuous_video_pipeline(
+    session: AsyncSession,
+    project_id: UUID,
+    force: bool = False,
+    progress: ProgressCallback | None = None,
+) -> ProjectChatResult:
+    script, message, changed = await _ensure_script_pipeline(session, project_id, progress)
+    if script is None:
+        return ProjectChatResult(
+            message,
+            "generate_video",
+            changed,
+            failed=_is_ai_generation_failure_message(message),
+        )
+
+    visual_report = await visual_reference_completion_report(session, project_id)
+    if not visual_report["complete"]:
+        return ProjectChatResult(
+            visual_reference_completion_message(visual_report),
+            "generate_video",
+            changed,
+        )
+
+    segments = await list_continuous_video_segments(session, project_id)
+    if force or not segments:
+        await _emit_progress(progress, "Vou planejar os segmentos de vídeo contínuo.")
+        _plan, segments, validation_errors = await plan_continuous_video_segments(
+            session,
+            project_id,
+            replace_existing=force,
+        )
+        changed = True
+        if validation_errors:
+            first_segment_number = min(validation_errors)
+            return ProjectChatResult(
+                (
+                    "Revise o segmento "
+                    f"{first_segment_number}: {'; '.join(validation_errors[first_segment_number])}"
+                ),
+                "generate_video",
+                True,
+                True,
+            )
+
+    pending_segments = [
+        segment
+        for segment in segments
+        if str(getattr(getattr(segment, "status", ""), "value", segment.status)).upper()
+        != "SUCCEEDED"
+    ]
+    if not force and not pending_segments:
+        return ProjectChatResult("Vídeo contínuo já gerado.", "generate_video", changed)
+
+    await _emit_progress(progress, "Vou enfileirar os segmentos de vídeo contínuo.")
+    await enqueue_project_step(
+        session,
+        project_id,
+        "continuous_video",
+        {
+            "retry_failed": True,
+            "request_id": uuid4().hex,
+        },
+    )
+    return ProjectChatResult(
+        f"{len(pending_segments)} segmento(s) enviado(s) para geração contínua.",
         "generate_video",
         True,
     )
@@ -854,6 +953,13 @@ async def handle_project_chat(
             session, project_id, force=force, progress=progress
         )
     if action == "generate_video":
+        if await _project_uses_continuous_video_mode(session, project_id, project_context):
+            return await _ensure_continuous_video_pipeline(
+                session,
+                project_id,
+                force=force,
+                progress=progress,
+            )
         return await _ensure_video_pipeline(session, project_id, force=force, progress=progress)
     if action == "generate_dubbing":
         return await _ensure_dubbing_pipeline(session, project_id, progress=progress)

@@ -14,19 +14,19 @@ Entregar o modo de video continuo com seguranca, sem quebrar projetos existentes
 
 ## Checklist
 
-- [ ] Criar migration sem perda de dados.
-- [ ] Adicionar defaults seguros para projetos antigos.
-- [ ] Atualizar resumo do projeto para incluir modo de producao.
-- [ ] Atualizar permissao de acesso entre etapas.
-- [ ] Atualizar agente para entender o novo modo.
-- [ ] Atualizar textos de UI para o modo continuo.
-- [ ] Criar smoke test com provider mock.
-- [ ] Criar teste de custo estimado.
-- [ ] Criar teste de geracao parcial.
-- [ ] Criar teste de retomada apos falha.
-- [ ] Criar teste de projeto antigo com Storyboards.
-- [ ] Criar teste de projeto novo em modo continuo.
-- [ ] Documentar limitacoes conhecidas.
+- [x] Criar migration sem perda de dados.
+- [x] Adicionar defaults seguros para projetos antigos.
+- [x] Atualizar resumo do projeto para incluir modo de producao.
+- [x] Atualizar permissao de acesso entre etapas.
+- [x] Atualizar agente para entender o novo modo.
+- [x] Atualizar textos de UI para o modo continuo.
+- [x] Criar smoke test com provider mock.
+- [x] Criar teste de custo estimado.
+- [x] Criar teste de geracao parcial.
+- [x] Criar teste de retomada apos falha.
+- [x] Criar teste de projeto antigo com Storyboards.
+- [x] Criar teste de projeto novo em modo continuo.
+- [x] Documentar limitacoes conhecidas.
 - [ ] Validar com um projeto pequeno antes de liberar para projetos longos.
 
 ## Validacao manual recomendada
@@ -45,3 +45,10 @@ Entregar o modo de video continuo com seguranca, sem quebrar projetos existentes
 ## Resultado esperado
 
 O modo continuo fica disponivel como beta confiavel, com rollback simples para o fluxo atual de Storyboards.
+
+## Limitacoes conhecidas
+
+- O modo continuo ainda deve ser tratado como beta ate passar pela validacao manual com um projeto pequeno usando a chave real do provider.
+- A continuidade entre segmentos usa o ultimo segmento aprovado como referencia operacional, mas o provider Google AI atual nao expoe extensao real de video nesta integracao; quando nao houver suporte de extensao, a continuidade cai para prompt continuity.
+- A montagem/exportacao final a partir de segmentos continuos ainda precisa ser validada no fluxo de finalizacao antes de substituir o fluxo classico de Storyboards em projetos longos.
+- Projetos antigos permanecem no modo classico por default. A troca para video continuo deve ser feita de forma explicita na UI ou nas configuracoes de producao.

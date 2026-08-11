@@ -100,7 +100,12 @@ class ContinuousVideoPlan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
-    mode: Mapped[str] = mapped_column(String(80), default="continuous_fast", nullable=False)
+    mode: Mapped[str] = mapped_column(
+        String(80),
+        default="continuous_fast",
+        server_default="continuous_fast",
+        nullable=False,
+    )
     target_duration_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     segment_duration_seconds: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
     segment_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -138,10 +143,16 @@ class ContinuousVideoSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
-    provider: Mapped[str] = mapped_column(String(120), default="google_ai", nullable=False)
+    provider: Mapped[str] = mapped_column(
+        String(120),
+        default="google_ai",
+        server_default="google_ai",
+        nullable=False,
+    )
     model: Mapped[str] = mapped_column(
         String(160),
         default="veo-3.1-fast-generate-preview",
+        server_default="veo-3.1-fast-generate-preview",
         nullable=False,
     )
     generation_job_id: Mapped[UUID | None] = mapped_column(

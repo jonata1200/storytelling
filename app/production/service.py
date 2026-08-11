@@ -12,6 +12,7 @@ WORKFLOW_MODES = {
     "keyframes_i2v": "Keyframes Images to Video",
     "elements_sequential": "Elements to Video Sequential",
     "elements_parallel": "Elements to Video Parallel",
+    "continuous_fast": "Video continuo economico",
 }
 
 CONTENT_TYPES = {

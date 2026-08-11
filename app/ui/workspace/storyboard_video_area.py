@@ -13,6 +13,7 @@ from app.costs.service import estimate_operation_cost
 from app.database.session import AsyncSessionLocal
 from app.dubbing.service import refresh_dubbing_job
 from app.jobs.service import enqueue_project_step
+from app.production.service import update_production_settings
 from app.projects.versioning import resolve_stale_artifacts_after_regeneration
 from app.storyboards.service import (
     approve_storyboard_prompt,
@@ -30,6 +31,7 @@ from app.ui.shared.page_config import (
     block_if_missing_api_keys_for_channels,
     block_if_missing_api_keys_for_step,
     friendly_ai_error,
+    is_deleted_ui_context_error,
     loading_status_message,
     safe_close_ui_element,
     show_ai_error_popup,
@@ -37,6 +39,13 @@ from app.ui.shared.page_config import (
 from app.ui.visual.actions import _approve_video_prompts_from_ui
 from app.ui.visual.helpers import asset_url
 from app.ui.workspace import storyboard_handlers as _storyboard_handlers
+from app.ui.workspace.continuous_video_view_model import (
+    CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    CONTROL_VISUAL_WORKFLOW_MODE,
+    VIDEO_WORKFLOW_MODE_LABELS,
+    ContinuousVideoViewModel,
+    build_continuous_video_view_model,
+)
 from app.ui.workspace.panels import _render_timeline_strip
 from app.ui.workspace.storyboard_video_view_model import (
     _video_job_count_status,
@@ -45,6 +54,7 @@ from app.ui.workspace.storyboard_video_view_model import (
 from app.ui.workspace.video_handlers import save_video_prompt_from_ui as _save_video_prompt_from_ui
 from app.video_generation.continuous import (
     continuous_video_segment_validation_errors,
+    generate_continuous_video_segments,
     plan_continuous_video_segments,
     update_continuous_video_segment_prompt,
 )
@@ -180,6 +190,69 @@ async def _save_continuous_video_segment_prompt_from_ui(
         ui.navigate.reload()
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+
+
+async def _set_video_workflow_mode_from_ui(project_id: UUID, workflow_mode: str) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            await update_production_settings(
+                session,
+                project_id,
+                {"workflow_mode": workflow_mode},
+            )
+        ui.notify("Modo de produ\u00e7\u00e3o atualizado.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+
+
+async def _generate_continuous_video_segments_from_ui(
+    project_id: UUID,
+    *,
+    segment_ids: list[UUID] | None = None,
+    retry_failed: bool = False,
+    max_segments: int | None = None,
+    loading_dialog: Any | None = None,
+    progress_callback: Any | None = None,
+    pause_after_current: Any | None = None,
+) -> None:
+    if block_if_missing_api_keys_for_step("continuous_video"):
+        return
+    if loading_dialog is not None:
+        loading_dialog.open()
+    try:
+        async with AsyncSessionLocal() as session:
+            jobs, segments = await generate_continuous_video_segments(
+                session,
+                project_id,
+                segment_ids=segment_ids,
+                retry_failed=retry_failed,
+                max_segments=max_segments,
+                progress_callback=progress_callback,
+                pause_after_current=pause_after_current,
+            )
+        failed = [
+            segment
+            for segment in segments
+            if str(getattr(getattr(segment, "status", ""), "value", segment.status)).lower()
+            == "failed"
+        ]
+        if failed:
+            metadata = (
+                failed[0].metadata_json if isinstance(failed[0].metadata_json, dict) else {}
+            )
+            message = str(metadata.get("error") or "A fila parou no segmento com falha.")
+            ui.notify(message, color="negative")
+        elif jobs:
+            ui.notify("Fila de v\u00eddeo cont\u00ednuo conclu\u00edda.", color="positive")
+        else:
+            ui.notify("Nenhum segmento pendente para gerar.", color="info")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            safe_close_ui_element(loading_dialog)
 
 
 async def _generate_storyboards_from_ui(
@@ -539,6 +612,117 @@ def _continuous_video_segment_cost_text(
         model=model,
     )
     return f"Custo deste segmento: US$ {estimate.estimated} ({duration_seconds}s)."
+
+
+def _continuous_state_label(state: str) -> str:
+    return {
+        "pending": "Pendente",
+        "sending": "Enviando",
+        "processing": "Processando",
+        "done": "Concluido",
+        "failed": "Falhou",
+        "skipped": "Ja existe",
+    }.get(state, "Pendente")
+
+
+def _ui_event_value(event: Any) -> Any:
+    args = getattr(event, "args", None)
+    if isinstance(args, dict) and "value" in args:
+        return args["value"]
+    return args
+
+
+def _continuous_state_icon(state: str) -> str:
+    return {
+        "pending": "radio_button_unchecked",
+        "sending": "upload",
+        "processing": "sync",
+        "done": "check_circle",
+        "failed": "error_outline",
+        "skipped": "done_all",
+    }.get(state, "radio_button_unchecked")
+
+
+def _continuous_state_classes(state: str) -> str:
+    if state in {"done", "skipped"}:
+        return "bg-[#26301f] text-[#eaf878]"
+    if state == "failed":
+        return "bg-[#4b2a2a] text-[#ffd4d4]"
+    if state in {"sending", "processing"}:
+        return "blue-status-badge bg-[#243342]"
+    return "bg-[#30362b] text-[#d8dbd8]"
+
+
+def _continuous_queue_progress_dialog(
+    view_model: ContinuousVideoViewModel,
+) -> tuple[Any, Any, Any]:
+    pause_requested = {"value": False}
+    row_widgets: dict[str, dict[str, Any]] = {}
+    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as progress_dialog, ui.card().classes(
+        "entity-card rounded-2xl p-6 w-[min(640px,94vw)] max-h-[86vh] flex flex-col"
+    ):
+        with ui.row().classes("w-full items-start justify-between gap-3 shrink-0"):
+            with ui.column().classes("gap-1 min-w-0"):
+                ui.label("Gerando v\u00eddeo cont\u00ednuo").classes(
+                    "brand-type text-2xl font-bold"
+                )
+                summary_label = ui.label(
+                    f"{view_model.generated_segments}/{view_model.total_segments} "
+                    "segmento(s) concluido(s)."
+                ).classes("text-sm text-[#8d938e]")
+            pause_button = ui.button("Pausar apos atual", icon="pause").props(
+                "flat no-caps"
+            ).classes("rounded-xl")
+        progress_bar = ui.linear_progress(
+            value=progress_ratio(view_model.generated_segments, view_model.total_segments),
+            show_value=False,
+        ).classes("w-full mt-4").props("instant-feedback rounded")
+        remaining_label = ui.label(
+            f"Custo restante: US$ {view_model.remaining_cost}"
+        ).classes("text-xs text-[#8d938e] mt-2")
+        with ui.column().classes("w-full gap-2 overflow-y-auto mt-4 pr-1"):
+            for row in view_model.rows:
+                with ui.row().classes(
+                    "w-full items-center justify-between gap-3 border-b border-[#343934] py-2"
+                ):
+                    with ui.row().classes("items-center gap-2 min-w-0"):
+                        icon = ui.icon(_continuous_state_icon(row.progress_state)).classes(
+                            "text-lg"
+                        )
+                        title = ui.label(row.title).classes("text-sm font-semibold truncate")
+                    badge = ui.badge(_continuous_state_label(row.progress_state)).classes(
+                        _continuous_state_classes(row.progress_state)
+                    )
+                    row_widgets[str(row.id)] = {"icon": icon, "badge": badge, "title": title}
+
+        def request_pause() -> None:
+            pause_requested["value"] = True
+            pause_button.props("disable")
+            pause_button.update()
+            remaining_label.set_text("A fila sera pausada apos o segmento atual.")
+
+        pause_button.on("click", request_pause)
+
+    def update_progress(rows: list[dict[str, Any]], remaining_cost: Decimal) -> None:
+        completed = sum(1 for row in rows if row.get("state") in {"done", "skipped"})
+        total = len(rows)
+        try:
+            summary_label.set_text(f"{completed}/{total} segmento(s) concluido(s).")
+            progress_bar.set_value(progress_ratio(completed, max(total, 1)))
+            remaining_label.set_text(f"Custo restante: US$ {remaining_cost}")
+            for row in rows:
+                widgets = row_widgets.get(str(row.get("segment_id")))
+                if not widgets:
+                    continue
+                state = str(row.get("state") or "pending")
+                widgets["icon"].props(f"name={_continuous_state_icon(state)}")
+                widgets["badge"].set_text(_continuous_state_label(state))
+                widgets["badge"].classes(replace=_continuous_state_classes(state))
+        except RuntimeError as exc:
+            if not is_deleted_ui_context_error(exc):
+                raise
+
+    return progress_dialog, update_progress, lambda: bool(pause_requested["value"])
 
 
 def _dubbing_cost_text(duration_seconds: int) -> str:
@@ -973,9 +1157,14 @@ def render_video_area(
     section_title: SectionTitle,
     loading_dialog_factory: LoadingDialogFactory | None = None,
 ) -> None:
+    continuous_view_model = build_continuous_video_view_model(summary)
     section_title(
         "Produ\u00e7\u00e3o de v\u00eddeo",
-        "Transforme cada quadro aprovado em clipes e acompanhe a montagem final.",
+        (
+            "Gere blocos sequenciais com Veo Fast a partir do roteiro e da Biblioteca Visual."
+            if continuous_view_model.is_continuous_mode
+            else "Transforme cada quadro aprovado em clipes e acompanhe a montagem final."
+        ),
         None,
         None,
     )
@@ -1008,6 +1197,12 @@ def render_video_area(
         int(getattr(frame, "duration_seconds", 0) or 0) for frame in pending_frames
     )
     continuous_segments = list(summary.get("continuous_video_segments", []))
+    failed_continuous_segments = [
+        segment
+        for segment in continuous_segments
+        if str(getattr(getattr(segment, "status", ""), "value", segment.status)).lower()
+        == "failed"
+    ]
     segment_total_duration = sum(
         int(getattr(segment, "duration_seconds", 0) or 0) for segment in continuous_segments
     )
@@ -1017,8 +1212,41 @@ def render_video_area(
         "etapa",
         "Agora: separando o roteiro em blocos de v\u00eddeo cont\u00ednuo.",
     )
+    continuous_generation_dialog, continuous_progress_callback, pause_after_current = (
+        _continuous_queue_progress_dialog(continuous_view_model)
+    )
 
-    with ui.element("div").classes("w-full mt-2"):
+    with ui.element("div").classes("w-full mb-2"):
+        with ui.row().classes("w-full items-center justify-between gap-3 flex-wrap"):
+            with ui.column().classes("gap-0 min-w-0"):
+                ui.label("Modo de produ\u00e7\u00e3o").classes("text-sm font-semibold")
+                ui.label(
+                    "Escolha entre controle quadro a quadro ou gera\u00e7\u00e3o cont\u00ednua econ\u00f4mica."
+                ).classes("text-xs text-[#8d938e]")
+            mode_toggle = ui.toggle(
+                {
+                    CONTROL_VISUAL_WORKFLOW_MODE: VIDEO_WORKFLOW_MODE_LABELS[
+                        CONTROL_VISUAL_WORKFLOW_MODE
+                    ],
+                    CONTINUOUS_VIDEO_WORKFLOW_MODE: VIDEO_WORKFLOW_MODE_LABELS[
+                        CONTINUOUS_VIDEO_WORKFLOW_MODE
+                    ],
+                },
+                value=continuous_view_model.workflow_mode
+                if continuous_view_model.workflow_mode in VIDEO_WORKFLOW_MODE_LABELS
+                else CONTROL_VISUAL_WORKFLOW_MODE,
+            ).props("unelevated no-caps")
+            mode_toggle.on(
+                "update:model-value",
+                lambda event: _set_video_workflow_mode_from_ui(
+                    project_id,
+                    str(_ui_event_value(event)),
+                ),
+            )
+
+    with ui.element("div").classes(
+        "w-full mt-2" if continuous_view_model.is_continuous_mode else "hidden"
+    ):
         with ui.row().classes("w-full items-end justify-between gap-3"):
             with ui.column().classes("gap-0 min-w-0"):
                 ui.label("V\u00eddeo cont\u00ednuo").classes("brand-type text-2xl font-bold")
@@ -1035,12 +1263,62 @@ def render_video_area(
             ).props("unelevated no-caps").classes("acid-bg rounded-xl")
 
         if continuous_segments:
-            with ui.row().classes("w-full flex-wrap gap-2 mt-3"):
-                ui.badge(f"{len(continuous_segments)} segmento(s)").classes(
-                    "blue-status-badge bg-[#243342]"
-                )
-                ui.badge(f"{segment_total_duration}s").classes("bg-[#26301f] text-[#eaf878]")
-                ui.badge("Veo 3.1 Fast").classes("bg-[#30362b] text-[#eaf878]")
+            with ui.row().classes("w-full items-center justify-between flex-wrap gap-3 mt-3"):
+                with ui.row().classes("flex-wrap gap-2"):
+                    ui.badge(f"{len(continuous_segments)} segmento(s)").classes(
+                        "blue-status-badge bg-[#243342]"
+                    )
+                    ui.badge(f"{segment_total_duration}s").classes("bg-[#26301f] text-[#eaf878]")
+                    ui.badge("Veo 3.1 Fast").classes("bg-[#30362b] text-[#eaf878]")
+                with ui.column().classes("gap-2 items-end"):
+                    ui.label(
+                        f"Custo restante: US$ {continuous_view_model.remaining_cost}"
+                    ).classes("text-xs text-[#8d938e]")
+                    with ui.row().classes("gap-2 justify-end flex-wrap"):
+                        next_segment_id = continuous_view_model.next_segment_id
+                        next_button = ui.button(
+                            "Gerar pr\u00f3ximo segmento",
+                            icon="skip_next",
+                            on_click=lambda segment_id=next_segment_id: (
+                                _generate_continuous_video_segments_from_ui(
+                                    project_id,
+                                    segment_ids=[segment_id] if segment_id is not None else None,
+                                    retry_failed=bool(failed_continuous_segments),
+                                    max_segments=1,
+                                    loading_dialog=continuous_generation_dialog,
+                                    progress_callback=continuous_progress_callback,
+                                    pause_after_current=pause_after_current,
+                                )
+                            ),
+                        ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                        all_button = ui.button(
+                            "Gerar todos em sequ\u00eancia",
+                            icon="movie_creation",
+                            on_click=lambda: _generate_continuous_video_segments_from_ui(
+                                project_id,
+                                retry_failed=False,
+                                loading_dialog=continuous_generation_dialog,
+                                progress_callback=continuous_progress_callback,
+                                pause_after_current=pause_after_current,
+                            ),
+                        ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+                        continue_button = ui.button(
+                            "Continuar de onde parou",
+                            icon="restart_alt",
+                            on_click=lambda: _generate_continuous_video_segments_from_ui(
+                                project_id,
+                                retry_failed=True,
+                                loading_dialog=continuous_generation_dialog,
+                                progress_callback=continuous_progress_callback,
+                                pause_after_current=pause_after_current,
+                            ),
+                        ).props("flat no-caps").classes("rounded-xl")
+                        if not continuous_view_model.can_generate_next:
+                            next_button.props("disable")
+                        if not continuous_view_model.can_generate_all:
+                            all_button.props("disable")
+                        if not continuous_view_model.can_continue:
+                            continue_button.props("disable")
 
             with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-4"):
                 for segment in continuous_segments:
@@ -1160,7 +1438,7 @@ def render_video_area(
                     "Crie os blocos a partir do roteiro e da Biblioteca Visual antes de gerar."
                 ).classes("text-sm text-[#8d938e] leading-6")
 
-    if pending_frames:
+    if not continuous_view_model.is_continuous_mode and pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
         with (
             ui.dialog().props(BLOCKING_DIALOG_PROPS) as video_prompt_dialog,
@@ -1337,7 +1615,7 @@ def render_video_area(
                             )
                             open_button.on("click.stop", video_prompt_detail_dialog.open)
 
-    if summary["clips"]:
+    if not continuous_view_model.is_continuous_mode and summary["clips"]:
         with ui.row().classes("w-full items-end justify-between gap-3 mt-6"):
             with ui.column().classes("gap-0"):
                 ui.label("Clipes gerados").classes("brand-type text-2xl font-bold")
@@ -1530,7 +1808,7 @@ def render_video_area(
                                         ).props("flat dense no-caps").classes(
                                             "text-[#d8dbd8] rounded-xl"
                                         )
-    elif not pending_frames:
+    elif not continuous_view_model.is_continuous_mode and not pending_frames:
         with ui.element("div").classes("entity-card rounded-2xl p-6 w-full mt-4"):
             ui.label("Nenhum clipe para gerar ainda").classes("brand-type text-2xl font-bold")
             ui.label(
@@ -1538,7 +1816,7 @@ def render_video_area(
                 "que podem virar clipes."
             ).classes("text-sm text-[#8d938e] leading-6")
 
-    if summary["clips"]:
+    if not continuous_view_model.is_continuous_mode and summary["clips"]:
         with ui.row().classes("w-full items-center justify-between gap-3 mt-6"):
             with ui.column().classes("gap-0"):
                 ui.label("Montagem").classes("brand-type text-2xl font-bold")
