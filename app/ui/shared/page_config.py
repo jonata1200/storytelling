@@ -163,7 +163,7 @@ PRODUCTION_STEPS = [
 WORKSPACE_TABS = [
     ("Roteiro", "script"),
     ("Biblioteca Visual", "assets"),
-    ("Video continuo", "video"),
+    ("Produ\u00e7\u00e3o de v\u00eddeo", "video"),
     ("Finalização", "finalization"),
     ("Dublagem", "dubbing"),
 ]

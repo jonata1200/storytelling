@@ -41,8 +41,6 @@ from app.ui.visual.helpers import asset_url
 from app.ui.workspace import storyboard_handlers as _storyboard_handlers
 from app.ui.workspace.continuous_video_view_model import (
     CONTINUOUS_VIDEO_WORKFLOW_MODE,
-    CONTROL_VISUAL_WORKFLOW_MODE,
-    VIDEO_WORKFLOW_MODE_LABELS,
     ContinuousVideoViewModel,
     build_continuous_video_view_model,
 )
@@ -197,13 +195,21 @@ async def _save_continuous_video_segment_prompt_from_ui(
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
-async def _set_video_workflow_mode_from_ui(project_id: UUID, workflow_mode: str) -> None:
+def _normalize_video_workflow_mode_from_ui(value: object) -> str:
+    text = str(value or "").strip()
+    if text == CONTINUOUS_VIDEO_WORKFLOW_MODE:
+        return text
+    return CONTINUOUS_VIDEO_WORKFLOW_MODE
+
+
+async def _set_video_workflow_mode_from_ui(project_id: UUID, workflow_mode: object) -> None:
     try:
+        normalized_workflow_mode = _normalize_video_workflow_mode_from_ui(workflow_mode)
         async with AsyncSessionLocal() as session:
             await update_production_settings(
                 session,
                 project_id,
-                {"workflow_mode": workflow_mode},
+                {"workflow_mode": normalized_workflow_mode},
             )
         ui.notify("Modo de produ\u00e7\u00e3o atualizado.", color="positive")
         ui.navigate.reload()
@@ -754,13 +760,6 @@ def _continuous_state_label(state: str) -> str:
         "failed": "Falhou",
         "skipped": "Ja existe",
     }.get(state, "Pendente")
-
-
-def _ui_event_value(event: Any) -> Any:
-    args = getattr(event, "args", None)
-    if isinstance(args, dict) and "value" in args:
-        return args["value"]
-    return args
 
 
 def _continuous_state_icon(state: str) -> str:
@@ -1341,43 +1340,10 @@ def render_video_area(
         _continuous_queue_progress_dialog(continuous_view_model)
     )
 
-    with ui.element("div").classes("w-full mb-2"):
-        with ui.row().classes("w-full items-center justify-between gap-3 flex-wrap"):
-            with ui.column().classes("gap-0 min-w-0"):
-                ui.label("Modo de produ\u00e7\u00e3o").classes("text-sm font-semibold")
-                ui.label(
-                    "Escolha entre controle quadro a quadro ou gera\u00e7\u00e3o cont\u00ednua econ\u00f4mica."
-                ).classes("text-xs text-[#8d938e]")
-            mode_toggle = ui.toggle(
-                {
-                    CONTROL_VISUAL_WORKFLOW_MODE: VIDEO_WORKFLOW_MODE_LABELS[
-                        CONTROL_VISUAL_WORKFLOW_MODE
-                    ],
-                    CONTINUOUS_VIDEO_WORKFLOW_MODE: VIDEO_WORKFLOW_MODE_LABELS[
-                        CONTINUOUS_VIDEO_WORKFLOW_MODE
-                    ],
-                },
-                value=continuous_view_model.workflow_mode
-                if continuous_view_model.workflow_mode in VIDEO_WORKFLOW_MODE_LABELS
-                else CONTROL_VISUAL_WORKFLOW_MODE,
-            ).props("unelevated no-caps")
-            mode_toggle.on(
-                "update:model-value",
-                lambda event: _set_video_workflow_mode_from_ui(
-                    project_id,
-                    str(_ui_event_value(event)),
-                ),
-            )
-
     with ui.element("div").classes(
         "w-full mt-2" if continuous_view_model.is_continuous_mode else "hidden"
     ):
-        with ui.row().classes("w-full items-end justify-between gap-3"):
-            with ui.column().classes("gap-0 min-w-0"):
-                ui.label("V\u00eddeo cont\u00ednuo").classes("brand-type text-2xl font-bold")
-                ui.label(
-                    "Revise os blocos antes de iniciar a gera\u00e7\u00e3o com Veo Fast."
-                ).classes("text-sm text-[#8d938e]")
+        with ui.row().classes("w-full items-center justify-end gap-3"):
             ui.button(
                 "Replanejar" if continuous_segments else "Planejar segmentos",
                 icon="view_timeline",

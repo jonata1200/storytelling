@@ -296,3 +296,34 @@ async def test_video_workflow_mode_ui_handler_saves_mode(
     )
 
     assert saved_payloads == [{"workflow_mode": CONTINUOUS_VIDEO_WORKFLOW_MODE}]
+
+
+@pytest.mark.asyncio
+async def test_video_workflow_mode_ui_handler_ignores_stale_toggle_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    saved_payloads: list[dict[str, str]] = []
+
+    class FakeSessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    async def fake_update(_session: object, _requested_project_id: object, payload: dict) -> object:
+        saved_payloads.append(payload)
+        return object()
+
+    monkeypatch.setattr(storyboard_video_area, "AsyncSessionLocal", lambda: FakeSessionContext())
+    monkeypatch.setattr(storyboard_video_area, "update_production_settings", fake_update)
+    monkeypatch.setattr(storyboard_video_area.ui, "notify", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(storyboard_video_area.ui.navigate, "reload", lambda: None)
+
+    await storyboard_video_area._set_video_workflow_mode_from_ui(
+        project_id,
+        [0, {"value": 0, "label": "Controle visual"}],
+    )
+
+    assert saved_payloads == [{"workflow_mode": CONTINUOUS_VIDEO_WORKFLOW_MODE}]

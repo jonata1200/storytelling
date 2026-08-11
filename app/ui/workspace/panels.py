@@ -28,7 +28,6 @@ from app.production.service import (
     CONTENT_TYPES,
     IMAGE_RESOLUTIONS,
     VIDEO_RESOLUTIONS,
-    WORKFLOW_MODES,
     normalize_image_aspect_ratio,
     normalize_image_resolution,
     normalize_video_resolution,
@@ -43,6 +42,7 @@ from app.ui.project.actions import (
     _save_model_setting,
     _save_production_setup,
 )
+from app.ui.workspace.rules import CONTINUOUS_VIDEO_WORKFLOW_MODE
 
 
 def _render_model_settings(project_id: UUID, settings_list: list[ProjectModelSetting]) -> None:
@@ -188,11 +188,6 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
                 label="Video",
                 value=normalize_video_resolution(settings.video_resolution),
             )
-            workflow_mode = ui.select(
-                WORKFLOW_MODES,
-                label="Workflow",
-                value=settings.workflow_mode,
-            )
             motion_intensity = ui.number(
                 "Movimento",
                 value=settings.motion_intensity,
@@ -218,7 +213,7 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
                     "aspect_ratio": aspect_ratio.value,
                     "image_resolution": image_resolution.value,
                     "video_resolution": video_resolution.value,
-                    "workflow_mode": workflow_mode.value,
+                    "workflow_mode": CONTINUOUS_VIDEO_WORKFLOW_MODE,
                     "motion_intensity": int(motion_intensity.value or 5),
                     "image_model": image_model.value,
                     "video_model": video_model.value,
