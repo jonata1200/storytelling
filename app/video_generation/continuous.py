@@ -1814,9 +1814,144 @@ async def approve_continuous_video_segment(
         return None
     if segment.status != GenerationJobStatus.SUCCEEDED or segment.asset_id is None:
         raise ValueError("Somente segmentos gerados podem ser aprovados.")
+    previous_status = normalize_continuous_video_review_status(
+        getattr(segment, "review_status", None)
+    )
     _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_APPROVED, note=note)
+    metadata = dict(segment.metadata_json or {})
+    metadata["review_decision"] = CONTINUOUS_VIDEO_REVIEW_APPROVED
+    metadata["review_decision_at"] = datetime.now(UTC).isoformat()
+    metadata["review_previous_status"] = previous_status
+    if note is not None:
+        metadata["review_note"] = note
+    metadata["continuity_summary"] = continuous_video_segment_continuity_summary(segment)
+    segment.metadata_json = metadata
+    next_segment = await get_continuous_video_segment_by_number(
+        session,
+        project_id,
+        segment.segment_number + 1,
+    )
+    if next_segment is not None and not continuous_video_segment_is_approved(next_segment):
+        next_segment.source_segment_id = segment.id
+        next_segment.source_video_asset_id = segment.asset_id
+        next_segment.source_frame_asset_id = segment.final_frame_asset_id
+        next_metadata = dict(next_segment.metadata_json or {})
+        next_metadata["source_segment_id"] = str(segment.id)
+        next_metadata["source_video_asset_id"] = str(segment.asset_id)
+        if segment.final_frame_asset_id is not None:
+            next_metadata["source_frame_asset_id"] = str(segment.final_frame_asset_id)
+        if metadata.get("final_frame_storage_uri"):
+            next_metadata["source_frame_storage_uri"] = metadata["final_frame_storage_uri"]
+        next_metadata["continuity_source_summary"] = metadata["continuity_summary"]
+        next_segment.metadata_json = next_metadata
     await session.flush()
     return segment
+
+
+def continuous_video_segment_continuity_summary(segment: ContinuousVideoSegment) -> str:
+    metadata = segment.metadata_json if isinstance(segment.metadata_json, dict) else {}
+    parts = [
+        f"Segmento {int(getattr(segment, 'segment_number', 0) or 0):02d}",
+        str(getattr(segment, "title", "") or "").strip(),
+        str(metadata.get("action") or "").strip(),
+        str(metadata.get("continuity") or "").strip(),
+    ]
+    names = [
+        *list(metadata.get("characters") or []),
+        *list(metadata.get("locations") or []),
+        *list(metadata.get("props") or []),
+    ]
+    visual_anchor = ", ".join(str(name) for name in names if str(name).strip())
+    if visual_anchor:
+        parts.append(f"Referencias: {visual_anchor}")
+    summary = " | ".join(part for part in parts if part)
+    return summary[:800]
+
+
+async def reject_continuous_video_segment(
+    session: AsyncSession,
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    note: str | None = None,
+) -> ContinuousVideoSegment | None:
+    segment = await session.get(ContinuousVideoSegment, segment_id)
+    if segment is None or segment.project_id != project_id:
+        return None
+    if segment.status != GenerationJobStatus.SUCCEEDED or segment.asset_id is None:
+        raise ValueError("Somente segmentos gerados podem ser rejeitados.")
+    previous_status = normalize_continuous_video_review_status(
+        getattr(segment, "review_status", None)
+    )
+    _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_REJECTED, note=note)
+    metadata = dict(segment.metadata_json or {})
+    metadata["review_decision"] = CONTINUOUS_VIDEO_REVIEW_REJECTED
+    metadata["review_decision_at"] = datetime.now(UTC).isoformat()
+    metadata["review_previous_status"] = previous_status
+    if note is not None:
+        metadata["review_note"] = note
+    segment.metadata_json = metadata
+    await invalidate_continuous_video_downstream_segments(
+        session,
+        project_id,
+        segment.segment_number,
+        reason="upstream_rejected",
+    )
+    await session.flush()
+    return segment
+
+
+async def retry_failed_continuous_video_segment(
+    session: AsyncSession,
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    provider_name: str = "auto",
+    model: str | None = None,
+    progress_callback: ContinuousVideoProgressCallback | None = None,
+) -> tuple[list[GenerationJob], list[ContinuousVideoSegment]]:
+    segment = await session.get(ContinuousVideoSegment, segment_id)
+    if segment is None or segment.project_id != project_id:
+        return [], []
+    if segment.status != GenerationJobStatus.FAILED:
+        raise ValueError("Somente segmentos com falha podem ser reenviados.")
+    return await generate_continuous_video_segment(
+        session,
+        project_id,
+        segment_id,
+        provider_name=provider_name,
+        model=model,
+        retry_failed=True,
+        progress_callback=progress_callback,
+    )
+
+
+async def regenerate_rejected_continuous_video_segment(
+    session: AsyncSession,
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    provider_name: str = "auto",
+    model: str | None = None,
+    progress_callback: ContinuousVideoProgressCallback | None = None,
+) -> tuple[list[GenerationJob], list[ContinuousVideoSegment]]:
+    segment = await session.get(ContinuousVideoSegment, segment_id)
+    if segment is None or segment.project_id != project_id:
+        return [], []
+    review_status = normalize_continuous_video_review_status(
+        getattr(segment, "review_status", None)
+    )
+    if review_status != CONTINUOUS_VIDEO_REVIEW_REJECTED:
+        raise ValueError("Somente segmentos rejeitados podem ser regenerados por este fluxo.")
+    return await generate_continuous_video_segment(
+        session,
+        project_id,
+        segment_id,
+        provider_name=provider_name,
+        model=model,
+        force=True,
+        progress_callback=progress_callback,
+    )
 
 
 def _reset_continuous_video_segment_for_regeneration(

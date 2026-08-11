@@ -46,6 +46,16 @@ def is_continuous_video_workflow(workflow_mode: object) -> bool:
     return str(workflow_mode or "").strip() == CONTINUOUS_VIDEO_WORKFLOW_MODE
 
 
+def continuous_video_ready(counts: dict[str, int]) -> bool:
+    return int(counts.get("continuous_video_approved_segments", 0) or 0) > 0
+
+
+def continuous_video_complete(counts: dict[str, int]) -> bool:
+    total = int(counts.get("continuous_video_segments", 0) or 0)
+    approved = int(counts.get("continuous_video_approved_segments", 0) or 0)
+    return total > 0 and approved >= total
+
+
 def workspace_section_access(
     section: str,
     counts: dict[str, int],
@@ -55,6 +65,10 @@ def workspace_section_access(
     assets_ready = step_ready("visual", counts)
     storyboard_ready = step_ready("storyboard", counts)
     continuous_mode = is_continuous_video_workflow(workflow_mode)
+    video_ready = continuous_video_ready(counts) if continuous_mode else step_ready("video", counts)
+    final_video_ready = (
+        continuous_video_complete(counts) if continuous_mode else step_ready("video", counts)
+    )
     if section == "script":
         return True, ""
     if section == "assets":
@@ -85,14 +99,18 @@ def workspace_section_access(
         allowed, reason = workspace_section_access("video", counts, workflow_mode)
         if not allowed:
             return False, reason
-        if not step_ready("video", counts):
+        if not video_ready:
+            if continuous_mode:
+                return False, "Aprove pelo menos um segmento de video antes de acessar dublagem."
             return False, "Gere pelo menos um clipe antes de acessar dublagem."
         return True, ""
     if section == "finalization":
         allowed, reason = workspace_section_access("video", counts, workflow_mode)
         if not allowed:
             return False, reason
-        if not step_ready("video", counts):
+        if not final_video_ready:
+            if continuous_mode:
+                return False, "Aprove todos os segmentos de video antes de acessar finalizacao."
             return False, "Gere pelo menos um clipe antes de acessar finalização."
         return True, ""
     return False, "Etapa desconhecida."

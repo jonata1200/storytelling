@@ -163,8 +163,7 @@ PRODUCTION_STEPS = [
 WORKSPACE_TABS = [
     ("Roteiro", "script"),
     ("Biblioteca Visual", "assets"),
-    ("Storyboard", "storyboard"),
-    ("Vídeo", "video"),
+    ("Video continuo", "video"),
     ("Finalização", "finalization"),
     ("Dublagem", "dubbing"),
 ]
@@ -291,6 +290,13 @@ def _created_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
         _append_count(created, counts, "animatics", "animatic", "animatics")
     if step_key in {"video", "dubbing", "finalization", "quality"}:
         _append_count(created, counts, "clips", "clipe de video", "clipes de video")
+        _append_count(
+            created,
+            counts,
+            "continuous_video_approved_segments",
+            "segmento continuo aprovado",
+            "segmentos continuos aprovados",
+        )
     if step_key in {"dubbing", "finalization", "quality"}:
         _append_count(created, counts, "dubbing_jobs", "job de dublagem", "jobs de dublagem")
     if step_key in {"finalization", "quality"}:
@@ -313,6 +319,8 @@ def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
     shots = _safe_count(counts, "shots")
     frames = _safe_count(counts, "frames")
     clips = _safe_count(counts, "clips")
+    continuous_segments = _safe_count(counts, "continuous_video_segments")
+    approved_continuous_segments = _safe_count(counts, "continuous_video_approved_segments")
     visual_refs = _safe_count(counts, "visual_refs")
     expected_visual_refs = _expected_visual_references(counts)
 
@@ -352,7 +360,18 @@ def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
             )
         if frames > 0 and _safe_count(counts, "animatics") <= 0:
             missing.append("animatic")
-    if step_key in {"video", "dubbing", "finalization"}:
+    if step_key in {"video", "dubbing", "finalization"} and continuous_segments > 0:
+        if approved_continuous_segments <= 0:
+            missing.append("segmento continuo aprovado")
+        elif approved_continuous_segments < continuous_segments:
+            missing.append(
+                _count_text(
+                    continuous_segments - approved_continuous_segments,
+                    "segmento continuo pendente de aprovacao",
+                    "segmentos continuos pendentes de aprovacao",
+                )
+            )
+    elif step_key in {"video", "dubbing", "finalization"}:
         if frames <= 0:
             missing.append("storyboard")
         elif clips < frames:
@@ -403,6 +422,13 @@ def _progress_for_step(step_key: str, counts: dict[str, Any]) -> tuple[int, int,
         return min(frames, max(frames, 1)), max(frames, 1), "quadro"
 
     if step_key == "video":
+        continuous_segments = _safe_count(counts, "continuous_video_segments")
+        if continuous_segments > 0:
+            return (
+                min(_safe_count(counts, "continuous_video_approved_segments"), continuous_segments),
+                max(continuous_segments, 1),
+                "segmento",
+            )
         frames = _safe_count(counts, "frames")
         total = max(frames, 1)
         return min(_safe_count(counts, "clips"), total), total, "clipe"

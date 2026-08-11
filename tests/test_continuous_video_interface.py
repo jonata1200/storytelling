@@ -34,6 +34,7 @@ def _counts_without_storyboard() -> dict[str, int]:
         "dubbing_jobs": 0,
         "exports": 0,
         "qa_issues": 0,
+        "continuous_video_approved_segments": 0,
     }
 
 
@@ -94,6 +95,30 @@ def test_legacy_project_with_storyboards_keeps_classic_video_access() -> None:
     assert reason == ""
 
 
+def test_continuous_finalization_requires_approved_segment() -> None:
+    counts = {
+        **_counts_without_storyboard(),
+        "continuous_video_segments": 2,
+    }
+
+    blocked, reason = workspace_section_access(
+        "finalization",
+        counts,
+        CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    )
+    counts["continuous_video_approved_segments"] = 2
+    allowed, allowed_reason = workspace_section_access(
+        "finalization",
+        counts,
+        CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    )
+
+    assert blocked is False
+    assert "segmento" in reason
+    assert allowed is True
+    assert allowed_reason == ""
+
+
 def test_continuous_project_progression_skips_storyboard_requirement() -> None:
     context = {
         "production_settings": {"workflow_mode": CONTINUOUS_VIDEO_WORKFLOW_MODE},
@@ -111,6 +136,26 @@ def test_continuous_project_progression_skips_storyboard_requirement() -> None:
     )
 
     assert intent.action == "generate_video"
+
+
+def test_continuous_project_progression_finalizes_after_all_segments_are_approved() -> None:
+    context = {
+        "production_settings": {"workflow_mode": CONTINUOUS_VIDEO_WORKFLOW_MODE},
+        "counts": {
+            **_counts_without_storyboard(),
+            "continuous_video_segments": 2,
+            "continuous_video_approved_segments": 2,
+        },
+    }
+
+    intent = _contextual_project_chat_intent(
+        "pode avancar para a proxima etapa",
+        "video",
+        context,
+        "chat",
+    )
+
+    assert intent.action == "generate_finalization"
 
 
 def test_continuous_video_view_model_calculates_actions_and_remaining_cost() -> None:

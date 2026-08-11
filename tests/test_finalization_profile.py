@@ -4,6 +4,8 @@ from uuid import uuid4
 
 from pytest import MonkeyPatch
 
+from app.assets.models import Asset
+from app.core.enums import AssetKind, GenerationJobStatus
 from app.finalization import service as finalization_service
 from app.finalization.service import (
     TimelineAudioAsset,
@@ -12,13 +14,14 @@ from app.finalization.service import (
     _voice_for_speaker,
     _voice_profile_for_key,
     clip_compatibility_errors,
+    continuous_video_timeline_coverage_errors,
     export_profile,
     export_profile_from_payload,
     final_timeline_coverage_errors,
     parse_dialogue_lines,
 )
 from app.storyboards.models import StoryboardFrame
-from app.video_generation.models import VideoClip
+from app.video_generation.models import ContinuousVideoSegment, VideoClip
 
 
 def test_export_profile_defaults_to_vertical_social_video() -> None:
@@ -98,6 +101,63 @@ def test_final_timeline_coverage_rejects_duplicate_selected_clips() -> None:
     assert "1 frame(s) com mais de um clipe selecionado" in final_timeline_coverage_errors(
         frames, clips
     )
+
+
+def test_continuous_video_timeline_coverage_requires_approved_complete_segments(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    video_path = tmp_path / "segment.mp4"
+    video_path.write_bytes(b"video")
+    asset_id = uuid4()
+    segment = ContinuousVideoSegment(
+        id=uuid4(),
+        project_id=project_id,
+        segment_number=1,
+        duration_seconds=7,
+        status=GenerationJobStatus.SUCCEEDED,
+        review_status="approved",
+        generated_video_asset_id=asset_id,
+    )
+    asset = Asset(
+        id=asset_id,
+        project_id=project_id,
+        kind=AssetKind.VIDEO,
+        storage_uri=video_path.as_posix(),
+        content_type="video/mp4",
+    )
+
+    monkeypatch.setattr(
+        finalization_service,
+        "_local_video_asset_path",
+        lambda _uri: video_path,
+    )
+
+    assert continuous_video_timeline_coverage_errors([segment], {asset_id: asset}) == []
+
+    segment.review_status = "ready_for_review"
+    errors = continuous_video_timeline_coverage_errors([segment], {asset_id: asset})
+
+    assert "segmento 1 nao aprovado" in errors
+
+
+def test_continuous_video_timeline_coverage_rejects_missing_sequence() -> None:
+    project_id = uuid4()
+    segment = ContinuousVideoSegment(
+        id=uuid4(),
+        project_id=project_id,
+        segment_number=2,
+        duration_seconds=7,
+        status=GenerationJobStatus.SUCCEEDED,
+        review_status="approved",
+        generated_video_asset_id=uuid4(),
+    )
+
+    errors = continuous_video_timeline_coverage_errors([segment], {})
+
+    assert "sequencia de segmentos incompleta" in errors
+    assert "segmento 2 sem asset de video" in errors
 
 
 def test_parse_dialogue_lines_accepts_colon_and_screenplay_blocks() -> None:

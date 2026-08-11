@@ -50,6 +50,18 @@ async def _count(session: AsyncSession, model: type[Any], project_id: UUID) -> i
     return int(value or 0)
 
 
+async def _count_approved_continuous_segments(session: AsyncSession, project_id: UUID) -> int:
+    value = await session.scalar(
+        select(func.count())
+        .select_from(ContinuousVideoSegment)
+        .where(
+            ContinuousVideoSegment.project_id == project_id,
+            ContinuousVideoSegment.review_status == "approved",
+        )
+    )
+    return int(value or 0)
+
+
 async def _active_scene_count_for_script(
     session: AsyncSession, project_id: UUID, script_id: UUID
 ) -> int:
@@ -140,6 +152,10 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
             "continuous_video_segments": await _count(
                 session,
                 ContinuousVideoSegment,
+                project_id,
+            ),
+            "continuous_video_approved_segments": await _count_approved_continuous_segments(
+                session,
                 project_id,
             ),
             "timelines": await _count(session, Timeline, project_id),

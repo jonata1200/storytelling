@@ -4,28 +4,28 @@ Goal: finalize videos from approved continuous segments and retire storyboard-on
 
 ## Checklist
 
-- [ ] Update finalization to assemble approved continuous segments in order.
-- [ ] Ensure finalization validates:
-  - [ ] All required segments exist
-  - [ ] All required segments are approved
-  - [ ] Video files exist in storage
-  - [ ] Durations are valid
-  - [ ] Sequence order is complete
-- [ ] Update export manifests to reference continuous segments instead of storyboard frames.
-- [ ] Update quality checks to inspect segment continuity instead of storyboard coverage.
-- [ ] Update cost summaries to report:
-  - [ ] Visual Bible image cost
-  - [ ] Continuous video generation cost
-  - [ ] Regeneration cost
-  - [ ] Finalization cost
-- [ ] Remove storyboard requirements from production-step gating.
-- [ ] Remove storyboard-only copy from the main UI.
-- [ ] Mark old storyboard service paths as legacy or remove them after migration confidence is high.
-- [ ] Add data cleanup tools for orphan storyboard files.
-- [ ] Add data cleanup tools for unused storyboard assets and artifacts.
-- [ ] Add migration notes for old projects.
-- [ ] Update README or product docs with the new workflow.
-- [ ] Run full unit test suite.
+- [x] Update finalization to assemble approved continuous segments in order.
+- [x] Ensure finalization validates:
+  - [x] All required segments exist
+  - [x] All required segments are approved
+  - [x] Video files exist in storage
+  - [x] Durations are valid
+  - [x] Sequence order is complete
+- [x] Update export manifests to reference continuous segments instead of storyboard frames.
+- [x] Update quality checks to inspect segment continuity instead of storyboard coverage.
+- [x] Update cost summaries to report:
+  - [x] Visual Bible image cost
+  - [x] Continuous video generation cost
+  - [x] Regeneration cost
+  - [x] Finalization cost
+- [x] Remove storyboard requirements from production-step gating.
+- [x] Remove storyboard-only copy from the main UI.
+- [x] Mark old storyboard service paths as legacy or remove them after migration confidence is high.
+- [x] Add data cleanup tools for orphan storyboard files.
+- [x] Add data cleanup tools for unused storyboard assets and artifacts.
+- [x] Add migration notes for old projects.
+- [x] Update README or product docs with the new workflow.
+- [x] Run full unit test suite.
 - [ ] Run a manual smoke test:
   - [ ] Create project
   - [ ] Generate script
@@ -37,8 +37,16 @@ Goal: finalize videos from approved continuous segments and retire storyboard-on
   - [ ] Regenerate a segment
   - [ ] Finalize approved segments
 
+## Implementation Notes
+
+- Finalization now prefers continuous-video timelines when continuous segments exist.
+- Continuous finalization validates a complete ordered sequence, approved review state, valid duration, valid video asset, and local storage availability.
+- Export manifests include `source: continuous_video` and the ordered continuous segment references.
+- Storyboard service paths remain legacy-compatible; `delete_storyboard_outputs` remains the project-level cleanup path for legacy frames, clips, animatics, assets, artifacts, and local files.
+- Manual smoke testing is intentionally left as a follow-up operational task because it requires interactive provider/API execution.
+
 ## Exit Criteria
 
-- [ ] Finalization works without storyboard frames.
-- [ ] Main production flow no longer depends on storyboard.
-- [ ] Legacy storyboard data has a clear retention or cleanup policy.
+- [x] Finalization works without storyboard frames.
+- [x] Main production flow no longer depends on storyboard.
+- [x] Legacy storyboard data has a clear retention or cleanup policy.

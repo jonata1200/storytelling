@@ -1,16 +1,17 @@
 # Storytelling Studio
 
 Storytelling Studio é uma aplicação local para criar projetos audiovisuais com apoio de IA.
-Ela transforma uma ideia em roteiro, cenas, biblioteca visual, storyboard, clipes, timeline,
-exportação e controle de qualidade.
+Ela transforma uma ideia em roteiro, cenas, biblioteca visual, segmentos de vídeo contínuo,
+timeline, exportação e controle de qualidade.
 
 ## Recursos
 
 - Criação de projetos por prompt, ideia salva ou briefing.
 - Geração de ideias, roteiro, cenas e planos.
 - Biblioteca visual de personagens, locais, objetos e referências.
-- Storyboard, animatic e prompts para vídeo vertical.
-- Geração e revisão de clipes.
+- Vídeo contínuo por segmentos, com revisão e aprovação antes de avançar.
+- Continuidade por frame final aprovado como ponto de partida do próximo segmento.
+- Storyboard e animatic permanecem como caminho legado para projetos antigos.
 - Timeline final, exportação, dublagem e controle de qualidade.
 - Custos, storage, observabilidade e autenticação local.
 

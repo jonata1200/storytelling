@@ -172,6 +172,10 @@ class ContinuousVideoSegmentPromptUpdate(BaseModel):
     title: str | None = None
 
 
+class ContinuousVideoReviewRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=1000)
+
+
 class ContinuousVideoPlanningRead(BaseModel):
     plan: ContinuousVideoPlanRead
     segments: list[ContinuousVideoSegmentRead]

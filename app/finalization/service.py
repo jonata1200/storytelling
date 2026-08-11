@@ -23,6 +23,7 @@ from app.core.enums import (
     AssetKind,
     CostEntryType,
     DependencyKind,
+    GenerationJobStatus,
     ProjectStatus,
 )
 from app.costs.models import CostEntry
@@ -44,7 +45,7 @@ from app.providers.speech.types import SpeechRequest
 from app.storage.service import apply_asset_storage_metadata
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.timeline import build_word_alignment
-from app.video_generation.models import VideoClip
+from app.video_generation.models import ContinuousVideoSegment, VideoClip
 from app.visual_bible.models import Character
 from app.workflows.models import ArtifactDependency
 from app.workflows.state_machine import advance_project_status
@@ -298,6 +299,38 @@ def final_timeline_coverage_errors(
     return errors
 
 
+def continuous_video_timeline_coverage_errors(
+    segments: list[ContinuousVideoSegment],
+    asset_by_id: dict[UUID, Asset],
+) -> list[str]:
+    errors: list[str] = []
+    if not segments:
+        return ["video continuo sem segmentos"]
+    ordered = sorted(segments, key=lambda item: int(item.segment_number or 0))
+    expected_numbers = list(range(1, len(ordered) + 1))
+    actual_numbers = [int(segment.segment_number or 0) for segment in ordered]
+    if actual_numbers != expected_numbers:
+        errors.append("sequencia de segmentos incompleta")
+    for segment in ordered:
+        if segment.status != GenerationJobStatus.SUCCEEDED:
+            errors.append(f"segmento {segment.segment_number} sem video gerado")
+        if str(getattr(segment, "review_status", "") or "").lower() != "approved":
+            errors.append(f"segmento {segment.segment_number} nao aprovado")
+        if int(segment.duration_seconds or 0) <= 0:
+            errors.append(f"segmento {segment.segment_number} com duracao invalida")
+        asset_id = segment.generated_video_asset_id or segment.asset_id
+        asset = asset_by_id.get(asset_id) if asset_id is not None else None
+        if asset is None:
+            errors.append(f"segmento {segment.segment_number} sem asset de video")
+            continue
+        if asset.kind != AssetKind.VIDEO or not str(asset.content_type or "").startswith("video/"):
+            errors.append(f"segmento {segment.segment_number} sem asset de video valido")
+            continue
+        if _local_video_asset_path(str(asset.storage_uri or "")) is None:
+            errors.append(f"segmento {segment.segment_number} sem arquivo local de video")
+    return errors
+
+
 def _local_video_asset_path(storage_uri: str) -> Path | None:
     if not storage_uri:
         return None
@@ -353,6 +386,33 @@ async def _timeline_audio_assets(
     return assets
 
 
+async def _timeline_continuous_segment_manifest(
+    session: AsyncSession,
+    timeline_id: UUID,
+) -> list[dict[str, object]]:
+    result = await session.execute(
+        select(TimelineItem)
+        .where(TimelineItem.timeline_id == timeline_id, TimelineItem.layer == "video")
+        .order_by(TimelineItem.order_index)
+    )
+    entries: list[dict[str, object]] = []
+    for item in result.scalars():
+        properties = item.properties if isinstance(item.properties, dict) else {}
+        if properties.get("source") != "continuous_video":
+            continue
+        entries.append(
+            {
+                "segment_id": properties.get("segment_id"),
+                "segment_number": properties.get("segment_number"),
+                "source_asset_id": str(item.source_asset_id) if item.source_asset_id else None,
+                "start_ms": item.start_ms,
+                "end_ms": item.end_ms,
+                "review_status": properties.get("review_status"),
+            }
+        )
+    return entries
+
+
 async def _create_artifact(
     session: AsyncSession,
     project_id: UUID,
@@ -389,6 +449,32 @@ async def _add_dependency(session: AsyncSession, upstream: UUID, downstream: UUI
             dependency_kind=DependencyKind.DERIVED_FROM,
         )
     )
+
+
+async def _ensure_continuous_video_asset_artifact(
+    session: AsyncSession,
+    segment: ContinuousVideoSegment,
+    asset: Asset,
+) -> Artifact:
+    if asset.artifact_id is not None:
+        existing = await session.get(Artifact, asset.artifact_id)
+        if existing is not None:
+            return existing
+    artifact = await _create_artifact(
+        session,
+        segment.project_id,
+        ArtifactType.VIDEO_CLIP,
+        f"Segmento continuo {int(segment.segment_number or 0):03d}",
+        {
+            "source": "continuous_video",
+            "segment_id": str(segment.id),
+            "segment_number": segment.segment_number,
+            "asset_id": str(asset.id),
+        },
+    )
+    asset.artifact_id = artifact.id
+    await session.flush()
+    return artifact
 
 
 async def _add_dialogue_audio_items(
@@ -594,6 +680,97 @@ async def create_final_timeline(
         if animatic is None or animatic.project_id != project_id:
             return None
 
+    continuous_result = await session.execute(
+        select(ContinuousVideoSegment)
+        .where(ContinuousVideoSegment.project_id == project_id)
+        .order_by(ContinuousVideoSegment.segment_number)
+    )
+    continuous_segments = list(continuous_result.scalars())
+    if continuous_segments:
+        asset_ids = {
+            asset_id
+            for segment in continuous_segments
+            for asset_id in (segment.generated_video_asset_id, segment.asset_id)
+            if asset_id is not None
+        }
+        asset_by_id: dict[UUID, Asset] = {}
+        if asset_ids:
+            asset_result = await session.execute(
+                select(Asset).where(Asset.project_id == project_id, Asset.id.in_(asset_ids))
+            )
+            asset_by_id = {asset.id: asset for asset in asset_result.scalars()}
+        coverage_errors = continuous_video_timeline_coverage_errors(
+            continuous_segments,
+            asset_by_id,
+        )
+        if coverage_errors:
+            raise ValueError("Timeline final incompleta: " + "; ".join(coverage_errors))
+        approved_segments = sorted(
+            continuous_segments,
+            key=lambda item: int(item.segment_number or 0),
+        )
+        duration_seconds = sum(int(segment.duration_seconds or 0) for segment in approved_segments)
+        artifact = await _create_artifact(
+            session,
+            project_id,
+            ArtifactType.TIMELINE,
+            "Timeline final",
+            {
+                "source": "continuous_video",
+                "segment_count": len(approved_segments),
+                "duration_seconds": duration_seconds,
+            },
+        )
+        timeline = Timeline(
+            project_id=project_id,
+            artifact_id=artifact.id,
+            animatic_id=None,
+            name="Timeline final",
+            duration_seconds=duration_seconds,
+            profile={
+                **export_profile(),
+                "source": "continuous_video",
+            },
+        )
+        session.add(timeline)
+        await session.flush()
+        cursor_ms = 0
+        for index, segment in enumerate(approved_segments, start=1):
+            asset_id = segment.generated_video_asset_id or segment.asset_id
+            asset = asset_by_id[asset_id] if asset_id is not None else None
+            if asset is None:
+                raise ValueError(f"Segmento {segment.segment_number} sem asset de video")
+            source_artifact = await _ensure_continuous_video_asset_artifact(
+                session,
+                segment,
+                asset,
+            )
+            duration_ms = int(segment.duration_seconds or 0) * 1000
+            await _add_dependency(session, source_artifact.id, artifact.id)
+            session.add(
+                TimelineItem(
+                    timeline_id=timeline.id,
+                    project_id=project_id,
+                    source_artifact_id=source_artifact.id,
+                    source_asset_id=asset.id,
+                    layer="video",
+                    start_ms=cursor_ms,
+                    end_ms=cursor_ms + duration_ms,
+                    order_index=index,
+                    properties={
+                        "source": "continuous_video",
+                        "segment_id": str(segment.id),
+                        "segment_number": segment.segment_number,
+                        "review_status": segment.review_status,
+                    },
+                )
+            )
+            cursor_ms += duration_ms
+        advance_project_status(project, ProjectStatus.ASSEMBLY)
+        await session.commit()
+        await session.refresh(timeline)
+        return timeline
+
     frame_result = await session.execute(
         select(StoryboardFrame)
         .where(StoryboardFrame.project_id == project_id)
@@ -720,6 +897,10 @@ async def export_timeline(
         "duration_seconds": timeline.duration_seconds,
         "ffmpeg_path": ffmpeg_path,
     }
+    continuous_segment_manifest = await _timeline_continuous_segment_manifest(session, timeline.id)
+    if continuous_segment_manifest:
+        manifest["source"] = "continuous_video"
+        manifest["continuous_segments"] = continuous_segment_manifest
     asset_kind = AssetKind.DOCUMENT
     content_type = "application/json"
     if ffmpeg_path:

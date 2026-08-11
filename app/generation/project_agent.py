@@ -85,6 +85,7 @@ from app.storytelling.service import (
     revise_script,
 )
 from app.video_generation.continuous import (
+    continuous_video_segment_is_approved,
     list_continuous_video_segments,
     plan_continuous_video_segments,
 )
@@ -718,15 +719,50 @@ async def _ensure_finalization_pipeline(
     project_id: UUID,
     progress: ProgressCallback | None = None,
 ) -> ProjectChatResult:
-    storyboard_result = await _ensure_storyboard_pipeline(session, project_id, progress=progress)
-    changed = storyboard_result.changed
-    if _is_visual_reference_gate_message(storyboard_result.message):
-        return ProjectChatResult(
-            storyboard_result.message,
-            "generate_finalization",
-            changed,
-            storyboard_result.failed,
+    changed = False
+    if await _project_uses_continuous_video_mode(session, project_id, None):
+        segments = await list_continuous_video_segments(session, project_id)
+        if not segments:
+            video_result = await _ensure_continuous_video_pipeline(
+                session,
+                project_id,
+                progress=progress,
+            )
+            return ProjectChatResult(
+                video_result.message,
+                "generate_finalization",
+                video_result.changed,
+                video_result.failed,
+            )
+        unapproved = [
+            segment
+            for segment in segments
+            if not continuous_video_segment_is_approved(segment)
+        ]
+        if unapproved:
+            first = min(unapproved, key=lambda item: int(item.segment_number or 0))
+            return ProjectChatResult(
+                (
+                    "Aprove todos os segmentos de video continuo antes da finalizacao. "
+                    f"Proximo pendente: segmento {first.segment_number}."
+                ),
+                "generate_finalization",
+                False,
+            )
+    else:
+        storyboard_result = await _ensure_storyboard_pipeline(
+            session,
+            project_id,
+            progress=progress,
         )
+        changed = storyboard_result.changed
+        if _is_visual_reference_gate_message(storyboard_result.message):
+            return ProjectChatResult(
+                storyboard_result.message,
+                "generate_finalization",
+                changed,
+                storyboard_result.failed,
+            )
 
     timeline = await _latest(session, Timeline, project_id)
     if timeline is None:
@@ -940,6 +976,13 @@ async def handle_project_chat(
             scene_number=_requested_storyboard_scene_number(message),
         )
     if action == "generate_storyboard":
+        if await _project_uses_continuous_video_mode(session, project_id, project_context):
+            return await _ensure_continuous_video_pipeline(
+                session,
+                project_id,
+                force=force,
+                progress=progress,
+            )
         scene_number = _requested_storyboard_scene_number(message)
         if scene_number is not None:
             return await _ensure_storyboard_pipeline(

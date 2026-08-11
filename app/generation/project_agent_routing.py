@@ -247,6 +247,7 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
     dubbing_jobs = counts.get("dubbing_jobs", 0)
     continuous_mode = _project_workflow_mode(project_context) == CONTINUOUS_VIDEO_WORKFLOW_MODE
     continuous_segments = counts.get("continuous_video_segments", 0)
+    approved_continuous_segments = counts.get("continuous_video_approved_segments", 0)
 
     if scripts == 0:
         return "generate_script"
@@ -254,8 +255,18 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
         return "generate_script"
     if characters == 0 or locations == 0 or props == 0:
         return "generate_assets"
-    if continuous_mode and (continuous_segments == 0 or clips == 0):
+    if continuous_mode and (
+        continuous_segments == 0 or approved_continuous_segments < continuous_segments
+    ):
         return "generate_video"
+    if continuous_mode:
+        if exports == 0 or active == "finalization":
+            return "generate_finalization"
+        if dubbing_jobs == 0:
+            return "generate_dubbing"
+        if active in {"video", "finalization", "dubbing"}:
+            return "generate_finalization"
+        return "run_quality"
     if frames == 0:
         return "generate_storyboard"
     if clips == 0:
@@ -293,6 +304,13 @@ def _contextual_project_chat_intent(
         or "clipes" in normalized
         or active == "video"
     )
+    continuous_mode = _project_workflow_mode(project_context) == CONTINUOUS_VIDEO_WORKFLOW_MODE
+    if continuous_mode and (storyboard_context or classified_action == "generate_storyboard"):
+        return ProjectChatIntent(
+            "generate_video",
+            0.92,
+            "modo continuo usa segmentos de video no lugar de storyboard",
+        )
     if wants_prompt_approval and (
         active == "video"
         or explicit_video_prompt

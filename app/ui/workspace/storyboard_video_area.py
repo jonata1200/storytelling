@@ -53,9 +53,14 @@ from app.ui.workspace.storyboard_video_view_model import (
 )
 from app.ui.workspace.video_handlers import save_video_prompt_from_ui as _save_video_prompt_from_ui
 from app.video_generation.continuous import (
+    approve_continuous_video_segment,
     continuous_video_segment_validation_errors,
     generate_continuous_video_segments,
+    generate_next_continuous_video_segment,
     plan_continuous_video_segments,
+    regenerate_rejected_continuous_video_segment,
+    reject_continuous_video_segment,
+    retry_failed_continuous_video_segment,
     update_continuous_video_segment_prompt,
 )
 
@@ -255,6 +260,126 @@ async def _generate_continuous_video_segments_from_ui(
             safe_close_ui_element(loading_dialog)
 
 
+async def _generate_next_continuous_video_segment_from_ui(
+    project_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+    progress_callback: Any | None = None,
+) -> None:
+    if block_if_missing_api_keys_for_step("continuous_video"):
+        return
+    if loading_dialog is not None:
+        loading_dialog.open()
+    try:
+        async with AsyncSessionLocal() as session:
+            jobs, _segments = await generate_next_continuous_video_segment(
+                session,
+                project_id,
+                retry_failed=True,
+                progress_callback=progress_callback,
+            )
+        ui.notify(
+            "Pr\u00f3ximo segmento enviado para revis\u00e3o." if jobs else "Nada pendente agora.",
+            color="positive" if jobs else "info",
+        )
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            safe_close_ui_element(loading_dialog)
+
+
+async def _approve_continuous_video_segment_from_ui(
+    project_id: UUID,
+    segment_id: UUID,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            segment = await approve_continuous_video_segment(session, project_id, segment_id)
+            await session.commit()
+        if segment is None:
+            ui.notify("Segmento n\u00e3o encontrado.", color="warning")
+            return
+        ui.notify("Segmento aprovado. O pr\u00f3ximo j\u00e1 pode usar este frame final.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+
+
+async def _reject_continuous_video_segment_from_ui(
+    project_id: UUID,
+    segment_id: UUID,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            segment = await reject_continuous_video_segment(session, project_id, segment_id)
+            await session.commit()
+        if segment is None:
+            ui.notify("Segmento n\u00e3o encontrado.", color="warning")
+            return
+        ui.notify("Segmento rejeitado. A continuidade downstream foi bloqueada.", color="warning")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+
+
+async def _retry_continuous_video_segment_from_ui(
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+    progress_callback: Any | None = None,
+) -> None:
+    if block_if_missing_api_keys_for_step("continuous_video"):
+        return
+    if loading_dialog is not None:
+        loading_dialog.open()
+    try:
+        async with AsyncSessionLocal() as session:
+            await retry_failed_continuous_video_segment(
+                session,
+                project_id,
+                segment_id,
+                progress_callback=progress_callback,
+            )
+        ui.notify("Segmento reenviado para revis\u00e3o.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            safe_close_ui_element(loading_dialog)
+
+
+async def _regenerate_rejected_continuous_video_segment_from_ui(
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+    progress_callback: Any | None = None,
+) -> None:
+    if block_if_missing_api_keys_for_step("continuous_video"):
+        return
+    if loading_dialog is not None:
+        loading_dialog.open()
+    try:
+        async with AsyncSessionLocal() as session:
+            await regenerate_rejected_continuous_video_segment(
+                session,
+                project_id,
+                segment_id,
+                progress_callback=progress_callback,
+            )
+        ui.notify("Segmento regenerado para nova revis\u00e3o.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            safe_close_ui_element(loading_dialog)
+
+
 async def _generate_storyboards_from_ui(
     project_id: UUID,
     script_id: UUID,
@@ -421,6 +546,12 @@ def _storyboard_frame_image_url(summary: dict[str, Any], frame: Any) -> str:
 
 def _video_clip_asset_url(clip: Any) -> str:
     asset_id = getattr(clip, "asset_id", None)
+    if asset_id is None:
+        return ""
+    return f"/api/v1/assets/{asset_id}/content"
+
+
+def _asset_content_url(asset_id: Any) -> str:
     if asset_id is None:
         return ""
     return f"/api/v1/assets/{asset_id}/content"
@@ -1197,12 +1328,6 @@ def render_video_area(
         int(getattr(frame, "duration_seconds", 0) or 0) for frame in pending_frames
     )
     continuous_segments = list(summary.get("continuous_video_segments", []))
-    failed_continuous_segments = [
-        segment
-        for segment in continuous_segments
-        if str(getattr(getattr(segment, "status", ""), "value", segment.status)).lower()
-        == "failed"
-    ]
     segment_total_duration = sum(
         int(getattr(segment, "duration_seconds", 0) or 0) for segment in continuous_segments
     )
@@ -1275,52 +1400,41 @@ def render_video_area(
                         f"Custo restante: US$ {continuous_view_model.remaining_cost}"
                     ).classes("text-xs text-[#8d938e]")
                     with ui.row().classes("gap-2 justify-end flex-wrap"):
-                        next_segment_id = continuous_view_model.next_segment_id
                         next_button = ui.button(
-                            "Gerar pr\u00f3ximo segmento",
+                            "Gerar pr\u00f3ximo",
                             icon="skip_next",
-                            on_click=lambda segment_id=next_segment_id: (
-                                _generate_continuous_video_segments_from_ui(
-                                    project_id,
-                                    segment_ids=[segment_id] if segment_id is not None else None,
-                                    retry_failed=bool(failed_continuous_segments),
-                                    max_segments=1,
-                                    loading_dialog=continuous_generation_dialog,
-                                    progress_callback=continuous_progress_callback,
-                                    pause_after_current=pause_after_current,
-                                )
-                            ),
-                        ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-                        all_button = ui.button(
-                            "Gerar todos em sequ\u00eancia",
-                            icon="movie_creation",
-                            on_click=lambda: _generate_continuous_video_segments_from_ui(
+                            on_click=lambda: _generate_next_continuous_video_segment_from_ui(
                                 project_id,
-                                retry_failed=False,
                                 loading_dialog=continuous_generation_dialog,
                                 progress_callback=continuous_progress_callback,
-                                pause_after_current=pause_after_current,
                             ),
                         ).props("unelevated no-caps").classes("acid-bg rounded-xl")
                         continue_button = ui.button(
-                            "Continuar de onde parou",
+                            "Continuar do aprovado",
                             icon="restart_alt",
-                            on_click=lambda: _generate_continuous_video_segments_from_ui(
+                            on_click=lambda: _generate_next_continuous_video_segment_from_ui(
                                 project_id,
-                                retry_failed=True,
                                 loading_dialog=continuous_generation_dialog,
                                 progress_callback=continuous_progress_callback,
-                                pause_after_current=pause_after_current,
                             ),
                         ).props("flat no-caps").classes("rounded-xl")
                         if not continuous_view_model.can_generate_next:
                             next_button.props("disable")
-                        if not continuous_view_model.can_generate_all:
-                            all_button.props("disable")
-                        if not continuous_view_model.can_continue:
+                            next_button.tooltip(
+                                "Gere o planejamento ou aprove o segmento pronto para revisar."
+                            )
+                        if not continuous_view_model.can_generate_next:
                             continue_button.props("disable")
+                            continue_button.tooltip(
+                                "A continuidade s\u00f3 avan\u00e7a ap\u00f3s aprovar o segmento anterior."
+                            )
 
-            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-4"):
+            approved_segment_numbers = {
+                int(getattr(segment, "segment_number", 0) or 0)
+                for segment in continuous_segments
+                if str(getattr(segment, "review_status", "") or "").lower() == "approved"
+            }
+            with ui.grid().classes("w-full grid-cols-1 xl:grid-cols-2 gap-4 mt-4"):
                 for segment in continuous_segments:
                     metadata = (
                         getattr(segment, "metadata_json", {})
@@ -1335,8 +1449,23 @@ def render_video_area(
                     visual_summary = ", ".join(str(name) for name in names if str(name).strip())
                     validation_errors = continuous_video_segment_validation_errors(segment)
                     status_value = str(
-                        getattr(getattr(segment, "status", ""), "value", segment.status)
+                        getattr(segment, "review_status", None)
+                        or getattr(getattr(segment, "status", ""), "value", segment.status)
                     ).lower()
+                    segment_number = int(getattr(segment, "segment_number", 0) or 0)
+                    can_use_previous = segment_number <= 1 or (
+                        segment_number - 1 in approved_segment_numbers
+                    )
+                    generated_video_url = _asset_content_url(
+                        getattr(segment, "generated_video_asset_id", None)
+                        or getattr(segment, "asset_id", None)
+                    )
+                    source_frame_url = _asset_content_url(
+                        getattr(segment, "source_frame_asset_id", None)
+                    )
+                    final_frame_url = _asset_content_url(
+                        getattr(segment, "final_frame_asset_id", None)
+                    )
                     with (
                         ui.dialog().props(BLOCKING_DIALOG_PROPS) as segment_prompt_dialog,
                         ui.card().classes(
@@ -1410,8 +1539,59 @@ def render_video_area(
                                 ).classes("text-xs text-[#8d938e]")
                             ui.badge(status_value or "pendente").classes(
                                 "bg-[#26301f] text-[#eaf878]"
-                                if status_value == "succeeded"
-                                else "blue-status-badge bg-[#243342]"
+                                if status_value in {"approved", "ready_for_review", "succeeded"}
+                                else (
+                                    "bg-[#4b2a2a] text-[#ffd4d4]"
+                                    if status_value in {"failed", "rejected"}
+                                    else "blue-status-badge bg-[#243342]"
+                                )
+                            )
+                        if generated_video_url or source_frame_url or final_frame_url:
+                            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-3 gap-3 mt-3"):
+                                with ui.element("div").classes("min-w-0"):
+                                    ui.label("Fonte").classes("text-xs text-[#8d938e]")
+                                    with ui.element("div").classes(
+                                        "visual-placeholder aspect-video flex items-center justify-center bg-black overflow-hidden"
+                                    ):
+                                        if source_frame_url:
+                                            ui.image(source_frame_url).classes(
+                                                "w-full h-full object-cover"
+                                            )
+                                        else:
+                                            ui.icon("image").classes("text-[#4a504b]")
+                                with ui.element("div").classes("min-w-0"):
+                                    ui.label("V\u00eddeo").classes("text-xs text-[#8d938e]")
+                                    with ui.element("div").classes(
+                                        "visual-placeholder aspect-video flex items-center justify-center bg-black overflow-hidden"
+                                    ):
+                                        if generated_video_url:
+                                            ui.video(generated_video_url, controls=True).classes(
+                                                "w-full h-full"
+                                            )
+                                        else:
+                                            ui.icon("movie").classes("text-[#4a504b]")
+                                with ui.element("div").classes("min-w-0"):
+                                    ui.label("Frame final").classes("text-xs text-[#8d938e]")
+                                    with ui.element("div").classes(
+                                        "visual-placeholder aspect-video flex items-center justify-center bg-black overflow-hidden"
+                                    ):
+                                        if final_frame_url:
+                                            ui.image(final_frame_url).classes(
+                                                "w-full h-full object-cover"
+                                            )
+                                        else:
+                                            ui.icon("filter_center_focus").classes("text-[#4a504b]")
+                        if not can_use_previous:
+                            ui.label(
+                                f"Aprove o segmento {segment_number - 1:02d} antes de gerar este."
+                            ).classes("text-xs text-[#ffddb4] mt-2")
+                        if metadata.get("error"):
+                            ui.label(str(metadata.get("error"))[:240]).classes(
+                                "text-xs text-[#ffb4b4] mt-2"
+                            )
+                        if metadata.get("continuity_source_summary"):
+                            ui.label(str(metadata.get("continuity_source_summary"))[:260]).classes(
+                                "text-xs text-[#8d938e] mt-2"
                             )
                         if validation_errors:
                             ui.label("; ".join(validation_errors)).classes(
@@ -1426,6 +1606,84 @@ def render_video_area(
                             "text-xs text-[#aeb4af] whitespace-pre-wrap mt-3 line-clamp-5"
                         )
                         with ui.row().classes("w-full justify-end mt-2"):
+                            if status_value == "ready_for_review":
+                                ui.button(
+                                    "Aprovar",
+                                    icon="check",
+                                    on_click=lambda segment_id=segment.id: (
+                                        _approve_continuous_video_segment_from_ui(
+                                            project_id,
+                                            segment_id,
+                                        )
+                                    ),
+                                ).props("unelevated dense no-caps").classes("acid-bg rounded-xl")
+                                ui.button(
+                                    "Rejeitar",
+                                    icon="close",
+                                    on_click=lambda segment_id=segment.id: (
+                                        _reject_continuous_video_segment_from_ui(
+                                            project_id,
+                                            segment_id,
+                                        )
+                                    ),
+                                ).props("flat dense no-caps").classes("rounded-xl")
+                            elif status_value == "failed":
+                                retry_button = ui.button(
+                                    "Tentar de novo",
+                                    icon="refresh",
+                                    on_click=lambda segment_id=segment.id: (
+                                        _retry_continuous_video_segment_from_ui(
+                                            project_id,
+                                            segment_id,
+                                            loading_dialog=continuous_generation_dialog,
+                                            progress_callback=continuous_progress_callback,
+                                        )
+                                    ),
+                                ).props("unelevated dense no-caps").classes("acid-bg rounded-xl")
+                                if not can_use_previous:
+                                    retry_button.props("disable")
+                                    retry_button.tooltip(
+                                        "Aprove o segmento anterior antes de tentar novamente."
+                                    )
+                            elif status_value == "rejected":
+                                regenerate_button = ui.button(
+                                    "Regenerar",
+                                    icon="refresh",
+                                    on_click=lambda segment_id=segment.id: (
+                                        _regenerate_rejected_continuous_video_segment_from_ui(
+                                            project_id,
+                                            segment_id,
+                                            loading_dialog=continuous_generation_dialog,
+                                            progress_callback=continuous_progress_callback,
+                                        )
+                                    ),
+                                ).props("unelevated dense no-caps").classes("acid-bg rounded-xl")
+                                if not can_use_previous:
+                                    regenerate_button.props("disable")
+                                    regenerate_button.tooltip(
+                                        "Aprove o segmento anterior antes de regenerar."
+                                    )
+                            elif status_value in {"pending", "retry_scheduled"}:
+                                generate_button = ui.button(
+                                    "Gerar",
+                                    icon="play_arrow",
+                                    on_click=lambda segment_id=segment.id: (
+                                        _generate_continuous_video_segments_from_ui(
+                                            project_id,
+                                            segment_ids=[segment_id],
+                                            retry_failed=False,
+                                            max_segments=1,
+                                            loading_dialog=continuous_generation_dialog,
+                                            progress_callback=continuous_progress_callback,
+                                            pause_after_current=pause_after_current,
+                                        )
+                                    ),
+                                ).props("unelevated dense no-caps").classes("acid-bg rounded-xl")
+                                if not can_use_previous:
+                                    generate_button.props("disable")
+                                    generate_button.tooltip(
+                                        "Aprove o segmento anterior antes de gerar este bloco."
+                                    )
                             ui.button(
                                 "Editar prompt",
                                 icon="edit",
@@ -1838,7 +2096,13 @@ def render_finalization_area(
     loading_dialog_factory: LoadingDialogFactory | None = None,
 ) -> None:
     del loading_dialog_factory
+    continuous_view_model = build_continuous_video_view_model(summary)
     clips = list(summary.get("clips", []))
+    approved_continuous_segments = [
+        segment
+        for segment in summary.get("continuous_video_segments", [])
+        if str(getattr(segment, "review_status", "") or "").lower() == "approved"
+    ]
     timeline = summary.get("timeline")
     timeline_items = list(summary.get("timeline_items", []))
     export = summary.get("export")
@@ -1847,17 +2111,21 @@ def render_finalization_area(
     export_url = _export_asset_url(export) if export is not None else ""
     export_filename = _export_filename(export) if export is not None else "storytelling-final.mp4"
     clip_duration = sum(int(getattr(clip, "duration_seconds", 0) or 0) for clip in clips)
+    continuous_duration = sum(
+        int(getattr(segment, "duration_seconds", 0) or 0)
+        for segment in approved_continuous_segments
+    )
     timeline_duration = int(getattr(timeline, "duration_seconds", 0) or 0)
-    total_duration = timeline_duration or clip_duration
+    total_duration = timeline_duration or continuous_duration or clip_duration
     section_title(
         "Finalização",
         "Monte a timeline final, gere o arquivo único e prepare o projeto para entrega.",
         None,
         None,
     )
-    if not clips:
+    if not clips and not approved_continuous_segments:
         with ui.element("div").classes("entity-card rounded-2xl p-6 w-full"):
-            ui.label("Nenhum clipe pronto para finalizar").classes("brand-type text-2xl font-bold")
+            ui.label("Nenhum video pronto para finalizar").classes("brand-type text-2xl font-bold")
             ui.label("Gere os clipes na etapa de vídeo antes de montar a timeline final.").classes(
                 "text-sm text-[#8d938e] leading-6"
             )
@@ -1878,9 +2146,12 @@ def render_finalization_area(
         with ui.row().classes("w-full items-start justify-between gap-3"):
             with ui.column().classes("gap-1 min-w-0"):
                 ui.label("Timeline e export final").classes("brand-type text-2xl font-bold")
-                ui.label(
-                    "Une os clipes selecionados em ordem de storyboard e cria um único arquivo."
-                ).classes("text-sm text-[#8d938e]")
+                timeline_copy = (
+                    "Une os segmentos continuos aprovados e cria um unico arquivo."
+                    if continuous_view_model.is_continuous_mode
+                    else "Une os clipes selecionados em ordem de storyboard e cria um unico arquivo."
+                )
+                ui.label(timeline_copy).classes("text-sm text-[#8d938e]")
                 ui.label(
                     "Custo de IA previsto: US$ 0.000000. Esta etapa usa processamento local."
                 ).classes("text-xs text-[#8d938e]")
@@ -1904,9 +2175,13 @@ def render_finalization_area(
             "instant-feedback rounded"
         )
         with ui.row().classes("w-full items-center justify-between gap-3 mt-3"):
-            ui.label(
-                f"{len(clips)} clipe(s) selecionado(s) · {total_duration}s · saída 720p"
-            ).classes("text-xs text-[#8d938e]")
+            timeline_stats = (
+                f"{len(approved_continuous_segments)} segmento(s) aprovado(s) · "
+                f"{total_duration}s · saida 720p"
+                if continuous_view_model.is_continuous_mode
+                else f"{len(clips)} clipe(s) selecionado(s) · {total_duration}s · saida 720p"
+            )
+            ui.label(timeline_stats).classes("text-xs text-[#8d938e]")
             with ui.row().classes("gap-2"):
                 if export_url:
                     ui.button(

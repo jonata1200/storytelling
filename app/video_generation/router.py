@@ -7,9 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.costs.service import CostBudgetExceededError
 from app.database.session import get_session
 from app.video_generation.continuous import (
+    approve_continuous_video_segment,
     generate_continuous_video_segments,
+    generate_next_continuous_video_segment,
     list_continuous_video_segments,
     plan_continuous_video_segments,
+    regenerate_rejected_continuous_video_segment,
+    reject_continuous_video_segment,
+    retry_failed_continuous_video_segment,
     update_continuous_video_segment_prompt,
 )
 from app.video_generation.schemas import (
@@ -20,6 +25,7 @@ from app.video_generation.schemas import (
     ContinuousVideoPlanningRead,
     ContinuousVideoPlanRead,
     ContinuousVideoPlanSegmentsRequest,
+    ContinuousVideoReviewRequest,
     ContinuousVideoSegmentPromptUpdate,
     ContinuousVideoSegmentRead,
     GenerateVideoClipsRequest,
@@ -138,6 +144,136 @@ async def patch_continuous_video_segment_prompt(
     if segment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
     return ContinuousVideoSegmentRead.model_validate(segment)
+
+
+@router.post(
+    "/{project_id}/continuous/segments/{segment_id}/approve",
+    response_model=ContinuousVideoSegmentRead,
+)
+async def post_approve_continuous_video_segment(
+    project_id: UUID,
+    segment_id: UUID,
+    payload: ContinuousVideoReviewRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContinuousVideoSegmentRead:
+    try:
+        segment = await approve_continuous_video_segment(
+            session,
+            project_id,
+            segment_id,
+            note=payload.note,
+        )
+        await session.commit()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if segment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
+    return ContinuousVideoSegmentRead.model_validate(segment)
+
+
+@router.post(
+    "/{project_id}/continuous/segments/{segment_id}/reject",
+    response_model=ContinuousVideoSegmentRead,
+)
+async def post_reject_continuous_video_segment(
+    project_id: UUID,
+    segment_id: UUID,
+    payload: ContinuousVideoReviewRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContinuousVideoSegmentRead:
+    try:
+        segment = await reject_continuous_video_segment(
+            session,
+            project_id,
+            segment_id,
+            note=payload.note,
+        )
+        await session.commit()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if segment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
+    return ContinuousVideoSegmentRead.model_validate(segment)
+
+
+@router.post("/{project_id}/continuous/generate-next", response_model=ContinuousVideoGenerationRead)
+async def post_generate_next_continuous_video_segment(
+    project_id: UUID,
+    payload: ContinuousVideoGenerateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContinuousVideoGenerationRead:
+    try:
+        jobs, segments = await generate_next_continuous_video_segment(
+            session,
+            project_id,
+            provider_name=payload.provider,
+            model=payload.model,
+            retry_failed=payload.retry_failed,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return ContinuousVideoGenerationRead(
+        jobs=[GenerationJobRead.model_validate(job) for job in jobs],
+        segments=[ContinuousVideoSegmentRead.model_validate(segment) for segment in segments],
+    )
+
+
+@router.post(
+    "/{project_id}/continuous/segments/{segment_id}/retry",
+    response_model=ContinuousVideoGenerationRead,
+)
+async def post_retry_failed_continuous_video_segment(
+    project_id: UUID,
+    segment_id: UUID,
+    payload: ContinuousVideoGenerateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContinuousVideoGenerationRead:
+    try:
+        jobs, segments = await retry_failed_continuous_video_segment(
+            session,
+            project_id,
+            segment_id,
+            provider_name=payload.provider,
+            model=payload.model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return ContinuousVideoGenerationRead(
+        jobs=[GenerationJobRead.model_validate(job) for job in jobs],
+        segments=[ContinuousVideoSegmentRead.model_validate(segment) for segment in segments],
+    )
+
+
+@router.post(
+    "/{project_id}/continuous/segments/{segment_id}/regenerate",
+    response_model=ContinuousVideoGenerationRead,
+)
+async def post_regenerate_rejected_continuous_video_segment(
+    project_id: UUID,
+    segment_id: UUID,
+    payload: ContinuousVideoGenerateRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContinuousVideoGenerationRead:
+    try:
+        jobs, segments = await regenerate_rejected_continuous_video_segment(
+            session,
+            project_id,
+            segment_id,
+            provider_name=payload.provider,
+            model=payload.model,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return ContinuousVideoGenerationRead(
+        jobs=[GenerationJobRead.model_validate(job) for job in jobs],
+        segments=[ContinuousVideoSegmentRead.model_validate(segment) for segment in segments],
+    )
 
 
 @router.post("/{project_id}/clips/generate", response_model=VideoGenerationBatchRead)

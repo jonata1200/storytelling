@@ -18,8 +18,11 @@ from app.video_generation.continuous import (
     CONTINUOUS_VIDEO_REVIEW_APPROVED,
     CONTINUOUS_VIDEO_REVIEW_PENDING,
     CONTINUOUS_VIDEO_REVIEW_READY,
+    CONTINUOUS_VIDEO_REVIEW_REJECTED,
+    approve_continuous_video_segment,
     build_continuous_video_segment_payloads,
     continuous_video_request_fingerprint,
+    continuous_video_segment_continuity_summary,
     continuous_video_segment_idempotency_key,
     continuous_video_segment_is_approved,
     continuous_video_segment_needs_generation,
@@ -29,6 +32,8 @@ from app.video_generation.continuous import (
     generate_continuous_video_segments,
     generate_next_continuous_video_segment,
     invalidate_continuous_video_downstream_segments,
+    reject_continuous_video_segment,
+    retry_failed_continuous_video_segment,
     update_continuous_video_segment_prompt,
 )
 from app.video_generation.models import (
@@ -967,6 +972,152 @@ async def test_generate_next_continuous_video_segment_waits_for_review_approval(
 
     first.review_status = CONTINUOUS_VIDEO_REVIEW_APPROVED
     assert continuous_video_segment_is_approved(first) is True
+
+
+@pytest.mark.asyncio
+async def test_approve_continuous_video_segment_links_next_continuity_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    first = _planned_segment(project_id, 1)
+    first.status = GenerationJobStatus.SUCCEEDED
+    first.asset_id = uuid4()
+    first.generated_video_asset_id = first.asset_id
+    first.final_frame_asset_id = uuid4()
+    first.review_status = CONTINUOUS_VIDEO_REVIEW_READY
+    first.metadata_json = {
+        **(first.metadata_json or {}),
+        "action": "Clara abre a porta com cuidado.",
+        "final_frame_storage_uri": "storage/final.jpg",
+    }
+    second = _planned_segment(project_id, 2)
+    segments = [first, second]
+
+    class FakeSession:
+        async def get(self, _model: object, item_id: object) -> ContinuousVideoSegment | None:
+            return next((segment for segment in segments if segment.id == item_id), None)
+
+        async def flush(self) -> None:
+            return None
+
+    async def fake_get_by_number(
+        _session: object,
+        _project_id: UUID,
+        number: int,
+    ) -> ContinuousVideoSegment | None:
+        return next((segment for segment in segments if segment.segment_number == number), None)
+
+    monkeypatch.setattr(
+        continuous,
+        "get_continuous_video_segment_by_number",
+        fake_get_by_number,
+    )
+
+    approved = await approve_continuous_video_segment(
+        cast(AsyncSession, FakeSession()),
+        project_id,
+        first.id,
+        note="bom corte",
+    )
+
+    assert approved is first
+    assert first.review_status == CONTINUOUS_VIDEO_REVIEW_APPROVED
+    assert first.metadata_json["review_decision"] == CONTINUOUS_VIDEO_REVIEW_APPROVED
+    assert first.metadata_json["review_previous_status"] == CONTINUOUS_VIDEO_REVIEW_READY
+    assert first.metadata_json["review_note"] == "bom corte"
+    assert continuous_video_segment_continuity_summary(first).startswith("Segmento 01")
+    assert second.source_segment_id == first.id
+    assert second.source_video_asset_id == first.asset_id
+    assert second.source_frame_asset_id == first.final_frame_asset_id
+    assert second.metadata_json["continuity_source_summary"] == first.metadata_json[
+        "continuity_summary"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_reject_continuous_video_segment_blocks_downstream_continuity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    first = _planned_segment(project_id, 1)
+    first.status = GenerationJobStatus.SUCCEEDED
+    first.asset_id = uuid4()
+    first.review_status = CONTINUOUS_VIDEO_REVIEW_READY
+    second = _planned_segment(project_id, 2)
+    second.source_segment_id = first.id
+    second.source_video_asset_id = first.asset_id
+    second.source_frame_asset_id = uuid4()
+    segments = [first, second]
+
+    class FakeSession:
+        async def get(self, _model: object, item_id: object) -> ContinuousVideoSegment | None:
+            return next((segment for segment in segments if segment.id == item_id), None)
+
+        async def flush(self) -> None:
+            return None
+
+    async def fake_list_segments(
+        _session: object,
+        _project_id: UUID,
+    ) -> list[ContinuousVideoSegment]:
+        return segments
+
+    monkeypatch.setattr(continuous, "list_continuous_video_segments", fake_list_segments)
+
+    rejected = await reject_continuous_video_segment(
+        cast(AsyncSession, FakeSession()),
+        project_id,
+        first.id,
+        note="trocar enquadramento",
+    )
+
+    assert rejected is first
+    assert first.review_status == CONTINUOUS_VIDEO_REVIEW_REJECTED
+    assert first.metadata_json["review_decision"] == CONTINUOUS_VIDEO_REVIEW_REJECTED
+    assert first.metadata_json["review_note"] == "trocar enquadramento"
+    assert second.status == GenerationJobStatus.PENDING
+    assert second.source_segment_id is None
+    assert second.source_video_asset_id is None
+    assert second.source_frame_asset_id is None
+
+
+@pytest.mark.asyncio
+async def test_retry_failed_continuous_video_segment_requires_failed_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    failed = _planned_segment(project_id, 1)
+    failed.status = GenerationJobStatus.FAILED
+    calls: list[dict[str, object]] = []
+
+    class FakeSession:
+        async def get(self, _model: object, item_id: object) -> ContinuousVideoSegment | None:
+            return failed if item_id == failed.id else None
+
+    async def fake_generate_segment(
+        _session: object,
+        _project_id: UUID,
+        segment_id: UUID,
+        **kwargs: object,
+    ) -> tuple[list[GenerationJob], list[ContinuousVideoSegment]]:
+        calls.append({"segment_id": segment_id, **kwargs})
+        return [], [failed]
+
+    monkeypatch.setattr(
+        continuous,
+        "generate_continuous_video_segment",
+        fake_generate_segment,
+    )
+
+    _jobs, processed = await retry_failed_continuous_video_segment(
+        cast(AsyncSession, FakeSession()),
+        project_id,
+        failed.id,
+    )
+
+    assert processed == [failed]
+    assert calls[0]["segment_id"] == failed.id
+    assert calls[0]["retry_failed"] is True
 
 
 @pytest.mark.asyncio

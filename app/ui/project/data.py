@@ -115,6 +115,15 @@ def project_counts_statement(project_id: UUID) -> Any:
         _plain("animatics", Animatic),
         _plain("clips", VideoClip),
         _plain("continuous_video_segments", ContinuousVideoSegment),
+        select(
+            literal("continuous_video_approved_segments").label("label"),
+            func.count().label("value"),
+        )
+        .select_from(ContinuousVideoSegment)
+        .where(
+            ContinuousVideoSegment.project_id == project_id,
+            ContinuousVideoSegment.review_status == "approved",
+        ),
         _plain("exports", Export),
         _plain("dubbing_jobs", DubbingJob),
         _plain("qa_issues", ContinuityIssue),
@@ -298,7 +307,19 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             reference.asset_id for reference in visual_refs if reference.asset_id is not None
         }
         frame_asset_ids = {frame.asset_id for frame in frames if frame.asset_id is not None}
-        asset_ids = visual_asset_ids | frame_asset_ids
+        continuous_asset_ids = {
+            asset_id
+            for segment in continuous_video_segments
+            for asset_id in (
+                segment.asset_id,
+                segment.generated_video_asset_id,
+                segment.source_video_asset_id,
+                segment.source_frame_asset_id,
+                segment.final_frame_asset_id,
+            )
+            if asset_id is not None
+        }
+        asset_ids = visual_asset_ids | frame_asset_ids | continuous_asset_ids
         if asset_ids:
             asset_result = await session.execute(
                 select(Asset).where(
