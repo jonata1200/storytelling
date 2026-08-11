@@ -71,6 +71,10 @@ def normalize_continuous_video_status(value: object) -> str:
 def continuous_video_status_label(status: str) -> str:
     return {
         "pending": "Pendente",
+        "generating": "Processando",
+        "ready_for_review": "Revisar",
+        "approved": "Aprovado",
+        "rejected": "Rejeitado",
         "retry_scheduled": "Pendente",
         "running": "Processando",
         "succeeded": "Concluido",
@@ -86,15 +90,19 @@ def continuous_video_progress_state(
     *,
     preexisting_succeeded_ids: set[UUID] | None = None,
 ) -> str:
-    status = normalize_continuous_video_status(getattr(segment, "status", ""))
+    status = normalize_continuous_video_status(
+        getattr(segment, "review_status", None) or getattr(segment, "status", "")
+    )
     segment_id = getattr(segment, "id", None)
-    if status == "succeeded" and segment_id in (preexisting_succeeded_ids or set()):
+    if status in {"approved", "ready_for_review", "succeeded"} and segment_id in (
+        preexisting_succeeded_ids or set()
+    ):
         return "skipped"
-    if status == "succeeded":
+    if status in {"approved", "ready_for_review", "succeeded"}:
         return "done"
-    if status == "failed":
+    if status in {"failed", "rejected"}:
         return "failed"
-    if status == "running":
+    if status in {"running", "generating"}:
         return "processing"
     return "pending"
 
@@ -131,7 +139,9 @@ def _row_from_segment(segment: Any) -> ContinuousVideoSegmentRow:
         if isinstance(getattr(segment, "metadata_json", {}), dict)
         else {}
     )
-    status = normalize_continuous_video_status(getattr(segment, "status", ""))
+    status = normalize_continuous_video_status(
+        getattr(segment, "review_status", None) or getattr(segment, "status", "")
+    )
     state = continuous_video_progress_state(segment)
     return ContinuousVideoSegmentRow(
         id=segment.id,
@@ -163,16 +173,24 @@ def build_continuous_video_view_model(summary: dict[str, Any]) -> ContinuousVide
             key=lambda item: int(getattr(item, "segment_number", 0) or 0),
         )
     ]
-    generated = sum(1 for row in rows if row.status == "succeeded")
-    failed = sum(1 for row in rows if row.status == "failed")
-    running = sum(1 for row in rows if row.status == "running")
+    generated = sum(
+        1 for row in rows if row.status in {"ready_for_review", "approved", "succeeded"}
+    )
+    failed = sum(1 for row in rows if row.status in {"failed", "rejected"})
+    running = sum(1 for row in rows if row.status in {"generating", "running"})
     pending = len(rows) - generated
     next_row = next(
-        (row for row in rows if row.status in {"pending", "retry_scheduled", "failed"}),
+        (
+            row
+            for row in rows
+            if row.status in {"pending", "retry_scheduled", "failed", "rejected"}
+        ),
         None,
     )
     remaining_rows = [
-        row for row in rows if row.status in {"pending", "retry_scheduled", "failed"}
+        row
+        for row in rows
+        if row.status in {"pending", "retry_scheduled", "failed", "rejected"}
     ]
     return ContinuousVideoViewModel(
         workflow_mode=workflow_mode,

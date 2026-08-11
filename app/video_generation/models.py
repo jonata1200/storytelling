@@ -130,9 +130,22 @@ class ContinuousVideoSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "project_id",
             "status",
         ),
+        Index(
+            "ix_continuous_video_segments_project_script_segment",
+            "project_id",
+            "script_id",
+            "segment_number",
+        ),
+        Index(
+            "ix_continuous_video_segments_project_review_status",
+            "project_id",
+            "review_status",
+            "segment_number",
+        ),
     )
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    script_id: Mapped[UUID | None] = mapped_column(ForeignKey("scripts.id"), nullable=True)
     segment_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(220), default="", nullable=False)
     prompt: Mapped[str] = mapped_column(Text, default="", nullable=False)
@@ -140,6 +153,13 @@ class ContinuousVideoSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[GenerationJobStatus] = mapped_column(
         Enum(GenerationJobStatus, name="generation_job_status"),
         default=GenerationJobStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(40),
+        default="pending",
+        server_default="pending",
         nullable=False,
         index=True,
     )
@@ -161,11 +181,23 @@ class ContinuousVideoSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     asset_id: Mapped[UUID | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
+    generated_video_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("assets.id"),
+        nullable=True,
+    )
     source_segment_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("continuous_video_segments.id"),
         nullable=True,
     )
     source_video_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("assets.id"),
+        nullable=True,
+    )
+    source_frame_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("assets.id"),
+        nullable=True,
+    )
+    final_frame_asset_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("assets.id"),
         nullable=True,
     )

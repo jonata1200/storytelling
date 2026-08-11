@@ -114,13 +114,16 @@ class ContinuousVideoPlanRead(BaseModel):
 
 class ContinuousVideoSegmentCreate(BaseModel):
     segment_number: int = Field(ge=1)
+    script_id: UUID | None = None
     title: str = ""
     prompt: str
     duration_seconds: int = Field(default=7, ge=1)
     provider: str = "google_ai"
     model: str = "veo-3.1-fast-generate-preview"
+    review_status: str = "pending"
     source_segment_id: UUID | None = None
     source_video_asset_id: UUID | None = None
+    source_frame_asset_id: UUID | None = None
     request_fingerprint: str | None = None
     idempotency_key: str | None = None
     cost_estimate: Decimal = Field(default=Decimal("0.000000"), ge=0)
@@ -130,17 +133,22 @@ class ContinuousVideoSegmentCreate(BaseModel):
 class ContinuousVideoSegmentRead(BaseModel):
     id: UUID
     project_id: UUID
+    script_id: UUID | None
     segment_number: int
     title: str
     prompt: str
     duration_seconds: int
     status: GenerationJobStatus
+    review_status: str
     provider: str
     model: str
     generation_job_id: UUID | None
     asset_id: UUID | None
+    generated_video_asset_id: UUID | None
     source_segment_id: UUID | None
     source_video_asset_id: UUID | None
+    source_frame_asset_id: UUID | None
+    final_frame_asset_id: UUID | None
     external_operation_id: str | None
     request_fingerprint: str
     idempotency_key: str
