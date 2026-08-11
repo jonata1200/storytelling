@@ -354,6 +354,13 @@ def _job_stale_after_redispatch_window(
     return reference_time - updated_at >= PENDING_JOB_REDISPATCH_AFTER
 
 
+def _is_recoverable_project_step_job(job: GenerationJob) -> bool:
+    payload = getattr(job, "request_payload", None)
+    if not isinstance(payload, dict):
+        return False
+    return normalize_step(str(payload.get("step") or "")) is not None
+
+
 async def list_stale_pending_jobs(session: AsyncSession, limit: int = 50) -> list[GenerationJob]:
     """Retorna jobs PENDING antigos (> PENDING_JOB_REDISPATCH_AFTER) para redespacho."""
     result = await session.execute(
@@ -362,7 +369,11 @@ async def list_stale_pending_jobs(session: AsyncSession, limit: int = 50) -> lis
         .order_by(GenerationJob.updated_at.asc())
         .limit(limit)
     )
-    return [job for job in result.scalars() if pending_job_is_stale(job)]
+    return [
+        job
+        for job in result.scalars()
+        if _is_recoverable_project_step_job(job) and pending_job_is_stale(job)
+    ]
 
 
 async def list_stale_running_jobs(session: AsyncSession, limit: int = 50) -> list[GenerationJob]:
@@ -377,7 +388,11 @@ async def list_stale_running_jobs(session: AsyncSession, limit: int = 50) -> lis
         .order_by(GenerationJob.updated_at.asc())
         .limit(limit)
     )
-    return [job for job in result.scalars() if _job_stale_after_redispatch_window(job)]
+    return [
+        job
+        for job in result.scalars()
+        if _is_recoverable_project_step_job(job) and _job_stale_after_redispatch_window(job)
+    ]
 
 
 def schedule_stale_job_recovery() -> None:

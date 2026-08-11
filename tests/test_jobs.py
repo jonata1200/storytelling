@@ -272,13 +272,21 @@ async def test_list_stale_pending_jobs_returns_only_stale_pending_jobs() -> None
         status=GenerationJobStatus.PENDING,
         updated_at=now - timedelta(minutes=3),
         created_at=now - timedelta(minutes=3),
+        request_payload={"step": "video", "payload": {}},
     )
     fresh = SimpleNamespace(
         status=GenerationJobStatus.PENDING,
         updated_at=now - timedelta(seconds=15),
         created_at=now - timedelta(seconds=15),
+        request_payload={"step": "video", "payload": {}},
     )
-    session = _FakeStaleJobSession([stale, fresh])
+    clip_job = SimpleNamespace(
+        status=GenerationJobStatus.PENDING,
+        updated_at=now - timedelta(minutes=3),
+        created_at=now - timedelta(minutes=3),
+        request_payload={"storyboard_frame_id": str(uuid4())},
+    )
+    session = _FakeStaleJobSession([stale, fresh, clip_job])
 
     result = await jobs_service.list_stale_pending_jobs(cast(AsyncSession, session))
 
@@ -292,13 +300,21 @@ async def test_list_stale_running_jobs_returns_abandoned_running_jobs() -> None:
         status=GenerationJobStatus.RUNNING,
         updated_at=now - timedelta(minutes=3),
         created_at=now - timedelta(minutes=3),
+        request_payload={"step": "video", "payload": {}},
     )
     fresh = SimpleNamespace(
         status=GenerationJobStatus.RUNNING,
         updated_at=now - timedelta(seconds=15),
         created_at=now - timedelta(seconds=15),
+        request_payload={"step": "video", "payload": {}},
     )
-    session = _FakeStaleJobSession([stale, fresh])
+    clip_job = SimpleNamespace(
+        status=GenerationJobStatus.RUNNING,
+        updated_at=now - timedelta(minutes=3),
+        created_at=now - timedelta(minutes=3),
+        request_payload={"storyboard_frame_id": str(uuid4())},
+    )
+    session = _FakeStaleJobSession([stale, fresh, clip_job])
 
     result = await jobs_service.list_stale_running_jobs(cast(AsyncSession, session))
 

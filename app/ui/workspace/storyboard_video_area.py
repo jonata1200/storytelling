@@ -433,20 +433,6 @@ def _video_row_badge_classes(state: str) -> str:
     return "bg-[#30362b] text-[#d8dbd8]"
 
 
-def _render_video_progress_button(dialog: Any) -> Any:
-    button = ui.element("button").classes(
-        "inline-flex h-10 items-center gap-2 rounded-full border border-[#cde3f7] "
-        "bg-[#f8fbff] px-4 text-sm font-semibold text-[#2f7fc3] shadow-sm transition "
-        "hover:border-[#8fc5f4] hover:bg-[#edf6ff] hover:text-[#1f6fad]"
-    )
-    button.props('type="button"')
-    button.on("click", dialog.open)
-    with button:
-        ui.element("span").classes("h-2 w-2 rounded-full bg-[#5aa3f0]")
-        ui.label("Progresso dos clipes").classes("leading-none")
-    return button
-
-
 def _render_video_progress_dialog(
     view_model: Any,
     video_jobs: list[Any],
@@ -491,9 +477,9 @@ def _render_video_progress_dialog(
             active_rows = [
                 row for row in rows if row["state"] in {"running", "queued", "failed", "pending"}
             ]
-            ui.label("O que está acontecendo").classes("font-semibold")
+            ui.label("Planos da geração").classes("font-semibold")
             with ui.element("div").classes("w-full max-h-[42vh] overflow-y-auto pr-1"):
-                for row in active_rows[:24]:
+                for row in active_rows:
                     frame = row["frame"]
                     job = row["job"]
                     state = str(row["state"])
@@ -512,13 +498,8 @@ def _render_video_progress_dialog(
                                     f"{int(getattr(frame, 'duration_seconds', 0) or 0)}s"
                                 ).classes("text-xs text-[#8d938e]")
                         ui.badge(str(row["label"])).classes(_video_row_badge_classes(state))
-            if active_count:
-                ui.label("Esta janela será atualizada enquanto houver clipes em andamento.").classes(
-                    "text-xs text-[#8d938e]"
-                )
     if auto_open:
         ui.timer(0.2, dialog.open, once=True)
-        ui.timer(8.0, lambda: ui.navigate.reload(), once=True)
     return dialog
 
 
@@ -1019,7 +1000,6 @@ def render_video_area(
     total_frames = view_model.total_frames
     active_video_job_count = view_model.queued_video_jobs + view_model.running_video_jobs
     video_jobs = list(summary.get("video_jobs", []))
-    video_progress_dialog = None
     video_progress_rows = _video_frame_progress_rows(view_model, video_jobs)
     active_video_frame_ids = {
         row["frame"].id for row in video_progress_rows if row["state"] in {"running", "queued"}
@@ -1037,52 +1017,15 @@ def render_video_area(
             now="Agora: enviando os clipes aprovados para a fila de video.",
         ),
     )
-    video_missing = max(total_frames - generated_count, 0)
     pending_duration = sum(
         int(getattr(frame, "duration_seconds", 0) or 0) for frame in pending_frames
     )
-    if total_frames:
-        video_detail = "Saída padronizada em 720p."
-        if active_video_job_count:
-            video_detail = (
-                f"{active_video_job_count} job(s) em fila/processando. Aguarde a conclusão."
-            )
-        if view_model.failed_video_jobs:
-            video_detail = (
-                f"{video_detail} {view_model.failed_video_jobs} job(s) com falha recente."
-            )
-        _render_generation_progress_summary(
-            "Clipes de vídeo",
-            generated_count,
-            total_frames,
-            video_missing,
-            f"{video_detail} {_video_cost_text(len(pending_frames), pending_duration)}",
-            badge="720p" if not active_video_job_count else "processando",
-        )
-        video_progress_dialog = _render_video_progress_dialog(
+    if total_frames and (has_active_jobs or view_model.failed_video_jobs):
+        _render_video_progress_dialog(
             view_model,
             video_jobs,
-            auto_open=has_active_jobs,
+            auto_open=has_active_jobs or bool(view_model.failed_video_jobs),
         )
-        if has_active_jobs:
-            with ui.element("div").classes(
-                "w-full border border-blue-800 bg-blue-950/40 rounded-xl px-4 py-3 mb-3"
-            ):
-                with ui.column().classes("w-full items-start gap-2"):
-                    with ui.row().classes("items-center gap-3"):
-                        ui.spinner(size="sm").classes("text-blue-400")
-                        ui.label(f"{active_video_job_count} clipe(s) em andamento.").classes(
-                            "text-sm text-blue-200"
-                        )
-                    if not pending_frames:
-                        _render_video_progress_button(video_progress_dialog)
-        elif (
-            video_progress_dialog is not None
-            and not pending_frames
-            and (video_missing or view_model.failed_video_jobs)
-        ):
-            with ui.row().classes("w-full justify-start mb-3"):
-                _render_video_progress_button(video_progress_dialog)
 
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
@@ -1138,13 +1081,7 @@ def render_video_area(
                     icon="check_circle",
                     on_click=confirm_video_prompts,
                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-        with ui.row().classes("w-full items-center justify-between gap-3"):
-            if video_progress_dialog is not None and (
-                has_active_jobs or video_missing or view_model.failed_video_jobs
-            ):
-                _render_video_progress_button(video_progress_dialog)
-            else:
-                ui.element("div")
+        with ui.row().classes("w-full items-center justify-end gap-3"):
             review_button = ui.button(
                 f"Revisar e gerar ({len(pending_frames)})",
                 icon="movie_creation",

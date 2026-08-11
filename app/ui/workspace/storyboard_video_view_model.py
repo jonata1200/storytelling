@@ -39,12 +39,25 @@ def build_storyboard_video_view_model(summary: dict[str, Any]) -> StoryboardVide
         if isinstance(getattr(job, "request_payload", None), dict)
         and getattr(job, "request_payload", {}).get("storyboard_frame_id")
     ]
+    project_step_video_jobs = [
+        job
+        for job in video_jobs
+        if isinstance(getattr(job, "request_payload", None), dict)
+        and getattr(job, "request_payload", {}).get("step") == "video"
+    ]
     counted_jobs = clip_video_jobs or video_jobs
     status_counts: dict[str, int] = {}
     for job in counted_jobs:
         raw_status = getattr(job, "status", "")
         status = str(getattr(raw_status, "value", raw_status)).lower()
         status_counts[status] = status_counts.get(status, 0) + 1
+    active_clip_jobs = status_counts.get("pending", 0) + status_counts.get("running", 0)
+    if clip_video_jobs and not active_clip_jobs:
+        for job in project_step_video_jobs:
+            raw_status = getattr(job, "status", "")
+            status = str(getattr(raw_status, "value", raw_status)).lower()
+            if status in {"pending", "running"}:
+                status_counts[status] = status_counts.get(status, 0) + 1
     return StoryboardVideoViewModel(
         sorted_frames=sorted_frames,
         pending_frames=pending_frames,
