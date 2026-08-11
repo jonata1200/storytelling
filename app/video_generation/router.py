@@ -6,9 +6,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.costs.service import CostBudgetExceededError
 from app.database.session import get_session
+from app.video_generation.continuous import (
+    list_continuous_video_segments,
+    plan_continuous_video_segments,
+    update_continuous_video_segment_prompt,
+)
 from app.video_generation.schemas import (
     ClipReviewCreate,
     ClipReviewRead,
+    ContinuousVideoPlanningRead,
+    ContinuousVideoPlanRead,
+    ContinuousVideoPlanSegmentsRequest,
+    ContinuousVideoSegmentPromptUpdate,
+    ContinuousVideoSegmentRead,
     GenerateVideoClipsRequest,
     GenerationJobRead,
     VideoClipRead,
@@ -39,6 +49,66 @@ async def post_video_cost_estimate(
         payload.unit_cost_per_second,
     )
     return VideoCostEstimateRead(**estimate)
+
+
+@router.post("/{project_id}/continuous/plan", response_model=ContinuousVideoPlanningRead)
+async def post_plan_continuous_video_segments(
+    project_id: UUID,
+    payload: ContinuousVideoPlanSegmentsRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContinuousVideoPlanningRead:
+    try:
+        plan, segments, validation_errors = await plan_continuous_video_segments(
+            session,
+            project_id,
+            segment_duration_seconds=payload.segment_duration_seconds,
+            provider=payload.provider,
+            model=payload.model,
+            replace_existing=payload.replace_existing,
+        )
+        await session.commit()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return ContinuousVideoPlanningRead(
+        plan=ContinuousVideoPlanRead.model_validate(plan),
+        segments=[ContinuousVideoSegmentRead.model_validate(segment) for segment in segments],
+        validation_errors=validation_errors,
+    )
+
+
+@router.get("/{project_id}/continuous/segments", response_model=list[ContinuousVideoSegmentRead])
+async def get_continuous_video_segments(
+    project_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[ContinuousVideoSegmentRead]:
+    segments = await list_continuous_video_segments(session, project_id)
+    return [ContinuousVideoSegmentRead.model_validate(segment) for segment in segments]
+
+
+@router.patch(
+    "/{project_id}/continuous/segments/{segment_id}",
+    response_model=ContinuousVideoSegmentRead,
+)
+async def patch_continuous_video_segment_prompt(
+    project_id: UUID,
+    segment_id: UUID,
+    payload: ContinuousVideoSegmentPromptUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContinuousVideoSegmentRead:
+    try:
+        segment = await update_continuous_video_segment_prompt(
+            session,
+            project_id,
+            segment_id,
+            prompt=payload.prompt,
+            title=payload.title,
+        )
+        await session.commit()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if segment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
+    return ContinuousVideoSegmentRead.model_validate(segment)
 
 
 @router.post("/{project_id}/clips/generate", response_model=VideoGenerationBatchRead)

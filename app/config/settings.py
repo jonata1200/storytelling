@@ -24,7 +24,10 @@ GOOGLE_AI_IMAGE_MODELS = (
 
 GOOGLE_AI_VIDEO_MODELS = (
     "veo-3.1-generate-preview",
+    "veo-3.1-fast-generate-preview",
 )
+GOOGLE_AI_STANDARD_VIDEO_MODEL = "veo-3.1-generate-preview"
+GOOGLE_AI_FAST_VIDEO_MODEL = "veo-3.1-fast-generate-preview"
 
 ELEVENLABS_SPEECH_MODELS = (
     "eleven_multilingual_v2",
@@ -60,8 +63,8 @@ class Settings(BaseSettings):
     google_ai_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     google_ai_image_model: str = GOOGLE_AI_IMAGE_MODELS[0]
     google_ai_image_size: str = "1K"
-    google_ai_video_model: str = GOOGLE_AI_VIDEO_MODELS[0]
-    google_ai_video_fast_model: str = GOOGLE_AI_VIDEO_MODELS[0]
+    google_ai_video_model: str = GOOGLE_AI_STANDARD_VIDEO_MODEL
+    google_ai_video_fast_model: str = GOOGLE_AI_FAST_VIDEO_MODEL
     google_ai_video_default_duration_seconds: int = 8
     google_ai_video_poll_interval_seconds: int = 10
     google_ai_video_poll_timeout_seconds: int = 900
@@ -99,7 +102,7 @@ class Settings(BaseSettings):
         self.google_ai_api_key = normalize_api_key(self.google_ai_api_key, "google_ai")
         self.google_ai_image_model = normalize_google_ai_image_model(self.google_ai_image_model)
         self.google_ai_video_model = normalize_google_ai_video_model(self.google_ai_video_model)
-        self.google_ai_video_fast_model = normalize_google_ai_video_model(
+        self.google_ai_video_fast_model = normalize_google_ai_video_fast_model(
             self.google_ai_video_fast_model
         )
         self.elevenlabs_api_key = normalize_api_key(self.elevenlabs_api_key, "elevenlabs")
@@ -148,7 +151,14 @@ def normalize_google_ai_video_model(value: object) -> str:
     model = str(value or "").strip()
     if model in GOOGLE_AI_VIDEO_MODELS:
         return model
-    return GOOGLE_AI_VIDEO_MODELS[0]
+    return GOOGLE_AI_STANDARD_VIDEO_MODEL
+
+
+def normalize_google_ai_video_fast_model(value: object) -> str:
+    model = str(value or "").strip()
+    if model in GOOGLE_AI_VIDEO_MODELS:
+        return model
+    return GOOGLE_AI_FAST_VIDEO_MODEL
 
 
 @lru_cache

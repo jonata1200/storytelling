@@ -2,7 +2,18 @@
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, Numeric, String, Text, text
+from sqlalchemy import (
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -80,3 +91,79 @@ class ClipReview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Enum(ClipReviewDecision, name="clip_review_decision"), nullable=False
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ContinuousVideoPlan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "continuous_video_plans"
+    __table_args__ = (
+        UniqueConstraint("project_id", name="uq_continuous_video_plans_project_id"),
+    )
+
+    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    mode: Mapped[str] = mapped_column(String(80), default="continuous_fast", nullable=False)
+    target_duration_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    segment_duration_seconds: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
+    segment_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="draft", nullable=False, index=True)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+
+class ContinuousVideoSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "continuous_video_segments"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "segment_number",
+            name="uq_continuous_video_segments_project_segment",
+        ),
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_continuous_video_segments_idempotency_key",
+        ),
+        Index(
+            "ix_continuous_video_segments_project_status",
+            "project_id",
+            "status",
+        ),
+    )
+
+    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    segment_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(220), default="", nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
+    status: Mapped[GenerationJobStatus] = mapped_column(
+        Enum(GenerationJobStatus, name="generation_job_status"),
+        default=GenerationJobStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(120), default="google_ai", nullable=False)
+    model: Mapped[str] = mapped_column(
+        String(160),
+        default="veo-3.1-fast-generate-preview",
+        nullable=False,
+    )
+    generation_job_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("generation_jobs.id"),
+        nullable=True,
+        index=True,
+    )
+    asset_id: Mapped[UUID | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
+    source_segment_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("continuous_video_segments.id"),
+        nullable=True,
+    )
+    source_video_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("assets.id"),
+        nullable=True,
+    )
+    external_operation_id: Mapped[str | None] = mapped_column(
+        String(220),
+        nullable=True,
+        index=True,
+    )
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    cost_estimate: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=0, nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)

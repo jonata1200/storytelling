@@ -138,7 +138,6 @@ async def test_google_ai_video_provider_submits_polls_and_saves_inline_video(
     assert captured["submit_body"]["parameters"] == {
         "aspectRatio": "16:9",
         "durationSeconds": "8",
-        "numberOfVideos": 1,
         "personGeneration": "allow_adult",
         "resolution": "720p",
         "seed": 123,

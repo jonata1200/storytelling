@@ -23,7 +23,7 @@ from app.quality.models import ContinuityIssue, QualityCheck
 from app.storyboards.models import Animatic, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.service import list_storyboard_prompt_previews
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
-from app.video_generation.models import GenerationJob, VideoClip
+from app.video_generation.models import ContinuousVideoSegment, GenerationJob, VideoClip
 from app.video_generation.planning import _video_effective_prompt, _video_prompt_override
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 
@@ -192,6 +192,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
         latest_timeline = await latest(session, Timeline, project_id) if load_video else None
         execution_summary = await project_execution_summary(session, project_id)
         video_jobs = []
+        continuous_video_segments = []
         if load_video:
             video_jobs_result = await session.execute(
                 select(GenerationJob)
@@ -203,6 +204,12 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
                 .limit(20)
             )
             video_jobs = list(video_jobs_result.scalars())
+            continuous_video_segments_result = await session.execute(
+                select(ContinuousVideoSegment)
+                .where(ContinuousVideoSegment.project_id == project_id)
+                .order_by(ContinuousVideoSegment.segment_number)
+            )
+            continuous_video_segments = list(continuous_video_segments_result.scalars())
         timeline_items: list[TimelineItem] = []
         if latest_timeline is not None:
             item_result = await session.execute(
@@ -330,6 +337,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             "frames": frames,
             "storyboard_prompt_previews": storyboard_prompt_previews,
             "video_prompt_previews": video_prompt_previews,
+            "continuous_video_segments": continuous_video_segments,
             "video_jobs": video_jobs,
             "clips": clips,
             "timeline": latest_timeline,

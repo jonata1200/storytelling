@@ -43,6 +43,11 @@ from app.ui.workspace.storyboard_video_view_model import (
     build_storyboard_video_view_model,
 )
 from app.ui.workspace.video_handlers import save_video_prompt_from_ui as _save_video_prompt_from_ui
+from app.video_generation.continuous import (
+    continuous_video_segment_validation_errors,
+    plan_continuous_video_segments,
+    update_continuous_video_segment_prompt,
+)
 
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
 LoadingDialogFactory = Callable[[str, Any], Any]
@@ -122,6 +127,59 @@ async def _save_storyboard_prompt_from_ui(
         shot_id,
         prompt,
     )
+
+
+async def _plan_continuous_video_segments_from_ui(
+    project_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+) -> None:
+    if loading_dialog is not None:
+        loading_dialog.open()
+    try:
+        async with AsyncSessionLocal() as session:
+            _plan, segments, validation_errors = await plan_continuous_video_segments(
+                session,
+                project_id,
+                replace_existing=True,
+            )
+            await session.commit()
+        if validation_errors:
+            ui.notify("Segmentos criados com pontos para revisar.", color="warning")
+        else:
+            ui.notify(f"{len(segments)} segmento(s) planejado(s).", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+    finally:
+        if loading_dialog is not None:
+            safe_close_ui_element(loading_dialog)
+
+
+async def _save_continuous_video_segment_prompt_from_ui(
+    project_id: UUID,
+    segment_id: UUID,
+    prompt: str,
+    *,
+    title: str | None = None,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            segment = await update_continuous_video_segment_prompt(
+                session,
+                project_id,
+                segment_id,
+                prompt=prompt,
+                title=title,
+            )
+            await session.commit()
+        if segment is None:
+            ui.notify("Segmento n\u00e3o encontrado.", color="warning")
+            return
+        ui.notify("Prompt salvo.", color="positive")
+        ui.navigate.reload()
+    except Exception as exc:
+        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
 
 async def _generate_storyboards_from_ui(
@@ -466,6 +524,21 @@ def _video_clip_cost_text(
         model=model,
     )
     return f"Custo deste vídeo: US$ {estimate.estimated} ({duration_seconds}s)."
+
+
+def _continuous_video_segment_cost_text(
+    duration_seconds: int,
+    model: str = "veo-3.1-fast-generate-preview",
+) -> str:
+    if duration_seconds <= 0:
+        return "Custo deste segmento: indispon\u00edvel."
+    estimate = estimate_operation_cost(
+        "text_to_video",
+        Decimal(duration_seconds),
+        provider="google_ai",
+        model=model,
+    )
+    return f"Custo deste segmento: US$ {estimate.estimated} ({duration_seconds}s)."
 
 
 def _dubbing_cost_text(duration_seconds: int) -> str:
@@ -934,6 +1007,158 @@ def render_video_area(
     pending_duration = sum(
         int(getattr(frame, "duration_seconds", 0) or 0) for frame in pending_frames
     )
+    continuous_segments = list(summary.get("continuous_video_segments", []))
+    segment_total_duration = sum(
+        int(getattr(segment, "duration_seconds", 0) or 0) for segment in continuous_segments
+    )
+    segment_plan_dialog, _segment_plan_progress_callback = generation_progress_dialog(
+        "Planejando segmentos",
+        1,
+        "etapa",
+        "Agora: separando o roteiro em blocos de v\u00eddeo cont\u00ednuo.",
+    )
+
+    with ui.element("div").classes("w-full mt-2"):
+        with ui.row().classes("w-full items-end justify-between gap-3"):
+            with ui.column().classes("gap-0 min-w-0"):
+                ui.label("V\u00eddeo cont\u00ednuo").classes("brand-type text-2xl font-bold")
+                ui.label(
+                    "Revise os blocos antes de iniciar a gera\u00e7\u00e3o com Veo Fast."
+                ).classes("text-sm text-[#8d938e]")
+            ui.button(
+                "Replanejar" if continuous_segments else "Planejar segmentos",
+                icon="view_timeline",
+                on_click=lambda: _plan_continuous_video_segments_from_ui(
+                    project_id,
+                    loading_dialog=segment_plan_dialog,
+                ),
+            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+
+        if continuous_segments:
+            with ui.row().classes("w-full flex-wrap gap-2 mt-3"):
+                ui.badge(f"{len(continuous_segments)} segmento(s)").classes(
+                    "blue-status-badge bg-[#243342]"
+                )
+                ui.badge(f"{segment_total_duration}s").classes("bg-[#26301f] text-[#eaf878]")
+                ui.badge("Veo 3.1 Fast").classes("bg-[#30362b] text-[#eaf878]")
+
+            with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-4"):
+                for segment in continuous_segments:
+                    metadata = (
+                        getattr(segment, "metadata_json", {})
+                        if isinstance(getattr(segment, "metadata_json", {}), dict)
+                        else {}
+                    )
+                    names = [
+                        *list(metadata.get("characters") or []),
+                        *list(metadata.get("locations") or []),
+                        *list(metadata.get("props") or []),
+                    ]
+                    visual_summary = ", ".join(str(name) for name in names if str(name).strip())
+                    validation_errors = continuous_video_segment_validation_errors(segment)
+                    status_value = str(
+                        getattr(getattr(segment, "status", ""), "value", segment.status)
+                    ).lower()
+                    with (
+                        ui.dialog().props(BLOCKING_DIALOG_PROPS) as segment_prompt_dialog,
+                        ui.card().classes(
+                            "entity-card rounded-2xl p-6 w-[min(820px,94vw)] "
+                            "h-[min(760px,86vh)] flex flex-col overflow-hidden"
+                        ),
+                    ):
+                        with ui.column().classes("w-full gap-1 shrink-0"):
+                            ui.label(getattr(segment, "title", "") or "Segmento").classes(
+                                "brand-type text-2xl font-bold"
+                            )
+                            ui.label(
+                                f"{int(getattr(segment, 'duration_seconds', 0) or 0)}s "
+                                f"\u00b7 {getattr(segment, 'model', '')}"
+                            ).classes("text-sm text-[#8d938e]")
+                        with ui.column().classes("w-full flex-1 min-h-0 mt-3"):
+                            segment_prompt_input = (
+                                ui.textarea(
+                                    "Prompt de v\u00eddeo",
+                                    value=str(getattr(segment, "prompt", "") or ""),
+                                )
+                                .props("outlined")
+                                .classes("storyboard-prompt-textarea w-full flex-1 min-h-0")
+                            )
+
+                        async def save_segment_prompt(
+                            segment_id: UUID = segment.id,
+                            prompt_input: Any = segment_prompt_input,
+                            dialog: Any = segment_prompt_dialog,
+                        ) -> None:
+                            new_prompt = str(prompt_input.value or "").strip()
+                            if not new_prompt:
+                                ui.notify("Informe um prompt antes de salvar.", color="warning")
+                                return
+                            safe_close_ui_element(dialog)
+                            await _save_continuous_video_segment_prompt_from_ui(
+                                project_id,
+                                segment_id,
+                                new_prompt,
+                            )
+
+                        with ui.row().classes(
+                            "w-full justify-end gap-2 mt-4 pt-3 border-t border-[#343934] shrink-0"
+                        ):
+                            ui.button(
+                                "Cancelar",
+                                on_click=segment_prompt_dialog.close,
+                            ).props("flat no-caps")
+                            ui.button(
+                                "Salvar",
+                                icon="save",
+                                on_click=save_segment_prompt,
+                            ).props("unelevated no-caps").classes("acid-bg rounded-xl")
+
+                    with (
+                        ui.element("div")
+                        .classes("entity-card rounded-2xl p-4 cursor-pointer")
+                        .on("click", segment_prompt_dialog.open)
+                    ):
+                        with ui.row().classes("w-full items-start justify-between gap-3"):
+                            with ui.column().classes("gap-1 min-w-0"):
+                                ui.label(
+                                    getattr(segment, "title", "")
+                                    or f"Segmento {segment.segment_number:02d}"
+                                ).classes("font-semibold")
+                                ui.label(
+                                    _continuous_video_segment_cost_text(
+                                        int(getattr(segment, "duration_seconds", 0) or 0),
+                                        str(getattr(segment, "model", "") or ""),
+                                    )
+                                ).classes("text-xs text-[#8d938e]")
+                            ui.badge(status_value or "pendente").classes(
+                                "bg-[#26301f] text-[#eaf878]"
+                                if status_value == "succeeded"
+                                else "blue-status-badge bg-[#243342]"
+                            )
+                        if validation_errors:
+                            ui.label("; ".join(validation_errors)).classes(
+                                "text-xs text-[#ffb4b4] mt-2"
+                            )
+                        ui.label(str(metadata.get("action") or "")).classes(
+                            "text-sm text-[#d1d4d1] line-clamp-3 mt-3"
+                        )
+                        if visual_summary:
+                            ui.label(visual_summary).classes("text-xs text-[#8d938e] mt-2")
+                        ui.label(str(getattr(segment, "prompt", "") or "")).classes(
+                            "text-xs text-[#aeb4af] whitespace-pre-wrap mt-3 line-clamp-5"
+                        )
+                        with ui.row().classes("w-full justify-end mt-2"):
+                            ui.button(
+                                "Editar prompt",
+                                icon="edit",
+                                on_click=segment_prompt_dialog.open,
+                            ).props("flat dense no-caps").classes("text-[#d8dbd8] rounded-xl")
+        else:
+            with ui.element("div").classes("entity-card rounded-2xl p-6 w-full mt-4"):
+                ui.label("Nenhum segmento planejado").classes("brand-type text-xl font-bold")
+                ui.label(
+                    "Crie os blocos a partir do roteiro e da Biblioteca Visual antes de gerar."
+                ).classes("text-sm text-[#8d938e] leading-6")
 
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
