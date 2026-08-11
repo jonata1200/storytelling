@@ -433,6 +433,20 @@ def _video_row_badge_classes(state: str) -> str:
     return "bg-[#30362b] text-[#d8dbd8]"
 
 
+def _render_video_progress_button(dialog: Any) -> Any:
+    button = ui.element("button").classes(
+        "inline-flex h-10 items-center gap-2 rounded-full border border-[#cde3f7] "
+        "bg-[#f8fbff] px-4 text-sm font-semibold text-[#2f7fc3] shadow-sm transition "
+        "hover:border-[#8fc5f4] hover:bg-[#edf6ff] hover:text-[#1f6fad]"
+    )
+    button.props('type="button"')
+    button.on("click", dialog.open)
+    with button:
+        ui.element("span").classes("h-2 w-2 rounded-full bg-[#5aa3f0]")
+        ui.label("Progresso dos clipes").classes("leading-none")
+    return button
+
+
 def _render_video_progress_dialog(
     view_model: Any,
     video_jobs: list[Any],
@@ -1054,24 +1068,21 @@ def render_video_area(
             with ui.element("div").classes(
                 "w-full border border-blue-800 bg-blue-950/40 rounded-xl px-4 py-3 mb-3"
             ):
-                with ui.row().classes("w-full items-center justify-between gap-3"):
+                with ui.column().classes("w-full items-start gap-2"):
                     with ui.row().classes("items-center gap-3"):
                         ui.spinner(size="sm").classes("text-blue-400")
                         ui.label(f"{active_video_job_count} clipe(s) em andamento.").classes(
                             "text-sm text-blue-200"
                         )
-                    ui.button(
-                        "Ver progresso",
-                        icon="monitoring",
-                        on_click=video_progress_dialog.open,
-                    ).props("flat dense no-caps").classes("text-blue-100 rounded-xl")
-        elif video_progress_dialog is not None and (video_missing or view_model.failed_video_jobs):
-            with ui.row().classes("w-full justify-end mb-3"):
-                ui.button(
-                    "Ver progresso",
-                    icon="monitoring",
-                    on_click=video_progress_dialog.open,
-                ).props("flat dense no-caps").classes("text-[#d8dbd8] rounded-xl")
+                    if not pending_frames:
+                        _render_video_progress_button(video_progress_dialog)
+        elif (
+            video_progress_dialog is not None
+            and not pending_frames
+            and (video_missing or view_model.failed_video_jobs)
+        ):
+            with ui.row().classes("w-full justify-start mb-3"):
+                _render_video_progress_button(video_progress_dialog)
 
     if pending_frames:
         pending_frame_ids = [frame.id for frame in pending_frames]
@@ -1127,7 +1138,13 @@ def render_video_area(
                     icon="check_circle",
                     on_click=confirm_video_prompts,
                 ).props("unelevated no-caps").classes("acid-bg rounded-xl")
-        with ui.row().classes("w-full items-center justify-end gap-3"):
+        with ui.row().classes("w-full items-center justify-between gap-3"):
+            if video_progress_dialog is not None and (
+                has_active_jobs or video_missing or view_model.failed_video_jobs
+            ):
+                _render_video_progress_button(video_progress_dialog)
+            else:
+                ui.element("div")
             review_button = ui.button(
                 f"Revisar e gerar ({len(pending_frames)})",
                 icon="movie_creation",

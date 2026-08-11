@@ -995,6 +995,7 @@ async def test_video_pipeline_enqueues_pending_frames_after_prompt_approval(
     assert captured_payload["frame_ids"] == [str(frame_id) for frame_id in frame_ids]
     assert isinstance(captured_payload["request_id"], str)
     assert captured_payload["request_id"]
+    assert captured_payload["retry_failed"] is True
     assert calls == ["storyboard", "frames", "pending", "enqueue"]
 
 

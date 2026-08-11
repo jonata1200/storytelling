@@ -194,6 +194,7 @@ async def _run_video(
         project_id,
         frame_ids=frame_ids,
         include_canonical_references=bool(payload.get("include_canonical_references")),
+        retry_failed=bool(payload.get("retry_failed")),
     )
     if result is None:
         raise ValueError("não encontrei o projeto para gerar os clipes")

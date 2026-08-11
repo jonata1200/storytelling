@@ -470,6 +470,7 @@ async def _ensure_video_pipeline(
             "frame_ids": [str(frame_id) for frame_id in target_frame_ids],
             "include_canonical_references": False,
             "request_id": uuid4().hex,
+            "retry_failed": True,
         },
     )
     return ProjectChatResult(

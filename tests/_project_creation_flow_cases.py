@@ -1066,6 +1066,53 @@ def test_video_view_model_counts_clip_jobs_before_parent_job() -> None:
 
 
 @pytest.mark.asyncio
+async def test_approve_video_prompts_retries_failed_clip_jobs_from_ui(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    frame_id = uuid4()
+    captured_payload: dict[str, Any] = {}
+    notifications: list[str] = []
+    reloads: list[bool] = []
+
+    class FakeSessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    async def fake_enqueue(
+        _session: object,
+        requested_project_id: UUID,
+        step: str,
+        payload: dict[str, Any],
+    ) -> object:
+        assert requested_project_id == project_id
+        assert step == "video"
+        captured_payload.update(payload)
+        return SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(visual_actions, "block_if_missing_api_keys_for_step", lambda _step: False)
+    monkeypatch.setattr(visual_actions, "AsyncSessionLocal", lambda: FakeSessionContext())
+    monkeypatch.setattr(visual_actions, "enqueue_project_step", fake_enqueue)
+    monkeypatch.setattr(
+        visual_actions.ui,
+        "notify",
+        lambda message, **_kwargs: notifications.append(message),
+    )
+    monkeypatch.setattr(visual_actions.ui.navigate, "reload", lambda: reloads.append(True))
+
+    await visual_actions._approve_video_prompts_from_ui(project_id, [frame_id])
+
+    assert captured_payload["frame_ids"] == [str(frame_id)]
+    assert captured_payload["retry_failed"] is True
+    assert captured_payload["request_id"]
+    assert notifications == ["1 clipe(s) enviados para geração. Acompanhe o progresso."]
+    assert reloads == [True]
+
+
+@pytest.mark.asyncio
 async def test_approve_all_storyboard_prompts_generates_frames_when_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

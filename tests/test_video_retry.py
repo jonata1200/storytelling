@@ -242,6 +242,7 @@ def test_video_job_needs_generation_is_false_for_reusable_jobs() -> None:
     assert _video_job_needs_generation(cast(Any, succeeded)) is False
     assert _video_job_needs_generation(cast(Any, running)) is False
     assert _video_job_needs_generation(cast(Any, exhausted)) is False
+    assert _video_job_needs_generation(cast(Any, exhausted), retry_failed=True) is True
 
 
 def test_video_job_needs_generation_is_true_without_existing_job() -> None:

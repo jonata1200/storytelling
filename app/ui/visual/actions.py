@@ -530,6 +530,7 @@ async def _approve_video_prompts_from_ui(
                     "frame_ids": [str(frame_id) for frame_id in frame_ids],
                     "include_canonical_references": include_canonical_references,
                     "request_id": uuid4().hex,
+                    "retry_failed": True,
                 },
             )
         await _emit_visual_batch_progress(

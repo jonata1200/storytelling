@@ -494,7 +494,11 @@ def _is_transient_video_error(error: str) -> bool:
     return any(marker in normalized for marker in transient_markers)
 
 
-def _video_job_needs_generation(existing_job: GenerationJob | None) -> bool:
+def _video_job_needs_generation(
+    existing_job: GenerationJob | None,
+    *,
+    retry_failed: bool = False,
+) -> bool:
     """True quando um job de vídeo deve ser gerado (e contabilizado no orçamento).
 
     Um job existente só dispensa nova geração quando não é retentável: concluído, em
@@ -505,6 +509,8 @@ def _video_job_needs_generation(existing_job: GenerationJob | None) -> bool:
         return True
     if existing_job.status != GenerationJobStatus.FAILED:
         return False
+    if retry_failed:
+        return True
     return existing_job.attempts < existing_job.max_attempts
 
 
@@ -516,6 +522,7 @@ async def _generate_video_clips_concurrent(
     provider_name: str = "auto",
     model: str | None = None,
     include_canonical_references: bool = False,
+    retry_failed: bool = False,
 ) -> tuple[list[GenerationJob], list[VideoClip]] | None:
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
@@ -574,7 +581,10 @@ async def _generate_video_clips_concurrent(
                 select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
             )
             existing_job = existing.scalars().first()
-            if existing_job is not None and not _video_job_needs_generation(existing_job):
+            if existing_job is not None and not _video_job_needs_generation(
+                existing_job,
+                retry_failed=retry_failed,
+            ):
                 jobs.append(existing_job)
                 existing_clip = await session.execute(
                     select(VideoClip).where(VideoClip.generation_job_id == existing_job.id)
@@ -630,6 +640,10 @@ async def _generate_video_clips_concurrent(
         variant_index = plan.variant_index
         if plan.existing_job is not None:
             existing_job = plan.existing_job
+            existing_job.max_attempts = max(
+                existing_job.max_attempts,
+                existing_job.attempts + 1,
+            )
             existing_job.status = GenerationJobStatus.RUNNING
             existing_job.progress = 5
             existing_job.attempts += 1
@@ -818,6 +832,7 @@ async def generate_video_clips(
     provider_name: str = "auto",
     model: str | None = None,
     include_canonical_references: bool = False,
+    retry_failed: bool = False,
 ) -> tuple[list[GenerationJob], list[VideoClip]] | None:
     return await _generate_video_clips_concurrent(
         session,
@@ -827,6 +842,7 @@ async def generate_video_clips(
         provider_name=provider_name,
         model=model,
         include_canonical_references=include_canonical_references,
+        retry_failed=retry_failed,
     )
 
 async def list_video_clips(session: AsyncSession, project_id: UUID) -> list[VideoClip]:
