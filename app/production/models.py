@@ -30,7 +30,7 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     video_model: Mapped[str] = mapped_column(
         String(160),
-        default="veo-3.1-lite-generate-preview",
+        default="veo-3.1-generate-preview",
         nullable=False,
     )
     audio_mode: Mapped[str] = mapped_column(

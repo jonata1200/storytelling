@@ -64,7 +64,7 @@ def test_provider_policy_supports_google_ai_media_provider() -> None:
         google_ai_api_key="google-secret",
         google_ai_base_url="https://generativelanguage.googleapis.com/v1beta",
         google_ai_image_model="gemini-3.1-flash-lite-image",
-        google_ai_video_model="veo-3.1-lite-generate-preview",
+        google_ai_video_model="veo-3.1-generate-preview",
     )
 
     assert "google_ai" in SUPPORTED_AI_PROVIDERS
@@ -75,7 +75,7 @@ def test_provider_policy_supports_google_ai_media_provider() -> None:
         "https://generativelanguage.googleapis.com/v1beta"
     )
     assert provider_model(settings, "google_ai", "image") == "gemini-3.1-flash-lite-image"
-    assert provider_model(settings, "google_ai", "video") == "veo-3.1-lite-generate-preview"
+    assert provider_model(settings, "google_ai", "video") == "veo-3.1-generate-preview"
     assert provider_requires_api_key(settings, "google_ai") is True
 
 

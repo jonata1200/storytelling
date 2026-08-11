@@ -48,7 +48,7 @@ class _BytesResponse:
 def _http_error(status: int, payload: str) -> urllib.error.HTTPError:
     return urllib.error.HTTPError(
         url="https://generativelanguage.googleapis.com/v1beta/models/"
-        "veo-3.1-lite-generate-preview:predictLongRunning",
+        "veo-3.1-generate-preview:predictLongRunning",
         code=status,
         msg="Error",
         hdrs=Message(),
@@ -118,14 +118,14 @@ async def test_google_ai_video_provider_submits_polls_and_saves_inline_video(
             resolution="1920x1080",
             source_image_uri=source.as_posix(),
             output_dir=tmp_path / "videos",
-            model="veo-3.1-lite-generate-preview",
+            model="veo-3.1-generate-preview",
             seed=123,
         )
     )
 
     assert captured["submit_url"] == (
         "https://generativelanguage.googleapis.com/v1beta/"
-        "models/veo-3.1-lite-generate-preview:predictLongRunning"
+        "models/veo-3.1-generate-preview:predictLongRunning"
     )
     assert captured["submit_headers"]["X-goog-api-key"] == "google-secret"
     assert captured["submit_body"]["instances"][0]["prompt"] == "Animar a cena"
@@ -136,6 +136,7 @@ async def test_google_ai_video_provider_submits_polls_and_saves_inline_video(
         "aspectRatio": "16:9",
         "durationSeconds": "8",
         "numberOfVideos": 1,
+        "personGeneration": "allow_adult",
         "resolution": "720p",
         "seed": 123,
     }
@@ -194,7 +195,7 @@ async def test_google_ai_video_provider_downloads_uri_payload(
             prompt="Cena ampla",
             duration_seconds=4,
             output_dir=tmp_path,
-            model="veo-3.1-lite-generate-preview",
+            model="veo-3.1-generate-preview",
         )
     )
 
@@ -210,7 +211,7 @@ def test_google_ai_video_request_coerces_legacy_resolution_to_720p() -> None:
             duration_seconds=4,
             resolution="1920x1080",
             output_dir=Path("videos"),
-            model="veo-3.1-lite-generate-preview",
+            model="veo-3.1-generate-preview",
         ),
         image_to_video=False,
     )
@@ -235,7 +236,7 @@ def test_google_ai_video_request_keeps_720p_image_input_duration(
             resolution="720p",
             source_image_uri=source.as_posix(),
             output_dir=tmp_path,
-            model="veo-3.1-lite-generate-preview",
+            model="veo-3.1-generate-preview",
         ),
         image_to_video=True,
     )
@@ -263,7 +264,7 @@ def test_google_ai_video_request_sends_reference_images(
             source_image_uri=source.as_posix(),
             reference_uris=[reference.as_posix()],
             output_dir=tmp_path,
-            model="veo-3.1-lite-generate-preview",
+            model="veo-3.1-generate-preview",
         ),
         image_to_video=True,
     )
@@ -272,6 +273,7 @@ def test_google_ai_video_request_sends_reference_images(
     assert len(reference_images) == 1
     assert reference_images[0]["referenceType"] == "asset"
     assert body["parameters"]["durationSeconds"] == "8"
+    assert body["parameters"]["personGeneration"] == "allow_adult"
 
 
 @pytest.mark.asyncio
@@ -329,7 +331,7 @@ async def test_google_ai_video_provider_retries_transient_submit_error(
             prompt="Cena ampla",
             duration_seconds=4,
             output_dir=tmp_path,
-            model="veo-3.1-lite-generate-preview",
+            model="veo-3.1-generate-preview",
         )
     )
 
@@ -391,7 +393,7 @@ async def test_google_ai_video_provider_retries_transient_poll_error(
             prompt="Cena ampla",
             duration_seconds=4,
             output_dir=tmp_path,
-            model="veo-3.1-lite-generate-preview",
+            model="veo-3.1-generate-preview",
         )
     )
 
@@ -453,7 +455,7 @@ async def test_google_ai_video_provider_retries_transient_download_error(
             prompt="Cena ampla",
             duration_seconds=4,
             output_dir=tmp_path,
-            model="veo-3.1-lite-generate-preview",
+            model="veo-3.1-generate-preview",
         )
     )
 

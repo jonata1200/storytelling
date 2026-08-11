@@ -89,14 +89,14 @@ def test_google_ai_cost_policy_uses_model_overrides() -> None:
         "image_to_video",
         Decimal("8"),
         provider="google_ai",
-        model="veo-3.1-lite-generate-preview",
+        model="veo-3.1-generate-preview",
     )
 
     assert image.unit == "image"
     assert image.unit_cost == Decimal("0.033600")
     assert video.unit == "second"
-    assert video.unit_cost == Decimal("0.050000")
-    assert video.estimated == Decimal("0.400000")
+    assert video.unit_cost == Decimal("0.400000")
+    assert video.estimated == Decimal("3.200000")
 
 
 def test_operation_cost_text_formats_estimates_and_zero_quantity() -> None:

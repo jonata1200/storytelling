@@ -109,6 +109,26 @@ async def test_enqueue_project_step_does_not_dispatch_exhausted_failed_job(
 
 
 @pytest.mark.asyncio
+async def test_run_video_raises_when_all_clip_jobs_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    failed_job = SimpleNamespace(
+        status=GenerationJobStatus.FAILED,
+        error="Google AI Videos submit HTTP 400: Unsupported video generation request",
+    )
+
+    async def fake_generate_video_clips(*args: Any, **kwargs: Any) -> tuple[list[Any], list[Any]]:
+        _ = (args, kwargs)
+        return [failed_job], []
+
+    monkeypatch.setattr(jobs_runner, "generate_video_clips", fake_generate_video_clips)
+
+    with pytest.raises(RuntimeError, match="Unsupported video generation request"):
+        await jobs_runner._run_video(cast(AsyncSession, object()), project_id, {})
+
+
+@pytest.mark.asyncio
 async def test_script_job_only_generates_script(monkeypatch: pytest.MonkeyPatch) -> None:
     project_id = uuid4()
     idea_id = uuid4()

@@ -199,6 +199,15 @@ async def _run_video(
     if result is None:
         raise ValueError("não encontrei o projeto para gerar os clipes")
     jobs, clips = result
+    failed_jobs = [
+        job
+        for job in jobs
+        if str(getattr(getattr(job, "status", ""), "value", getattr(job, "status", ""))).lower()
+        == "failed"
+    ]
+    if jobs and not clips and failed_jobs:
+        first_error = str(getattr(failed_jobs[0], "error", "") or "").strip()
+        raise RuntimeError(first_error or "nenhum clipe de vídeo foi gerado")
     return {"job_count": len(jobs), "clip_count": len(clips)}
 
 

@@ -1,14 +1,11 @@
-import pytest
 
 from app.config.provider_policy import effective_provider_for_channel
 from app.config.settings import (
-    DEFAULT_APP_SECRET_KEY,
     ELEVENLABS_SPEECH_MODELS,
     GOOGLE_AI_IMAGE_MODELS,
     GOOGLE_AI_VIDEO_MODELS,
     OLLAMA_CLOUD_TEXT_MODELS,
     Settings,
-    get_settings,
 )
 
 
@@ -21,7 +18,7 @@ def test_settings_defaults_to_new_ai_providers() -> None:
     assert effective_provider_for_channel(settings, "video") == "google_ai"
     assert settings.google_ai_base_url == "https://generativelanguage.googleapis.com/v1beta"
     assert settings.google_ai_image_model == "gemini-3.1-flash-lite-image"
-    assert settings.google_ai_video_model == "veo-3.1-lite-generate-preview"
+    assert settings.google_ai_video_model == "veo-3.1-generate-preview"
     assert settings.speech_provider == "elevenlabs"
     assert settings.elevenlabs_speech_model == "eleven_multilingual_v2"
     assert settings.dubbing_provider == "elevenlabs"
@@ -51,11 +48,11 @@ def test_settings_replaces_removed_ollama_cloud_model_with_default() -> None:
 def test_settings_replaces_removed_google_ai_models_with_defaults() -> None:
     settings = Settings(
         google_ai_image_model="gemini-3.1-flash-image",
-        google_ai_video_model="veo-3.1-generate-preview",
+        google_ai_video_model="veo-3.0-generate-preview",
     )
 
     assert settings.google_ai_image_model == "gemini-3.1-flash-lite-image"
-    assert settings.google_ai_video_model == "veo-3.1-lite-generate-preview"
+    assert settings.google_ai_video_model == "veo-3.1-generate-preview"
 
 
 def test_settings_reads_google_ai_media_provider() -> None:
@@ -65,7 +62,7 @@ def test_settings_reads_google_ai_media_provider() -> None:
         google_ai_api_key="  google-secret  ",
         google_ai_image_model="gemini-3.1-flash-lite-image",
         google_ai_image_size="2K",
-        google_ai_video_model="veo-3.1-lite-generate-preview",
+        google_ai_video_model="veo-3.1-generate-preview",
         google_ai_video_default_duration_seconds=6,
         google_ai_video_poll_interval_seconds=2,
         google_ai_video_poll_timeout_seconds=30,
@@ -76,7 +73,7 @@ def test_settings_reads_google_ai_media_provider() -> None:
     assert settings.google_ai_api_key == "google-secret"
     assert settings.google_ai_image_model == "gemini-3.1-flash-lite-image"
     assert settings.google_ai_image_size == "2K"
-    assert settings.google_ai_video_model == "veo-3.1-lite-generate-preview"
+    assert settings.google_ai_video_model == "veo-3.1-generate-preview"
     assert settings.google_ai_video_default_duration_seconds == 6
     assert settings.google_ai_video_poll_interval_seconds == 2
     assert settings.google_ai_video_poll_timeout_seconds == 30
@@ -121,7 +118,7 @@ def test_new_text_model_lists_have_initial_defaults() -> None:
         "gemini-3.1-flash-lite-image",
     )
     assert GOOGLE_AI_VIDEO_MODELS == (
-        "veo-3.1-lite-generate-preview",
+        "veo-3.1-generate-preview",
     )
     assert ELEVENLABS_SPEECH_MODELS == (
         "eleven_multilingual_v2",
@@ -138,6 +135,4 @@ def test_settings_rejects_unknown_ai_provider() -> None:
         assert "AI_PROVIDER" in str(exc)
     else:
         raise AssertionError("Settings should reject unsupported providers")
-
-
 

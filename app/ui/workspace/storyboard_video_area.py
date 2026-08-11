@@ -448,14 +448,14 @@ def _video_cost_text(frame_count: int, duration_seconds: int) -> str:
         "image_to_video",
         Decimal(duration_seconds),
         provider="google_ai",
-        model="veo-3.1-lite-generate-preview",
+        model="veo-3.1-generate-preview",
     )
     return f"Estimativa: US$ {estimate.estimated} para {frame_count} clipe(s)."
 
 
 def _video_clip_cost_text(
     duration_seconds: int,
-    model: str = "veo-3.1-lite-generate-preview",
+    model: str = "veo-3.1-generate-preview",
 ) -> str:
     if duration_seconds <= 0:
         return "Custo deste vídeo: indisponível."

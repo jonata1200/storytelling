@@ -65,7 +65,7 @@ async def test_google_ai_video_smoke(
             "GOOGLE_AI_BASE_URL",
             "https://generativelanguage.googleapis.com/v1beta",
         ),
-        google_ai_video_model=os.getenv("GOOGLE_AI_VIDEO_MODEL", "veo-3.1-lite-generate-preview"),
+        google_ai_video_model=os.getenv("GOOGLE_AI_VIDEO_MODEL", "veo-3.1-generate-preview"),
         google_ai_video_poll_interval_seconds=10,
         google_ai_video_poll_timeout_seconds=900,
         local_storage_path=tmp_path,

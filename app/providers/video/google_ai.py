@@ -155,10 +155,11 @@ class GoogleAIVideoProvider:
             if inline_image is not None:
                 instance["image"] = inline_image
         references = []
-        for reference in request.reference_uris[: self.capabilities.max_reference_images]:
-            inline_image = self._inline_image(reference)
-            if inline_image is not None:
-                references.append({"image": inline_image, "referenceType": "asset"})
+        if self._model_supports_reference_images(request.model):
+            for reference in request.reference_uris[: self.capabilities.max_reference_images]:
+                inline_image = self._inline_image(reference)
+                if inline_image is not None:
+                    references.append({"image": inline_image, "referenceType": "asset"})
         if references:
             instance["referenceImages"] = references
         resolution = self._resolution(request.resolution or request.size)
@@ -168,16 +169,24 @@ class GoogleAIVideoProvider:
             has_image_input=image_to_video and bool(request.source_image_uri),
             has_references=bool(references),
         )
+        parameters: dict[str, Any] = {
+            "aspectRatio": self._normalized_aspect_ratio(request.aspect_ratio),
+            "durationSeconds": str(duration_seconds),
+            "numberOfVideos": 1,
+            "resolution": resolution,
+            **({"seed": request.seed} if request.seed is not None else {}),
+        }
+        if image_to_video or references:
+            parameters["personGeneration"] = "allow_adult"
         return {
             "instances": [instance],
-            "parameters": {
-                "aspectRatio": self._normalized_aspect_ratio(request.aspect_ratio),
-                "durationSeconds": str(duration_seconds),
-                "numberOfVideos": 1,
-                "resolution": resolution,
-                **({"seed": request.seed} if request.seed is not None else {}),
-            },
+            "parameters": parameters,
         }
+
+    @staticmethod
+    def _model_supports_reference_images(model: str) -> bool:
+        normalized = str(model or "").strip().casefold()
+        return normalized == "veo-3.1-generate-preview"
 
     @staticmethod
     def _inline_image(uri: str) -> dict[str, Any] | None:

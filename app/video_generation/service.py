@@ -1,4 +1,5 @@
-﻿import asyncio
+import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -69,6 +70,7 @@ from app.workflows.state_machine import advance_project_status
 MOCK_VIDEO_UNIT_COST_PER_SECOND = Decimal("0.000000")
 VIDEO_GENERATION_MIN_CONCURRENCY = 1
 VIDEO_GENERATION_MAX_CONCURRENCY = 4
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -246,6 +248,12 @@ def _storyboard_canonical_reference_uris(frame: StoryboardFrame) -> list[str]:
     return references[:3]
 
 
+def _video_model_supports_reference_images(provider: str, model: str) -> bool:
+    if provider != "google_ai":
+        return False
+    return GoogleAIVideoProvider._model_supports_reference_images(model)
+
+
 async def _emit_video_job_event(
     session: AsyncSession,
     *,
@@ -303,6 +311,16 @@ async def _mark_video_job_failed(
         item.job.attempts,
     )
     item.job.completed_at = datetime.now(UTC)
+    logger.warning(
+        "video_generation_failed project_id=%s frame_number=%s job_id=%s "
+        "provider=%s model=%s reason=%s",
+        project_id,
+        item.frame.frame_number,
+        item.job.id,
+        provider,
+        model,
+        reason,
+    )
     await _emit_video_job_event(
         session,
         project_id=project_id,
@@ -499,7 +517,7 @@ def _stale_running_video_job(job: GenerationJob, *, after_minutes: int = 10) -> 
         return False
     updated_at = job.updated_at or job.started_at or job.created_at
     if updated_at is None:
-        return True
+        return False
     if updated_at.tzinfo is None:
         updated_at = updated_at.replace(tzinfo=UTC)
     return datetime.now(UTC) - updated_at >= timedelta(minutes=after_minutes)
@@ -568,6 +586,7 @@ async def _generate_video_clips_concurrent(
         reference_uris = (
             _storyboard_canonical_reference_uris(frame)
             if include_canonical_references
+            and _video_model_supports_reference_images(resolved_provider, resolved_model)
             else []
         )
         shot, scene = shot_context.get(frame.shot_id, (None, None))
@@ -779,6 +798,16 @@ async def _generate_video_clips_concurrent(
                 item.job.external_job_id = external_job_id
                 item.job.progress = 25
                 item.job.response_payload = {"submit_response": {"task_id": external_job_id}}
+                logger.info(
+                    "video_generation_submitted project_id=%s frame_number=%s job_id=%s "
+                    "provider=%s model=%s external_job_id=%s",
+                    project_id,
+                    item.frame.frame_number,
+                    item.job.id,
+                    resolved_provider,
+                    resolved_model,
+                    external_job_id,
+                )
                 await _emit_video_job_event(
                     session,
                     project_id=project_id,

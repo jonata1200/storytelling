@@ -30,7 +30,7 @@ def _stale_running_video_job(job: Any, *, after_minutes: int = 10) -> bool:
         or getattr(job, "created_at", None)
     )
     if updated_at is None:
-        return True
+        return False
     if getattr(updated_at, "tzinfo", None) is None:
         updated_at = updated_at.replace(tzinfo=UTC)
     return datetime.now(UTC) - updated_at >= timedelta(minutes=after_minutes)

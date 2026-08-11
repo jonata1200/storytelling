@@ -86,7 +86,7 @@ def test_resolve_image_model_uses_global_default_for_legacy_project_default() ->
 def test_resolve_video_model_uses_global_default_for_legacy_project_default() -> None:
     assert (
         resolve_video_model("bytedance/seedance-2.0-fast", "veo-3.1-generate-preview")
-        == "veo-3.1-lite-generate-preview"
+        == "veo-3.1-generate-preview"
     )
 
 

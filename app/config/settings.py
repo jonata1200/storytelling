@@ -23,7 +23,7 @@ GOOGLE_AI_IMAGE_MODELS = (
 )
 
 GOOGLE_AI_VIDEO_MODELS = (
-    "veo-3.1-lite-generate-preview",
+    "veo-3.1-generate-preview",
 )
 
 ELEVENLABS_SPEECH_MODELS = (
