@@ -207,6 +207,51 @@ async def test_google_ai_video_provider_downloads_uri_payload(
     assert result.metadata["delivery"] == "uri"
 
 
+@pytest.mark.asyncio
+async def test_google_ai_video_provider_explains_filtered_empty_operation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def fake_urlopen(request: Any, timeout: int) -> _JsonResponse:
+        if request.get_method() == "POST":
+            return _JsonResponse({"name": "operations/video-filtered"})
+        return _JsonResponse(
+            {
+                "done": True,
+                "response": {
+                    "generateVideoResponse": {
+                        "generatedSamples": [],
+                        "raiMediaFilteredCount": 1,
+                        "raiMediaFilteredReasons": ["SAFETY"],
+                    }
+                },
+            }
+        )
+
+    settings = Settings(
+        google_ai_api_key="google-secret",
+        google_ai_video_poll_interval_seconds=1,
+        google_ai_video_poll_timeout_seconds=5,
+    )
+    monkeypatch.setattr("app.providers.video.google_ai.get_settings", lambda: settings)
+    monkeypatch.setattr("app.providers.video.google_ai.urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await GoogleAIVideoProvider().generate_from_text(
+            VideoRequest(
+                prompt="Cena ampla",
+                duration_seconds=8,
+                output_dir=tmp_path,
+                model="veo-3.1-fast-generate-preview",
+            )
+        )
+
+    message = str(exc_info.value)
+    assert "concluiu a operacao sem video" in message
+    assert "raiMediaFilteredCount" in message
+    assert "SAFETY" in message
+
+
 def test_google_ai_video_request_coerces_legacy_resolution_to_720p() -> None:
     body = GoogleAIVideoProvider()._request_body(
         VideoRequest(

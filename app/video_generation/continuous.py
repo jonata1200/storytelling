@@ -417,14 +417,23 @@ def _chunk_text_fallback(content: str, segment_count: int) -> list[str]:
         while len(chunks) < segment_count:
             chunks.append(chunks[-1])
         return chunks[:segment_count]
-    words = _script_action_text_for_chunks(paragraphs).split()
-    if not words:
+    action_units = _script_action_units_for_chunks(paragraphs)
+    if not action_units:
         return ["acao visual principal do roteiro"] * segment_count
-    chunk_size = max(1, math.ceil(len(words) / segment_count))
-    chunks = [
-        " ".join(words[index : index + chunk_size]).strip()
-        for index in range(0, len(words), chunk_size)
-    ]
+    total_words = sum(len(unit.split()) for unit in action_units)
+    target_words = max(1, math.ceil(total_words / segment_count))
+    chunks: list[str] = []
+    current_units: list[str] = []
+    current_words = 0
+    for unit in action_units:
+        if current_units and current_words >= target_words and len(chunks) < segment_count - 1:
+            chunks.append(" ".join(current_units).strip())
+            current_units = []
+            current_words = 0
+        current_units.append(unit)
+        current_words += len(unit.split())
+    if current_units:
+        chunks.append(" ".join(current_units).strip())
     while len(chunks) < segment_count:
         chunks.append(chunks[-1])
     return chunks[:segment_count]
@@ -449,6 +458,10 @@ def _script_visual_paragraphs(content: str) -> list[str]:
 
 
 def _script_action_text_for_chunks(paragraphs: list[str]) -> str:
+    return " ".join(_script_action_units_for_chunks(paragraphs))
+
+
+def _script_action_units_for_chunks(paragraphs: list[str]) -> list[str]:
     action_lines: list[str] = []
     for paragraph in paragraphs:
         for line in paragraph.splitlines():
@@ -460,7 +473,9 @@ def _script_action_text_for_chunks(paragraphs: list[str]) -> str:
             ):
                 continue
             action_lines.append(clean_line)
-    return " ".join(action_lines)
+    action_text = " ".join(action_lines)
+    units = [unit.strip() for unit in re.split(r"(?<=[.!?])\s+", action_text) if unit.strip()]
+    return units or ([action_text.strip()] if action_text.strip() else [])
 
 
 def _is_transition_marker(text: str) -> bool:

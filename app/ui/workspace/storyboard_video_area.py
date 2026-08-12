@@ -902,34 +902,12 @@ def _continuous_state_label(state: str) -> str:
     }.get(state, "Pendente")
 
 
-def _continuous_state_icon(state: str) -> str:
-    return {
-        "pending": "radio_button_unchecked",
-        "sending": "upload",
-        "processing": "sync",
-        "done": "check_circle",
-        "failed": "error_outline",
-        "skipped": "done_all",
-    }.get(state, "radio_button_unchecked")
-
-
-def _continuous_state_classes(state: str) -> str:
-    if state in {"done", "skipped"}:
-        return "bg-[#26301f] text-[#eaf878]"
-    if state == "failed":
-        return "bg-[#4b2a2a] text-[#ffd4d4]"
-    if state in {"sending", "processing"}:
-        return "blue-status-badge bg-[#243342]"
-    return "bg-[#30362b] text-[#d8dbd8]"
-
-
 def _continuous_queue_progress_dialog(
     view_model: ContinuousVideoViewModel,
 ) -> tuple[Any, Any, Any]:
     pause_requested = {"value": False}
-    row_widgets: dict[str, dict[str, Any]] = {}
     with ui.dialog().props(BLOCKING_DIALOG_PROPS) as progress_dialog, ui.card().classes(
-        "entity-card rounded-2xl p-6 w-[min(640px,94vw)] max-h-[86vh] flex flex-col"
+        "p-6 w-[min(520px,92vw)]"
     ):
         with ui.row().classes("w-full items-start justify-between gap-3 shrink-0"):
             with ui.column().classes("gap-1 min-w-0"):
@@ -940,9 +918,15 @@ def _continuous_queue_progress_dialog(
                     f"{view_model.generated_segments}/{view_model.total_segments} "
                     "segmento(s) concluido(s)."
                 ).classes("text-sm text-[#8d938e]")
-            pause_button = ui.button("Pausar apos atual", icon="pause").props(
-                "flat no-caps"
+            pause_button = ui.button(icon="pause", on_click=None).props(
+                "flat round dense"
             ).classes("rounded-xl")
+            pause_button.tooltip("Pausar apos o segmento atual")
+        with ui.row().classes("items-center gap-3 mt-5"):
+            ui.spinner(size="sm").classes("acid")
+            active_label = ui.label("Preparando envio ao provider.").classes(
+                "text-sm text-[#d8dbd8]"
+            )
         progress_bar = ui.linear_progress(
             value=progress_ratio(view_model.generated_segments, view_model.total_segments),
             show_value=False,
@@ -950,26 +934,12 @@ def _continuous_queue_progress_dialog(
         remaining_label = ui.label(
             f"Custo restante: US$ {view_model.remaining_cost}"
         ).classes("text-xs text-[#8d938e] mt-2")
-        with ui.column().classes("w-full gap-2 overflow-y-auto mt-4 pr-1"):
-            for row in view_model.rows:
-                with ui.row().classes(
-                    "w-full items-center justify-between gap-3 border-b border-[#343934] py-2"
-                ):
-                    with ui.row().classes("items-center gap-2 min-w-0"):
-                        icon = ui.icon(_continuous_state_icon(row.progress_state)).classes(
-                            "text-lg"
-                        )
-                        title = ui.label(row.title).classes("text-sm font-semibold truncate")
-                    badge = ui.badge(_continuous_state_label(row.progress_state)).classes(
-                        _continuous_state_classes(row.progress_state)
-                    )
-                    row_widgets[str(row.id)] = {"icon": icon, "badge": badge, "title": title}
 
         def request_pause() -> None:
             pause_requested["value"] = True
             pause_button.props("disable")
             pause_button.update()
-            remaining_label.set_text("A fila sera pausada apos o segmento atual.")
+            active_label.set_text("A fila sera pausada apos o segmento atual.")
 
         pause_button.on("click", request_pause)
 
@@ -980,14 +950,23 @@ def _continuous_queue_progress_dialog(
             summary_label.set_text(f"{completed}/{total} segmento(s) concluido(s).")
             progress_bar.set_value(progress_ratio(completed, max(total, 1)))
             remaining_label.set_text(f"Custo restante: US$ {remaining_cost}")
-            for row in rows:
-                widgets = row_widgets.get(str(row.get("segment_id")))
-                if not widgets:
-                    continue
-                state = str(row.get("state") or "pending")
-                widgets["icon"].props(f"name={_continuous_state_icon(state)}")
-                widgets["badge"].set_text(_continuous_state_label(state))
-                widgets["badge"].classes(replace=_continuous_state_classes(state))
+            active_row = next(
+                (
+                    row
+                    for row in rows
+                    if str(row.get("state") or "") in {"sending", "processing"}
+                ),
+                None,
+            )
+            if active_row:
+                active_label.set_text(
+                    f"{active_row.get('title') or 'Segmento'}: "
+                    f"{_continuous_state_label(str(active_row.get('state') or 'processing'))}."
+                )
+            elif completed >= total and total:
+                active_label.set_text("Gera\u00e7\u00e3o conclu\u00edda.")
+            else:
+                active_label.set_text("Aguardando pr\u00f3ximo segmento.")
         except RuntimeError as exc:
             if not is_deleted_ui_context_error(exc):
                 raise

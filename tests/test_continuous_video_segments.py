@@ -500,6 +500,34 @@ def test_continuous_video_planner_does_not_create_marker_only_first_segment() ->
     assert "FADE OUT" not in payloads[-1].metadata_json["source_text"]
 
 
+def test_continuous_video_planner_preserves_sentence_boundaries_in_fallback_chunks() -> None:
+    project_id = uuid4()
+    script = _script(
+        project_id,
+        duration=40,
+        content=(
+            "O apartamento e vasto, minimalista e imerso em um silencio opressor. "
+            "Arthur, 65 anos, veste um fraque impecavel, mas seus olhos carregam "
+            "a exaustao de quem luta contra o invisivel. "
+            "Ele segura uma batuta com forca diante do vazio. "
+            "Arthur comeca a reger uma orquestra ausente."
+        ),
+    )
+
+    payloads = build_continuous_video_segment_payloads(
+        project_id=project_id,
+        script=script,
+        scenes=[],
+        shots_by_scene={},
+        visual_context=_visual_context(project_id),
+        segment_duration_seconds=8,
+    )
+
+    assert payloads[0].metadata_json["source_text"].endswith("opressor.")
+    assert "exaustao de." not in payloads[0].prompt
+    assert "quem luta contra o invisivel." in payloads[1].metadata_json["source_text"]
+
+
 def test_continuous_video_planner_groups_medium_script_shots() -> None:
     project_id = uuid4()
     script = _script(

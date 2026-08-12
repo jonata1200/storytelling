@@ -222,7 +222,6 @@ async def save_script_from_ui(
     notify_user = notify or (lambda message, color: ui.notify(message, color=color))
     reload_user = reload_page or ui.navigate.reload
     try:
-        notify_user("Salvando roteiro...", "info")
         clean_title = title.strip()
         clean_content = content.strip()
         if not clean_title:
@@ -266,10 +265,6 @@ async def save_script_from_ui(
                 )
             )
             await session.commit()
-        notify_user(
-            "Roteiro salvo. Cenas e planos serão recriados na etapa Storyboard.",
-            "info",
-        )
         await _refresh_script_derivatives_from_ui(project_id, script_id)
         notify_user("Roteiro salvo.", "positive")
         if notify is None:

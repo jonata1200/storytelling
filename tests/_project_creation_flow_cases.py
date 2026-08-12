@@ -405,11 +405,7 @@ async def test_manual_script_save_refreshes_scene_plan_without_visual_bible(
     assert script.title == "Roteiro novo"
     assert script.content == "Cena nova com conflito visual."
     assert calls == ["version", "ScriptVersion", "commit", "refresh_derivatives", "reload"]
-    assert notifications == [
-        ("Salvando roteiro...", "info"),
-        ("Roteiro salvo. Cenas e planos serão recriados na etapa Storyboard.", "info"),
-        ("Roteiro salvo.", "positive"),
-    ]
+    assert notifications == [("Roteiro salvo.", "positive")]
 
 
 def test_friendly_ai_error_explains_timeout() -> None:

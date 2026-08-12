@@ -360,7 +360,48 @@ class GoogleAIVideoProvider:
             first = generated_videos[0]
             if isinstance(first, dict) and isinstance(first.get("video"), dict):
                 return cast(dict[str, Any], first["video"])
-        raise RuntimeError(f"{self.display_name} retornou operacao sem video")
+        raise RuntimeError(self._missing_video_message(operation))
+
+    def _missing_video_message(self, operation: dict[str, Any]) -> str:
+        details = self._missing_video_details(operation)
+        if details:
+            return (
+                f"{self.display_name} concluiu a operacao sem video. "
+                f"Possivel bloqueio/filtro do provider: {details}"
+            )
+        return (
+            f"{self.display_name} concluiu a operacao sem video. "
+            "Replaneje o segmento ou simplifique o prompt antes de tentar novamente."
+        )
+
+    def _missing_video_details(self, value: object) -> str:
+        interesting_keys = {
+            "blockReason",
+            "filteredReason",
+            "filterReason",
+            "finishReason",
+            "promptFeedback",
+            "raiMediaFilteredCount",
+            "raiMediaFilteredReasons",
+            "safetyFeedback",
+            "safetyRatings",
+        }
+        details: list[str] = []
+
+        def collect(item: object, parent_key: str = "") -> None:
+            if len(details) >= 6:
+                return
+            if isinstance(item, dict):
+                for key, child in item.items():
+                    if key in interesting_keys and child not in ({}, [], None, ""):
+                        details.append(f"{key}={redact_secrets(child)}")
+                    collect(child, key)
+            elif parent_key in interesting_keys and item not in (None, ""):
+                details.append(f"{parent_key}={redact_secrets(item)}")
+
+        collect(value)
+        unique_details = list(dict.fromkeys(str(detail) for detail in details))
+        return "; ".join(unique_details)[:700]
 
     def _download_video(self, uri: str) -> tuple[bytes, str]:
         settings = get_settings()

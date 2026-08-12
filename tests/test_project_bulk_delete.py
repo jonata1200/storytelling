@@ -152,6 +152,25 @@ async def test_hard_delete_project_removes_project_graph_physically(
     assert deleted is True
     assert any("CREATE TEMP TABLE tmp_target_projects" in sql for sql in session.executed)
     assert any("DELETE FROM projects" in sql for sql in session.executed)
+    continuous_segments_delete_index = next(
+        index
+        for index, sql in enumerate(session.executed)
+        if "DELETE FROM continuous_video_segments" in sql
+    )
+    continuous_plans_delete_index = next(
+        index
+        for index, sql in enumerate(session.executed)
+        if "DELETE FROM continuous_video_plans" in sql
+    )
+    generation_jobs_delete_index = next(
+        index for index, sql in enumerate(session.executed) if "DELETE FROM generation_jobs" in sql
+    )
+    assets_delete_index = next(
+        index for index, sql in enumerate(session.executed) if "DELETE FROM assets" in sql
+    )
+    assert continuous_segments_delete_index < generation_jobs_delete_index
+    assert continuous_segments_delete_index < assets_delete_index
+    assert continuous_plans_delete_index < generation_jobs_delete_index
     assert all("deleted_at" not in sql for sql in session.executed)
     assert deleted_storage_uris == ["storage/frame.png"]
     assert session.committed is True
@@ -188,7 +207,10 @@ async def test_hard_delete_all_story_ideas_removes_db_ideas_and_non_briefing_art
     assert counts["story_ideas"] == 3
     assert counts["storage_files"] == 1
     assert deleted_storage_uris == ["storage/reference.png"]
-    assert any("TRUNCATE TABLE" in sql and "story_ideas" in sql for sql in session.executed)
+    truncate_sql = next(sql for sql in session.executed if "TRUNCATE TABLE" in sql)
+    assert "story_ideas" in truncate_sql
+    assert "continuous_video_segments" in truncate_sql
+    assert "continuous_video_plans" in truncate_sql
     assert any("artifact_type <> 'BRIEFING'" in sql for sql in session.executed)
     assert all("TRUNCATE TABLE projects" not in sql for sql in session.executed)
     assert session.committed is True
