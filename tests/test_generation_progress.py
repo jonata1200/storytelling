@@ -1,7 +1,15 @@
+import asyncio
+from contextlib import suppress
+
 import pytest
 
 from app.ui.shared import page_config
-from app.ui.shared.generation_progress import progress_percent_text, progress_ratio
+from app.ui.shared.generation_progress import (
+    attach_cancel_button,
+    mark_dialog_task_cancelable,
+    progress_percent_text,
+    progress_ratio,
+)
 from app.ui.shared.page_config import (
     is_deleted_ui_context_error,
     play_completion_sound,
@@ -23,6 +31,40 @@ def test_progress_percent_text_uses_percentage() -> None:
     assert progress_percent_text(1, 4) == "25%"
     assert progress_percent_text(2, 3) == "67%"
     assert progress_percent_text(10, 10) == "100%"
+
+
+async def test_cancel_button_cancels_bound_dialog_task() -> None:
+    class Dialog:
+        pass
+
+    class Button:
+        callback = None
+        disabled = False
+
+        def on(self, _event: str, callback: object) -> None:
+            self.callback = callback
+
+        def disable(self) -> None:
+            self.disabled = True
+
+        def enable(self) -> None:
+            self.disabled = False
+
+    dialog = Dialog()
+    button = Button()
+    task = asyncio.create_task(asyncio.sleep(60))
+
+    attach_cancel_button(dialog, button)
+    mark_dialog_task_cancelable(dialog, task)
+    assert button.callback is not None
+
+    await button.callback()
+    with suppress(asyncio.CancelledError):
+        await task
+
+    assert button.disabled is True
+    assert task.cancelled()
+    assert dialog.cancel_requested()
 
 
 def test_deleted_ui_context_errors_are_detected() -> None:

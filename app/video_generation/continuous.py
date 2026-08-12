@@ -83,6 +83,50 @@ CONTINUOUS_VIDEO_NEGATIVE_PROMPT = (
     "mudanca brusca de figurino, mudanca de local sem acao visivel, cortes abruptos, "
     "flicker, morphing ou deformacao de rosto, maos e objetos."
 )
+_FRAGILE_SEGMENT_END_WORDS = {
+    "a",
+    "as",
+    "com",
+    "como",
+    "da",
+    "das",
+    "de",
+    "do",
+    "dos",
+    "e",
+    "em",
+    "mas",
+    "o",
+    "os",
+    "ou",
+    "para",
+    "por",
+    "que",
+    "sem",
+    "the",
+    "of",
+    "and",
+    "or",
+    "but",
+    "with",
+    "without",
+    "to",
+    "for",
+    "from",
+}
+_ABSTRACT_SEGMENT_TERMS = {
+    "alma",
+    "agonia",
+    "culpa",
+    "destino",
+    "invisivel",
+    "memoria",
+    "medo",
+    "opressor",
+    "saudade",
+    "silencio",
+    "vazio",
+}
 
 
 def normalize_continuous_video_review_status(value: object) -> str:
@@ -322,18 +366,60 @@ async def create_or_get_continuous_video_segment(
     return segment
 
 
+def _last_word(text: str) -> str:
+    words = re.findall(r"[^\W\d_]+", text.casefold())
+    return words[-1] if words else ""
+
+
+def _segment_action_has_fragile_ending(text: str) -> bool:
+    return _last_word(text) in _FRAGILE_SEGMENT_END_WORDS
+
+
+def _prompt_has_fragile_sentence(prompt: str) -> bool:
+    for sentence in re.findall(r"[^.!?\n]{10,}[.!?]", prompt):
+        if _segment_action_has_fragile_ending(sentence):
+            return True
+    return False
+
+
+def _normalize_segment_action(source_text: str) -> str:
+    action = re.sub(r"\s+", " ", str(source_text or "")).strip()
+    if not action:
+        action = "acao visual principal do roteiro"
+    if action.endswith((".", "!", "?")):
+        return action
+    return f"{action}."
+
+
+def _segment_action_guidance(action: str) -> str:
+    normalized = action.casefold()
+    if any(term in normalized for term in _ABSTRACT_SEGMENT_TERMS):
+        return (
+            "Converta ideias internas em sinais visiveis: postura, olhar, respiracao, "
+            "gesto de maos e interacao com objetos."
+        )
+    return (
+        "Mostre a acao em comportamento fisico claro, sem narracao escrita ou texto na tela."
+    )
+
+
 def continuous_video_segment_validation_errors(segment: ContinuousVideoSegment) -> list[str]:
     errors: list[str] = []
     prompt = str(segment.prompt or "").strip()
     metadata = segment.metadata_json if isinstance(segment.metadata_json, dict) else {}
+    action = str(metadata.get("action") or "").strip()
     if segment.segment_number <= 0:
         errors.append("numero de segmento invalido")
     if segment.duration_seconds <= 0:
         errors.append("duracao invalida")
     if len(prompt.split()) < 20:
         errors.append("prompt generico demais")
-    if not metadata.get("action"):
+    if not action:
         errors.append("acao principal ausente")
+    elif _segment_action_has_fragile_ending(action):
+        errors.append("acao principal termina em frase incompleta")
+    if _prompt_has_fragile_sentence(prompt):
+        errors.append("prompt contem frase incompleta")
     if not metadata.get("continuity"):
         errors.append("continuidade ausente")
     visual_context = metadata.get("visual_context")
@@ -616,27 +702,28 @@ def _segment_prompt(
     continuity: str,
     duration_seconds: int,
 ) -> str:
-    action = source_text.strip() or "acao visual principal do roteiro"
+    action = _normalize_segment_action(source_text)
+    continuity_sentence = _normalize_segment_action(continuity)
+    action_guidance = _segment_action_guidance(action)
     return (
         f"Prompt Veo 3.1 Fast - Segmento {segment_number:02d}\n\n"
-        "OBJETIVO\n"
-        "Gerar um unico trecho cinematografico continuo, realista e filmavel para "
-        "compor uma sequencia maior.\n\n"
-        "FORMATO\n"
-        f"- Duracao: {int(duration_seconds)} segundos.\n"
-        "- Enquadramento: vertical 9:16, composicao limpa para mobile.\n"
-        "- Estilo: live action cinematografico, realista, luz natural/controlada, "
-        "movimento suave, sem cortes abruptos.\n\n"
-        "SUJEITO E ACAO PRINCIPAL\n"
-        f"{action}.\n\n"
-        "CONTINUIDADE TEMPORAL\n"
-        f"{continuity}. Preserve posicao, direcao do movimento, estado emocional, "
-        "figurino, idade aparente, escala, paleta, luz e ambiente definidos pela "
-        "Biblioteca Visual.\n\n"
-        "CAMERA E MOVIMENTO\n"
-        "Use uma acao principal clara, natural e executavel em camera. Priorize "
-        "movimento de camera sutil, transicoes corporais consistentes e continuidade "
-        "espacial. Nao reinicie a cena.\n\n"
+        "CRIE UM UNICO PLANO DE VIDEO\n"
+        f"- Duracao exata: {int(duration_seconds)} segundos.\n"
+        "- Formato: vertical 9:16, live action cinematografico realista.\n"
+        "- Nao faca montagem, colagem de momentos ou salto temporal interno.\n"
+        "- A cena deve ser filmavel como uma tomada continua.\n\n"
+        "ACAO VISIVEL DO SEGMENTO\n"
+        f"{action}\n"
+        f"{action_guidance}\n\n"
+        "CONTINUIDADE\n"
+        f"{continuity_sentence} Preserve identidade, idade aparente, figurino, "
+        "posicao, direcao do movimento, estado emocional, escala, paleta, luz, "
+        "ambiente e objetos. Se houver frame inicial de referencia, comece a partir "
+        "dele sem reiniciar a cena.\n\n"
+        "CAMERA\n"
+        "Composicao limpa para mobile, movimento suave e natural, foco no sujeito "
+        "principal e leitura clara dos objetos importantes. Mantenha continuidade "
+        "espacial entre inicio e fim do clipe.\n\n"
         "Biblioteca Visual canonica\n"
         f"{_visual_reference_text(visual_context)}\n\n"
         "RESTRICOES NEGATIVAS\n"
@@ -670,6 +757,7 @@ def build_continuous_video_segment_payloads(
     previous_segment_fingerprint = ""
     for index, source in enumerate(sources, 1):
         source_text = str(source.get("text") or "").strip()
+        action = _normalize_segment_action(source_text)
         continuity = (
             "comece estabelecendo o momento inicial da historia"
             if index == 1
@@ -683,7 +771,7 @@ def build_continuous_video_segment_payloads(
             duration_seconds=segment_duration_seconds,
         )
         metadata = {
-            "action": source_text,
+            "action": action,
             "characters": _names_present(source_text, visual_context.get("characters", [])),
             "locations": _names_present(source_text, visual_context.get("locations", [])),
             "props": _names_present(source_text, visual_context.get("props", [])),

@@ -1,3 +1,5 @@
+import asyncio
+import inspect
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -7,6 +9,7 @@ from nicegui import ui
 from app.ui.shared.page_config import BLOCKING_DIALOG_PROPS, is_deleted_ui_context_error
 
 logger = logging.getLogger(__name__)
+OPERATION_CANCELLED_MESSAGE = "Operacao cancelada pelo usuario."
 
 
 def progress_ratio(done: int, total: int) -> float:
@@ -17,11 +20,64 @@ def progress_percent_text(done: int, total: int) -> str:
     return f"{round(progress_ratio(done, total) * 100)}%"
 
 
+def mark_dialog_task_cancelable(dialog: Any | None, task: asyncio.Task[Any] | None = None) -> None:
+    if dialog is None:
+        return
+    binder = getattr(dialog, "bind_cancel_task", None)
+    if callable(binder):
+        binder(task or asyncio.current_task())
+
+
+def dialog_cancel_requested(dialog: Any | None) -> bool:
+    checker = getattr(dialog, "cancel_requested", None)
+    return bool(checker()) if callable(checker) else False
+
+
+def attach_cancel_button(
+    dialog: Any,
+    cancel_button: Any,
+    *,
+    on_cancel: Callable[[], Any] | None = None,
+) -> None:
+    state: dict[str, Any] = {"requested": False, "task": None}
+
+    def bind_cancel_task(task: asyncio.Task[Any] | None = None) -> None:
+        state["requested"] = False
+        state["task"] = task or asyncio.current_task()
+        try:
+            cancel_button.enable()
+        except RuntimeError as exc:
+            if not is_deleted_ui_context_error(exc):
+                raise
+
+    async def request_cancel() -> None:
+        state["requested"] = True
+        try:
+            cancel_button.disable()
+        except RuntimeError as exc:
+            if not is_deleted_ui_context_error(exc):
+                raise
+        if on_cancel is not None:
+            result = on_cancel()
+            if inspect.isawaitable(result):
+                await result
+        task = state.get("task")
+        if task is not None and not task.done():
+            task.cancel()
+
+    dialog.bind_cancel_task = bind_cancel_task
+    dialog.cancel_requested = lambda: bool(state["requested"])
+    dialog.request_cancel = request_cancel
+    cancel_button.on("click", request_cancel)
+
+
 def generation_progress_dialog(
     title: str,
     total: int,
     item_label: str,
     initial_detail: str,
+    *,
+    on_cancel: Callable[[], Any] | None = None,
 ) -> tuple[Any, Callable[[int, int, str], None]]:
     with ui.dialog().props(BLOCKING_DIALOG_PROPS) as progress_dialog, ui.card().classes(
         "entity-card rounded-2xl p-6 w-[min(520px,92vw)]"
@@ -37,6 +93,17 @@ def generation_progress_dialog(
             progress_bar.props("instant-feedback rounded")
             progress_detail = ui.label(initial_detail).classes(
                 "text-xs text-[#8d938e] text-center whitespace-pre-line"
+            )
+            cancel_button = ui.button("Cancelar", icon="close").props("flat no-caps")
+            cancel_button.classes("rounded-xl")
+
+            def show_cancel_feedback() -> None:
+                progress_detail.set_text("Cancelando operacao...")
+
+            attach_cancel_button(
+                progress_dialog,
+                cancel_button,
+                on_cancel=on_cancel or show_cancel_feedback,
             )
 
     def update_progress(completed: int, current_total: int, detail: str) -> None:

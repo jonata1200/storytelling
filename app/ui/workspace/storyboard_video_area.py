@@ -26,7 +26,13 @@ from app.storyboards.service import (
     update_storyboard_prompt,
 )
 from app.storytelling.service import regenerate_scenes_and_shots
-from app.ui.shared.generation_progress import generation_progress_dialog, progress_ratio
+from app.ui.shared.generation_progress import (
+    OPERATION_CANCELLED_MESSAGE,
+    dialog_cancel_requested,
+    generation_progress_dialog,
+    mark_dialog_task_cancelable,
+    progress_ratio,
+)
 from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
     block_if_missing_api_keys_for_channels,
@@ -204,6 +210,7 @@ async def _plan_continuous_video_segments_from_ui(
     loading_dialog: Any | None = None,
 ) -> None:
     await _open_loading_dialog_quietly(loading_dialog)
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             _plan, segments, validation_errors = await plan_continuous_video_segments(
@@ -217,6 +224,8 @@ async def _plan_continuous_video_segments_from_ui(
         else:
             ui.notify(f"{len(segments)} segmento(s) planejado(s).", color="positive")
         ui.navigate.reload()
+    except asyncio.CancelledError:
+        _safe_notify(OPERATION_CANCELLED_MESSAGE, color="warning")
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:
@@ -284,6 +293,7 @@ async def _generate_continuous_video_segments_from_ui(
     if block_if_missing_api_keys_for_step("continuous_video"):
         return
     await _open_loading_dialog_quietly(loading_dialog)
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             jobs, segments = await generate_continuous_video_segments(
@@ -316,6 +326,9 @@ async def _generate_continuous_video_segments_from_ui(
             notified = _safe_notify("Nenhum segmento pendente para gerar.", color="info")
         if notified:
             _safe_reload()
+    except asyncio.CancelledError:
+        _safe_notify(OPERATION_CANCELLED_MESSAGE, color="warning")
+        _safe_reload()
     except Exception as exc:
         _show_ai_error_unless_context_gone(exc)
     finally:
@@ -331,6 +344,7 @@ async def _generate_next_continuous_video_segment_from_ui(
     if block_if_missing_api_keys_for_step("continuous_video"):
         return
     await _open_loading_dialog_quietly(loading_dialog)
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             jobs, _segments = await generate_next_continuous_video_segment(
@@ -345,6 +359,9 @@ async def _generate_next_continuous_video_segment_from_ui(
         )
         if notified:
             _safe_reload()
+    except asyncio.CancelledError:
+        _safe_notify(OPERATION_CANCELLED_MESSAGE, color="warning")
+        _safe_reload()
     except Exception as exc:
         _show_ai_error_unless_context_gone(exc)
     finally:
@@ -395,6 +412,7 @@ async def _retry_continuous_video_segment_from_ui(
     if block_if_missing_api_keys_for_step("continuous_video"):
         return
     await _open_loading_dialog_quietly(loading_dialog)
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             await retry_failed_continuous_video_segment(
@@ -402,8 +420,11 @@ async def _retry_continuous_video_segment_from_ui(
                 project_id,
                 segment_id,
                 progress_callback=progress_callback,
-            )
+        )
         _safe_notify("Segmento reenviado para revis\u00e3o.", color="positive")
+        _safe_reload()
+    except asyncio.CancelledError:
+        _safe_notify(OPERATION_CANCELLED_MESSAGE, color="warning")
         _safe_reload()
     except Exception as exc:
         _show_ai_error_unless_context_gone(exc)
@@ -421,6 +442,7 @@ async def _regenerate_rejected_continuous_video_segment_from_ui(
     if block_if_missing_api_keys_for_step("continuous_video"):
         return
     await _open_loading_dialog_quietly(loading_dialog)
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             await regenerate_rejected_continuous_video_segment(
@@ -428,8 +450,11 @@ async def _regenerate_rejected_continuous_video_segment_from_ui(
                 project_id,
                 segment_id,
                 progress_callback=progress_callback,
-            )
+        )
         _safe_notify("Segmento regenerado para nova revis\u00e3o.", color="positive")
+        _safe_reload()
+    except asyncio.CancelledError:
+        _safe_notify(OPERATION_CANCELLED_MESSAGE, color="warning")
         _safe_reload()
     except Exception as exc:
         _show_ai_error_unless_context_gone(exc)
@@ -447,6 +472,7 @@ async def _regenerate_continuous_video_segment_from_ui(
     if block_if_missing_api_keys_for_step("continuous_video"):
         return
     await _open_loading_dialog_quietly(loading_dialog)
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             jobs, _segments = await generate_continuous_video_segment(
@@ -462,6 +488,9 @@ async def _regenerate_continuous_video_segment_from_ui(
         )
         if notified:
             _safe_reload()
+    except asyncio.CancelledError:
+        _safe_notify(OPERATION_CANCELLED_MESSAGE, color="warning")
+        _safe_reload()
     except Exception as exc:
         _show_ai_error_unless_context_gone(exc)
     finally:
@@ -475,6 +504,7 @@ async def _extract_continuous_video_frames_from_ui(
     loading_dialog: Any | None = None,
 ) -> None:
     await _open_loading_dialog_quietly(loading_dialog)
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             segment, errors = await extract_continuous_video_segment_frames(
@@ -495,6 +525,8 @@ async def _extract_continuous_video_frames_from_ui(
             notified = _safe_notify("Frames extra\u00eddos do v\u00eddeo.", color="positive")
         if notified:
             _safe_reload()
+    except asyncio.CancelledError:
+        _safe_notify(OPERATION_CANCELLED_MESSAGE, color="warning")
     except Exception as exc:
         _show_ai_error_unless_context_gone(exc)
     finally:
@@ -537,6 +569,7 @@ async def _prepare_storyboard_scene_plan_from_ui(
         return
     if loading_dialog is not None:
         loading_dialog.open()
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             scenes = await regenerate_scenes_and_shots(session, project_id, script_id)
@@ -562,6 +595,7 @@ async def _enqueue_dubbing_from_ui(
         return
     if loading_dialog is not None:
         loading_dialog.open()
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             job = await enqueue_project_step(session, project_id, "dubbing")
@@ -583,6 +617,7 @@ async def _enqueue_finalization_from_ui(
         return
     if loading_dialog is not None:
         loading_dialog.open()
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             job = await enqueue_project_step(session, project_id, "finalization")
@@ -605,6 +640,7 @@ async def _refresh_dubbing_from_ui(
         return
     if loading_dialog is not None:
         loading_dialog.open()
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             job = await refresh_dubbing_job(session, project_id, job_id)
@@ -918,10 +954,10 @@ def _continuous_queue_progress_dialog(
                     f"{view_model.generated_segments}/{view_model.total_segments} "
                     "segmento(s) concluido(s)."
                 ).classes("text-sm text-[#8d938e]")
-            pause_button = ui.button(icon="pause", on_click=None).props(
+            pause_button = ui.button(icon="close", on_click=None).props(
                 "flat round dense"
             ).classes("rounded-xl")
-            pause_button.tooltip("Pausar apos o segmento atual")
+            pause_button.tooltip("Cancelar apos o segmento atual")
         with ui.row().classes("items-center gap-3 mt-5"):
             ui.spinner(size="sm").classes("acid")
             active_label = ui.label("Preparando envio ao provider.").classes(
@@ -939,7 +975,7 @@ def _continuous_queue_progress_dialog(
             pause_requested["value"] = True
             pause_button.props("disable")
             pause_button.update()
-            active_label.set_text("A fila sera pausada apos o segmento atual.")
+            active_label.set_text("A fila sera cancelada apos o segmento atual.")
 
         pause_button.on("click", request_pause)
 
@@ -971,7 +1007,11 @@ def _continuous_queue_progress_dialog(
             if not is_deleted_ui_context_error(exc):
                 raise
 
-    return progress_dialog, update_progress, lambda: bool(pause_requested["value"])
+    return (
+        progress_dialog,
+        update_progress,
+        lambda: bool(pause_requested["value"]) or dialog_cancel_requested(progress_dialog),
+    )
 
 
 def _dubbing_cost_text(duration_seconds: int) -> str:

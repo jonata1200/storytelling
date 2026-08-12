@@ -1,4 +1,5 @@
-﻿import logging
+﻿import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -23,6 +24,38 @@ from app.ui.project.data import scalar_count as _scalar_count
 from app.ui.shared.page_config import friendly_ai_error as _friendly_ai_error
 
 logger = logging.getLogger(__name__)
+_INITIAL_SCRIPT_TASKS: dict[UUID, asyncio.Task[None]] = {}
+
+
+def schedule_initial_script_generation(
+    project_id: UUID,
+    source_idea: dict[str, Any] | None = None,
+) -> asyncio.Task[None]:
+    task = asyncio.create_task(_generate_initial_script_in_background(project_id, source_idea))
+    _INITIAL_SCRIPT_TASKS[project_id] = task
+    task.add_done_callback(lambda _task: _INITIAL_SCRIPT_TASKS.pop(project_id, None))
+    return task
+
+
+def schedule_initial_script_resume(project_id: UUID) -> asyncio.Task[None]:
+    task = asyncio.create_task(_resume_initial_script_in_background(project_id))
+    _INITIAL_SCRIPT_TASKS[project_id] = task
+    task.add_done_callback(lambda _task: _INITIAL_SCRIPT_TASKS.pop(project_id, None))
+    return task
+
+
+async def cancel_initial_script_generation(project_id: UUID) -> None:
+    task = _INITIAL_SCRIPT_TASKS.pop(project_id, None)
+    if task is not None and not task.done():
+        task.cancel()
+    async with AsyncSessionLocal() as session:
+        await _set_project_ai_action_status(
+            session,
+            project_id,
+            status="cancelled",
+            message="Geracao de roteiro cancelada pelo usuario.",
+            error=None,
+        )
 
 
 async def _sync_project_title_from_story(
@@ -177,6 +210,8 @@ async def _generate_initial_script_in_background(
                 message="Roteiro inicial criado.",
                 record_event=False,
             )
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         _log_ai_background_failure(
             "Não foi possível gerar roteiro inicial do projeto",
@@ -289,6 +324,8 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
                 status="completed",
                 message="Roteiro inicial criado.",
             )
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         _log_ai_background_failure(
             "Não foi possível retomar roteiro inicial do projeto",
@@ -364,7 +401,7 @@ async def _reload_project_when_script_ready(project_id: UUID) -> bool:
         metadata = settings.metadata_json or {}
         action = metadata.get("ai_action") if isinstance(metadata, dict) else None
         status = str(action.get("status") or "") if isinstance(action, dict) else ""
-    if status in {"completed", "failed"} or script is not None or scene_count > 0:
+    if status in {"completed", "failed", "cancelled"} or script is not None or scene_count > 0:
         ui.navigate.reload()
         return True
     return False

@@ -448,8 +448,11 @@ def test_continuous_video_planner_splits_short_script_without_scenes() -> None:
     assert payloads[0].script_id == script.id
     assert payloads[0].review_status == CONTINUOUS_VIDEO_REVIEW_PENDING
     assert "Segmento 01" in payloads[0].prompt
+    assert "CRIE UM UNICO PLANO DE VIDEO" in payloads[0].prompt
+    assert "ACAO VISIVEL DO SEGMENTO" in payloads[0].prompt
     assert "Biblioteca Visual" in payloads[0].prompt
     assert "Nao criar legendas" in payloads[0].prompt
+    assert payloads[0].metadata_json["action"].endswith(".")
     assert payloads[0].metadata_json["characters"] == ["Clara"]
     assert payloads[0].metadata_json["locations"] == ["Observatorio"]
     assert payloads[0].metadata_json["props"] == ["Relogio"]
@@ -526,6 +529,35 @@ def test_continuous_video_planner_preserves_sentence_boundaries_in_fallback_chun
     assert payloads[0].metadata_json["source_text"].endswith("opressor.")
     assert "exaustao de." not in payloads[0].prompt
     assert "quem luta contra o invisivel." in payloads[1].metadata_json["source_text"]
+    assert "Converta ideias internas em sinais visiveis" in payloads[0].prompt
+
+
+def test_continuous_video_segment_validation_rejects_incomplete_action() -> None:
+    project_id = uuid4()
+    segment = ContinuousVideoSegment(
+        project_id=project_id,
+        segment_number=1,
+        prompt=(
+            "Prompt Veo 3.1 Fast - Segmento 01\n\n"
+            "ACAO VISIVEL DO SEGMENTO\n"
+            "Arthur carrega a exaustao de.\n\n"
+            "Biblioteca Visual canonica\n"
+            "Personagens: Arthur."
+        ),
+        duration_seconds=8,
+        request_fingerprint="f" * 64,
+        idempotency_key="k" * 64,
+        metadata_json={
+            "action": "Arthur carrega a exaustao de.",
+            "continuity": "inicio",
+            "visual_context": _visual_context(project_id),
+        },
+    )
+
+    errors = continuous_video_segment_validation_errors(segment)
+
+    assert "acao principal termina em frase incompleta" in errors
+    assert "prompt contem frase incompleta" in errors
 
 
 def test_continuous_video_planner_groups_medium_script_shots() -> None:

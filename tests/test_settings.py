@@ -32,12 +32,12 @@ def test_settings_reads_ollama_cloud_text_provider() -> None:
         text_provider="ollama_cloud",
         ollama_cloud_api_key="  ollama-secret  ",
         ollama_cloud_base_url="https://ollama.com/api",
-        ollama_cloud_default_model="minimax-m2.7:cloud",
+        ollama_cloud_default_model="deepseek-v4-flash:0731-cloud",
     )
 
     assert settings.text_provider == "ollama_cloud"
     assert settings.ollama_cloud_api_key == "ollama-secret"
-    assert settings.ollama_cloud_default_model == "minimax-m2.7:cloud"
+    assert settings.ollama_cloud_default_model == "deepseek-v4-flash:0731-cloud"
 
 
 def test_settings_replaces_removed_ollama_cloud_model_with_default() -> None:
@@ -113,6 +113,8 @@ def test_settings_reads_elevenlabs_voice_and_dubbing_provider() -> None:
 def test_new_text_model_lists_have_initial_defaults() -> None:
     assert OLLAMA_CLOUD_TEXT_MODELS == (
         "deepseek-v4-flash:cloud",
+        "deepseek-v4-flash:0731-cloud",
+        "deepseek-v4-flash:preview-cloud",
         "gemma4:cloud",
         "minimax-m2.7:cloud",
         "mistral-large-3:675b-cloud",

@@ -1,6 +1,5 @@
 # ruff: noqa: E501
 
-import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
@@ -164,12 +163,12 @@ from app.ui.project.text import (
     format_idea_payload_for_project as _format_idea_payload_for_project,
 )
 from app.ui.project.workflows import (
-    _generate_initial_script_in_background,
-    _reload_project_when_script_ready,
-    _set_project_ai_action_status,
+    _log_ai_background_failure as _workflow_log_ai_background_failure,
 )
 from app.ui.project.workflows import (
-    _log_ai_background_failure as _workflow_log_ai_background_failure,
+    _reload_project_when_script_ready,
+    _set_project_ai_action_status,
+    schedule_initial_script_generation,
 )
 from app.ui.shared import assistant_state
 from app.ui.shared.assistant_state import (  # noqa: F401
@@ -178,6 +177,7 @@ from app.ui.shared.assistant_state import (  # noqa: F401
 from app.ui.shared.assistant_state import (  # noqa: F401
     safe_refresh as _safe_refresh,
 )
+from app.ui.shared.generation_progress import attach_cancel_button
 from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
     DEFAULT_STORY_DURATION_MINUTES,
@@ -383,7 +383,7 @@ async def _retry_initial_script_from_ui(project_id: UUID, loading_dialog: Any) -
             message="A IA vai retomar a criação do roteiro inicial.",
             action="create_initial_script",
         )
-    asyncio.create_task(_generate_initial_script_in_background(project_id))
+    schedule_initial_script_generation(project_id)
     ui.timer(
         5.0,
         lambda: _close_loading_dialog_when_script_ready(project_id, loading_dialog),
@@ -491,9 +491,7 @@ async def _create_project_from_form(
                 )
                 background_source_idea = dict(source_idea) if source_idea is not None else None
         if generate_initial_script:
-            asyncio.create_task(
-                _generate_initial_script_in_background(project_id, background_source_idea)
-            )
+            schedule_initial_script_generation(project_id, background_source_idea)
             message = f"Projeto criado. A IA iniciou o roteiro de {duration:g} minutos."
         else:
             message = "Projeto criado com briefing inicial."
@@ -651,6 +649,14 @@ def _generation_loading_dialog(title: str, message: str | LoadingStatus) -> Any:
             _render_loading_status(message)
         else:
             ui.label(message).classes("text-sm text-[#8f9590] whitespace-pre-line leading-6")
+        cancel_status = ui.label("").classes("text-xs text-[#8f9590]")
+        cancel_button = ui.button("Cancelar", icon="close").props("flat no-caps")
+        cancel_button.classes("rounded-xl")
+
+        def show_cancel_feedback() -> None:
+            cancel_status.set_text("Cancelando operacao...")
+
+        attach_cancel_button(loading_dialog, cancel_button, on_cancel=show_cancel_feedback)
     return loading_dialog
 
 

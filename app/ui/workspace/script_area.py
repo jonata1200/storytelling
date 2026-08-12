@@ -1,5 +1,4 @@
-﻿import asyncio
-from collections.abc import Awaitable, Callable
+﻿from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -17,10 +16,14 @@ from app.storytelling.service import mark_scene_plan_stale
 from app.ui.project.data import latest as _latest
 from app.ui.project.workflows import (
     _reload_project_when_script_ready,
-    _resume_initial_script_in_background,
+    cancel_initial_script_generation,
+    schedule_initial_script_resume,
 )
 from app.ui.shared.cost_display import SCRIPT_TEXT_ESTIMATED_TOKENS, text_generation_cost_text
-from app.ui.shared.generation_progress import generation_progress_dialog
+from app.ui.shared.generation_progress import (
+    OPERATION_CANCELLED_MESSAGE,
+    generation_progress_dialog,
+)
 from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
     UI_GENERATION_TIMEOUT_SECONDS,
@@ -58,7 +61,7 @@ async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID)
 
 
 def _schedule_initial_script_resume(project_id: UUID) -> None:
-    asyncio.create_task(_resume_initial_script_in_background(project_id))
+    schedule_initial_script_resume(project_id)
 
 
 def script_editor_state(title: object, content: object) -> dict[str, str]:
@@ -152,10 +155,16 @@ async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int,
         "shots": 0,
     }
     failed = status == "failed"
+    cancelled = status == "cancelled"
     if action_timeout:
         detail = (
             "A geração demorou demais ou foi interrompida. Vou recarregar para liberar "
             "uma nova tentativa."
+            f"\n{loading_status_message('script', counts)}"
+        )
+    elif cancelled:
+        detail = (
+            "Geração de roteiro cancelada pelo usuário."
             f"\n{loading_status_message('script', counts)}"
         )
     elif failed:
@@ -181,7 +190,7 @@ async def _script_generation_progress_state(project_id: UUID) -> tuple[int, int,
             counts,
             now="Agora: roteiro pronto.",
         )
-    return completed, 2, detail, completed >= 2 or failed or action_timeout
+    return completed, 2, detail, completed >= 2 or failed or cancelled or action_timeout
 
 
 async def _update_script_generation_progress(
@@ -319,11 +328,19 @@ def render_script_area(
                 ),
             )
         )
+
+        async def cancel_script_generation() -> None:
+            await cancel_initial_script_generation(project_id)
+            safe_close_ui_element(loading_dialog)
+            ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
+            ui.navigate.reload()
+
         loading_dialog, update_script_progress = generation_progress_dialog(
             loading_title,
             2,
             "etapa",
             loading_message,
+            on_cancel=cancel_script_generation,
         )
         loading_dialog.open()
         update_script_progress(0, 2, loading_message)
@@ -396,6 +413,12 @@ def render_script_area(
                     )
                 ).classes("text-xs text-[#8d938e]")
             if script is None and ai_status == "failed":
+                async def cancel_retry_generation() -> None:
+                    await cancel_initial_script_generation(project_id)
+                    safe_close_ui_element(retry_loading_dialog)
+                    ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
+                    ui.navigate.reload()
+
                 retry_loading_dialog, update_retry_progress = generation_progress_dialog(
                     "Retomando roteiro",
                     2,
@@ -405,6 +428,7 @@ def render_script_area(
                         summary["counts"],
                         now="Agora: tentando criar o roteiro inicial novamente.",
                     ),
+                    on_cancel=cancel_retry_generation,
                 )
 
                 async def retry_initial_script() -> None:

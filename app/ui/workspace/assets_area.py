@@ -1,4 +1,5 @@
-﻿from collections.abc import Callable
+﻿import asyncio
+from collections.abc import Callable
 from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
@@ -12,7 +13,12 @@ from app.ui.shared.cost_display import (
     VISUAL_PROMPTS_ESTIMATED_TOKENS,
     text_generation_cost_text,
 )
-from app.ui.shared.generation_progress import generation_progress_dialog, progress_ratio
+from app.ui.shared.generation_progress import (
+    OPERATION_CANCELLED_MESSAGE,
+    generation_progress_dialog,
+    mark_dialog_task_cancelable,
+    progress_ratio,
+)
 from app.ui.shared.page_config import (
     BLOCKING_DIALOG_PROPS,
     loading_status_message,
@@ -366,6 +372,7 @@ def _entity_card(
                                     ) -> None:
                                         safe_close_ui_element(gallery_dialog)
                                         loading_dialog.open()
+                                        mark_dialog_task_cancelable(loading_dialog)
                                         try:
                                             await _regenerate_visual_reference_from_ui(
                                                 project_id,
@@ -373,6 +380,8 @@ def _entity_card(
                                                 target_id,
                                                 view_type,
                                             )
+                                        except asyncio.CancelledError:
+                                            ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
                                         finally:
                                             safe_close_ui_element(loading_dialog)
 
@@ -468,6 +477,7 @@ def _entity_card(
                 ) -> None:
                     safe_close_ui_element(prompt_dialog)
                     loading_dialog.open()
+                    mark_dialog_task_cancelable(loading_dialog)
                     try:
                         await _approve_visual_target_from_ui(
                             project_id,
@@ -514,6 +524,7 @@ def _entity_card(
                 ) -> None:
                     safe_close_ui_element(optional_sheet_dialog)
                     loading_dialog.open()
+                    mark_dialog_task_cancelable(loading_dialog)
                     try:
                         await _approve_visual_target_from_ui(
                             project_id,
@@ -521,6 +532,8 @@ def _entity_card(
                             target_id,
                             views,
                         )
+                    except asyncio.CancelledError:
+                        ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
                     finally:
                         safe_close_ui_element(loading_dialog)
 
@@ -610,6 +623,7 @@ def _entity_card(
                         view_type: str = hero_view_type,
                     ) -> None:
                         loading_dialog.open()
+                        mark_dialog_task_cancelable(loading_dialog)
                         try:
                             await _regenerate_visual_reference_from_ui(
                                 project_id,
@@ -617,6 +631,8 @@ def _entity_card(
                                 target_id,
                                 view_type,
                             )
+                        except asyncio.CancelledError:
+                            ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
                         finally:
                             safe_close_ui_element(loading_dialog)
 
@@ -704,11 +720,14 @@ def render_assets_area(
             async def confirm_batch_prompts() -> None:
                 safe_close_ui_element(batch_prompt_dialog)
                 batch_loading_dialog.open()
+                mark_dialog_task_cancelable(batch_loading_dialog)
                 try:
                     await _approve_all_visual_targets_from_ui(
                         project_id,
                         progress_callback=update_batch_progress,
                     )
+                except asyncio.CancelledError:
+                    ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
                 finally:
                     safe_close_ui_element(batch_loading_dialog)
 
@@ -747,11 +766,14 @@ def render_assets_area(
 
             async def generate_all_visual_prompts() -> None:
                 prompt_loading_dialog.open()
+                mark_dialog_task_cancelable(prompt_loading_dialog)
                 try:
                     await _generate_all_visual_prompts_with_progress_from_ui(
                         project_id,
                         progress_callback=update_prompt_progress,
                     )
+                except asyncio.CancelledError:
+                    ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
                 finally:
                     safe_close_ui_element(prompt_loading_dialog)
 

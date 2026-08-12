@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 from typing import Any
 from uuid import UUID
@@ -13,6 +14,10 @@ from app.storyboards.service import (
     storyboard_frames_need_generation,
     storyboard_prompts_need_approval,
     update_storyboard_prompt,
+)
+from app.ui.shared.generation_progress import (
+    OPERATION_CANCELLED_MESSAGE,
+    mark_dialog_task_cancelable,
 )
 from app.ui.shared.page_config import (
     block_if_missing_api_keys_for_channels,
@@ -83,6 +88,7 @@ async def approve_storyboard_prompts_from_ui(
         return
     if loading_dialog is not None:
         loading_dialog.open()
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             await _emit_progress(
@@ -123,6 +129,8 @@ async def approve_storyboard_prompts_from_ui(
         if approved_count:
             play_completion_sound()
         ui.navigate.reload()
+    except asyncio.CancelledError:
+        ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
         if _is_partial_storyboard_generation_error(exc):
@@ -144,6 +152,7 @@ async def approve_storyboard_prompt_from_ui(
         return
     if loading_dialog is not None:
         loading_dialog.open()
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             await _emit_progress(
@@ -198,6 +207,8 @@ async def approve_storyboard_prompt_from_ui(
         if approved:
             play_completion_sound()
         ui.navigate.reload()
+    except asyncio.CancelledError:
+        ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
         if _is_partial_storyboard_generation_error(exc):
@@ -250,6 +261,7 @@ async def generate_storyboards_from_ui(
         return
     if loading_dialog is not None:
         loading_dialog.open()
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         should_refresh_animatic = shot_id is None
         async with AsyncSessionLocal() as session:
@@ -291,6 +303,8 @@ async def generate_storyboards_from_ui(
         )
         play_completion_sound()
         ui.navigate.reload()
+    except asyncio.CancelledError:
+        ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
         if _is_partial_storyboard_generation_error(exc):

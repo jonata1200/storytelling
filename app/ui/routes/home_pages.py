@@ -35,7 +35,11 @@ from app.ui.search_filters import (
     project_active_filter_labels,
     unique_idea_filter_options,
 )
-from app.ui.shared.generation_progress import generation_progress_dialog
+from app.ui.shared.generation_progress import (
+    OPERATION_CANCELLED_MESSAGE,
+    generation_progress_dialog,
+    mark_dialog_task_cancelable,
+)
 from app.ui.shared.page_config import (
     DEFAULT_STORY_DURATION_MINUTES,
     IDEA_COUNT_OPTIONS,
@@ -779,6 +783,7 @@ def register_home_pages(
                             )
                         )
                         idea_generation_dialog.open()
+                        mark_dialog_task_cancelable(idea_generation_dialog)
                         update_idea_generation_progress(
                             0,
                             expected_count,
@@ -862,6 +867,8 @@ def register_home_pages(
                                 "A geração demorou demais. Tente novamente ou escolha outro modelo.",
                                 title="A IA demorou demais",
                             )
+                        except asyncio.CancelledError:
+                            safe_notify(OPERATION_CANCELLED_MESSAGE, color="warning")
                         except Exception as exc:
                             show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
                         finally:

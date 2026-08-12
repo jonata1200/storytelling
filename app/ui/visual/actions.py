@@ -11,6 +11,10 @@ from sqlalchemy import select
 from app.database.session import AsyncSessionLocal
 from app.jobs.service import enqueue_project_step
 from app.storytelling.models import Script
+from app.ui.shared.generation_progress import (
+    OPERATION_CANCELLED_MESSAGE,
+    mark_dialog_task_cancelable,
+)
 from app.ui.shared.page_config import (
     block_if_missing_api_keys_for_channels,
     block_if_missing_api_keys_for_step,
@@ -511,6 +515,7 @@ async def _approve_video_prompts_from_ui(
         return
     if loading_dialog is not None:
         loading_dialog.open()
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         await _emit_visual_batch_progress(
             progress_callback,
@@ -548,6 +553,8 @@ async def _approve_video_prompts_from_ui(
             color="positive",
         )
         ui.navigate.reload()
+    except asyncio.CancelledError:
+        ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:

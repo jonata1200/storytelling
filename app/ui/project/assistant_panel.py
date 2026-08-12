@@ -16,7 +16,11 @@ from app.ui.shared.assistant_state import safe_client_navigation as _safe_client
 from app.ui.shared.assistant_state import safe_refresh as _safe_refresh
 from app.ui.shared.assistant_state import save_assistant_draft as _save_assistant_draft
 from app.ui.shared.assistant_state import save_assistant_messages as _save_assistant_messages
-from app.ui.shared.generation_progress import generation_progress_dialog
+from app.ui.shared.generation_progress import (
+    OPERATION_CANCELLED_MESSAGE,
+    generation_progress_dialog,
+    mark_dialog_task_cancelable,
+)
 from app.ui.shared.page_config import (
     action_loading_copy,
     block_if_missing_api_keys_for_step,
@@ -218,6 +222,7 @@ def render_assistant_panel(
             loading_progress_completed = 0
             if loading_dialog is not None:
                 loading_dialog.open()
+                mark_dialog_task_cancelable(loading_dialog)
             error_popup: tuple[str, str | None, str] | None = None
 
             async def report_progress(content: Any) -> None:
@@ -279,6 +284,10 @@ def render_assistant_panel(
                             None,
                             "A IA não concluiu a solicitação",
                         )
+            except asyncio.CancelledError:
+                response = OPERATION_CANCELLED_MESSAGE
+                error_popup = None
+                should_reload = True
             except Exception as exc:
                 logger.exception(
                     "Não foi possível responder ao chat do projeto %s na etapa %s",

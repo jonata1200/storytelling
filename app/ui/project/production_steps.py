@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 from uuid import UUID
 
@@ -11,6 +12,10 @@ from app.storytelling.models import Script
 from app.ui.project.data import latest as _latest
 from app.ui.shared.assistant_state import (
     append_assistant_message_to_chat as _append_assistant_message_to_chat,
+)
+from app.ui.shared.generation_progress import (
+    OPERATION_CANCELLED_MESSAGE,
+    mark_dialog_task_cancelable,
 )
 from app.ui.shared.page_config import (
     block_if_missing_api_keys_for_step,
@@ -45,6 +50,7 @@ async def _run_step(
         return
     if loading_dialog is not None:
         loading_dialog.open()
+    mark_dialog_task_cancelable(loading_dialog)
     try:
         _append_assistant_message_to_chat(
             project_id,
@@ -96,6 +102,8 @@ async def _run_step(
             await enqueue_project_step(session, project_id, step_key)
         ui.notify("Etapa agendada para execução interna.", color="positive")
         ui.navigate.reload()
+    except asyncio.CancelledError:
+        ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
     except Exception as exc:
         message = friendly_ai_error(exc)
         _append_assistant_message_to_chat(project_id, f"Não consegui concluir a etapa: {message}")

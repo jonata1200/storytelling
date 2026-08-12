@@ -11,6 +11,8 @@ DEFAULT_APP_SECRET_KEY = "change-me-in-development"
 
 OLLAMA_CLOUD_TEXT_MODELS = (
     "deepseek-v4-flash:cloud",
+    "deepseek-v4-flash:0731-cloud",
+    "deepseek-v4-flash:preview-cloud",
     "gemma4:cloud",
     "minimax-m2.7:cloud",
     "mistral-large-3:675b-cloud",
