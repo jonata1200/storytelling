@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     google_ai_video_default_duration_seconds: int = 8
     google_ai_video_poll_interval_seconds: int = 10
     google_ai_video_poll_timeout_seconds: int = 900
+    ffmpeg_path: str = ""
     image_provider: str | None = "google_ai"
     video_provider: str | None = "google_ai"
     storyboard_image_concurrency: int = 3

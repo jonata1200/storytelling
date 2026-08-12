@@ -467,6 +467,39 @@ def test_continuous_video_planner_splits_short_script_without_scenes() -> None:
     assert continuous_video_segment_validation_errors(segment) == []
 
 
+def test_continuous_video_planner_does_not_create_marker_only_first_segment() -> None:
+    project_id = uuid4()
+    script = _script(
+        project_id,
+        duration=120,
+        content=(
+            "FADE IN:\n\n"
+            "CENA 1\n"
+            "INT. QUARTO - DIA\n\n"
+            "Elias pesa um frasco de perfume vazio em uma balanca digital, "
+            "anota o numero em um caderno antigo e prende a respiracao.\n\n"
+            "CENA 2\n"
+            "INT. QUARTO - DIA\n\n"
+            "Elias coloca uma alianca dourada no centro da balanca, percebe "
+            "um peso impossivel e encara o quarto vazio em silencio.\n\n"
+            "FADE OUT."
+        ),
+    )
+
+    payloads = build_continuous_video_segment_payloads(
+        project_id=project_id,
+        script=script,
+        scenes=[],
+        shots_by_scene={},
+        visual_context=_visual_context(project_id),
+    )
+
+    first_source = payloads[0].metadata_json["source_text"]
+    assert first_source != "FADE IN:\nCENA 1"
+    assert "Elias pesa" in first_source
+    assert "FADE OUT" not in payloads[-1].metadata_json["source_text"]
+
+
 def test_continuous_video_planner_groups_medium_script_shots() -> None:
     project_id = uuid4()
     script = _script(
@@ -906,7 +939,7 @@ async def test_create_continuous_video_segment_is_idempotent(
 
 
 @pytest.mark.asyncio
-async def test_continuous_video_success_enters_review_and_stores_final_frame(
+async def test_continuous_video_success_enters_review_and_stores_preview_frames(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -923,12 +956,26 @@ async def test_continuous_video_success_enters_review_and_stores_final_frame(
         captured_budget=captured_budget,
     )
 
-    def fake_extract(_video_asset: Asset, *, segment_number: int) -> tuple[Path | None, str | None]:
+    def fake_extract_initial(
+        _video_asset: Asset,
+        *,
+        segment_number: int,
+    ) -> tuple[Path | None, str | None]:
+        path = tmp_path / f"segment-{segment_number}-initial.jpg"
+        path.write_bytes(b"initial-frame")
+        return path, None
+
+    def fake_extract_final(
+        _video_asset: Asset,
+        *,
+        segment_number: int,
+    ) -> tuple[Path | None, str | None]:
         path = tmp_path / f"segment-{segment_number}-final.jpg"
         path.write_bytes(b"final-frame")
         return path, None
 
-    monkeypatch.setattr(continuous, "_extract_continuous_video_final_frame", fake_extract)
+    monkeypatch.setattr(continuous, "_extract_continuous_video_initial_frame", fake_extract_initial)
+    monkeypatch.setattr(continuous, "_extract_continuous_video_final_frame", fake_extract_final)
     session = _FakeContinuousSession()
 
     _jobs, processed = await generate_continuous_video_segments(
@@ -940,9 +987,10 @@ async def test_continuous_video_success_enters_review_and_stores_final_frame(
     assert segment.status == GenerationJobStatus.SUCCEEDED
     assert segment.review_status == CONTINUOUS_VIDEO_REVIEW_READY
     assert segment.generated_video_asset_id == segment.asset_id
+    assert segment.metadata_json["initial_frame_asset_id"]
     assert segment.final_frame_asset_id is not None
     assert segment.metadata_json["final_frame_asset_id"] == str(segment.final_frame_asset_id)
-    assert len([item for item in session.added if isinstance(item, Asset)]) == 2
+    assert len([item for item in session.added if isinstance(item, Asset)]) == 3
 
 
 @pytest.mark.asyncio

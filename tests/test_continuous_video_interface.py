@@ -211,6 +211,7 @@ async def test_generate_continuous_video_ui_handler_passes_queue_options(
     project_id = uuid4()
     segment_id = uuid4()
     calls: list[dict[str, Any]] = []
+    dialog_events: list[str] = []
     notifications: list[tuple[str, str | None]] = []
     reloads = 0
 
@@ -221,10 +222,21 @@ async def test_generate_continuous_video_ui_handler_passes_queue_options(
         async def __aexit__(self, *_args: object) -> None:
             return None
 
+    class FakeLoadingDialog:
+        def open(self) -> None:
+            dialog_events.append("open")
+
+        def close(self) -> None:
+            dialog_events.append("close")
+
     async def fake_generate(_session: object, requested_project_id: object, **kwargs: Any) -> tuple:
         assert requested_project_id == project_id
+        dialog_events.append("generate")
         calls.append(kwargs)
         return [object()], [_segment(1, GenerationJobStatus.SUCCEEDED)]
+
+    async def fake_sleep(seconds: float) -> None:
+        dialog_events.append(f"sleep:{seconds}")
 
     def fake_reload() -> None:
         nonlocal reloads
@@ -232,6 +244,7 @@ async def test_generate_continuous_video_ui_handler_passes_queue_options(
 
     monkeypatch.setattr(storyboard_video_area, "AsyncSessionLocal", lambda: FakeSessionContext())
     monkeypatch.setattr(storyboard_video_area, "generate_continuous_video_segments", fake_generate)
+    monkeypatch.setattr(storyboard_video_area.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(
         storyboard_video_area,
         "block_if_missing_api_keys_for_step",
@@ -249,10 +262,12 @@ async def test_generate_continuous_video_ui_handler_passes_queue_options(
         segment_ids=[segment_id],
         retry_failed=True,
         max_segments=1,
+        loading_dialog=FakeLoadingDialog(),
         progress_callback=lambda *_args: None,
         pause_after_current=lambda: False,
     )
 
+    assert dialog_events == ["open", "sleep:0.1", "generate", "close"]
     assert calls == [
         {
             "segment_ids": [segment_id],

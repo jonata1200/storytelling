@@ -1,5 +1,6 @@
 # ruff: noqa: E501
 
+import asyncio
 from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
@@ -53,6 +54,8 @@ from app.ui.workspace.video_handlers import save_video_prompt_from_ui as _save_v
 from app.video_generation.continuous import (
     approve_continuous_video_segment,
     continuous_video_segment_validation_errors,
+    extract_continuous_video_segment_frames,
+    generate_continuous_video_segment,
     generate_continuous_video_segments,
     generate_next_continuous_video_segment,
     plan_continuous_video_segments,
@@ -96,6 +99,21 @@ def _safe_close_ui_element_quietly(element: object | None) -> None:
     except (AssertionError, RuntimeError) as exc:
         if not is_deleted_ui_context_error(exc):
             raise
+
+
+async def _open_loading_dialog_quietly(element: object | None) -> bool:
+    if element is None:
+        return False
+    try:
+        open_dialog = getattr(element, "open", None)
+        if callable(open_dialog):
+            open_dialog()
+    except (AssertionError, RuntimeError) as exc:
+        if is_deleted_ui_context_error(exc):
+            return False
+        raise
+    await asyncio.sleep(0.1)
+    return True
 
 
 def _show_ai_error_unless_context_gone(exc: Exception) -> None:
@@ -185,8 +203,7 @@ async def _plan_continuous_video_segments_from_ui(
     *,
     loading_dialog: Any | None = None,
 ) -> None:
-    if loading_dialog is not None:
-        loading_dialog.open()
+    await _open_loading_dialog_quietly(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             _plan, segments, validation_errors = await plan_continuous_video_segments(
@@ -203,8 +220,7 @@ async def _plan_continuous_video_segments_from_ui(
     except Exception as exc:
         show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
     finally:
-        if loading_dialog is not None:
-            safe_close_ui_element(loading_dialog)
+        _safe_close_ui_element_quietly(loading_dialog)
 
 
 async def _save_continuous_video_segment_prompt_from_ui(
@@ -267,8 +283,7 @@ async def _generate_continuous_video_segments_from_ui(
 ) -> None:
     if block_if_missing_api_keys_for_step("continuous_video"):
         return
-    if loading_dialog is not None:
-        loading_dialog.open()
+    await _open_loading_dialog_quietly(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             jobs, segments = await generate_continuous_video_segments(
@@ -315,8 +330,7 @@ async def _generate_next_continuous_video_segment_from_ui(
 ) -> None:
     if block_if_missing_api_keys_for_step("continuous_video"):
         return
-    if loading_dialog is not None:
-        loading_dialog.open()
+    await _open_loading_dialog_quietly(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             jobs, _segments = await generate_next_continuous_video_segment(
@@ -380,8 +394,7 @@ async def _retry_continuous_video_segment_from_ui(
 ) -> None:
     if block_if_missing_api_keys_for_step("continuous_video"):
         return
-    if loading_dialog is not None:
-        loading_dialog.open()
+    await _open_loading_dialog_quietly(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             await retry_failed_continuous_video_segment(
@@ -407,8 +420,7 @@ async def _regenerate_rejected_continuous_video_segment_from_ui(
 ) -> None:
     if block_if_missing_api_keys_for_step("continuous_video"):
         return
-    if loading_dialog is not None:
-        loading_dialog.open()
+    await _open_loading_dialog_quietly(loading_dialog)
     try:
         async with AsyncSessionLocal() as session:
             await regenerate_rejected_continuous_video_segment(
@@ -419,6 +431,70 @@ async def _regenerate_rejected_continuous_video_segment_from_ui(
             )
         _safe_notify("Segmento regenerado para nova revis\u00e3o.", color="positive")
         _safe_reload()
+    except Exception as exc:
+        _show_ai_error_unless_context_gone(exc)
+    finally:
+        _safe_close_ui_element_quietly(loading_dialog)
+
+
+async def _regenerate_continuous_video_segment_from_ui(
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+    progress_callback: Any | None = None,
+) -> None:
+    if block_if_missing_api_keys_for_step("continuous_video"):
+        return
+    await _open_loading_dialog_quietly(loading_dialog)
+    try:
+        async with AsyncSessionLocal() as session:
+            jobs, _segments = await generate_continuous_video_segment(
+                session,
+                project_id,
+                segment_id,
+                force=True,
+                progress_callback=progress_callback,
+            )
+        notified = _safe_notify(
+            "Segmento regenerado para nova revis\u00e3o." if jobs else "Nada para regenerar agora.",
+            color="positive" if jobs else "info",
+        )
+        if notified:
+            _safe_reload()
+    except Exception as exc:
+        _show_ai_error_unless_context_gone(exc)
+    finally:
+        _safe_close_ui_element_quietly(loading_dialog)
+
+
+async def _extract_continuous_video_frames_from_ui(
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    loading_dialog: Any | None = None,
+) -> None:
+    await _open_loading_dialog_quietly(loading_dialog)
+    try:
+        async with AsyncSessionLocal() as session:
+            segment, errors = await extract_continuous_video_segment_frames(
+                session,
+                project_id,
+                segment_id,
+                force=False,
+            )
+            await session.commit()
+        if segment is None:
+            notified = _safe_notify("Segmento n\u00e3o encontrado.", color="warning")
+        elif errors:
+            notified = _safe_notify(
+                "N\u00e3o foi poss\u00edvel extrair todos os frames. Verifique o FFmpeg.",
+                color="warning",
+            )
+        else:
+            notified = _safe_notify("Frames extra\u00eddos do v\u00eddeo.", color="positive")
+        if notified:
+            _safe_reload()
     except Exception as exc:
         _show_ai_error_unless_context_gone(exc)
     finally:
@@ -600,6 +676,31 @@ def _asset_content_url(asset_id: Any) -> str:
     if asset_id is None:
         return ""
     return f"/api/v1/assets/{asset_id}/content"
+
+
+def _render_continuous_media_preview(
+    title: str,
+    media_url: str,
+    *,
+    media_kind: str,
+    large: bool = False,
+) -> None:
+    container_classes = (
+        "visual-placeholder w-full aspect-[9/16] max-h-[72vh] flex items-center "
+        "justify-center bg-black overflow-hidden"
+        if large
+        else "visual-placeholder aspect-video flex items-center justify-center bg-black overflow-hidden"
+    )
+    media_classes = "w-full h-full object-contain" if large else "w-full h-full object-cover"
+    with ui.element("div").classes("min-w-0 w-full"):
+        ui.label(title).classes("text-xs text-[#8d938e]")
+        with ui.element("div").classes(container_classes):
+            if media_url and media_kind == "video":
+                ui.video(media_url, controls=True).classes("w-full h-full")
+            elif media_url:
+                ui.image(media_url).classes(media_classes)
+            else:
+                ui.label("Indispon\u00edvel").classes("text-xs text-[#8d938e]")
 
 
 def _dubbing_asset_url(job: Any) -> str:
@@ -1368,6 +1469,12 @@ def render_video_area(
     continuous_generation_dialog, continuous_progress_callback, pause_after_current = (
         _continuous_queue_progress_dialog(continuous_view_model)
     )
+    frame_extraction_dialog, _frame_extraction_progress_callback = generation_progress_dialog(
+        "Extraindo frames",
+        1,
+        "etapa",
+        "Agora: extraindo previews do video gerado.",
+    )
 
     if continuous_view_model.is_continuous_mode:
         with ui.row().classes("w-full items-start justify-between gap-4 mb-2"):
@@ -1464,6 +1571,12 @@ def render_video_area(
                         getattr(segment, "review_status", None)
                         or getattr(getattr(segment, "status", ""), "value", segment.status)
                     ).lower()
+                    is_generating_segment = status_value in {
+                        "generating",
+                        "running",
+                        "sending",
+                        "processing",
+                    }
                     segment_number = int(getattr(segment, "segment_number", 0) or 0)
                     can_use_previous = segment_number <= 1 or (
                         segment_number - 1 in approved_segment_numbers
@@ -1471,12 +1584,29 @@ def render_video_area(
                     generated_video_url = _asset_content_url(
                         getattr(segment, "generated_video_asset_id", None)
                         or getattr(segment, "asset_id", None)
+                        or (
+                            metadata.get("previous_generated_video_asset_id")
+                            if is_generating_segment
+                            else None
+                        )
                     )
-                    source_frame_url = _asset_content_url(
-                        getattr(segment, "source_frame_asset_id", None)
+                    initial_frame_url = _asset_content_url(
+                        metadata.get("initial_frame_asset_id")
+                        or getattr(segment, "source_frame_asset_id", None)
+                        or (
+                            metadata.get("previous_initial_frame_asset_id")
+                            if is_generating_segment
+                            else None
+                        )
                     )
                     final_frame_url = _asset_content_url(
                         getattr(segment, "final_frame_asset_id", None)
+                        or metadata.get("final_frame_asset_id")
+                        or (
+                            metadata.get("previous_final_frame_asset_id")
+                            if is_generating_segment
+                            else None
+                        )
                     )
                     with (
                         ui.dialog().props(BLOCKING_DIALOG_PROPS) as segment_prompt_dialog,
@@ -1533,9 +1663,50 @@ def render_video_area(
                             ).props("unelevated no-caps").classes("acid-bg rounded-xl")
 
                     with (
+                        ui.dialog().props(BLOCKING_DIALOG_PROPS) as segment_media_dialog,
+                        ui.card().classes(
+                            "entity-card rounded-2xl p-5 w-[min(1180px,96vw)] "
+                            "h-[min(880px,92vh)] flex flex-col overflow-hidden"
+                        ),
+                    ):
+                        with ui.row().classes("w-full items-center justify-between gap-3 shrink-0"):
+                            with ui.column().classes("gap-1 min-w-0"):
+                                ui.label(
+                                    getattr(segment, "title", "")
+                                    or f"Segmento {segment.segment_number:02d}"
+                                ).classes("brand-type text-2xl font-bold")
+                                ui.label("Frame inicial, video e frame final").classes(
+                                    "text-xs text-[#8d938e]"
+                                )
+                            ui.button(
+                                icon="close",
+                                on_click=segment_media_dialog.close,
+                            ).props("flat round dense")
+                        with ui.grid().classes(
+                            "w-full grid-cols-1 lg:grid-cols-3 gap-4 mt-4 flex-1 min-h-0 overflow-y-auto"
+                        ):
+                            _render_continuous_media_preview(
+                                "Frame inicial",
+                                initial_frame_url,
+                                media_kind="image",
+                                large=True,
+                            )
+                            _render_continuous_media_preview(
+                                "V\u00eddeo",
+                                generated_video_url,
+                                media_kind="video",
+                                large=True,
+                            )
+                            _render_continuous_media_preview(
+                                "Frame final",
+                                final_frame_url,
+                                media_kind="image",
+                                large=True,
+                            )
+
+                    with (
                         ui.element("div")
-                        .classes("entity-card rounded-2xl p-4 cursor-pointer")
-                        .on("click", segment_prompt_dialog.open)
+                        .classes("entity-card rounded-2xl p-4")
                     ):
                         with ui.row().classes("w-full items-start justify-between gap-3"):
                             with ui.column().classes("gap-1 min-w-0"):
@@ -1558,41 +1729,23 @@ def render_video_area(
                                     else "blue-status-badge bg-[#243342]"
                                 )
                             )
-                        if generated_video_url or source_frame_url or final_frame_url:
+                        if generated_video_url or initial_frame_url or final_frame_url:
                             with ui.grid().classes("w-full grid-cols-1 md:grid-cols-3 gap-3 mt-3"):
-                                with ui.element("div").classes("min-w-0"):
-                                    ui.label("Fonte").classes("text-xs text-[#8d938e]")
-                                    with ui.element("div").classes(
-                                        "visual-placeholder aspect-video flex items-center justify-center bg-black overflow-hidden"
-                                    ):
-                                        if source_frame_url:
-                                            ui.image(source_frame_url).classes(
-                                                "w-full h-full object-cover"
-                                            )
-                                        else:
-                                            ui.icon("image").classes("text-[#4a504b]")
-                                with ui.element("div").classes("min-w-0"):
-                                    ui.label("V\u00eddeo").classes("text-xs text-[#8d938e]")
-                                    with ui.element("div").classes(
-                                        "visual-placeholder aspect-video flex items-center justify-center bg-black overflow-hidden"
-                                    ):
-                                        if generated_video_url:
-                                            ui.video(generated_video_url, controls=True).classes(
-                                                "w-full h-full"
-                                            )
-                                        else:
-                                            ui.icon("movie").classes("text-[#4a504b]")
-                                with ui.element("div").classes("min-w-0"):
-                                    ui.label("Frame final").classes("text-xs text-[#8d938e]")
-                                    with ui.element("div").classes(
-                                        "visual-placeholder aspect-video flex items-center justify-center bg-black overflow-hidden"
-                                    ):
-                                        if final_frame_url:
-                                            ui.image(final_frame_url).classes(
-                                                "w-full h-full object-cover"
-                                            )
-                                        else:
-                                            ui.icon("filter_center_focus").classes("text-[#4a504b]")
+                                _render_continuous_media_preview(
+                                    "Frame inicial",
+                                    initial_frame_url,
+                                    media_kind="image",
+                                )
+                                _render_continuous_media_preview(
+                                    "V\u00eddeo",
+                                    generated_video_url,
+                                    media_kind="video",
+                                )
+                                _render_continuous_media_preview(
+                                    "Frame final",
+                                    final_frame_url,
+                                    media_kind="image",
+                                )
                         if not can_use_previous:
                             ui.label(
                                 f"Aprove o segmento {segment_number - 1:02d} antes de gerar este."
@@ -1606,6 +1759,11 @@ def render_video_area(
                                 "Frame final indispon\u00edvel: "
                                 + str(metadata.get("final_frame_error"))[:220]
                             ).classes("text-xs text-[#ffddb4] mt-2")
+                        if metadata.get("initial_frame_error"):
+                            ui.label(
+                                "Frame inicial indispon\u00edvel: "
+                                + str(metadata.get("initial_frame_error"))[:220]
+                            ).classes("text-xs text-[#ffddb4] mt-2")
                         if metadata.get("continuity_source_summary"):
                             ui.label(str(metadata.get("continuity_source_summary"))[:260]).classes(
                                 "text-xs text-[#8d938e] mt-2"
@@ -1614,6 +1772,14 @@ def render_video_area(
                             ui.label("; ".join(validation_errors)).classes(
                                 "text-xs text-[#ffb4b4] mt-2"
                             )
+                        if is_generating_segment:
+                            with ui.row().classes(
+                                "items-center gap-2 mt-3 text-sm text-[#d1d4d1]"
+                            ):
+                                ui.spinner(size="sm").classes("acid")
+                                ui.label(
+                                    "Gerando nova vers\u00e3o do segmento. A revis\u00e3o volta assim que o v\u00eddeo terminar."
+                                )
                         ui.label(str(metadata.get("action") or "")).classes(
                             "text-sm text-[#d1d4d1] line-clamp-3 mt-3"
                         )
@@ -1623,7 +1789,28 @@ def render_video_area(
                             "text-xs text-[#aeb4af] whitespace-pre-wrap mt-3 line-clamp-5"
                         )
                         with ui.row().classes("w-full justify-end mt-2"):
-                            if status_value == "ready_for_review":
+                            if generated_video_url or initial_frame_url or final_frame_url:
+                                ui.button(
+                                    "Visualizar",
+                                    icon="open_in_full",
+                                    on_click=segment_media_dialog.open,
+                                ).props("flat dense no-caps").classes("rounded-xl")
+                            if is_generating_segment:
+                                generating_button = ui.button(
+                                    "Gerando",
+                                    icon="hourglass_empty",
+                                ).props("unelevated dense no-caps disable").classes(
+                                    "acid-bg rounded-xl"
+                                )
+                                generating_button.tooltip(
+                                    "A gera\u00e7\u00e3o esta em andamento. Atualize para verificar o resultado."
+                                )
+                                ui.button(
+                                    "Atualizar",
+                                    icon="refresh",
+                                    on_click=_safe_reload,
+                                ).props("flat dense no-caps").classes("rounded-xl")
+                            elif status_value == "ready_for_review":
                                 ui.button(
                                     "Aprovar",
                                     icon="check",
@@ -1644,6 +1831,32 @@ def render_video_area(
                                         )
                                     ),
                                 ).props("flat dense no-caps").classes("rounded-xl")
+                                ui.button(
+                                    "Regenerar",
+                                    icon="refresh",
+                                    on_click=lambda segment_id=segment.id: (
+                                        _regenerate_continuous_video_segment_from_ui(
+                                            project_id,
+                                            segment_id,
+                                            loading_dialog=continuous_generation_dialog,
+                                            progress_callback=continuous_progress_callback,
+                                        )
+                                    ),
+                                ).props("flat dense no-caps").classes("rounded-xl")
+                                if generated_video_url and (
+                                    not initial_frame_url or not final_frame_url
+                                ):
+                                    ui.button(
+                                        "Extrair frames",
+                                        icon="image_search",
+                                        on_click=lambda segment_id=segment.id: (
+                                            _extract_continuous_video_frames_from_ui(
+                                                project_id,
+                                                segment_id,
+                                                loading_dialog=frame_extraction_dialog,
+                                            )
+                                        ),
+                                    ).props("flat dense no-caps").classes("rounded-xl")
                             elif status_value == "failed":
                                 retry_button = ui.button(
                                     "Tentar de novo",
@@ -1707,7 +1920,10 @@ def render_video_area(
                                 "Editar prompt",
                                 icon="edit",
                                 on_click=segment_prompt_dialog.open,
-                            ).props("flat dense no-caps").classes("text-[#d8dbd8] rounded-xl")
+                            ).props(
+                                "flat dense no-caps"
+                                + (" disable" if is_generating_segment else "")
+                            ).classes("text-[#d8dbd8] rounded-xl")
         else:
             with ui.element("div").classes("entity-card rounded-2xl p-6 w-full mt-4"):
                 ui.label("Nenhum segmento planejado").classes("brand-type text-xl font-bold")

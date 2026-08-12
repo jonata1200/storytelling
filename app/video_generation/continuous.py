@@ -4,6 +4,7 @@ import json
 import logging
 import math
 import mimetypes
+import re
 import shutil
 import subprocess
 from collections.abc import Awaitable, Callable
@@ -404,7 +405,7 @@ def _names_present(text: str, visual_items: list[dict[str, str]]) -> list[str]:
 
 
 def _chunk_text_fallback(content: str, segment_count: int) -> list[str]:
-    paragraphs = [part.strip() for part in content.splitlines() if part.strip()]
+    paragraphs = _script_visual_paragraphs(content)
     if not paragraphs:
         paragraphs = [content.strip()]
     if len(paragraphs) >= segment_count:
@@ -416,7 +417,7 @@ def _chunk_text_fallback(content: str, segment_count: int) -> list[str]:
         while len(chunks) < segment_count:
             chunks.append(chunks[-1])
         return chunks[:segment_count]
-    words = content.split()
+    words = _script_action_text_for_chunks(paragraphs).split()
     if not words:
         return ["acao visual principal do roteiro"] * segment_count
     chunk_size = max(1, math.ceil(len(words) / segment_count))
@@ -427,6 +428,53 @@ def _chunk_text_fallback(content: str, segment_count: int) -> list[str]:
     while len(chunks) < segment_count:
         chunks.append(chunks[-1])
     return chunks[:segment_count]
+
+
+def _script_visual_paragraphs(content: str) -> list[str]:
+    raw_paragraphs = [part.strip() for part in content.splitlines() if part.strip()]
+    paragraphs: list[str] = []
+    pending_headers: list[str] = []
+    for paragraph in raw_paragraphs:
+        if _is_transition_marker(paragraph):
+            continue
+        if _is_scene_marker(paragraph) or _is_slugline(paragraph):
+            pending_headers.append(paragraph)
+            continue
+        if pending_headers:
+            paragraphs.append("\n".join([*pending_headers, paragraph]))
+            pending_headers = []
+            continue
+        paragraphs.append(paragraph)
+    return paragraphs
+
+
+def _script_action_text_for_chunks(paragraphs: list[str]) -> str:
+    action_lines: list[str] = []
+    for paragraph in paragraphs:
+        for line in paragraph.splitlines():
+            clean_line = line.strip()
+            if not clean_line:
+                continue
+            if _is_transition_marker(clean_line) or _is_scene_marker(clean_line) or _is_slugline(
+                clean_line
+            ):
+                continue
+            action_lines.append(clean_line)
+    return " ".join(action_lines)
+
+
+def _is_transition_marker(text: str) -> bool:
+    normalized = text.strip().casefold().rstrip(":.")
+    return normalized in {"fade in", "fade out", "corta para", "cut to"}
+
+
+def _is_scene_marker(text: str) -> bool:
+    return re.match(r"(?i)^cena\s+\d+\b", text.strip()) is not None
+
+
+def _is_slugline(text: str) -> bool:
+    normalized = text.strip().casefold()
+    return normalized.startswith(("int.", "ext.", "int/ext.", "int./ext."))
 
 
 def _ordered_shot_units(scenes: list[Scene], shots_by_scene: dict[UUID, list[Shot]]) -> list[dict]:
@@ -1148,25 +1196,12 @@ async def _persist_continuous_video_segment_success(
     metadata["completed_at"] = datetime.now(UTC).isoformat()
     metadata["resumed_external_operation"] = resumed_external_operation
     segment.metadata_json = metadata
-    final_frame_path, final_frame_error = _extract_continuous_video_final_frame(
-        asset,
-        segment_number=segment.segment_number,
+    await _extract_and_persist_continuous_video_frames(
+        session,
+        segment=segment,
+        video_asset=asset,
+        force=True,
     )
-    if final_frame_path is not None:
-        final_frame_asset = await _persist_continuous_video_final_frame_asset(
-            session,
-            segment=segment,
-            video_asset=asset,
-            frame_path=final_frame_path,
-        )
-        metadata = dict(segment.metadata_json or {})
-        metadata["final_frame_asset_id"] = str(final_frame_asset.id)
-        metadata["final_frame_storage_uri"] = final_frame_asset.storage_uri
-        segment.metadata_json = metadata
-    elif final_frame_error:
-        metadata = dict(segment.metadata_json or {})
-        metadata["final_frame_error"] = final_frame_error
-        segment.metadata_json = metadata
     _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_READY)
     job.status = GenerationJobStatus.SUCCEEDED
     job.progress = 100
@@ -1325,25 +1360,42 @@ def _continuous_video_local_storage_path(storage_uri: str) -> Path | None:
     return None
 
 
-def _extract_continuous_video_final_frame(
+def _continuous_video_ffmpeg_path() -> str | None:
+    configured_path = str(getattr(get_settings(), "ffmpeg_path", "") or "").strip().strip('"')
+    if configured_path:
+        path = Path(configured_path)
+        if path.is_file():
+            return str(path)
+        discovered = shutil.which(configured_path)
+        if discovered:
+            return discovered
+    return shutil.which("ffmpeg")
+
+
+def _extract_continuous_video_frame(
     video_asset: Asset,
     *,
     segment_number: int,
+    frame_role: str,
 ) -> tuple[Path | None, str | None]:
-    ffmpeg_path = shutil.which("ffmpeg")
+    normalized_role = "initial" if frame_role == "initial" else "final"
+    role_label = "inicial" if normalized_role == "initial" else "final"
+    ffmpeg_path = _continuous_video_ffmpeg_path()
     if not ffmpeg_path:
-        return None, "FFmpeg nao encontrado para extrair frame final."
+        return None, f"FFmpeg nao encontrado para extrair frame {role_label}."
     source_path = _continuous_video_local_storage_path(str(video_asset.storage_uri or ""))
     if source_path is None:
         return None, "Arquivo de video nao encontrado no armazenamento local."
-    output_dir = source_path.parent / "final_frames"
+    output_dir = source_path.parent / "frames"
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{source_path.stem}_segment_{segment_number:03d}_final.jpg"
+    output_path = (
+        output_dir / f"{source_path.stem}_segment_{segment_number:03d}_{normalized_role}.jpg"
+    )
+    seek_args = ["-sseof", "-0.05"] if normalized_role == "final" else []
     command = [
         ffmpeg_path,
         "-y",
-        "-sseof",
-        "-0.05",
+        *seek_args,
         "-i",
         str(source_path),
         "-frames:v",
@@ -1361,27 +1413,54 @@ def _extract_continuous_video_final_frame(
             timeout=120,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        return None, f"Falha ao extrair frame final: {exc}"
+        return None, f"Falha ao extrair frame {role_label}: {exc}"
     if completed.returncode != 0 or not output_path.is_file():
         detail = (completed.stderr or completed.stdout or "").strip()
-        return None, f"FFmpeg nao extraiu frame final: {detail[:500]}"
+        return None, f"FFmpeg nao extraiu frame {role_label}: {detail[:500]}"
     return output_path, None
 
 
-async def _persist_continuous_video_final_frame_asset(
+def _extract_continuous_video_initial_frame(
+    video_asset: Asset,
+    *,
+    segment_number: int,
+) -> tuple[Path | None, str | None]:
+    return _extract_continuous_video_frame(
+        video_asset,
+        segment_number=segment_number,
+        frame_role="initial",
+    )
+
+
+def _extract_continuous_video_final_frame(
+    video_asset: Asset,
+    *,
+    segment_number: int,
+) -> tuple[Path | None, str | None]:
+    return _extract_continuous_video_frame(
+        video_asset,
+        segment_number=segment_number,
+        frame_role="final",
+    )
+
+
+async def _persist_continuous_video_frame_asset(
     session: AsyncSession,
     *,
     segment: ContinuousVideoSegment,
     video_asset: Asset,
     frame_path: Path,
+    frame_role: str,
 ) -> Asset:
+    normalized_role = "initial" if frame_role == "initial" else "final"
+    role_label = "initial" if normalized_role == "initial" else "final"
     frame_bytes = await asyncio.to_thread(frame_path.read_bytes)
     content_type = mimetypes.guess_type(frame_path.name)[0] or "image/jpeg"
     asset = Asset(
         project_id=segment.project_id,
         artifact_id=None,
         kind=AssetKind.IMAGE,
-        name=f"Continuous segment {segment.segment_number:03d} final frame",
+        name=f"Continuous segment {segment.segment_number:03d} {role_label} frame",
         storage_uri=frame_path.as_posix(),
         content_type=content_type,
         sha256=hashlib.sha256(frame_bytes).hexdigest(),
@@ -1389,7 +1468,7 @@ async def _persist_continuous_video_final_frame_asset(
             "segment_id": str(segment.id),
             "segment_number": segment.segment_number,
             "source_video_asset_id": str(video_asset.id),
-            "technical_role": "continuous_video_final_frame",
+            "technical_role": f"continuous_video_{role_label}_frame",
         },
     )
     apply_asset_storage_metadata(asset)
@@ -1404,8 +1483,66 @@ async def _persist_continuous_video_final_frame_asset(
             metadata_json=asset.metadata_json,
         )
     )
-    segment.final_frame_asset_id = asset.id
+    if normalized_role == "final":
+        segment.final_frame_asset_id = asset.id
     return asset
+
+
+async def _persist_continuous_video_final_frame_asset(
+    session: AsyncSession,
+    *,
+    segment: ContinuousVideoSegment,
+    video_asset: Asset,
+    frame_path: Path,
+) -> Asset:
+    return await _persist_continuous_video_frame_asset(
+        session,
+        segment=segment,
+        video_asset=video_asset,
+        frame_path=frame_path,
+        frame_role="final",
+    )
+
+
+async def _extract_and_persist_continuous_video_frames(
+    session: AsyncSession,
+    *,
+    segment: ContinuousVideoSegment,
+    video_asset: Asset,
+    force: bool = False,
+) -> dict[str, str]:
+    metadata = dict(segment.metadata_json or {})
+    errors: dict[str, str] = {}
+    for frame_role, extractor in (
+        ("initial", _extract_continuous_video_initial_frame),
+        ("final", _extract_continuous_video_final_frame),
+    ):
+        metadata.pop(f"{frame_role}_frame_error", None)
+        existing_asset_id = (
+            segment.final_frame_asset_id
+            if frame_role == "final"
+            else metadata.get("initial_frame_asset_id")
+        )
+        if existing_asset_id and not force:
+            continue
+        frame_path, frame_error = extractor(video_asset, segment_number=segment.segment_number)
+        if frame_path is None:
+            if frame_error:
+                metadata[f"{frame_role}_frame_error"] = frame_error
+                errors[frame_role] = frame_error
+            continue
+        frame_asset = await _persist_continuous_video_frame_asset(
+            session,
+            segment=segment,
+            video_asset=video_asset,
+            frame_path=frame_path,
+            frame_role=frame_role,
+        )
+        metadata[f"{frame_role}_frame_asset_id"] = str(frame_asset.id)
+        metadata[f"{frame_role}_frame_storage_uri"] = frame_asset.storage_uri
+    segment.metadata_json = metadata
+    await session.flush()
+    return errors
 
 
 def _continuous_video_progress_rows(
@@ -1965,6 +2102,31 @@ async def retry_failed_continuous_video_segment(
     )
 
 
+async def extract_continuous_video_segment_frames(
+    session: AsyncSession,
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    force: bool = False,
+) -> tuple[ContinuousVideoSegment | None, dict[str, str]]:
+    segment = await session.get(ContinuousVideoSegment, segment_id)
+    if segment is None or segment.project_id != project_id:
+        return None, {}
+    video_asset_id = segment.generated_video_asset_id or segment.asset_id
+    if segment.status != GenerationJobStatus.SUCCEEDED or video_asset_id is None:
+        raise ValueError("Somente segmentos com video gerado podem ter frames extraidos.")
+    video_asset = await session.get(Asset, video_asset_id)
+    if video_asset is None:
+        raise ValueError("Asset de video do segmento nao encontrado.")
+    errors = await _extract_and_persist_continuous_video_frames(
+        session,
+        segment=segment,
+        video_asset=video_asset,
+        force=force,
+    )
+    return segment, errors
+
+
 async def regenerate_rejected_continuous_video_segment(
     session: AsyncSession,
     project_id: UUID,
@@ -2002,8 +2164,19 @@ def _reset_continuous_video_segment_for_regeneration(
     previous_asset_id = segment.asset_id or segment.generated_video_asset_id
     if previous_asset_id is not None:
         metadata["previous_generated_video_asset_id"] = str(previous_asset_id)
+    if metadata.get("initial_frame_asset_id"):
+        metadata["previous_initial_frame_asset_id"] = str(metadata["initial_frame_asset_id"])
     if segment.final_frame_asset_id is not None:
         metadata["previous_final_frame_asset_id"] = str(segment.final_frame_asset_id)
+    for key in (
+        "initial_frame_asset_id",
+        "initial_frame_storage_uri",
+        "initial_frame_error",
+        "final_frame_asset_id",
+        "final_frame_storage_uri",
+        "final_frame_error",
+    ):
+        metadata.pop(key, None)
     metadata.pop("error", None)
     metadata["regeneration_reason"] = reason
     metadata["regeneration_requested_at"] = datetime.now(UTC).isoformat()
