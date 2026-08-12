@@ -1,6 +1,5 @@
 ﻿import asyncio
 import logging
-import shutil
 from collections import Counter
 from decimal import Decimal
 from typing import Any
@@ -37,6 +36,7 @@ from app.observability.schemas import (
     ReadinessComponentRead,
     ReadinessDashboardRead,
 )
+from app.providers.media_utils import resolve_ffmpeg_path
 from app.providers.speech.service import speech_configuration_status
 from app.video_generation.models import GenerationJob
 
@@ -364,12 +364,12 @@ async def readiness_dashboard(
         )
 
     components.append(await _redis_check("redis", app_settings.redis_url))
-    ffmpeg_path = shutil.which("ffmpeg")
+    ffmpeg_path = resolve_ffmpeg_path(app_settings.ffmpeg_path)
     components.append(
         ReadinessComponentRead(
             name="ffmpeg",
             status="ready" if ffmpeg_path else "degraded",
-            message="FFmpeg encontrado" if ffmpeg_path else "FFmpeg não encontrado no PATH",
+            message="FFmpeg encontrado" if ffmpeg_path else "FFmpeg não encontrado",
             details={"path": ffmpeg_path},
         )
     )

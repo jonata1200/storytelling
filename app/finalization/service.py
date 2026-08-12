@@ -3,7 +3,6 @@ import hashlib
 import json
 import logging
 import re
-import shutil
 import subprocess
 import tempfile
 import unicodedata
@@ -36,6 +35,7 @@ from app.observability.schemas import OperationalEventCreate
 from app.observability.service import emit_project_event
 from app.projects.models import Artifact, ArtifactVersion
 from app.projects.repository import ProjectRepository
+from app.providers.media_utils import resolve_ffmpeg_path
 from app.providers.speech.service import (
     speech_configuration_status,
     speech_model_from_settings,
@@ -886,7 +886,7 @@ async def export_timeline(
     settings = get_settings()
     export_dir = settings.local_storage_path / "exports" / str(project_id)
     export_dir.mkdir(parents=True, exist_ok=True)
-    ffmpeg_path = shutil.which("ffmpeg")
+    ffmpeg_path = resolve_ffmpeg_path(settings.ffmpeg_path)
     status = "MANIFEST_ONLY"
     output_path = export_dir / f"export_{uuid4().hex[:8]}.json"
     render_log = "FFmpeg not found; wrote structured export manifest."

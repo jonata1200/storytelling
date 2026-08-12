@@ -5,7 +5,6 @@ import logging
 import math
 import mimetypes
 import re
-import shutil
 import subprocess
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -42,6 +41,7 @@ from app.production.service import (
     normalize_video_resolution,
 )
 from app.projects.repository import ProjectRepository
+from app.providers.media_utils import resolve_ffmpeg_path
 from app.providers.video.google_ai import GoogleAIVideoProvider
 from app.providers.video.types import VideoProvider, VideoRequest, VideoResult
 from app.storage.service import apply_asset_storage_metadata
@@ -1464,15 +1464,73 @@ def _continuous_video_local_storage_path(storage_uri: str) -> Path | None:
 
 
 def _continuous_video_ffmpeg_path() -> str | None:
-    configured_path = str(getattr(get_settings(), "ffmpeg_path", "") or "").strip().strip('"')
-    if configured_path:
-        path = Path(configured_path)
-        if path.is_file():
-            return str(path)
-        discovered = shutil.which(configured_path)
-        if discovered:
-            return discovered
-    return shutil.which("ffmpeg")
+    return resolve_ffmpeg_path(getattr(get_settings(), "ffmpeg_path", ""))
+
+
+def _continuous_video_frame_extract_commands(
+    ffmpeg_path: str,
+    source_path: Path,
+    output_path: Path,
+    *,
+    normalized_role: str,
+) -> list[list[str]]:
+    base_args = [
+        ffmpeg_path,
+        "-y",
+        "-i",
+        str(source_path),
+        "-map",
+        "0:v:0",
+        "-an",
+        "-sn",
+        "-dn",
+        "-frames:v",
+        "1",
+        "-q:v",
+        "2",
+        str(output_path),
+    ]
+    if normalized_role == "initial":
+        return [base_args]
+    return [
+        [
+            ffmpeg_path,
+            "-y",
+            "-sseof",
+            "-0.1",
+            "-i",
+            str(source_path),
+            "-map",
+            "0:v:0",
+            "-an",
+            "-sn",
+            "-dn",
+            "-frames:v",
+            "1",
+            "-q:v",
+            "2",
+            str(output_path),
+        ],
+        [
+            ffmpeg_path,
+            "-y",
+            "-sseof",
+            "-1",
+            "-i",
+            str(source_path),
+            "-map",
+            "0:v:0",
+            "-an",
+            "-sn",
+            "-dn",
+            "-frames:v",
+            "1",
+            "-q:v",
+            "2",
+            str(output_path),
+        ],
+        base_args,
+    ]
 
 
 def _extract_continuous_video_frame(
@@ -1494,32 +1552,33 @@ def _extract_continuous_video_frame(
     output_path = (
         output_dir / f"{source_path.stem}_segment_{segment_number:03d}_{normalized_role}.jpg"
     )
-    seek_args = ["-sseof", "-0.05"] if normalized_role == "final" else []
-    command = [
+    command_errors: list[str] = []
+    for command in _continuous_video_frame_extract_commands(
         ffmpeg_path,
-        "-y",
-        *seek_args,
-        "-i",
-        str(source_path),
-        "-frames:v",
-        "1",
-        "-q:v",
-        "2",
-        str(output_path),
-    ]
-    try:
-        completed = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        return None, f"Falha ao extrair frame {role_label}: {exc}"
-    if completed.returncode != 0 or not output_path.is_file():
+        source_path,
+        output_path,
+        normalized_role=normalized_role,
+    ):
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            command_errors.append(str(exc))
+            continue
+        if completed.returncode == 0 and output_path.is_file():
+            return output_path, None
         detail = (completed.stderr or completed.stdout or "").strip()
-        return None, f"FFmpeg nao extraiu frame {role_label}: {detail[:500]}"
+        if detail:
+            command_errors.append(detail[:500])
+    if command_errors:
+        return None, f"FFmpeg nao extraiu frame {role_label}: {command_errors[-1]}"
+    if not output_path.is_file():
+        return None, f"FFmpeg nao gerou arquivo para o frame {role_label}."
     return output_path, None
 
 

@@ -31,7 +31,7 @@ timeline, exportação e controle de qualidade.
 - Python 3.12 ou superior
 - Docker Desktop
 - Git
-- FFmpeg opcional para exportação/renderização de vídeo
+- FFmpeg para renderização/exportação e extração de frames de continuidade
 
 ## Instalação
 
@@ -85,6 +85,7 @@ VIDEO_PROVIDER=google_ai
 GOOGLE_AI_API_KEY=sua_chave_google_ai
 GOOGLE_AI_IMAGE_MODEL=gemini-3.1-flash-lite-image
 GOOGLE_AI_VIDEO_MODEL=veo-3.1-lite-generate-preview
+FFMPEG_PATH=C:\caminho\para\ffmpeg.exe
 
 SPEECH_PROVIDER=elevenlabs
 DUBBING_PROVIDER=elevenlabs

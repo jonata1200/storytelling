@@ -600,7 +600,8 @@ def test_visual_reference_aspect_ratio_matches_asset_type_and_view() -> None:
     assert visual_reference_aspect_ratio(character, "front_portrait") == "9:16"
     assert visual_reference_aspect_ratio(location, "establishing") == "16:9"
     assert visual_reference_aspect_ratio(prop, "front") == "9:16"
-    assert visual_reference_aspect_ratio(prop, "side") == "16:9"
+    assert visual_reference_aspect_ratio(prop, "side") == "9:16"
+    assert visual_reference_aspect_ratio(prop, "prop_reference_sheet") == "9:16"
 
 
 def test_profile_items_accepts_mapping_sections_from_story_bible() -> None:

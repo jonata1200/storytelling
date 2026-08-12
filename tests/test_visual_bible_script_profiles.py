@@ -58,7 +58,8 @@ def test_script_fallback_extracts_locations_and_props() -> None:
     props = _script_prop_profiles(script)
 
     assert [item["name"] for item in locations] == ["Cozinha De Dona Lourdes", "Quintal"]
-    assert "Panela De Ferro Preto" in [item["name"] for item in props]
+    assert "Panela De Ferro Preto" not in [item["name"] for item in props]
+    assert "Colher De Pau" in [item["name"] for item in props]
     assert "Carta Amarelada" in [item["name"] for item in props]
 
 
@@ -193,6 +194,36 @@ def test_visual_profile_merge_filters_weak_set_dressing_props_without_evidence()
     assert [item["name"] for item in merged] == ["Diário Preto", "Travesseiro"]
 
 
+def test_visual_profile_merge_keeps_only_main_story_props() -> None:
+    items: list[dict] = [
+        {"name": "Caneca", "narrative_importance": "aparece na mesa da cozinha"},
+        {"name": "Carta", "evidence_text": ["Lia entrega a carta ao pai."]},
+        {"name": "Chave", "narrative_importance": "pista central da revelacao final"},
+    ]
+
+    merged = _merge_profile_items("prop", items, [])
+
+    assert [item["name"] for item in merged] == ["Carta", "Chave"]
+
+
+def test_visual_profile_merge_limits_main_props() -> None:
+    items = [
+        {"name": f"Objeto {index}", "evidence_text": [f"Lia pega o objeto {index}."]}
+        for index in range(1, 9)
+    ]
+
+    merged = _merge_profile_items("prop", items, [])
+
+    assert [item["name"] for item in merged] == [
+        "Objeto 1",
+        "Objeto 2",
+        "Objeto 3",
+        "Objeto 4",
+        "Objeto 5",
+        "Objeto 6",
+    ]
+
+
 def test_script_fallback_trims_action_phrases_from_props() -> None:
     script = """
     O desenho e tosco, mas cheio de vida.
@@ -202,7 +233,7 @@ def test_script_fallback_trims_action_phrases_from_props() -> None:
     props = _script_prop_profiles(script)
     names = [item["name"] for item in props]
 
-    assert "Desenho" in names
+    assert "Desenho" not in names
     assert "Corda" in names
     assert "Chave" in names
     assert "Desenho E Tosco" not in names

@@ -277,15 +277,11 @@ def _prop_view_guardrail(view_type: str) -> str:
 def visual_reference_aspect_ratio(profile: dict, view_type: str) -> str:
     if view_type == "character_reference_sheet":
         return "16:9"
-    if view_type == "prop_reference_sheet":
-        return "16:9"
     asset_kind = str(profile.get("asset_kind") or "")
-    if asset_kind == "location":
-        return "16:9"
-    if asset_kind == "prop" and view_type == "side":
-        return "16:9"
     if asset_kind == "prop":
         return "9:16"
+    if asset_kind == "location":
+        return "16:9"
     if asset_kind == "character" and view_type != "front_portrait":
         return "16:9"
     return "9:16"

@@ -1,6 +1,8 @@
+import sys
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -11,6 +13,7 @@ from app.assets.models import Asset
 from app.core.enums import GenerationJobStatus, GenerationJobType, ProjectStatus
 from app.costs.service import estimate_operation_cost
 from app.projects.models import Project
+from app.providers import media_utils
 from app.providers.video.types import ProviderCapabilities, VideoRequest, VideoResult
 from app.storytelling.models import Scene, Script, Shot
 from app.video_generation import continuous
@@ -421,6 +424,22 @@ def test_continuous_video_fast_cost_estimate_uses_text_to_video_override() -> No
     assert estimate.unit == "second"
     assert estimate.unit_cost == Decimal("0.100000")
     assert estimate.estimated == Decimal("0.700000")
+
+
+def test_continuous_video_ffmpeg_path_uses_imageio_ffmpeg_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ffmpeg_path = tmp_path / "ffmpeg.exe"
+    ffmpeg_path.write_bytes(b"binary")
+    module = ModuleType("imageio_ffmpeg")
+    module.get_ffmpeg_exe = lambda: str(ffmpeg_path)  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(continuous, "get_settings", lambda: SimpleNamespace(ffmpeg_path=""))
+    monkeypatch.setattr(media_utils.shutil, "which", lambda _name: None)
+    monkeypatch.setitem(sys.modules, "imageio_ffmpeg", module)
+
+    assert continuous._continuous_video_ffmpeg_path() == str(ffmpeg_path)
 
 
 def test_continuous_video_planner_splits_short_script_without_scenes() -> None:

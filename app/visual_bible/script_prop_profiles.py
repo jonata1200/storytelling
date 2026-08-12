@@ -4,6 +4,7 @@ from app.visual_bible.script_profiles import (
     _append_metadata as _append_metadata,
 )
 from app.visual_bible.script_profiles import (
+    _ascii_lower,
     _candidate_importance,
     _clean_script_entity_name,
     _entity_key,
@@ -61,6 +62,18 @@ SCRIPT_PROP_KEYWORDS = (
     "tabua",
     "tambor",
     "violino",
+)
+
+SCRIPT_MAIN_PROP_EVIDENCE_RE = re.compile(
+    r"\b("
+    r"abre|acende|apaga|aperta|aponta|carrega|coloca|constroi|constroem|"
+    r"desenha|destranca|entrega|encontra|esconde|escreve|fecha|folheia|"
+    r"guarda|le|levanta|mexe|mistura|mostra|mostram|pega|puxa|quebra|queima|"
+    r"rasga|recebe|revela|segura|tira|toca|tranca|traz|usa|utiliza|"
+    r"central|climax|destaque|importante|payoff|pista|principal|prova|"
+    r"recorrente|revelacao|ritual|segredo|virada"
+    r")\b",
+    re.IGNORECASE,
 )
 
 
@@ -125,6 +138,11 @@ def _prop_evidence_text(block: str, start: int, end: int) -> str:
     return re.sub(r"\s+", " ", evidence)[:240]
 
 
+def _script_prop_has_main_evidence(evidence_text: str) -> bool:
+    normalized = _ascii_lower(evidence_text)
+    return bool(SCRIPT_MAIN_PROP_EVIDENCE_RE.search(normalized))
+
+
 def _script_prop_profiles(script_content: str) -> list[dict]:
     profiles: list[dict] = []
     seen: set[str] = set()
@@ -149,6 +167,9 @@ def _script_prop_profiles(script_content: str) -> list[dict]:
             name = _clean_script_prop_name(raw_name)
             if not name or len(name) < 3:
                 continue
+            evidence_text = _prop_evidence_text(block, match.start(1), match.end(1))
+            if not _script_prop_has_main_evidence(evidence_text):
+                continue
             key = _entity_key(name)
             if key in seen:
                 continue
@@ -161,10 +182,10 @@ def _script_prop_profiles(script_content: str) -> list[dict]:
                 _script_prop_profile(
                     name,
                     scene_number,
-                    _prop_evidence_text(block, match.start(1), match.end(1)),
+                    evidence_text,
                 )
             )
             break
-        if len(profiles) >= 12:
+        if len(profiles) >= 6:
             break
     return profiles

@@ -548,20 +548,93 @@ SCREENPLAY_MARKER_NAMES = {
 WEAK_SET_DRESSING_PROP_NAMES = {
     "abajur",
     "almofada",
+    "balcao",
+    "balcão",
+    "banco",
     "cama",
     "cadeira",
+    "cobertor",
     "cortina",
+    "estante",
     "janela",
     "lencol",
     "lençol",
     "mesa",
+    "piso",
     "parede",
     "porta",
+    "prateleira",
     "sofa",
     "sofá",
     "tapete",
     "travesseiro",
+    "vaso",
 }
+
+MAX_MAIN_VISUAL_PROPS = 6
+
+PROP_MAIN_ACTION_TERMS = (
+    "abre",
+    "acende",
+    "apaga",
+    "aperta",
+    "aponta",
+    "carrega",
+    "coloca",
+    "constroi",
+    "constroem",
+    "desenha",
+    "destranca",
+    "entrega",
+    "encontra",
+    "esconde",
+    "escreve",
+    "fecha",
+    "folheia",
+    "guarda",
+    "le",
+    "levanta",
+    "mexe",
+    "mistura",
+    "mostra",
+    "mostram",
+    "pega",
+    "puxa",
+    "quebra",
+    "queima",
+    "rasga",
+    "recebe",
+    "revela",
+    "segura",
+    "tira",
+    "toca",
+    "tranca",
+    "traz",
+    "usa",
+    "utiliza",
+)
+
+PROP_MAIN_STORY_TERMS = (
+    "arma",
+    "central",
+    "climax",
+    "clímax",
+    "destaque",
+    "heranca",
+    "herança",
+    "importante",
+    "mensagem",
+    "payoff",
+    "pista",
+    "principal",
+    "prova",
+    "recorrente",
+    "revelacao",
+    "revelação",
+    "ritual",
+    "segredo",
+    "virada",
+)
 
 VISUAL_CHARACTER_HONORIFIC_PREFIXES = {
     "dona",
@@ -627,13 +700,30 @@ def _has_strong_prop_evidence(item: dict) -> bool:
     return bool(
         re.search(
             r"\b("
-            r"pega|segura|entrega|recebe|abre|fecha|le|lê|esconde|revela|"
-            r"encontra|guarda|carrega|mostra|usa|quebra|rasga|queima|"
-            r"prova|pista|payoff|segredo|revelacao|revelação|chave"
+            + "|".join(re.escape(term) for term in PROP_MAIN_ACTION_TERMS)
+            + "|"
+            + "|".join(re.escape(_ascii_lower(term)) for term in PROP_MAIN_STORY_TERMS)
+            + r"|chave"
             r")\b",
             normalized,
         )
     )
+
+
+def _main_visual_prop(item: dict) -> bool:
+    if _has_strong_prop_evidence(item):
+        return True
+    normalized_name = _ascii_lower(_visual_item_name(item))
+    normalized_importance = _ascii_lower(
+        item.get("importance")
+        or item.get("narrative_importance")
+        or item.get("importancia")
+        or item.get("importância")
+        or ""
+    )
+    if any(term in normalized_importance for term in ("principal", "recorrente", "destaque")):
+        return True
+    return bool(normalized_name == "chave" or normalized_name.startswith("chave "))
 
 
 def _invalid_visual_item(target_kind: str, item: dict) -> bool:
@@ -644,6 +734,8 @@ def _invalid_visual_item(target_kind: str, item: dict) -> bool:
         return True
     if target_kind == "prop":
         normalized_name = re.sub(r"\s+", " ", _ascii_lower(name)).strip()
+        if not _main_visual_prop(item):
+            return True
         if normalized_name in WEAK_SET_DRESSING_PROP_NAMES and not _has_strong_prop_evidence(
             item
         ):
@@ -726,6 +818,8 @@ def _merge_profile_items(target_kind: str, primary: list[dict], fallback: list[d
 
     def append(item: dict) -> None:
         if _invalid_visual_item(target_kind, item):
+            return
+        if target_kind == "prop" and len(merged) >= MAX_MAIN_VISUAL_PROPS:
             return
         key = _visual_merge_key(target_kind, item)
         if not key:

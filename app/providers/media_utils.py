@@ -1,9 +1,47 @@
 ﻿import base64
+import logging
 import mimetypes
+import shutil
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from app.config.settings import get_settings
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_ffmpeg_path(configured_path: object = None) -> str | None:
+    configured = str(configured_path or "").strip().strip('"')
+    if configured:
+        path = Path(configured)
+        if path.is_file():
+            return str(path)
+        discovered = shutil.which(configured)
+        if discovered:
+            return discovered
+    discovered = shutil.which("ffmpeg")
+    if discovered:
+        return discovered
+    try:
+        from imageio_ffmpeg import get_ffmpeg_exe
+    except ImportError:
+        pass
+    else:
+        try:
+            imageio_ffmpeg_path = Path(get_ffmpeg_exe())
+        except Exception:
+            logger.debug("imageio_ffmpeg did not resolve an ffmpeg executable", exc_info=True)
+        else:
+            if imageio_ffmpeg_path.is_file():
+                return str(imageio_ffmpeg_path)
+    for candidate in (
+        Path("C:/ffmpeg/bin/ffmpeg.exe"),
+        Path("C:/Program Files/ffmpeg/bin/ffmpeg.exe"),
+        Path("C:/Program Files (x86)/ffmpeg/bin/ffmpeg.exe"),
+    ):
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 def _resolved_storage_root() -> Path:
