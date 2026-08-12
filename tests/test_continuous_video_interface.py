@@ -188,6 +188,55 @@ def test_continuous_dubbing_requires_minimum_three_approved_segments() -> None:
     assert allowed_reason == ""
 
 
+def test_continuous_video_unlocked_without_props_when_refs_complete() -> None:
+    counts = {
+        **_counts_without_storyboard(),
+        "characters": 2,
+        "locations": 1,
+        "props": 0,
+        "visual_refs": 3,
+        "continuous_video_segments": 0,
+    }
+
+    allowed, reason = workspace_section_access(
+        "video",
+        counts,
+        CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    )
+
+    assert allowed is True
+    assert reason == ""
+
+
+def test_visual_bible_still_requires_characters_and_locations_without_props() -> None:
+    counts = {
+        **_counts_without_storyboard(),
+        "characters": 2,
+        "locations": 1,
+        "props": 0,
+        "visual_refs": 1,
+        "continuous_video_segments": 0,
+    }
+
+    blocked, reason = workspace_section_access(
+        "video",
+        counts,
+        CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    )
+
+    assert blocked is False
+    assert "imagens" in reason
+
+    counts["locations"] = 0
+    blocked, reason = workspace_section_access(
+        "video",
+        counts,
+        CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    )
+    assert blocked is False
+    assert "imagens" in reason
+
+
 def test_continuous_project_progression_skips_storyboard_requirement() -> None:
     context = {
         "production_settings": {"workflow_mode": CONTINUOUS_VIDEO_WORKFLOW_MODE},

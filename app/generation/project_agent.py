@@ -236,13 +236,11 @@ async def _ensure_visual_pipeline(
 
     existing_characters = await _count(session, Character, project_id)
     existing_locations = await _count(session, Location, project_id)
-    existing_props = await _count(session, Prop, project_id)
     needs_visual = (
         reset_existing
         or force
         or existing_characters == 0
         or existing_locations == 0
-        or existing_props == 0
     )
     changed = changed or needs_visual
     if needs_visual:

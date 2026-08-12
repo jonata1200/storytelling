@@ -244,7 +244,6 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
     shots = counts.get("shots", 0)
     characters = counts.get("characters", 0)
     locations = counts.get("locations", 0)
-    props = counts.get("props", 0)
     frames = counts.get("frames", 0)
     clips = counts.get("clips", 0)
     exports = counts.get("exports", 0)
@@ -257,7 +256,7 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
         return "generate_script"
     if not continuous_mode and (scenes == 0 or shots == 0):
         return "generate_script"
-    if characters == 0 or locations == 0 or props == 0:
+    if characters == 0 or locations == 0:
         return "generate_assets"
     if continuous_mode and (
         continuous_segments == 0

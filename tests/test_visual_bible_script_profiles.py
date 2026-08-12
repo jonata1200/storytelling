@@ -163,6 +163,34 @@ def test_script_fallback_ignores_end_and_epilogue_markers_as_characters() -> Non
     assert [item["name"] for item in _script_character_profiles(script)] == ["Sr. Oliveira"]
 
 
+def test_script_fallback_excludes_incorporeal_entities_from_characters() -> None:
+    script = """
+    INT. SALA DE ESTAR - DIA
+    CLARA digita no computador.
+
+    IA
+    Clara, o sistema respondeu.
+
+    CLARA
+    Obrigada.
+
+    NARRADOR (V.O.)
+    Clara ainda não sabia o segredo.
+
+    OBSERVADOR
+    Ele vê tudo.
+
+    CLARA
+    Continue.
+
+    VOZ OFF
+    Você precisa confiar no toque.
+    """
+
+    assert _script_character_names(script) == ["Clara"]
+    assert [item["name"] for item in _script_character_profiles(script)] == ["Clara"]
+
+
 def test_visual_profile_merge_filters_markers_and_deduplicates_honorifics() -> None:
     primary = [
         {"name": "Sr. Oliveira", "role": "gerente"},

@@ -11,18 +11,19 @@ VISUAL_REFERENCE_VIEW_COUNTS = {
 
 
 def expected_visual_reference_count(counts: dict[str, int]) -> int:
-    return sum(
-        int(counts.get(key, 0) or 0) * view_count
-        for key, view_count in VISUAL_REFERENCE_VIEW_COUNTS.items()
-    )
+    total = 0
+    for key, view_count in VISUAL_REFERENCE_VIEW_COUNTS.items():
+        count = int(counts.get(key, 0) or 0)
+        if key == "props" and count <= 0:
+            continue
+        total += count * view_count
+    return total
 
 
 def visual_assets_ready(counts: dict[str, int]) -> bool:
     if int(counts.get("characters", 0) or 0) <= 0:
         return False
     if int(counts.get("locations", 0) or 0) <= 0:
-        return False
-    if int(counts.get("props", 0) or 0) <= 0:
         return False
     return int(counts.get("visual_refs", 0) or 0) >= expected_visual_reference_count(counts)
 

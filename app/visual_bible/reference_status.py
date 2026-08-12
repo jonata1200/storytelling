@@ -124,7 +124,8 @@ async def visual_reference_completion_report(
         targets = list(result.scalars())
         counts[count_key] = len(targets)
         if not targets:
-            missing_categories.append(label)
+            if target_kind != "prop":
+                missing_categories.append(label)
             continue
 
         for target in targets:

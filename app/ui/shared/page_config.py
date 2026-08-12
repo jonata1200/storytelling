@@ -254,10 +254,13 @@ def _append_count(
 
 
 def _expected_visual_references(counts: dict[str, Any]) -> int:
-    return sum(
-        _safe_count(counts, key) * view_count
-        for key, view_count in VISUAL_REFERENCE_VIEW_COUNTS.items()
-    )
+    total = 0
+    for key, view_count in VISUAL_REFERENCE_VIEW_COUNTS.items():
+        count = _safe_count(counts, key)
+        if key == "props" and count <= 0:
+            continue
+        total += count * view_count
+    return total
 
 
 def _created_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
@@ -338,8 +341,7 @@ def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
             missing.append("prompts de personagens")
         if _safe_count(counts, "locations") <= 0:
             missing.append("prompts de locais")
-        if _safe_count(counts, "props") <= 0:
-            missing.append("prompts de objetos")
+        # objetos (props) sao opcionais: sem objetos criados, nao bloqueiam a etapa
         if expected_visual_refs > visual_refs:
             pending_refs = expected_visual_refs - visual_refs
             missing.append(

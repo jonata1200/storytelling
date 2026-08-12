@@ -59,6 +59,7 @@ from app.visual_bible.profiles import (
     _character_profile,
     _fingerprint,
     _location_profile,
+    _looks_like_non_character_name,
     _merge_profile_items,
     _payload_section,
     _profile_items,
@@ -372,6 +373,29 @@ async def generate_visual_bible(
             character_items,
             _script_character_profiles(script_content),
         )
+    character_items = [
+        item
+        for item in character_items
+        if not _looks_like_non_character_name(str(item.get("name") or ""))
+    ]
+    if not character_items:
+        fallback_name = protagonist_hint or (
+            _script_character_names(script_content)[0]
+            if _script_character_names(script_content)
+            else "Protagonista"
+        )
+        character_items = [
+            {
+                "name": fallback_name,
+                "role": "protagonista",
+                "desire": source_payload.get("protagonist_desire")
+                or source_payload.get("stakes")
+                or "cumprir a promessa emocional da historia",
+                "arc": source_payload.get("emotional_need")
+                or source_payload.get("resolution")
+                or "transformacao emocional visivel",
+            }
+        ]
     character_profiles = [_character_profile(raw) for raw in character_items]
     _raise_visual_profile_errors("character", character_profiles)
     existing_character_result = await session.execute(

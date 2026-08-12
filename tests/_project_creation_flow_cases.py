@@ -92,7 +92,7 @@ def test_step_loading_copy_reports_progress_data_for_visual_work() -> None:
     created = [item.label for item in status.created]
     missing = [item.label for item in status.missing]
     assert "2 personagens" in created
-    assert "prompts de objetos" in missing
+    assert "prompts de objetos" not in missing
     assert "2 referencias visuais" in missing
 
 

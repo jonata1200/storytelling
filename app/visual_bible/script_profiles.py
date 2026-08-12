@@ -402,6 +402,18 @@ SCRIPT_CHARACTER_EXCLUSIONS = {
     "PROLOGO",
     "PRÓLOGO",
     "CENA",
+    "NARRADOR",
+    "NARRADORA",
+    "NARRACAO",
+    "NARRAÇÃO",
+    "OBSERVADOR",
+    "OBSERVADORA",
+    "VOZ",
+    "VOZ OFF",
+    "IA",
+    "I.A.",
+    "INTELIGENCIA ARTIFICIAL",
+    "INTELIGÊNCIA ARTIFICIAL",
     "MENINO",
     "MENINA",
     "GAROTO",
@@ -456,12 +468,31 @@ def _strip_character_honorifics(value: object) -> str:
     return " ".join(tokens)
 
 
+NON_CORPOREAL_CHARACTER_PHRASES = (
+    "narrador",
+    "narradora",
+    "observador",
+    "observadora",
+    "inteligencia artificial",
+    "inteligência artificial",
+    "voz off",
+)
+
+NON_CORPOREAL_CHARACTER_WORDS = ("ia", "voz")
+
+
 def _looks_like_non_character_name(name: str) -> bool:
     key = _character_exclusion_key(name)
     exclusion_keys = {_character_exclusion_key(item) for item in SCRIPT_CHARACTER_EXCLUSIONS}
     if key in exclusion_keys:
         return True
     normalized = _ascii_lower(name)
+    if any(phrase in normalized for phrase in NON_CORPOREAL_CHARACTER_PHRASES):
+        return True
+    if any(
+        re.search(rf"\b{re.escape(word)}\b", normalized) for word in NON_CORPOREAL_CHARACTER_WORDS
+    ):
+        return True
     if normalized.startswith(
         (
             "ato ",
