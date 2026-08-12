@@ -41,7 +41,6 @@ from app.ui.shared.generation_progress import (
     mark_dialog_task_cancelable,
 )
 from app.ui.shared.page_config import (
-    DEFAULT_STORY_DURATION_MINUTES,
     IDEA_COUNT_OPTIONS,
     IDEA_GENRES,
     STORY_DURATION_OPTIONS,
@@ -888,7 +887,7 @@ def register_home_pages(
                             ui.select(
                                 STORY_DURATION_OPTIONS,
                                 label="Duração",
-                                value=int(DEFAULT_STORY_DURATION_MINUTES),
+                                value=int(STORY_DURATION_OPTIONS[0]),
                             )
                             .props("outlined suffix='min'")
                             .classes("w-36")

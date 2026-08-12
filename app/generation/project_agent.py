@@ -85,6 +85,7 @@ from app.storytelling.service import (
     revise_script,
 )
 from app.video_generation.continuous import (
+    CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS,
     continuous_video_segment_is_approved,
     list_continuous_video_segments,
     plan_continuous_video_segments,
@@ -734,16 +735,21 @@ async def _ensure_finalization_pipeline(
                 video_result.changed,
                 video_result.failed,
             )
-        unapproved = [
-            segment
-            for segment in segments
-            if not continuous_video_segment_is_approved(segment)
-        ]
-        if unapproved:
+        approved_count = sum(
+            1 for segment in segments if continuous_video_segment_is_approved(segment)
+        )
+        required = min(CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS, len(segments))
+        if approved_count < required:
+            unapproved = [
+                segment
+                for segment in segments
+                if not continuous_video_segment_is_approved(segment)
+            ]
             first = min(unapproved, key=lambda item: int(item.segment_number or 0))
             return ProjectChatResult(
                 (
-                    "Aprove todos os segmentos de video continuo antes da finalizacao. "
+                    f"Aprove pelo menos {required} segmentos de video continuo "
+                    "antes da finalizacao. "
                     f"Proximo pendente: segmento {first.segment_number}."
                 ),
                 "generate_finalization",

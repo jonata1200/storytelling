@@ -687,9 +687,14 @@ async def create_final_timeline(
     )
     continuous_segments = list(continuous_result.scalars())
     if continuous_segments:
+        approved_segments = [
+            segment
+            for segment in continuous_segments
+            if str(getattr(segment, "review_status", "") or "").lower() == "approved"
+        ]
         asset_ids = {
             asset_id
-            for segment in continuous_segments
+            for segment in approved_segments
             for asset_id in (segment.generated_video_asset_id, segment.asset_id)
             if asset_id is not None
         }
@@ -700,13 +705,13 @@ async def create_final_timeline(
             )
             asset_by_id = {asset.id: asset for asset in asset_result.scalars()}
         coverage_errors = continuous_video_timeline_coverage_errors(
-            continuous_segments,
+            approved_segments,
             asset_by_id,
         )
         if coverage_errors:
             raise ValueError("Timeline final incompleta: " + "; ".join(coverage_errors))
         approved_segments = sorted(
-            continuous_segments,
+            approved_segments,
             key=lambda item: int(item.segment_number or 0),
         )
         duration_seconds = sum(int(segment.duration_seconds or 0) for segment in approved_segments)

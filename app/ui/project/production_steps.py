@@ -3,7 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from nicegui import ui
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.database.session import AsyncSessionLocal
 from app.jobs.service import enqueue_project_step
@@ -23,7 +23,7 @@ from app.ui.shared.page_config import (
     safe_close_ui_element,
     show_ai_error_popup,
 )
-from app.video_generation.models import VideoClip
+from app.video_generation.models import ContinuousVideoSegment, VideoClip
 from app.visual_bible.service import (
     visual_reference_completion_message,
     visual_reference_completion_report,
@@ -77,7 +77,15 @@ async def _run_step(
                     select(VideoClip).where(VideoClip.project_id == project_id)
                 )
                 clips = list(result.scalars())
-                if not clips:
+                approved_continuous = await session.scalar(
+                    select(func.count())
+                    .select_from(ContinuousVideoSegment)
+                    .where(
+                        ContinuousVideoSegment.project_id == project_id,
+                        ContinuousVideoSegment.review_status == "approved",
+                    )
+                )
+                if not clips and int(approved_continuous or 0) <= 0:
                     raise ValueError("gere os clipes de video primeiro")
 
             if step_key not in {

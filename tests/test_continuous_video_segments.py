@@ -166,10 +166,12 @@ class _FakeContinuousProvider:
         self.tmp_path = tmp_path
         self.fail_operation = fail_operation
         self.submitted_prompts: list[str] = []
+        self.submitted_requests: list[VideoRequest] = []
         self.polled_operations: list[str] = []
 
     async def submit_from_text(self, request: VideoRequest) -> str:
         self.submitted_prompts.append(request.prompt)
+        self.submitted_requests.append(request)
         return f"operations/continuous-{len(self.submitted_prompts)}"
 
     async def poll_submitted(
@@ -189,7 +191,7 @@ class _FakeContinuousProvider:
             storage_uri=path.as_posix(),
             sha256="a" * 64,
             provider="google_ai",
-            model="veo-3.1-fast-generate-preview",
+            model=request.model,
             metadata={"operation_name": external_job_id},
         )
 
@@ -467,8 +469,8 @@ def test_continuous_video_planner_splits_short_script_without_scenes() -> None:
     assert payloads[0].script_id == script.id
     assert payloads[0].review_status == CONTINUOUS_VIDEO_REVIEW_PENDING
     assert "Segmento 01" in payloads[0].prompt
-    assert "CRIE UM UNICO PLANO DE VIDEO" in payloads[0].prompt
-    assert "ACAO VISIVEL DO SEGMENTO" in payloads[0].prompt
+    assert "Plano unico vertical 9:16" in payloads[0].prompt
+    assert "Acao" in payloads[0].prompt
     assert "Biblioteca Visual" in payloads[0].prompt
     assert "Nao criar legendas" in payloads[0].prompt
     assert payloads[0].metadata_json["action"].endswith(".")
@@ -577,6 +579,36 @@ def test_continuous_video_segment_validation_rejects_incomplete_action() -> None
 
     assert "acao principal termina em frase incompleta" in errors
     assert "prompt contem frase incompleta" in errors
+
+
+def test_continuous_video_segment_prompt_uses_compact_visual_context() -> None:
+    project_id = uuid4()
+    visual_context = continuous_video_visual_context(
+        [
+            Character(
+                project_id=project_id,
+                artifact_id=uuid4(),
+                name="Clara",
+                role="protagonista",
+                canonical_profile={"canonical_prompt": "Clara " + "detalhe visual " * 80},
+                character_fingerprint={},
+            )
+        ],
+        [],
+        [],
+    )
+
+    payload = build_continuous_video_segment_payloads(
+        project_id=project_id,
+        script=_script(project_id, duration=8, content="Clara observa a porta."),
+        scenes=[],
+        shots_by_scene={},
+        visual_context=visual_context,
+    )[0]
+
+    assert len(payload.prompt) < 1200
+    assert "detalhe visual " * 20 not in payload.prompt
+    assert "imagens de referencia anexadas" in payload.prompt
 
 
 def test_continuous_video_planner_groups_medium_script_shots() -> None:
@@ -1070,6 +1102,71 @@ async def test_continuous_video_success_enters_review_and_stores_preview_frames(
     assert segment.final_frame_asset_id is not None
     assert segment.metadata_json["final_frame_asset_id"] == str(segment.final_frame_asset_id)
     assert len([item for item in session.added if isinstance(item, Asset)]) == 3
+
+
+@pytest.mark.asyncio
+async def test_continuous_video_generation_sends_visual_reference_uris(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project_id = uuid4()
+    project = Project(id=project_id, title="Projeto", status=ProjectStatus.PRODUCTION_PLANNING)
+    segments = [_planned_segment(project_id, 1)]
+    provider = _FakeContinuousProvider(tmp_path)
+    provider.capabilities = ProviderCapabilities(
+        text_to_video=True,
+        reference_images=True,
+        max_reference_images=3,
+    )
+    reference_path = tmp_path / "clara-reference.png"
+    reference_path.write_bytes(b"image")
+    captured_budget: list[Decimal] = []
+    _patch_continuous_generation_dependencies(
+        monkeypatch,
+        project=project,
+        segments=segments,
+        provider=provider,
+        captured_budget=captured_budget,
+    )
+
+    async def fake_reference_uris(
+        _session: object,
+        _project_id: UUID,
+        _segment: ContinuousVideoSegment,
+        *,
+        limit: int,
+    ) -> list[str]:
+        assert limit == 3
+        return [reference_path.as_posix()]
+
+    monkeypatch.setattr(
+        continuous,
+        "_continuous_video_reference_uris_for_segment",
+        fake_reference_uris,
+    )
+    monkeypatch.setattr(
+        continuous,
+        "_extract_continuous_video_initial_frame",
+        lambda *_args, **_kwargs: (None, "sem frame inicial no teste"),
+    )
+    monkeypatch.setattr(
+        continuous,
+        "_extract_continuous_video_final_frame",
+        lambda *_args, **_kwargs: (None, "sem frame final no teste"),
+    )
+    session = _FakeContinuousSession()
+
+    jobs, processed = await generate_continuous_video_segments(
+        cast(AsyncSession, session),
+        project_id,
+    )
+
+    request = provider.submitted_requests[0]
+    assert request.reference_uris == [reference_path.as_posix()]
+    assert request.model == "veo-3.1-generate-preview"
+    assert jobs[0].request_payload["reference_count"] == 1
+    assert processed[0].metadata_json["reference_uris"] == [reference_path.as_posix()]
+    assert captured_budget == [Decimal("0.700000"), Decimal("2.800000")]
 
 
 @pytest.mark.asyncio

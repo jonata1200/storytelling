@@ -1,3 +1,4 @@
+from app.video_generation.continuous import CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS
 from app.visual_bible.prompts import default_views_for
 
 WORKSPACE_SECTIONS = ("script", "assets", "storyboard", "video", "finalization", "dubbing")
@@ -47,14 +48,31 @@ def is_continuous_video_workflow(workflow_mode: object) -> bool:
     return not mode or mode == CONTINUOUS_VIDEO_WORKFLOW_MODE
 
 
+def continuous_video_required_approved(counts: dict[str, int]) -> int:
+    total = int(counts.get("continuous_video_segments", 0) or 0)
+    if total <= 0:
+        return 0
+    return min(CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS, total)
+
+
 def continuous_video_ready(counts: dict[str, int]) -> bool:
-    return int(counts.get("continuous_video_approved_segments", 0) or 0) > 0
+    approved = int(counts.get("continuous_video_approved_segments", 0) or 0)
+    required = continuous_video_required_approved(counts)
+    return required > 0 and approved >= required
 
 
 def continuous_video_complete(counts: dict[str, int]) -> bool:
-    total = int(counts.get("continuous_video_segments", 0) or 0)
-    approved = int(counts.get("continuous_video_approved_segments", 0) or 0)
-    return total > 0 and approved >= total
+    return continuous_video_ready(counts)
+
+
+def _continuous_video_advance_message(counts: dict[str, int], stage: str) -> str:
+    required = continuous_video_required_approved(counts)
+    if required >= CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS:
+        return (
+            f"Aprove pelo menos {CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS} segmentos "
+            f"de video antes de acessar {stage}."
+        )
+    return f"Aprove todos os segmentos de video antes de acessar {stage}."
 
 
 def workspace_section_access(
@@ -102,7 +120,7 @@ def workspace_section_access(
             return False, reason
         if not video_ready:
             if continuous_mode:
-                return False, "Aprove pelo menos um segmento de video antes de acessar dublagem."
+                return False, _continuous_video_advance_message(counts, "dublagem")
             return False, "Gere pelo menos um clipe antes de acessar dublagem."
         return True, ""
     if section == "finalization":
@@ -111,7 +129,7 @@ def workspace_section_access(
             return False, reason
         if not final_video_ready:
             if continuous_mode:
-                return False, "Aprove todos os segmentos de video antes de acessar finalizacao."
+                return False, _continuous_video_advance_message(counts, "finalizacao")
             return False, "Gere pelo menos um clipe antes de acessar finalização."
         return True, ""
     return False, "Etapa desconhecida."

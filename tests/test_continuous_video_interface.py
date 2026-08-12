@@ -130,6 +130,64 @@ def test_continuous_finalization_requires_approved_segment() -> None:
     assert allowed_reason == ""
 
 
+def test_continuous_finalization_requires_minimum_three_approved_segments() -> None:
+    counts = {
+        **_counts_without_storyboard(),
+        "continuous_video_segments": 15,
+    }
+
+    blocked, reason = workspace_section_access(
+        "finalization",
+        counts,
+        CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    )
+    assert blocked is False
+    assert "pelo menos 3" in reason
+
+    counts["continuous_video_approved_segments"] = 2
+    blocked, reason = workspace_section_access(
+        "finalization",
+        counts,
+        CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    )
+    assert blocked is False
+    assert "pelo menos 3" in reason
+
+    counts["continuous_video_approved_segments"] = 3
+    allowed, allowed_reason = workspace_section_access(
+        "finalization",
+        counts,
+        CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    )
+    assert allowed is True
+    assert allowed_reason == ""
+
+
+def test_continuous_dubbing_requires_minimum_three_approved_segments() -> None:
+    counts = {
+        **_counts_without_storyboard(),
+        "continuous_video_segments": 15,
+        "continuous_video_approved_segments": 1,
+    }
+
+    blocked, reason = workspace_section_access(
+        "dubbing",
+        counts,
+        CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    )
+    assert blocked is False
+    assert "pelo menos 3" in reason
+
+    counts["continuous_video_approved_segments"] = 3
+    allowed, allowed_reason = workspace_section_access(
+        "dubbing",
+        counts,
+        CONTINUOUS_VIDEO_WORKFLOW_MODE,
+    )
+    assert allowed is True
+    assert allowed_reason == ""
+
+
 def test_continuous_project_progression_skips_storyboard_requirement() -> None:
     context = {
         "production_settings": {"workflow_mode": CONTINUOUS_VIDEO_WORKFLOW_MODE},

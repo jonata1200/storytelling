@@ -18,6 +18,7 @@ from app.generation.project_agent_visual import (
     _requests_visual_prompt_approval,
 )
 from app.generation.service import run_structured_generation
+from app.video_generation.continuous import CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS
 
 CONTINUOUS_VIDEO_WORKFLOW_MODE = "continuous_fast"
 
@@ -259,7 +260,9 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
     if characters == 0 or locations == 0 or props == 0:
         return "generate_assets"
     if continuous_mode and (
-        continuous_segments == 0 or approved_continuous_segments < continuous_segments
+        continuous_segments == 0
+        or approved_continuous_segments
+        < min(CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS, continuous_segments)
     ):
         return "generate_video"
     if continuous_mode:

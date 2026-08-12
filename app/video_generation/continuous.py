@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from inspect import isawaitable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -52,7 +52,7 @@ from app.video_generation.schemas import (
     ContinuousVideoPlanCreate,
     ContinuousVideoSegmentCreate,
 )
-from app.visual_bible.models import Character, Location, Prop
+from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.workflows.state_machine import advance_project_status
 
 logger = logging.getLogger(__name__)
@@ -62,8 +62,11 @@ ContinuousVideoProgressCallback = Callable[
 ]
 
 CONTINUOUS_VIDEO_DEFAULT_PROVIDER = "google_ai"
+CONTINUOUS_VIDEO_DEFAULT_MODEL = "veo-3.1-generate-preview"
 CONTINUOUS_VIDEO_FAST_MODEL = "veo-3.1-fast-generate-preview"
 CONTINUOUS_VIDEO_DEFAULT_SEGMENT_SECONDS = 8
+CONTINUOUS_VIDEO_REFERENCE_LIMIT = 3
+CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS = 3
 CONTINUOUS_VIDEO_REVIEW_PENDING = "pending"
 CONTINUOUS_VIDEO_REVIEW_GENERATING = "generating"
 CONTINUOUS_VIDEO_REVIEW_READY = "ready_for_review"
@@ -172,7 +175,7 @@ def continuous_video_request_fingerprint(
     prompt: str,
     duration_seconds: int,
     provider: str = CONTINUOUS_VIDEO_DEFAULT_PROVIDER,
-    model: str = CONTINUOUS_VIDEO_FAST_MODEL,
+    model: str = CONTINUOUS_VIDEO_DEFAULT_MODEL,
     script_fingerprint: str = "",
     visual_fingerprint: str = "",
     source_segment_id: UUID | None = None,
@@ -313,7 +316,7 @@ async def create_or_get_continuous_video_segment(
     if await ProjectRepository(session).get_project(project_id) is None:
         raise ValueError("Project not found")
     provider = payload.provider.strip() or CONTINUOUS_VIDEO_DEFAULT_PROVIDER
-    model = payload.model.strip() or CONTINUOUS_VIDEO_FAST_MODEL
+    model = payload.model.strip() or CONTINUOUS_VIDEO_DEFAULT_MODEL
     fingerprint = payload.request_fingerprint or continuous_video_request_fingerprint(
         project_id=project_id,
         segment_number=payload.segment_number,
@@ -677,7 +680,18 @@ def _segment_sources(
     return segments
 
 
-def _visual_reference_text(visual_context: dict[str, list[dict[str, str]]]) -> str:
+def _compact_visual_prompt(value: object, max_chars: int = 120) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rsplit(" ", 1)[0].rstrip(" ,.;") + "."
+
+
+def _visual_reference_text(
+    visual_context: dict[str, list[dict[str, str]]],
+    *,
+    source_text: str = "",
+) -> str:
     lines: list[str] = []
     for label, key in (
         ("Personagens", "characters"),
@@ -687,11 +701,19 @@ def _visual_reference_text(visual_context: dict[str, list[dict[str, str]]]) -> s
         values = visual_context.get(key, [])
         if not values:
             continue
+        names = set(_names_present(source_text, values)) if source_text else set()
+        selected = [item for item in values if item.get("name") in names] or values[:2]
         joined = "; ".join(
-            f"{item['name']}: {item.get('prompt') or item['name']}" for item in values[:4]
+            f"{item['name']}: {_compact_visual_prompt(item.get('prompt') or item['name'])}"
+            for item in selected[:2]
         )
         lines.append(f"{label}: {joined}.")
-    return "\n".join(lines) or "Biblioteca Visual ainda sem itens aprovados."
+    if not lines:
+        return "Biblioteca Visual ainda sem itens aprovados."
+    return (
+        "\n".join(lines)
+        + "\nUse as imagens de referencia anexadas como fonte principal de identidade visual."
+    )
 
 
 def _segment_prompt(
@@ -706,27 +728,22 @@ def _segment_prompt(
     continuity_sentence = _normalize_segment_action(continuity)
     action_guidance = _segment_action_guidance(action)
     return (
-        f"Prompt Veo 3.1 Fast - Segmento {segment_number:02d}\n\n"
-        "CRIE UM UNICO PLANO DE VIDEO\n"
-        f"- Duracao exata: {int(duration_seconds)} segundos.\n"
-        "- Formato: vertical 9:16, live action cinematografico realista.\n"
-        "- Nao faca montagem, colagem de momentos ou salto temporal interno.\n"
-        "- A cena deve ser filmavel como uma tomada continua.\n\n"
-        "ACAO VISIVEL DO SEGMENTO\n"
+        f"Prompt Veo 3.1 - Segmento {segment_number:02d}\n\n"
+        f"Plano unico vertical 9:16, live action realista, {int(duration_seconds)}s. "
+        "Sem montagem, texto na tela ou salto temporal interno.\n\n"
+        "Acao\n"
         f"{action}\n"
         f"{action_guidance}\n\n"
-        "CONTINUIDADE\n"
+        "Continuidade\n"
         f"{continuity_sentence} Preserve identidade, idade aparente, figurino, "
-        "posicao, direcao do movimento, estado emocional, escala, paleta, luz, "
-        "ambiente e objetos. Se houver frame inicial de referencia, comece a partir "
-        "dele sem reiniciar a cena.\n\n"
-        "CAMERA\n"
-        "Composicao limpa para mobile, movimento suave e natural, foco no sujeito "
-        "principal e leitura clara dos objetos importantes. Mantenha continuidade "
-        "espacial entre inicio e fim do clipe.\n\n"
-        "Biblioteca Visual canonica\n"
-        f"{_visual_reference_text(visual_context)}\n\n"
-        "RESTRICOES NEGATIVAS\n"
+        "posicao, movimento, emocao, escala, paleta, luz, ambiente e objetos. "
+        "Se houver frame inicial, comece exatamente dele.\n\n"
+        "Camera\n"
+        "Composicao limpa para mobile, movimento suave, foco no sujeito e leitura "
+        "clara dos objetos importantes.\n\n"
+        "Biblioteca Visual\n"
+        f"{_visual_reference_text(visual_context, source_text=source_text)}\n\n"
+        "Negativo\n"
         f"{CONTINUOUS_VIDEO_NEGATIVE_PROMPT}"
     )
 
@@ -740,7 +757,7 @@ def build_continuous_video_segment_payloads(
     visual_context: dict[str, list[dict[str, str]]],
     segment_duration_seconds: int = CONTINUOUS_VIDEO_DEFAULT_SEGMENT_SECONDS,
     provider: str = CONTINUOUS_VIDEO_DEFAULT_PROVIDER,
-    model: str = CONTINUOUS_VIDEO_FAST_MODEL,
+    model: str = CONTINUOUS_VIDEO_DEFAULT_MODEL,
 ) -> list[ContinuousVideoSegmentCreate]:
     script_fingerprint = hashlib.sha256(
         f"{script.id}:{script.updated_at}:{script.content}".encode()
@@ -878,7 +895,7 @@ async def plan_continuous_video_segments(
     *,
     segment_duration_seconds: int = CONTINUOUS_VIDEO_DEFAULT_SEGMENT_SECONDS,
     provider: str = CONTINUOUS_VIDEO_DEFAULT_PROVIDER,
-    model: str = CONTINUOUS_VIDEO_FAST_MODEL,
+    model: str = CONTINUOUS_VIDEO_DEFAULT_MODEL,
     replace_existing: bool = False,
 ) -> tuple[ContinuousVideoPlan, list[ContinuousVideoSegment], dict[int, list[str]]]:
     if await ProjectRepository(session).get_project(project_id) is None:
@@ -1041,9 +1058,9 @@ async def _continuous_video_provider_for_project(
     )
     if resolved_provider != "google_ai":
         raise ValueError("Provider de video continuo nao suportado. Use Google AI.")
-    resolved_model = str(model or app_settings.google_ai_video_fast_model).strip()
+    resolved_model = str(model or app_settings.google_ai_video_model).strip()
     if not resolved_model:
-        resolved_model = CONTINUOUS_VIDEO_FAST_MODEL
+        resolved_model = CONTINUOUS_VIDEO_DEFAULT_MODEL
     return (
         GoogleAIVideoProvider(),
         "google_ai",
@@ -1444,6 +1461,112 @@ async def _continuous_video_assets_by_id(
         return {}
     result = await session.execute(select(Asset).where(Asset.id.in_(asset_ids)))
     return {asset.id: asset for asset in result.scalars()}
+
+
+def _continuous_video_reference_view_priority(target_kind: str, view_type: str) -> int:
+    priorities = {
+        "character": {"front_portrait": 0, "character_reference_sheet": 1},
+        "location": {"establishing": 0},
+        "prop": {"front": 0, "side": 1, "prop_reference_sheet": 2},
+    }
+    return priorities.get(target_kind, {}).get(view_type, 99)
+
+
+def _continuous_video_reference_match_text(segment: ContinuousVideoSegment) -> str:
+    metadata = segment.metadata_json if isinstance(segment.metadata_json, dict) else {}
+    return " ".join(
+        str(value or "")
+        for value in (
+            metadata.get("source_text"),
+            metadata.get("action"),
+            segment.prompt,
+        )
+    ).casefold()
+
+
+async def _continuous_video_reference_uris_for_segment(
+    session: AsyncSession,
+    project_id: UUID,
+    segment: ContinuousVideoSegment,
+    *,
+    limit: int = CONTINUOUS_VIDEO_REFERENCE_LIMIT,
+) -> list[str]:
+    if limit <= 0 or not hasattr(session, "execute"):
+        return []
+    normalized_text = _continuous_video_reference_match_text(segment)
+    target_rows: list[tuple[str, UUID, str, int]] = []
+    for target_kind, model, kind_priority in (
+        ("character", Character, 0),
+        ("location", Location, 1),
+        ("prop", Prop, 2),
+    ):
+        result = await session.execute(
+            select(model).where(model.project_id == project_id).order_by(model.created_at)
+        )
+        for item in result.scalars():
+            item = cast(Character | Location | Prop, item)
+            name = str(getattr(item, "name", "") or "").strip()
+            score = 20 if name and name.casefold() in normalized_text else 0
+            target_rows.append((target_kind, item.id, name, score - kind_priority))
+    if not target_rows:
+        return []
+
+    target_ids_by_kind: dict[str, list[UUID]] = {}
+    for target_kind, target_id, _name, _score in target_rows:
+        target_ids_by_kind.setdefault(target_kind, []).append(target_id)
+
+    references_by_target: dict[tuple[str, UUID], list[VisualReference]] = {}
+    for target_kind, target_ids in target_ids_by_kind.items():
+        refs_result = await session.execute(
+            select(VisualReference)
+            .where(
+                VisualReference.project_id == project_id,
+                VisualReference.target_kind == target_kind,
+                VisualReference.target_id.in_(target_ids),
+                VisualReference.asset_id.is_not(None),
+            )
+            .order_by(VisualReference.created_at.desc())
+        )
+        for reference in refs_result.scalars():
+            key = (reference.target_kind, reference.target_id)
+            references_by_target.setdefault(key, []).append(reference)
+
+    selected_targets = sorted(target_rows, key=lambda row: (-row[3], row[0], row[2]))[:limit]
+    reference_uris: list[str] = []
+    seen: set[str] = set()
+    for target_kind, target_id, _name, _score in selected_targets:
+        references = sorted(
+            references_by_target.get((target_kind, target_id), []),
+            key=lambda item: (
+                _continuous_video_reference_view_priority(item.target_kind, item.view_type),
+                -item.created_at.timestamp(),
+            ),
+        )
+        if not references:
+            continue
+        asset = await session.get(Asset, references[0].asset_id)
+        storage_uri = str(getattr(asset, "storage_uri", "") or "").strip() if asset else ""
+        if storage_uri and storage_uri not in seen:
+            seen.add(storage_uri)
+            reference_uris.append(storage_uri)
+        if len(reference_uris) >= limit:
+            break
+    return reference_uris
+
+
+def _continuous_video_model_for_reference_images(
+    resolved_provider: str,
+    resolved_model: str,
+    reference_uris: list[str],
+) -> str:
+    if not reference_uris or resolved_provider != "google_ai":
+        return resolved_model
+    if GoogleAIVideoProvider._model_supports_reference_images(resolved_model):
+        return resolved_model
+    configured_model = str(getattr(get_settings(), "google_ai_video_model", "") or "").strip()
+    if GoogleAIVideoProvider._model_supports_reference_images(configured_model):
+        return configured_model
+    return CONTINUOUS_VIDEO_DEFAULT_MODEL
 
 
 def _continuous_video_local_storage_path(storage_uri: str) -> Path | None:
@@ -1974,11 +2097,40 @@ async def generate_continuous_video_segments(
             else "prompt_continuity"
         )
         operation = "image_to_video" if continuation_mode == "final_frame_i2v" else "text_to_video"
+        reference_limit = (
+            int(getattr(provider.capabilities, "max_reference_images", 0) or 0)
+            if getattr(provider.capabilities, "reference_images", False)
+            else 0
+        )
+        reference_uris = await _continuous_video_reference_uris_for_segment(
+            session,
+            project_id,
+            segment,
+            limit=reference_limit,
+        )
+        request_model = _continuous_video_model_for_reference_images(
+            resolved_provider,
+            resolved_model,
+            reference_uris,
+        )
+        if request_model != resolved_model:
+            request_estimate = estimate_operation_cost(
+                operation,
+                Decimal(segment.duration_seconds),
+                provider=resolved_provider,
+                model=request_model,
+            )
+            await assert_project_budget_allows(
+                session,
+                project_id,
+                request_estimate.estimated,
+                stage="continuous_video",
+            )
         job = await _continuous_video_generation_job(
             session,
             segment,
             provider=resolved_provider,
-            model=resolved_model,
+            model=request_model,
             operation=operation,
             aspect_ratio=aspect_ratio,
             resolution=resolution,
@@ -1988,6 +2140,8 @@ async def generate_continuous_video_segments(
             **(job.request_payload or {}),
             "source_video_uri": previous_video_uri or None,
             "source_frame_uri": source_frame_uri or None,
+            "reference_uris": reference_uris,
+            "reference_count": len(reference_uris),
         }
         jobs.append(job)
         if validation_errors:
@@ -1997,7 +2151,7 @@ async def generate_continuous_video_segments(
                 job=job,
                 reason="; ".join(validation_errors),
                 provider=resolved_provider,
-                model=resolved_model,
+                model=request_model,
             )
             await session.commit()
             processed.append(segment)
@@ -2012,9 +2166,13 @@ async def generate_continuous_video_segments(
         segment.status = GenerationJobStatus.RUNNING
         _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_GENERATING)
         segment.provider = resolved_provider
-        segment.model = resolved_model
+        segment.model = request_model
         metadata = dict(segment.metadata_json or {})
         metadata["continuation_mode"] = continuation_mode
+        metadata["reference_uris"] = reference_uris
+        metadata["reference_count"] = len(reference_uris)
+        if request_model != resolved_model:
+            metadata["requested_model_before_reference_upgrade"] = resolved_model
         metadata["started_at"] = datetime.now(UTC).isoformat()
         segment.metadata_json = metadata
         await _publish_continuous_video_progress(
@@ -2030,10 +2188,13 @@ async def generate_continuous_video_segments(
             job=job,
             status="started",
             provider=resolved_provider,
-            model=resolved_model,
+            model=request_model,
             message="Segmento de video continuo iniciado",
             estimated_cost=estimate.estimated,
-            details={"continuation_mode": continuation_mode},
+            details={
+                "continuation_mode": continuation_mode,
+                "reference_count": len(reference_uris),
+            },
         )
         await session.commit()
         request = VideoRequest(
@@ -2043,8 +2204,9 @@ async def generate_continuous_video_segments(
             resolution=resolution,
             size=resolution,
             source_image_uri=source_frame_uri or None,
+            reference_uris=reference_uris,
             output_dir=video_dir,
-            model=resolved_model,
+            model=request_model,
         )
         resumed_external_operation = bool(segment.external_operation_id)
         result, operation_id, error = await _run_continuous_video_provider_request(
@@ -2069,7 +2231,7 @@ async def generate_continuous_video_segments(
                 job=job,
                 status="submitted",
                 provider=resolved_provider,
-                model=resolved_model,
+                model=request_model,
                 message="Segmento enviado ao provider",
                 details={
                     "external_operation_id": operation_id,
@@ -2091,7 +2253,7 @@ async def generate_continuous_video_segments(
                 job=job,
                 reason=error or "Provider nao retornou video para o segmento.",
                 provider=resolved_provider,
-                model=resolved_model,
+                model=request_model,
             )
             await session.commit()
             processed.append(segment)

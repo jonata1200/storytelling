@@ -2485,17 +2485,29 @@ def render_dubbing_area(
     loading_dialog_factory: LoadingDialogFactory | None = None,
 ) -> None:
     del loading_dialog_factory
+    continuous_view_model = build_continuous_video_view_model(summary)
     clips = list(summary.get("clips", []))
-    total_duration = sum(int(getattr(clip, "duration_seconds", 0) or 0) for clip in clips)
+    approved_continuous_segments = [
+        segment
+        for segment in summary.get("continuous_video_segments", [])
+        if str(getattr(segment, "review_status", "") or "").lower() == "approved"
+    ]
+    clip_duration = sum(int(getattr(clip, "duration_seconds", 0) or 0) for clip in clips)
+    continuous_duration = sum(
+        int(getattr(segment, "duration_seconds", 0) or 0)
+        for segment in approved_continuous_segments
+    )
+    total_duration = clip_duration or continuous_duration
+    media_count = len(clips) or len(approved_continuous_segments)
     section_title(
         "Dublagem",
         "Gere a versão dublada do vídeo final usando ElevenLabs.",
         None,
         None,
     )
-    if not clips:
+    if not clips and not approved_continuous_segments:
         with ui.element("div").classes("entity-card rounded-2xl p-6 w-full"):
-            ui.label("Nenhum clipe pronto para dublar").classes("brand-type text-2xl font-bold")
+            ui.label("Nenhum video pronto para dublar").classes("brand-type text-2xl font-bold")
             ui.label("Gere os clipes na etapa de vídeo antes de criar a dublagem.").classes(
                 "text-sm text-[#8d938e] leading-6"
             )
@@ -2536,8 +2548,13 @@ def render_dubbing_area(
             show_value=False,
         ).classes("w-full mt-3").props("instant-feedback rounded")
         with ui.row().classes("w-full items-center justify-between gap-3 mt-3"):
+            media_label = (
+                f"{media_count} segmento(s)"
+                if continuous_view_model.is_continuous_mode and not clips
+                else f"{media_count} clipe(s)"
+            )
             ui.label(
-                f"{len(clips)} clipe(s) · {total_duration}s · idioma alvo: "
+                f"{media_label} · {total_duration}s · idioma alvo: "
                 f"{dubbing_target or 'não configurado'}"
             ).classes("text-xs text-[#8d938e]")
             with ui.row().classes("gap-2"):

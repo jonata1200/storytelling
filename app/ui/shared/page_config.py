@@ -12,13 +12,14 @@ from app.config.api_keys import (
     missing_api_key_messages_for_channels,
     missing_api_key_messages_for_creation_step,
 )
+from app.video_generation.continuous import CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS
 from app.visual_bible.prompts import default_views_for
 
 logger = logging.getLogger(__name__)
 
 BRAND_MARK_URL = "/ui-assets/favicon.png"
 DEFAULT_STORY_DURATION_MINUTES = 5.0
-STORY_DURATION_OPTIONS = [2, 5]
+STORY_DURATION_OPTIONS = [2, 4, 6, 8, 10]
 IDEA_COUNT_OPTIONS = list(range(1, 11))
 BLOCKING_DIALOG_PROPS = "persistent no-esc-dismiss no-backdrop-dismiss"
 UI_GENERATION_TIMEOUT_SECONDS = 300
@@ -361,12 +362,12 @@ def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
         if frames > 0 and _safe_count(counts, "animatics") <= 0:
             missing.append("animatic")
     if step_key in {"video", "dubbing", "finalization"} and continuous_segments > 0:
-        if approved_continuous_segments <= 0:
-            missing.append("segmento continuo aprovado")
-        elif approved_continuous_segments < continuous_segments:
+        required_approved = min(CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS, continuous_segments)
+        if approved_continuous_segments < required_approved:
+            pending = required_approved - approved_continuous_segments
             missing.append(
                 _count_text(
-                    continuous_segments - approved_continuous_segments,
+                    pending,
                     "segmento continuo pendente de aprovacao",
                     "segmentos continuos pendentes de aprovacao",
                 )
@@ -424,11 +425,9 @@ def _progress_for_step(step_key: str, counts: dict[str, Any]) -> tuple[int, int,
     if step_key == "video":
         continuous_segments = _safe_count(counts, "continuous_video_segments")
         if continuous_segments > 0:
-            return (
-                min(_safe_count(counts, "continuous_video_approved_segments"), continuous_segments),
-                max(continuous_segments, 1),
-                "segmento",
-            )
+            required_approved = min(CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS, continuous_segments)
+            approved = _safe_count(counts, "continuous_video_approved_segments")
+            return min(approved, required_approved), max(required_approved, 1), "segmento"
         frames = _safe_count(counts, "frames")
         total = max(frames, 1)
         return min(_safe_count(counts, "clips"), total), total, "clipe"
