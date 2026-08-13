@@ -471,7 +471,7 @@ def test_continuous_video_planner_splits_short_script_without_scenes() -> None:
     assert "Segmento 01" in payloads[0].prompt
     assert "Plano unico vertical 9:16" in payloads[0].prompt
     assert "Acao" in payloads[0].prompt
-    assert "Biblioteca Visual" in payloads[0].prompt
+    assert "imagens de referencia anexadas" in payloads[0].prompt
     assert "Nao criar legendas" in payloads[0].prompt
     assert payloads[0].metadata_json["action"].endswith(".")
     assert payloads[0].metadata_json["characters"] == ["Clara"]

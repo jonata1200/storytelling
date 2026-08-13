@@ -480,6 +480,83 @@ NON_CORPOREAL_CHARACTER_PHRASES = (
 
 NON_CORPOREAL_CHARACTER_WORDS = ("ia", "voz")
 
+# Coletivos, equipes e grupos de pessoas que nao devem virar personagens.
+# Os termos estao em forma ascii-lower pois a comparacao usa _ascii_lower().
+GROUP_CHARACTER_WORDS = (
+    "adolescentes",
+    "alunas",
+    "alunos",
+    "amigas",
+    "amigos",
+    "assembleia",
+    "audiencia",
+    "avos",
+    "banda",
+    "bandas",
+    "bando",
+    "bandos",
+    "casais",
+    "casal",
+    "colegas",
+    "comissao",
+    "companheiras",
+    "companheiros",
+    "comunidade",
+    "conselho",
+    "convidadas",
+    "convidados",
+    "delegacao",
+    "dupla",
+    "duplas",
+    "elenco",
+    "empregadas",
+    "empregados",
+    "equipe",
+    "equipes",
+    "espectadores",
+    "estudantes",
+    "familia",
+    "familias",
+    "funcionarias",
+    "funcionarios",
+    "gangue",
+    "gangues",
+    "grupo",
+    "grupos",
+    "guardas",
+    "homens",
+    "integrantes",
+    "irmaas",
+    "irmaos",
+    "jovens",
+    "juri",
+    "maes",
+    "membros",
+    "multidao",
+    "multidoes",
+    "mulheres",
+    "participantes",
+    "pessoal",
+    "pessoas",
+    "plateia",
+    "policiais",
+    "professoras",
+    "professores",
+    "publico",
+    "soldados",
+    "time",
+    "times",
+    "torcida",
+    "tribo",
+    "tribos",
+    "tribunal",
+    "tripulacao",
+    "turma",
+    "turmas",
+    "vizinhos",
+    "vizinhas",
+)
+
 
 def _looks_like_non_character_name(name: str) -> bool:
     key = _character_exclusion_key(name)
@@ -491,6 +568,10 @@ def _looks_like_non_character_name(name: str) -> bool:
         return True
     if any(
         re.search(rf"\b{re.escape(word)}\b", normalized) for word in NON_CORPOREAL_CHARACTER_WORDS
+    ):
+        return True
+    if any(
+        re.search(rf"\b{re.escape(word)}\b", normalized) for word in GROUP_CHARACTER_WORDS
     ):
         return True
     if normalized.startswith(

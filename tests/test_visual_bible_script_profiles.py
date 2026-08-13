@@ -163,6 +163,53 @@ def test_script_fallback_ignores_end_and_epilogue_markers_as_characters() -> Non
     assert [item["name"] for item in _script_character_profiles(script)] == ["Sr. Oliveira"]
 
 
+def test_script_fallback_excludes_teams_and_groups_from_characters() -> None:
+    script = """
+    INT. PREDIO - DIA
+    EQUIPE DE RESGATE entra no saguão.
+
+    EQUIPE
+    Vamos subir.
+
+    CLARA
+    Eu conheço o caminho.
+
+    OS IRMÃOS esperam no carro.
+
+    IRMÃOS
+    Nós cuidamos do resto.
+
+    A MULTIDÃO avança.
+
+    POLICIAIS
+    Afastem-se.
+
+    CLARA
+    Fiquem calmos.
+    """
+
+    assert _script_character_names(script) == ["Clara"]
+    assert [item["name"] for item in _script_character_profiles(script)] == ["Clara"]
+
+
+def test_script_fallback_keeps_singular_group_member_as_character() -> None:
+    script = """
+    INT. POSTO - DIA
+    UM POLICIAL revista a entrada.
+
+    POLICIAL
+    Documentos.
+
+    A SOLDADO observa de longe.
+
+    SOLDADO
+    Liberado.
+    """
+
+    assert "Policial" in _script_character_names(script)
+    assert "Soldado" in _script_character_names(script)
+
+
 def test_script_fallback_excludes_incorporeal_entities_from_characters() -> None:
     script = """
     INT. SALA DE ESTAR - DIA
@@ -353,6 +400,26 @@ def test_visual_profiles_preserve_script_evidence_metadata() -> None:
     assert character["scene_numbers"] == [9]
     assert character["evidence_text"] == ["OMERO CRIANÇA (8) está no colo da mãe."]
     assert character["importance"] == "pontual"
+
+
+def test_script_fallback_extracts_prominent_everyday_objects() -> None:
+    script = """
+    INT. APARTAMENTO - NOITE
+    CLARA segura um celular antigo. A tela mostra uma mensagem.
+
+    CLARA
+    O segredo esta aqui.
+
+    A caixa de som pisca. Clara liga o aparelho.
+    O quadro na parede esconde a prova final.
+    """
+
+    props = _script_prop_profiles(script)
+    names = [item["name"] for item in props]
+
+    assert "Celular Antigo" in names
+    assert "Caixa De Som" in names
+    assert "Quadro" in names
 
 
 def test_script_fallback_extracts_musical_props_from_script() -> None:

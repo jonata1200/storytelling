@@ -680,47 +680,10 @@ def _segment_sources(
     return segments
 
 
-def _compact_visual_prompt(value: object, max_chars: int = 120) -> str:
-    text = re.sub(r"\s+", " ", str(value or "")).strip()
-    if len(text) <= max_chars:
-        return text
-    return text[:max_chars].rsplit(" ", 1)[0].rstrip(" ,.;") + "."
-
-
-def _visual_reference_text(
-    visual_context: dict[str, list[dict[str, str]]],
-    *,
-    source_text: str = "",
-) -> str:
-    lines: list[str] = []
-    for label, key in (
-        ("Personagens", "characters"),
-        ("Locais", "locations"),
-        ("Objetos", "props"),
-    ):
-        values = visual_context.get(key, [])
-        if not values:
-            continue
-        names = set(_names_present(source_text, values)) if source_text else set()
-        selected = [item for item in values if item.get("name") in names] or values[:2]
-        joined = "; ".join(
-            f"{item['name']}: {_compact_visual_prompt(item.get('prompt') or item['name'])}"
-            for item in selected[:2]
-        )
-        lines.append(f"{label}: {joined}.")
-    if not lines:
-        return "Biblioteca Visual ainda sem itens aprovados."
-    return (
-        "\n".join(lines)
-        + "\nUse as imagens de referencia anexadas como fonte principal de identidade visual."
-    )
-
-
 def _segment_prompt(
     *,
     segment_number: int,
     source_text: str,
-    visual_context: dict[str, list[dict[str, str]]],
     continuity: str,
     duration_seconds: int,
 ) -> str:
@@ -735,14 +698,8 @@ def _segment_prompt(
         f"{action}\n"
         f"{action_guidance}\n\n"
         "Continuidade\n"
-        f"{continuity_sentence} Preserve identidade, idade aparente, figurino, "
-        "posicao, movimento, emocao, escala, paleta, luz, ambiente e objetos. "
-        "Se houver frame inicial, comece exatamente dele.\n\n"
-        "Camera\n"
-        "Composicao limpa para mobile, movimento suave, foco no sujeito e leitura "
-        "clara dos objetos importantes.\n\n"
-        "Biblioteca Visual\n"
-        f"{_visual_reference_text(visual_context, source_text=source_text)}\n\n"
+        f"{continuity_sentence} Se houver frame inicial, comece exatamente dele. "
+        "Use as imagens de referencia anexadas como fonte de identidade visual.\n\n"
         "Negativo\n"
         f"{CONTINUOUS_VIDEO_NEGATIVE_PROMPT}"
     )
@@ -783,7 +740,6 @@ def build_continuous_video_segment_payloads(
         prompt = _segment_prompt(
             segment_number=index,
             source_text=source_text,
-            visual_context=visual_context,
             continuity=continuity,
             duration_seconds=segment_duration_seconds,
         )
