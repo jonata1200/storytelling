@@ -6,8 +6,6 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
-from app.auth.ui_middleware import UIBasicAuthMiddleware
-from app.auth.ui_routes import router as auth_ui_router
 from app.config.settings import get_settings
 from app.observability.middleware import CorrelationIdMiddleware
 from app.runtime import install_asyncio_exception_filter
@@ -29,9 +27,7 @@ def create_app(include_ui: bool = True) -> FastAPI:
         openapi_url="/openapi.json" if docs_enabled else None,
     )
     app.add_middleware(CorrelationIdMiddleware)
-    app.add_middleware(UIBasicAuthMiddleware)
     app.include_router(api_router)
-    app.include_router(auth_ui_router)
     app.router.on_startup.append(install_asyncio_exception_filter)
 
     from app.jobs.service import schedule_stale_job_recovery

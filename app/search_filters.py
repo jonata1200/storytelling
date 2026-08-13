@@ -21,8 +21,6 @@ PROJECT_STAGE_FILTER_OPTIONS = {
     "visual": "Visual",
     "storyboard": "Storyboard",
     "video": "Video",
-    "finalization": "Finalizacao",
-    "quality": "QA",
 }
 
 PROJECT_UPDATED_FILTER_OPTIONS = {
@@ -72,8 +70,6 @@ PROJECT_REVIEW_STATUSES = {
     "SCRIPT_APPROVAL",
     "VISUAL_BIBLE_APPROVAL",
     "STORYBOARD_APPROVAL",
-    "VIDEO_REVIEW",
-    "FINAL_APPROVAL",
 }
 
 PROJECT_STAGE_BY_STATUS = {
@@ -90,14 +86,7 @@ PROJECT_STAGE_BY_STATUS = {
     "STORYBOARD_APPROVAL": "storyboard",
     "PRODUCTION_PLANNING": "video",
     "VIDEO_GENERATION": "video",
-    "VIDEO_REVIEW": "video",
-    "AUDIO_GENERATION": "finalization",
-    "ASSEMBLY": "finalization",
-    "QUALITY_CONTROL": "quality",
-    "FINAL_APPROVAL": "finalization",
-    "COMPLETED": "finalization",
-    "FAILED": "quality",
-    "ARCHIVED": "finalization",
+    "COMPLETED": "video",
 }
 
 

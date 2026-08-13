@@ -105,25 +105,6 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         "animatic",
     )
     video_terms = ("video", "vídeo", "clipe", "clipes", "montagem")
-    dubbing_terms = ("dublagem", "dublar", "dubla", "dublado", "dub", "idioma")
-
-    finalization_terms = (
-        "finalizacao",
-        "finalização",
-        "finalizar",
-        "export",
-        "exportar",
-        "timeline",
-    )
-    quality_terms = (
-        "qualidade",
-        "qa",
-        "controle",
-        "continuidade",
-        "validar",
-        "válidacao",
-        "válidação",
-    )
 
     wants_generation = any(term in normalized for term in generation_terms)
     wants_revision = _requests_regeneration(message)
@@ -146,12 +127,6 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
         return "approve_visual_prompt"
     if _requests_full_script_regeneration(message):
         return "generate_script"
-    if actionable and any(term in normalized for term in quality_terms):
-        return "run_quality"
-    if actionable and any(term in normalized for term in dubbing_terms):
-        return "generate_dubbing"
-    if actionable and any(term in normalized for term in finalization_terms):
-        return "generate_finalization"
     if actionable and any(term in normalized for term in video_terms):
         return "generate_video"
     if actionable and any(term in normalized for term in storyboard_terms):
@@ -171,10 +146,6 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
             return "generate_storyboard"
         if active == "video":
             return "generate_video"
-        if active == "finalization":
-            return "generate_finalization"
-        if active == "dubbing":
-            return "generate_dubbing"
     if wants_generation and (
         active == "script" or any(term in normalized for term in script_terms)
     ):
@@ -186,10 +157,6 @@ def classify_project_chat_action(message: str, active: str) -> ProjectChatAction
             return "generate_storyboard"
         if active == "video":
             return "generate_video"
-        if active == "finalization":
-            return "generate_finalization"
-        if active == "dubbing":
-            return "generate_dubbing"
         return "generate_script"
     return "chat"
 
@@ -246,8 +213,6 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
     locations = counts.get("locations", 0)
     frames = counts.get("frames", 0)
     clips = counts.get("clips", 0)
-    exports = counts.get("exports", 0)
-    dubbing_jobs = counts.get("dubbing_jobs", 0)
     continuous_mode = _project_workflow_mode(project_context) == CONTINUOUS_VIDEO_WORKFLOW_MODE
     continuous_segments = counts.get("continuous_video_segments", 0)
     approved_continuous_segments = counts.get("continuous_video_approved_segments", 0)
@@ -265,24 +230,12 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
     ):
         return "generate_video"
     if continuous_mode:
-        if exports == 0 or active == "finalization":
-            return "generate_finalization"
-        if dubbing_jobs == 0:
-            return "generate_dubbing"
-        if active in {"video", "finalization", "dubbing"}:
-            return "generate_finalization"
-        return "run_quality"
+        return "chat"
     if frames == 0:
         return "generate_storyboard"
     if clips == 0:
         return "generate_video"
-    if exports == 0 or active == "finalization":
-        return "generate_finalization"
-    if dubbing_jobs == 0:
-        return "generate_dubbing"
-    if active in {"video", "finalization", "dubbing"}:
-        return "generate_finalization"
-    return "run_quality"
+    return "chat"
 
 
 def _contextual_project_chat_intent(
@@ -372,8 +325,7 @@ async def _infer_project_chat_intent_with_ai(
         "audiovisual. Retorne somente JSON válido, sem markdown. Acoes possíveis: "
         "chat, generate_ideas, generate_script, revise_script, generate_assets, "
         "approve_visual_prompt, approve_storyboard_prompt, generate_storyboard, "
-        "generate_video, generate_dubbing, "
-        "generate_finalization, run_quality. Use o estado real do projeto para decidir se "
+        "generate_video. Use o estado real do projeto para decidir se "
         "o usuario quer executar "
         "uma etapa ou apenas conversar. Se a confianca for menor que 0.70, use chat. "
         'Formato: {"action":"generate_assets","confidence":0.92,"reason":"..."}. '

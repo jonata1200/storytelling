@@ -2247,7 +2247,7 @@ async def generate_continuous_video_segments(
     ):
         plan = await get_or_create_continuous_video_plan(session, project_id)
         plan.status = "completed"
-        advance_project_status(project, ProjectStatus.VIDEO_REVIEW)
+        advance_project_status(project, ProjectStatus.COMPLETED)
     elif processed:
         plan = await get_or_create_continuous_video_plan(session, project_id)
         plan.status = "generating"

@@ -18,8 +18,8 @@ test_project_chat_routes_storyboard_scene_requests = (
 test_project_chat_uses_project_state_for_progression_requests = (
     cases.test_project_chat_uses_project_state_for_progression_requests
 )
-test_project_chat_routes_script_finalization_and_quality = (
-    cases.test_project_chat_routes_script_finalization_and_quality
+test_project_chat_routes_script_request = (
+    cases.test_project_chat_routes_script_request
 )
 test_project_chat_uses_continuous_video_pipeline_when_mode_is_continuous = (
     cases.test_project_chat_uses_continuous_video_pipeline_when_mode_is_continuous

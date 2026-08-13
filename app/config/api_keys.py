@@ -42,9 +42,6 @@ IMAGE_CREATION_STEPS = {
 VIDEO_CREATION_STEPS = {"video", "generate_video", "video_clips", "continuous_video"}
 ELEVENLABS_CREATION_STEPS = {
     "speech",
-    "finalization",
-    "dubbing",
-    "generate_dubbing",
 }
 
 
@@ -61,8 +58,6 @@ def provider_for_creation_channel(settings: Any, channel: CreationChannel) -> st
         return effective_provider_for_channel(settings, channel)
     if channel == "speech":
         return str(getattr(settings, "speech_provider", "") or "elevenlabs").strip().casefold()
-    if channel == "dubbing":
-        return str(getattr(settings, "dubbing_provider", "") or "elevenlabs").strip().casefold()
     return str(channel or "").strip().casefold()
 
 
@@ -81,7 +76,7 @@ def required_channels_for_creation_step(step: str) -> tuple[CreationChannel, ...
     if normalized in VIDEO_CREATION_STEPS:
         channels.append("video")
     if normalized in ELEVENLABS_CREATION_STEPS:
-        channels.append("dubbing" if normalized in {"dubbing", "generate_dubbing"} else "speech")
+        channels.append("speech")
     return tuple(channels)
 
 

@@ -15,8 +15,6 @@ from app.ui.visual.helpers import asset_url as _visual_asset_url
 from app.ui.workspace.assets_area import render_assets_area
 from app.ui.workspace.script_area import render_script_area, save_script_from_ui
 from app.ui.workspace.storyboard_video_area import (
-    render_dubbing_area,
-    render_finalization_area,
     render_storyboard_area,
     render_video_area,
 )
@@ -254,24 +252,6 @@ def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
     )
 
 
-def _render_finalization_area(project_id: UUID, summary: dict[str, Any]) -> None:
-    render_finalization_area(
-        project_id,
-        summary,
-        section_title=_section_title,
-        loading_dialog_factory=_ui_pages()._generation_loading_dialog,
-    )
-
-
-def _render_dubbing_area(project_id: UUID, summary: dict[str, Any]) -> None:
-    render_dubbing_area(
-        project_id,
-        summary,
-        section_title=_section_title,
-        loading_dialog_factory=_ui_pages()._generation_loading_dialog,
-    )
-
-
 def register_ui_pages(pages: _PagesFacade) -> None:
     global _pages
     _pages = pages
@@ -311,7 +291,5 @@ def register_ui_pages(pages: _PagesFacade) -> None:
         render_assets_area=_render_assets_area,
         render_storyboard_area=_render_storyboard_area,
         render_video_area=_render_video_area,
-        render_finalization_area=_render_finalization_area,
-        render_dubbing_area=_render_dubbing_area,
         assistant_panel=_assistant_panel,
     )

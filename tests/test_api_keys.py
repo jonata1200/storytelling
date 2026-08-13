@@ -8,7 +8,6 @@ from app.config.api_keys import (
     format_missing_api_key_message,
     missing_api_key_messages_for_channels,
     missing_api_key_messages_for_creation_step,
-    required_channels_for_creation_step,
 )
 from app.config.runtime_preferences import save_runtime_preferences
 from app.config.settings import get_settings
@@ -21,7 +20,6 @@ def _settings(**overrides: object) -> SimpleNamespace:
         "image_provider": "google_ai",
         "video_provider": "google_ai",
         "speech_provider": "elevenlabs",
-        "dubbing_provider": "elevenlabs",
         "ollama_cloud_api_key": None,
         "google_ai_api_key": None,
         "elevenlabs_api_key": None,
@@ -47,18 +45,6 @@ def test_image_and_video_steps_use_google_ai_key() -> None:
     ]
     assert missing_api_key_messages_for_creation_step("video", settings) == [
         "GOOGLE_AI_API_KEY não está configurada para Google AI."
-    ]
-
-
-def test_dubbing_and_finalization_steps_use_elevenlabs_key() -> None:
-    settings = _settings(ollama_cloud_api_key="ollama-secret", google_ai_api_key="google-secret")
-
-    assert required_channels_for_creation_step("finalization") == ("speech",)
-    assert missing_api_key_messages_for_creation_step("finalization", settings) == [
-        "ELEVENLABS_API_KEY não está configurada para ElevenLabs."
-    ]
-    assert missing_api_key_messages_for_creation_step("dubbing", settings) == [
-        "ELEVENLABS_API_KEY não está configurada para ElevenLabs."
     ]
 
 

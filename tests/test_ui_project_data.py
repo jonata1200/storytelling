@@ -15,9 +15,9 @@ def test_dashboard_metrics_statement_compiles_on_supported_dialects() -> None:
         assert "union all" in sql.lower()
 
 
-def test_dashboard_metrics_statement_has_five_unioned_selects() -> None:
+def test_dashboard_metrics_statement_has_three_unioned_selects() -> None:
     sql = str(dashboard_metrics_statement().compile(dialect=postgresql.dialect()))
-    assert sql.lower().count("union all") == 4  # 5 selects -> 4 unions
+    assert sql.lower().count("union all") == 2  # 3 selects -> 2 unions
 
 
 def test_project_counts_statement_compiles_on_supported_dialects() -> None:
@@ -27,8 +27,8 @@ def test_project_counts_statement_compiles_on_supported_dialects() -> None:
         assert "union all" in sql.lower()
 
 
-def test_project_counts_statement_has_eighteen_unioned_selects() -> None:
+def test_project_counts_statement_has_fifteen_unioned_selects() -> None:
     sql = str(project_counts_statement(uuid4()).compile(dialect=postgresql.dialect()))
-    assert sql.lower().count("union all") == 17  # 18 selects -> 17 unions
+    assert sql.lower().count("union all") == 14  # 15 selects -> 14 unions
     assert "continuous_video_segments" in sql
     assert "continuous_video_segments.review_status" in sql

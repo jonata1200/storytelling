@@ -852,7 +852,7 @@ async def _generate_video_clips_concurrent(
         await session.commit()
 
     if clips:
-        advance_project_status(project, ProjectStatus.VIDEO_REVIEW)
+        advance_project_status(project, ProjectStatus.COMPLETED)
     elif jobs:
         advance_project_status(project, ProjectStatus.VIDEO_GENERATION)
     await session.commit()

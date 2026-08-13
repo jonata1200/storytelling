@@ -9,8 +9,6 @@ from app.assets.models import Asset
 from app.core.enums import ArtifactStatus, GenerationJobType
 from app.costs.service import project_cost_summary
 from app.database.session import AsyncSessionLocal
-from app.dubbing.models import DubbingJob
-from app.finalization.models import Export
 from app.generation.model_settings import ensure_default_model_settings
 from app.generation.models import ProjectModelSetting
 from app.observability.service import project_execution_summary
@@ -19,7 +17,6 @@ from app.projects.models import Artifact, Project
 from app.projects.repository import ProjectRepository
 from app.projects.service import list_projects
 from app.projects.versioning import INACTIVE_DERIVED_STATUSES
-from app.quality.models import ContinuityIssue, QualityCheck
 from app.storyboards.models import Animatic, StoryboardFrame, Timeline, TimelineItem
 from app.storyboards.service import list_storyboard_prompt_previews
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
@@ -124,9 +121,6 @@ def project_counts_statement(project_id: UUID) -> Any:
             ContinuousVideoSegment.project_id == project_id,
             ContinuousVideoSegment.review_status == "approved",
         ),
-        _plain("exports", Export),
-        _plain("dubbing_jobs", DubbingJob),
-        _plain("qa_issues", ContinuityIssue),
         select(literal("stale_artifacts").label("label"), func.count().label("value"))
         .select_from(Artifact)
         .where(
@@ -155,10 +149,6 @@ def dashboard_metrics_statement() -> Any:
         select(literal("Projetos").label("metric"), func.count()).select_from(Project),
         select(literal("Artefatos").label("metric"), func.count()).select_from(Artifact),
         select(literal("Jobs").label("metric"), func.count()).select_from(GenerationJob),
-        select(literal("Exports").label("metric"), func.count()).select_from(Export),
-        select(literal("Alertas QA").label("metric"), func.count())
-        .select_from(ContinuityIssue)
-        .where(ContinuityIssue.accepted.is_(False)),
     )
 
 
@@ -175,13 +165,13 @@ async def dashboard_metrics() -> dict[str, str]:
 async def project_summary(project_id: UUID, section: str = "script") -> dict[str, Any] | None:
     active_section = (
         section
-        if section in {"script", "assets", "storyboard", "video", "finalization", "dubbing"}
+        if section in {"script", "assets", "storyboard", "video"}
         else "script"
     )
     load_script_details = active_section == "script"
     load_assets = active_section == "assets"
     load_storyboard = active_section == "storyboard"
-    load_video = active_section in {"video", "finalization", "dubbing"}
+    load_video = active_section == "video"
     load_frames = load_storyboard or load_video
 
     async with AsyncSessionLocal() as session:
@@ -196,9 +186,6 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             .order_by(ProjectModelSetting.task)
         )
         cost_summary = await project_cost_summary(session, project_id)
-        latest_quality = await latest(session, QualityCheck, project_id)
-        latest_export = await latest(session, Export, project_id)
-        latest_dubbing_job = await latest(session, DubbingJob, project_id)
         latest_timeline = await latest(session, Timeline, project_id) if load_video else None
         execution_summary = await project_execution_summary(session, project_id)
         video_jobs = []
@@ -336,9 +323,6 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             "counts": await project_counts(session, project_id),
             "cost_total": str(cost_summary.total_cost or Decimal("0.000000")),
             "cost_summary": cost_summary,
-            "quality": latest_quality,
-            "export": latest_export,
-            "dubbing_job": latest_dubbing_job,
             "model_settings": list(model_result.scalars()),
             "script": script,
             "scenes": await active_many(session, Scene, project_id, 12)

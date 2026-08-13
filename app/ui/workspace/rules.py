@@ -1,7 +1,7 @@
 from app.video_generation.continuous import CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS
 from app.visual_bible.prompts import default_views_for
 
-WORKSPACE_SECTIONS = ("script", "assets", "storyboard", "video", "finalization", "dubbing")
+WORKSPACE_SECTIONS = ("script", "assets", "storyboard", "video")
 CONTINUOUS_VIDEO_WORKFLOW_MODE = "continuous_fast"
 VISUAL_REFERENCE_VIEW_COUNTS = {
     "characters": len(default_views_for("character")),
@@ -37,9 +37,6 @@ def step_ready(step_key: str, counts: dict[str, int]) -> bool:
         "visual": visual_assets_ready(counts),
         "storyboard": counts.get("frames", 0) > 0 and counts.get("animatics", 0) > 0,
         "video": counts.get("clips", 0) > 0,
-        "dubbing": counts.get("dubbing_jobs", 0) > 0,
-        "finalization": counts.get("exports", 0) > 0,
-        "quality": counts.get("qa_issues", 0) >= 0,
     }
     return readiness[step_key]
 
@@ -62,20 +59,6 @@ def continuous_video_ready(counts: dict[str, int]) -> bool:
     return required > 0 and approved >= required
 
 
-def continuous_video_complete(counts: dict[str, int]) -> bool:
-    return continuous_video_ready(counts)
-
-
-def _continuous_video_advance_message(counts: dict[str, int], stage: str) -> str:
-    required = continuous_video_required_approved(counts)
-    if required >= CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS:
-        return (
-            f"Aprove pelo menos {CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS} segmentos "
-            f"de video antes de acessar {stage}."
-        )
-    return f"Aprove todos os segmentos de video antes de acessar {stage}."
-
-
 def workspace_section_access(
     section: str,
     counts: dict[str, int],
@@ -85,10 +68,6 @@ def workspace_section_access(
     assets_ready = step_ready("visual", counts)
     storyboard_ready = step_ready("storyboard", counts)
     continuous_mode = is_continuous_video_workflow(workflow_mode)
-    video_ready = continuous_video_ready(counts) if continuous_mode else step_ready("video", counts)
-    final_video_ready = (
-        continuous_video_complete(counts) if continuous_mode else step_ready("video", counts)
-    )
     if section == "script":
         return True, ""
     if section == "assets":
@@ -114,24 +93,6 @@ def workspace_section_access(
             )
         if not storyboard_ready and not continuous_mode:
             return False, "Crie o storyboard antes de acessar vídeo."
-        return True, ""
-    if section == "dubbing":
-        allowed, reason = workspace_section_access("video", counts, workflow_mode)
-        if not allowed:
-            return False, reason
-        if not video_ready:
-            if continuous_mode:
-                return False, _continuous_video_advance_message(counts, "dublagem")
-            return False, "Gere pelo menos um clipe antes de acessar dublagem."
-        return True, ""
-    if section == "finalization":
-        allowed, reason = workspace_section_access("video", counts, workflow_mode)
-        if not allowed:
-            return False, reason
-        if not final_video_ready:
-            if continuous_mode:
-                return False, _continuous_video_advance_message(counts, "finalizacao")
-            return False, "Gere pelo menos um clipe antes de acessar finalização."
         return True, ""
     return False, "Etapa desconhecida."
 

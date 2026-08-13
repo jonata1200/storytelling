@@ -138,35 +138,12 @@ PRODUCTION_STEPS = [
         "Gerar clipes",
         "movie",
     ),
-    ProductionStep(
-        "finalization",
-        "Finalização",
-        "Monte a timeline final e exporte os clipes selecionados.",
-        "Finalizar",
-        "auto_awesome_motion",
-    ),
-    ProductionStep(
-        "dubbing",
-        "Dublagem",
-        "Duble o export base com ElevenLabs, reaproveitando jobs e arquivos já criados.",
-        "Gerar dublagem",
-        "graphic_eq",
-    ),
-    ProductionStep(
-        "quality",
-        "Qualidade",
-        "Rode continuity ledger, alertas, score e observabilidade do projeto.",
-        "Rodar QA",
-        "verified",
-    ),
 ]
 
 WORKSPACE_TABS = [
     ("Roteiro", "script"),
     ("Biblioteca Visual", "assets"),
     ("Produ\u00e7\u00e3o de v\u00eddeo", "video"),
-    ("Finalização", "finalization"),
-    ("Dublagem", "dubbing"),
 ]
 
 STEP_LOADING_COPY = {
@@ -179,9 +156,6 @@ STEP_LOADING_COPY = {
     ),
     "storyboard": ("Gerando storyboard", "A IA está criando quadros, planos e animatic."),
     "video": ("Preparando vídeo", "A IA está verificando prompts e deixando os clipes prontos."),
-    "dubbing": ("Gerando dublagem", "A IA está preparando o export base e enviando ao ElevenLabs."),
-    "finalization": ("Finalizando projeto", "A IA está montando timeline final e export."),
-    "quality": ("Revisando qualidade", "A IA está checando continuidade e riscos."),
 }
 
 
@@ -194,9 +168,6 @@ ACTION_LOADING_STEPS = {
     "approve_storyboard_prompt": "storyboard",
     "generate_storyboard": "storyboard",
     "generate_video": "video",
-    "generate_dubbing": "dubbing",
-    "generate_finalization": "finalization",
-    "run_quality": "quality",
 }
 
 ACTION_LOADING_TITLES = {
@@ -217,9 +188,6 @@ ACTION_NOW_COPY = {
     ),
     "generate_storyboard": "Agora: criando quadros de storyboard e animatic.",
     "generate_video": "Agora: criando clipes de video a partir do storyboard.",
-    "generate_dubbing": "Agora: preparando dublagem para os clipes criados.",
-    "generate_finalization": "Agora: montando timeline final e export.",
-    "run_quality": "Agora: revisando continuidade e riscos de qualidade.",
 }
 
 VISUAL_REFERENCE_VIEW_COUNTS = {
@@ -283,7 +251,7 @@ def _created_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
             "referencia visual",
             "referencias visuais",
         )
-    if step_key in {"storyboard", "video", "dubbing", "finalization"}:
+    if step_key in {"storyboard", "video"}:
         _append_count(
             created,
             counts,
@@ -292,7 +260,7 @@ def _created_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
             "quadros de storyboard",
         )
         _append_count(created, counts, "animatics", "animatic", "animatics")
-    if step_key in {"video", "dubbing", "finalization", "quality"}:
+    if step_key == "video":
         _append_count(created, counts, "clips", "clipe de video", "clipes de video")
         _append_count(
             created,
@@ -300,18 +268,6 @@ def _created_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
             "continuous_video_approved_segments",
             "segmento continuo aprovado",
             "segmentos continuos aprovados",
-        )
-    if step_key in {"dubbing", "finalization", "quality"}:
-        _append_count(created, counts, "dubbing_jobs", "job de dublagem", "jobs de dublagem")
-    if step_key in {"finalization", "quality"}:
-        _append_count(created, counts, "exports", "export final", "exports finais")
-    if step_key == "quality":
-        created.append(
-            _count_text(
-                _safe_count(counts, "qa_issues"),
-                "alerta de qualidade registrado",
-                "alertas de qualidade registrados",
-            )
         )
     return created
 
@@ -363,7 +319,7 @@ def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
             )
         if frames > 0 and _safe_count(counts, "animatics") <= 0:
             missing.append("animatic")
-    if step_key in {"video", "dubbing", "finalization"} and continuous_segments > 0:
+    if step_key == "video" and continuous_segments > 0:
         required_approved = min(CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS, continuous_segments)
         if approved_continuous_segments < required_approved:
             pending = required_approved - approved_continuous_segments
@@ -374,18 +330,12 @@ def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
                     "segmentos continuos pendentes de aprovacao",
                 )
             )
-    elif step_key in {"video", "dubbing", "finalization"}:
+    elif step_key == "video":
         if frames <= 0:
             missing.append("storyboard")
         elif clips < frames:
             pending_clips = frames - clips
             missing.append(_count_text(pending_clips, "clipe de video", "clipes de video"))
-    if step_key == "dubbing" and _safe_count(counts, "dubbing_jobs") <= 0:
-        missing.append("dublagem")
-    if step_key == "finalization" and _safe_count(counts, "exports") <= 0:
-        missing.append("export final")
-    if step_key == "quality":
-        missing.append("revisao de qualidade atualizada")
     return missing
 
 
@@ -433,15 +383,6 @@ def _progress_for_step(step_key: str, counts: dict[str, Any]) -> tuple[int, int,
         frames = _safe_count(counts, "frames")
         total = max(frames, 1)
         return min(_safe_count(counts, "clips"), total), total, "clipe"
-
-    if step_key == "dubbing":
-        return min(_safe_count(counts, "dubbing_jobs"), 1), 1, "job"
-
-    if step_key == "finalization":
-        return min(_safe_count(counts, "exports"), 1), 1, "export"
-
-    if step_key == "quality":
-        return 0, 1, "revisao"
 
     return 0, 1, "item"
 

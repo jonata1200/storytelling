@@ -73,7 +73,6 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
             "ELEVENLABS_API_KEY": "eleven-secret",
             "ELEVENLABS_VOICE_ID": "voice-1",
             "ELEVENLABS_SPEECH_MODEL": "eleven_multilingual_v2",
-            "DUBBING_TARGET_LANG": "en",
         },
         path,
     )
@@ -90,7 +89,6 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     assert preferences["elevenlabs_api_key"] == "eleven-secret"
     assert preferences["elevenlabs_voice_id"] == "voice-1"
     assert preferences["elevenlabs_speech_model"] == "eleven_multilingual_v2"
-    assert preferences["dubbing_target_lang"] == "en"
     with pytest.raises(ValueError, match="not allowed"):
         save_runtime_preferences({"DATABASE_URL": "attacker"}, path)
     with pytest.raises(ValueError, match="control character"):

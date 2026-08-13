@@ -1,8 +1,7 @@
 # Storytelling Studio
 
 Storytelling Studio é uma aplicação local para criar projetos audiovisuais com apoio de IA.
-Ela transforma uma ideia em roteiro, cenas, biblioteca visual, segmentos de vídeo contínuo,
-timeline, exportação e controle de qualidade.
+Ela transforma uma ideia em roteiro, cenas, biblioteca visual e segmentos de vídeo contínuo.
 
 ## Recursos
 
@@ -12,8 +11,7 @@ timeline, exportação e controle de qualidade.
 - Vídeo contínuo por segmentos, com revisão e aprovação antes de avançar.
 - Continuidade por frame final aprovado como ponto de partida do próximo segmento.
 - Storyboard e animatic permanecem como caminho legado para projetos antigos.
-- Timeline final, exportação, dublagem e controle de qualidade.
-- Custos, storage, observabilidade e autenticação local.
+- Custos, storage e observabilidade.
 
 ## Stack
 
@@ -31,7 +29,7 @@ timeline, exportação e controle de qualidade.
 - Python 3.12 ou superior
 - Docker Desktop
 - Git
-- FFmpeg para renderização/exportação e extração de frames de continuidade
+- FFmpeg para extração de frames de continuidade
 
 ## Instalação
 
@@ -88,7 +86,6 @@ GOOGLE_AI_VIDEO_MODEL=veo-3.1-lite-generate-preview
 FFMPEG_PATH=C:\caminho\para\ffmpeg.exe
 
 SPEECH_PROVIDER=elevenlabs
-DUBBING_PROVIDER=elevenlabs
 ELEVENLABS_API_KEY=sua_chave_elevenlabs
 ELEVENLABS_VOICE_ID=voice_id_padrao
 ```
@@ -101,8 +98,6 @@ APP_DEBUG=true
 APP_SECRET_KEY=change-me-in-development
 DATABASE_URL=postgresql+asyncpg://storytelling:storytelling@localhost:5433/storytelling
 REDIS_URL=redis://localhost:6379/0
-ALLOW_USER_REGISTRATION=true
-SINGLE_USER_MODE=true
 ```
 
 ## Comandos da Aplicação
@@ -197,7 +192,7 @@ Health check:
 http://127.0.0.1:8000/api/v1/health/live
 ```
 
-## Qualidade
+## Verificações
 
 Rodar pytest diretamente:
 
@@ -228,7 +223,7 @@ Rota pública:
 GET /api/v1/health/live
 ```
 
-Rotas autenticadas principais:
+Rotas principais da API:
 
 ```text
 GET  /api/v1/projects
@@ -239,30 +234,23 @@ POST /api/v1/storytelling/projects/{project_id}/scenes/generate
 POST /api/v1/visual-bible/projects/{project_id}/generate
 POST /api/v1/storyboards/projects/{project_id}/generate
 POST /api/v1/video/projects/{project_id}/clips/generate
-POST /api/v1/finalization/projects/{project_id}/exports
-POST /api/v1/quality/projects/{project_id}/checks/run
 GET  /api/v1/observability/projects/{project_id}/summary
 GET  /api/v1/storage/usage
 GET  /api/v1/costs/projects/{project_id}/summary
 ```
 
-Em `APP_ENV=local` e `APP_ENV=test`, a aplicação usa bypass local para facilitar o
-desenvolvimento. Fora desses ambientes, rotas operacionais exigem sessão ou token bearer.
 
 ## Estrutura
 
 ```text
 app/
   api/               roteadores centrais
-  auth/              login, sessão e CSRF
   config/            settings, providers e preferências
   costs/             custos e orçamento
-  finalization/      timeline e exportação
   generation/        prompts, modelos e provedores
   jobs/              execução interna de etapas longas
   observability/     eventos e métricas
   projects/          projetos, artefatos e versionamento
-  quality/           continuidade e checks
   storyboards/       frames, prompts e animatic
   storytelling/      briefing, ideias, roteiro, cenas e planos
   storage/           uso e limpeza local

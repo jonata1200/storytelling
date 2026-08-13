@@ -328,7 +328,7 @@ def register_settings_page(
                             with ui.element("div").classes(
                                 "border border-[#2d332e] rounded-lg p-4 flex flex-col gap-3"
                             ):
-                                provider_header("graphic_eq", "Voz e dublagem", "ElevenLabs")
+                                provider_header("graphic_eq", "Voz", "ElevenLabs")
                                 with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3"):
                                     elevenlabs_base_url = (
                                         ui.input(
@@ -388,26 +388,6 @@ def register_settings_page(
                                         .props("outlined stack-label options-dense")
                                         .classes("w-full")
                                     )
-                                with ui.grid().classes("w-full grid-cols-1 md:grid-cols-2 gap-3"):
-                                    dubbing_source_lang = (
-                                        ui.input(
-                                            "Idioma original",
-                                            value=current.dubbing_source_lang,
-                                            placeholder="pt",
-                                        )
-                                        .props("outlined stack-label")
-                                        .classes("w-full")
-                                    )
-                                    dubbing_target_lang = (
-                                        ui.input(
-                                            "Idioma da dublagem",
-                                            value=current.dubbing_target_lang,
-                                            placeholder="en",
-                                        )
-                                        .props("outlined stack-label")
-                                        .classes("w-full")
-                                    )
-
                             def save_ai() -> None:
                                 typed_ollama_cloud_api_key = str(
                                     ollama_cloud_api_key.value or ""
@@ -419,7 +399,6 @@ def register_settings_page(
                                         "IMAGE_PROVIDER": "google_ai",
                                         "VIDEO_PROVIDER": "google_ai",
                                         "SPEECH_PROVIDER": "elevenlabs",
-                                        "DUBBING_PROVIDER": "elevenlabs",
                                         "TEXT_PROVIDER_FALLBACKS": "",
                                         "OLLAMA_CLOUD_BASE_URL": str(
                                             ollama_cloud_base_url.value or ""
@@ -461,12 +440,6 @@ def register_settings_page(
                                         ),
                                         "ELEVENLABS_OUTPUT_FORMAT": str(
                                             elevenlabs_output_format.value or "mp3_44100_128"
-                                        ).strip(),
-                                        "DUBBING_SOURCE_LANG": str(
-                                            dubbing_source_lang.value or "pt"
-                                        ).strip(),
-                                        "DUBBING_TARGET_LANG": str(
-                                            dubbing_target_lang.value or "en"
                                         ).strip(),
                                     }
                                 except ValueError as exc:

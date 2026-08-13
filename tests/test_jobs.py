@@ -39,11 +39,6 @@ def test_scenes_is_a_valid_project_step() -> None:
     assert "scenes" in jobs_service.PROJECT_STEP_JOB_TYPES
 
 
-def test_dubbing_is_a_valid_project_step() -> None:
-    assert jobs_service.normalize_step("dubbing") == "dubbing"
-    assert "dubbing" in jobs_service.PROJECT_STEP_JOB_TYPES
-
-
 def test_pending_job_is_not_stale_when_recent() -> None:
     now = datetime.now(UTC)
     job = SimpleNamespace(

@@ -131,24 +131,16 @@ def test_operation_cost_text_formats_estimates_and_zero_quantity() -> None:
     )
 
 
-def test_elevenlabs_cost_policy_uses_speech_and_dubbing_units() -> None:
+def test_elevenlabs_cost_policy_uses_speech_units() -> None:
     speech = estimate_operation_cost(
         "speech_generation",
         Decimal("2"),
         provider="elevenlabs",
         model="eleven_flash_v2_5",
     )
-    dubbing = estimate_operation_cost(
-        "dubbing",
-        Decimal("3"),
-        provider="elevenlabs",
-        model="dubbing-v1",
-    )
 
     assert speech.unit == "1k_characters"
     assert speech.estimated == Decimal("0.100000")
-    assert dubbing.unit == "minute"
-    assert dubbing.estimated == Decimal("0.990000")
 
 
 class _FakeBudgetSession:

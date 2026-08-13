@@ -51,8 +51,6 @@ def render_assistant_panel(
         "assets": "Descreva um personagem, local ou objeto.",
         "storyboard": "Diga ao diretor o que enquadrar.",
         "video": "Descreva movimento, câmera ou ritmo.",
-        "finalization": "Peça ajustes de timeline, export ou arquivo final.",
-        "dubbing": "Peça ajustes de idioma, voz ou sincronização.",
     }
     assistant_suggestions = {
         "script": (
@@ -72,14 +70,6 @@ def render_assistant_panel(
             "Sugestões que posso ajudar agora: criar clipes a partir do storyboard, "
             "orientar movimento de câmera, ajustar ritmo ou propor variações."
         ),
-        "finalization": (
-            "Sugestões que posso ajudar agora: montar a timeline final, exportar o "
-            "arquivo único, revisar duração ou preparar a entrega."
-        ),
-        "dubbing": (
-            "Sugestões que posso ajudar agora: gerar dublagem, revisar idioma alvo, "
-            "atualizar o status do job ou preparar a etapa final após o áudio."
-        ),
     }
     counts = summary.get("counts")
     count_map = counts if isinstance(counts, dict) else {}
@@ -92,9 +82,6 @@ def render_assistant_panel(
         "approve_storyboard_prompt",
         "generate_storyboard",
         "generate_video",
-        "generate_dubbing",
-        "generate_finalization",
-        "run_quality",
     )
     chat_loading_copy = {
         action: action_loading_copy(action, count_map)

@@ -33,9 +33,6 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     assert classify_project_chat_action("gerar os clipes de video", "storyboard") == (
         "generate_video"
     )
-    assert classify_project_chat_action("gerar dublagem em inglês", "video") == (
-        "generate_dubbing"
-    )
     assert classify_project_chat_action("melhore o gancho do roteiro", "script") == (
         "revise_script"
     )
@@ -65,10 +62,10 @@ def test_project_chat_action_classifier_routes_creation_requests() -> None:
     )
     assert classify_project_chat_action("gere ideias novas", "script") == "generate_ideas"
     assert classify_project_chat_action("exportar a timeline final", "video") == (
-        "generate_finalization"
+        "generate_video"
     )
     assert classify_project_chat_action("rode o controle de qualidade", "video") == (
-        "run_quality"
+        "generate_video"
     )
     assert classify_project_chat_action("aprove o prompt da Clara para gerar imagem", "assets") == (
         "approve_visual_prompt"
@@ -1120,7 +1117,7 @@ async def test_continuous_video_pipeline_plans_and_enqueues_generation(
 
 
 @pytest.mark.asyncio
-async def test_project_chat_routes_script_finalization_and_quality(
+async def test_project_chat_routes_script_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
@@ -1140,42 +1137,15 @@ async def test_project_chat_routes_script_finalization_and_quality(
         assert force is False
         return SimpleNamespace(id=uuid4()), "script ok", True
 
-    async def fake_finalization(
-        session: AsyncSession,
-        requested_project_id: Any,
-        progress: Any = None,
-    ) -> ProjectChatResult:
-        calls.append("finalization")
-        assert requested_project_id == project_id
-        return ProjectChatResult("final ok", "generate_finalization", True)
-
-    async def fake_quality(
-        session: AsyncSession,
-        requested_project_id: Any,
-    ) -> ProjectChatResult:
-        calls.append("quality")
-        assert requested_project_id == project_id
-        return ProjectChatResult("quality ok", "run_quality", True)
-
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
-    monkeypatch.setattr(project_agent, "_ensure_finalization_pipeline", fake_finalization)
-    monkeypatch.setattr(project_agent, "_ensure_quality_pipeline", fake_quality)
 
     script = await handle_project_chat(
         cast(AsyncSession, object()), project_id, "script", "crie o roteiro", []
     )
-    finalization = await handle_project_chat(
-        cast(AsyncSession, object()), project_id, "video", "exportar timeline final", []
-    )
-    quality = await handle_project_chat(
-        cast(AsyncSession, object()), project_id, "video", "rode o controle de qualidade", []
-    )
 
     assert script.action == "generate_script"
-    assert finalization.action == "generate_finalization"
-    assert quality.action == "run_quality"
-    assert calls == ["script", "finalization", "quality"]
+    assert calls == ["script"]
 
 
 @pytest.mark.asyncio

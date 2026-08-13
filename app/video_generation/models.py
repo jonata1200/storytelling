@@ -86,7 +86,6 @@ class ClipReview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "clip_reviews"
 
     video_clip_id: Mapped[UUID] = mapped_column(ForeignKey("video_clips.id"), nullable=False)
-    reviewer_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     decision: Mapped[ClipReviewDecision] = mapped_column(
         Enum(ClipReviewDecision, name="clip_review_decision"), nullable=False
     )

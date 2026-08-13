@@ -92,12 +92,6 @@ from app.ui.page_runtime import (
     _render_assets_area as _render_assets_area,  # noqa: F401
 )
 from app.ui.page_runtime import (
-    _render_dubbing_area as _render_dubbing_area,  # noqa: F401
-)
-from app.ui.page_runtime import (
-    _render_finalization_area as _render_finalization_area,  # noqa: F401
-)
-from app.ui.page_runtime import (
     _render_script_area as _render_script_area,  # noqa: F401
 )
 from app.ui.page_runtime import (

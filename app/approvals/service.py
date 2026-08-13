@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ApprovalDecision, ArtifactStatus
@@ -12,7 +10,6 @@ async def record_approval(
     artifact_version: ArtifactVersion,
     decision: ApprovalDecision,
     notes: str | None = None,
-    reviewer_user_id: UUID | None = None,
 ) -> Approval:
     if artifact_version.artifact_id != artifact.id:
         raise ValueError("Artifact version does not belong to artifact")
@@ -20,7 +17,6 @@ async def record_approval(
     approval = Approval(
         artifact_id=artifact.id,
         artifact_version_id=artifact_version.id,
-        reviewer_user_id=reviewer_user_id,
         decision=decision,
         notes=notes,
     )

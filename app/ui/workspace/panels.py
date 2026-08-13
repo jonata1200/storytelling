@@ -121,8 +121,6 @@ def _render_director_cockpit(settings: ProjectProductionSettings, counts: dict[s
         ("Assets", counts["characters"] + counts["visual_refs"]),
         ("Storyboard", counts["frames"]),
         ("Video", counts["clips"]),
-        ("Dublagem", counts.get("dubbing_jobs", 0)),
-        ("Timeline", counts["exports"]),
     ]
     with ui.card().classes(_card_classes("w-full")):
         with ui.row().classes("items-center justify-between w-full"):
@@ -133,8 +131,8 @@ def _render_director_cockpit(settings: ProjectProductionSettings, counts: dict[s
                 "text-xs px-2 py-1 rounded-md bg-slate-800 text-slate-300"
             )
         _muted(
-            "Fluxo integrado estilo estúdio: ideia, roteiro, ativos, storyboard, render, "
-            "timeline e exportação sem trocar de ferramenta."
+            "Fluxo integrado estilo estúdio: ideia, roteiro, ativos, storyboard e vídeo "
+            "sem trocar de ferramenta."
         )
         with ui.row().classes("w-full items-center gap-2"):
             for index, (label, value) in enumerate(flow):

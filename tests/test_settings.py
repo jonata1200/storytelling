@@ -22,9 +22,6 @@ def test_settings_defaults_to_new_ai_providers() -> None:
     assert settings.google_ai_video_fast_model == "veo-3.1-fast-generate-preview"
     assert settings.speech_provider == "elevenlabs"
     assert settings.elevenlabs_speech_model == "eleven_multilingual_v2"
-    assert settings.dubbing_provider == "elevenlabs"
-    assert settings.dubbing_source_lang == "pt"
-    assert settings.dubbing_target_lang == "en"
 
 
 def test_settings_reads_ollama_cloud_text_provider() -> None:
@@ -84,18 +81,13 @@ def test_settings_reads_google_ai_media_provider() -> None:
     assert settings.google_ai_video_poll_timeout_seconds == 30
 
 
-def test_settings_reads_elevenlabs_voice_and_dubbing_provider() -> None:
+def test_settings_reads_elevenlabs_voice_provider() -> None:
     settings = Settings(
         speech_provider="elevenlabs",
         elevenlabs_api_key="  eleven-secret  ",
         elevenlabs_voice_id="voice-1",
         elevenlabs_speech_model="eleven_flash_v2_5",
         elevenlabs_output_format="mp3_44100_128",
-        dubbing_provider="elevenlabs",
-        dubbing_source_lang="pt",
-        dubbing_target_lang="es",
-        dubbing_poll_interval_seconds=2,
-        dubbing_poll_timeout_seconds=30,
     )
 
     assert settings.speech_provider == "elevenlabs"
@@ -103,11 +95,6 @@ def test_settings_reads_elevenlabs_voice_and_dubbing_provider() -> None:
     assert settings.elevenlabs_voice_id == "voice-1"
     assert settings.elevenlabs_speech_model == "eleven_flash_v2_5"
     assert settings.elevenlabs_output_format == "mp3_44100_128"
-    assert settings.dubbing_provider == "elevenlabs"
-    assert settings.dubbing_source_lang == "pt"
-    assert settings.dubbing_target_lang == "es"
-    assert settings.dubbing_poll_interval_seconds == 2
-    assert settings.dubbing_poll_timeout_seconds == 30
 
 
 def test_new_text_model_lists_have_initial_defaults() -> None:

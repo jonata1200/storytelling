@@ -19,8 +19,10 @@ class Asset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     storage_uri: Mapped[str] = mapped_column(String(1024), nullable=False)
     content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
     sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    missing_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    missing_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     storage_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -16,9 +16,7 @@ os.environ["TMPDIR"] = str(PYTEST_TMP_ROOT)
 tempfile.tempdir = str(PYTEST_TMP_ROOT)
 
 SECURITY_TEST_FILES = {
-    "test_auth.py",
     "test_production_settings.py",
-    "test_quality_security.py",
     "test_reference_upload.py",
     "test_script_upload.py",
     "test_security_regressions.py",
@@ -35,7 +33,6 @@ PROVIDER_TEST_FILES = {
 SMOKE_TEST_FILES: set[str] = set()
 
 UI_TEST_FILES = {
-    "test_auth.py",
     "test_idea_lab.py",
     "test_project_creation_assets.py",
     "test_project_creation_storyboard.py",
@@ -44,7 +41,6 @@ UI_TEST_FILES = {
 }
 
 INTEGRATION_TEST_FILES = {
-    "test_auth.py",
     "test_dependencies.py",
     "test_idea_lab.py",
     "test_initial_script_pipeline.py",

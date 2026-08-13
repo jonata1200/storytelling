@@ -34,7 +34,7 @@ def speech_configuration_status(settings: Any | None = None) -> tuple[bool, str,
     if provider_name == "elevenlabs":
         ready = bool(app_settings.elevenlabs_api_key and app_settings.elevenlabs_voice_id and model)
         message = (
-            "Provider ElevenLabs de vozes e dublagem configurado"
+            "Provider ElevenLabs de vozes configurado"
             if ready
             else "ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID e ELEVENLABS_SPEECH_MODEL são necessários"
         )

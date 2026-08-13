@@ -28,8 +28,6 @@ def register_project_workspace_pages(
     render_assets_area: WorkspaceAreaRenderer,
     render_storyboard_area: WorkspaceAreaRenderer,
     render_video_area: WorkspaceAreaRenderer,
-    render_finalization_area: WorkspaceAreaRenderer,
-    render_dubbing_area: WorkspaceAreaRenderer,
     assistant_panel: AssistantPanelRenderer,
 ) -> None:
     @ui.page("/projects/{project_id}", response_timeout=15)
@@ -40,7 +38,7 @@ def register_project_workspace_pages(
     @ui.page("/projects/{project_id}/{section}", response_timeout=15)
     async def project_studio(project_id: str, section: str) -> None:
         body_style()
-        if section not in {"script", "assets", "storyboard", "video", "finalization", "dubbing"}:
+        if section not in {"script", "assets", "storyboard", "video"}:
             ui.navigate.to(f"/projects/{project_id}/script")
             return
         try:
@@ -81,8 +79,4 @@ def register_project_workspace_pages(
                     render_storyboard_area(project_uuid, summary)
                 elif section == "video":
                     render_video_area(project_uuid, summary)
-                elif section == "finalization":
-                    render_finalization_area(project_uuid, summary)
-                elif section == "dubbing":
-                    render_dubbing_area(project_uuid, summary)
             assistant_panel(project_uuid, section, summary)

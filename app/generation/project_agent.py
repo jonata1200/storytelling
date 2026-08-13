@@ -4,13 +4,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dubbing.models import DubbingJob
-from app.dubbing.service import start_project_dubbing
-from app.finalization.models import Export, SubtitleTrack
-from app.finalization.service import (
-    create_final_timeline,
-    export_timeline,
-)
 from app.generation.director_agent import ask_director_agent
 from app.generation.project_agent_context import (
     _active_scene_count_for_script,
@@ -66,7 +59,6 @@ from app.projects.versioning import (
     mark_dependents_stale,
     resolve_stale_artifacts_after_regeneration,
 )
-from app.quality.service import run_quality_check
 from app.storyboards.models import Animatic, AudioTrack, StoryboardFrame, Timeline
 from app.storyboards.service import (
     StoryboardProgressCallback,
@@ -85,8 +77,6 @@ from app.storytelling.service import (
     revise_script,
 )
 from app.video_generation.continuous import (
-    CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS,
-    continuous_video_segment_is_approved,
     list_continuous_video_segments,
     plan_continuous_video_segments,
 )
@@ -116,9 +106,6 @@ SCRIPT_AGENT_EDIT_BLOCKER_MODELS = (
     ("faixas de audio", AudioTrack),
     ("clipes de video", VideoClip),
     ("segmentos de video continuo", ContinuousVideoSegment),
-    ("exportacoes", Export),
-    ("legendas", SubtitleTrack),
-    ("dublagem", DubbingJob),
 )
 
 CONTINUOUS_VIDEO_WORKFLOW_MODE = "continuous_fast"
@@ -713,163 +700,6 @@ def _storyboard_frame_progress(
     return report
 
 
-async def _ensure_finalization_pipeline(
-    session: AsyncSession,
-    project_id: UUID,
-    progress: ProgressCallback | None = None,
-) -> ProjectChatResult:
-    changed = False
-    if await _project_uses_continuous_video_mode(session, project_id, None):
-        segments = await list_continuous_video_segments(session, project_id)
-        if not segments:
-            video_result = await _ensure_continuous_video_pipeline(
-                session,
-                project_id,
-                progress=progress,
-            )
-            return ProjectChatResult(
-                video_result.message,
-                "generate_finalization",
-                video_result.changed,
-                video_result.failed,
-            )
-        approved_count = sum(
-            1 for segment in segments if continuous_video_segment_is_approved(segment)
-        )
-        required = min(CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS, len(segments))
-        if approved_count < required:
-            unapproved = [
-                segment
-                for segment in segments
-                if not continuous_video_segment_is_approved(segment)
-            ]
-            first = min(unapproved, key=lambda item: int(item.segment_number or 0))
-            return ProjectChatResult(
-                (
-                    f"Aprove pelo menos {required} segmentos de video continuo "
-                    "antes da finalizacao. "
-                    f"Proximo pendente: segmento {first.segment_number}."
-                ),
-                "generate_finalization",
-                False,
-            )
-    else:
-        storyboard_result = await _ensure_storyboard_pipeline(
-            session,
-            project_id,
-            progress=progress,
-        )
-        changed = storyboard_result.changed
-        if _is_visual_reference_gate_message(storyboard_result.message):
-            return ProjectChatResult(
-                storyboard_result.message,
-                "generate_finalization",
-                changed,
-                storyboard_result.failed,
-            )
-
-    timeline = await _latest(session, Timeline, project_id)
-    if timeline is None:
-        await _emit_progress(progress, "Vou montar a timeline final com diálogos dos personagens.")
-        animatic = await _latest(session, Animatic, project_id)
-        try:
-            timeline = await create_final_timeline(
-                session,
-                project_id,
-                animatic.id if animatic else None,
-            )
-        except ValueError as exc:
-            return ProjectChatResult(str(exc), "generate_finalization", changed)
-        if timeline is None:
-            return ProjectChatResult(
-                "Finalização preparada, mas ainda faltam clipes selecionados para a timeline.",
-                "generate_finalization",
-                changed,
-            )
-        changed = True
-
-    existing_export = await _latest(session, Export, project_id)
-    if existing_export is not None and existing_export.timeline_id == timeline.id:
-        return ProjectChatResult(
-            "Exportação final já existe e foi reaproveitada.",
-            "generate_finalization",
-            changed,
-        )
-
-    await _emit_progress(progress, "Vou exportar a timeline com as vozes dos personagens.")
-    exported = await export_timeline(
-        session,
-        project_id,
-        timeline.id,
-    )
-    if exported is None:
-        return ProjectChatResult(
-            "Timeline criada, mas não consegui exportar o projeto.",
-            "generate_finalization",
-            changed,
-            True,
-        )
-    return ProjectChatResult(
-        "Finalização criada e exportação salva no projeto.",
-        "generate_finalization",
-        True,
-    )
-
-
-async def _ensure_dubbing_pipeline(
-    session: AsyncSession,
-    project_id: UUID,
-    progress: ProgressCallback | None = None,
-) -> ProjectChatResult:
-    video_result = await _ensure_video_pipeline(session, project_id, progress=progress)
-    if video_result.failed or not await _count(session, VideoClip, project_id):
-        return ProjectChatResult(
-            video_result.message,
-            "generate_dubbing",
-            video_result.changed,
-            video_result.failed,
-        )
-    existing_jobs = await _count(session, DubbingJob, project_id)
-    await _emit_progress(progress, "Vou preparar o export base e acionar a dublagem.")
-    try:
-        job = await start_project_dubbing(session, project_id)
-    except ValueError as exc:
-        return ProjectChatResult(str(exc), "generate_dubbing", existing_jobs > 0, True)
-    if job is None:
-        return ProjectChatResult(
-            "Não consegui iniciar a dublagem do projeto.",
-            "generate_dubbing",
-            existing_jobs > 0,
-            True,
-        )
-    if existing_jobs:
-        return ProjectChatResult(
-            f"Dublagem reaproveitada/atualizada ({job.target_language}, {job.status}).",
-            "generate_dubbing",
-            False,
-        )
-    return ProjectChatResult(
-        f"Dublagem enviada ao ElevenLabs para {job.target_language}.",
-        "generate_dubbing",
-        True,
-    )
-
-
-async def _ensure_quality_pipeline(session: AsyncSession, project_id: UUID) -> ProjectChatResult:
-    check = await run_quality_check(session, project_id)
-    if check is None:
-        return ProjectChatResult(
-            "Não consegui rodar o controle de qualidade.",
-            "run_quality",
-            failed=True,
-        )
-    return ProjectChatResult(
-        f"Controle de qualidade concluido com score {check.score} ({check.status}).",
-        "run_quality",
-        True,
-    )
-
-
 async def handle_project_chat(
     session: AsyncSession,
     project_id: UUID,
@@ -1008,13 +838,6 @@ async def handle_project_chat(
                 progress=progress,
             )
         return await _ensure_video_pipeline(session, project_id, force=force, progress=progress)
-    if action == "generate_dubbing":
-        return await _ensure_dubbing_pipeline(session, project_id, progress=progress)
-    if action == "generate_finalization":
-        return await _ensure_finalization_pipeline(session, project_id, progress=progress)
-    if action == "run_quality":
-        return await _ensure_quality_pipeline(session, project_id)
-
     response = await ask_director_agent(
         session,
         project_id,

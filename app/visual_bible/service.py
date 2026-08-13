@@ -18,8 +18,6 @@ from app.core.enums import (
 )
 from app.costs.models import CostEntry
 from app.costs.service import cost_audit_metadata, estimate_operation_cost, final_budget_cost
-from app.dubbing.models import DubbingJob
-from app.finalization.models import Export, SubtitleTrack
 from app.generation.model_settings import llm_provider_for_task
 from app.generation.models import PromptExecution
 from app.generation.prompt_language import ensure_portuguese_prompt_text
@@ -125,9 +123,6 @@ VISUAL_RESET_BLOCKER_MODELS = (
     ("timelines", Timeline),
     ("audio_tracks", AudioTrack),
     ("video_clips", VideoClip),
-    ("exports", Export),
-    ("subtitle_tracks", SubtitleTrack),
-    ("dubbing_jobs", DubbingJob),
 )
 
 
@@ -151,9 +146,6 @@ def visual_bible_reset_blocker_message(blockers: dict[str, int]) -> str:
         "timelines": "timeline",
         "audio_tracks": "faixas de audio",
         "video_clips": "clipes de video",
-        "exports": "exportacoes",
-        "subtitle_tracks": "legendas",
-        "dubbing_jobs": "dublagem",
     }
     details = ", ".join(
         f"{labels.get(key, key)}: {value}" for key, value in sorted(blockers.items())

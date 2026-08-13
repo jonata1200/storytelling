@@ -16,9 +16,6 @@ class ProjectStep(StrEnum):
     STORYBOARD = "storyboard"
     VIDEO = "video"
     CONTINUOUS_VIDEO = "continuous_video"
-    DUBBING = "dubbing"
-    FINALIZATION = "finalization"
-    QUALITY = "quality"
 
 
 class ProjectStatus(StrEnum):
@@ -35,11 +32,6 @@ class ProjectStatus(StrEnum):
     STORYBOARD_APPROVAL = "STORYBOARD_APPROVAL"
     PRODUCTION_PLANNING = "PRODUCTION_PLANNING"
     VIDEO_GENERATION = "VIDEO_GENERATION"
-    VIDEO_REVIEW = "VIDEO_REVIEW"
-    AUDIO_GENERATION = "AUDIO_GENERATION"
-    ASSEMBLY = "ASSEMBLY"
-    QUALITY_CONTROL = "QUALITY_CONTROL"
-    FINAL_APPROVAL = "FINAL_APPROVAL"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     ARCHIVED = "ARCHIVED"
@@ -79,7 +71,6 @@ class ArtifactType(StrEnum):
     VIDEO_CLIP = "VIDEO_CLIP"
     AUDIO_TRACK = "AUDIO_TRACK"
     TIMELINE = "TIMELINE"
-    EXPORT = "EXPORT"
 
 
 class DependencyKind(StrEnum):
@@ -117,7 +108,6 @@ class GenerationJobType(StrEnum):
     IMAGE = "IMAGE"
     VIDEO = "VIDEO"
     SPEECH = "SPEECH"
-    RENDER = "RENDER"
     ANALYSIS = "ANALYSIS"
 
 

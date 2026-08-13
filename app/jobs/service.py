@@ -28,9 +28,6 @@ PROJECT_STEP_JOB_TYPES = {
     ProjectStep.STORYBOARD: GenerationJobType.IMAGE,
     ProjectStep.VIDEO: GenerationJobType.VIDEO,
     ProjectStep.CONTINUOUS_VIDEO: GenerationJobType.VIDEO,
-    ProjectStep.DUBBING: GenerationJobType.SPEECH,
-    ProjectStep.FINALIZATION: GenerationJobType.RENDER,
-    ProjectStep.QUALITY: GenerationJobType.ANALYSIS,
 }
 
 TERMINAL_JOB_STATUSES = {

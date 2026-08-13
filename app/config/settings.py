@@ -52,8 +52,6 @@ class Settings(BaseSettings):
     local_storage_path: Path = Path("./storage")
     max_upload_bytes: int = 25 * 1024 * 1024
     max_generated_asset_bytes: int = 750 * 1024 * 1024
-    allow_user_registration: bool = True
-    single_user_mode: bool = True
 
     ai_provider: str = "ollama_cloud"
     text_provider: str | None = "ollama_cloud"
@@ -82,11 +80,6 @@ class Settings(BaseSettings):
     elevenlabs_voice_id: str = ""
     elevenlabs_speech_model: str = "eleven_multilingual_v2"
     elevenlabs_output_format: str = "mp3_44100_128"
-    dubbing_provider: str = "elevenlabs"
-    dubbing_source_lang: str = "pt"
-    dubbing_target_lang: str = "en"
-    dubbing_poll_interval_seconds: int = 10
-    dubbing_poll_timeout_seconds: int = 900
     user_display_name: str = "Jonata"
     user_email: str = ""
     user_avatar_path: str = ""

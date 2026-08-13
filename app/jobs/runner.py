@@ -6,12 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import ProjectStep
 from app.database.session import AsyncSessionLocal
-from app.dubbing.service import start_project_dubbing
-from app.finalization.models import Export
-from app.finalization.service import (
-    create_final_timeline,
-    export_timeline,
-)
 from app.jobs.service import (
     get_job,
     mark_job_failed,
@@ -27,8 +21,6 @@ from app.projects.versioning import (
     INACTIVE_DERIVED_STATUSES,
     resolve_stale_artifacts_after_regeneration,
 )
-from app.quality.service import run_quality_check
-from app.storyboards.models import Animatic, Timeline
 from app.storyboards.service import generate_animatic_bundle, generate_storyboard_frames
 from app.storytelling.models import Scene, Script, StoryIdea
 from app.storytelling.service import (
@@ -247,66 +239,6 @@ async def _run_continuous_video(
     return {"job_count": len(jobs), "segment_count": len(segments)}
 
 
-async def _run_dubbing(
-    session: AsyncSession,
-    project_id: UUID,
-    payload: dict,
-) -> dict[str, Any]:
-    job = await start_project_dubbing(
-        session,
-        project_id,
-        source_language=payload.get("source_language"),
-        target_language=payload.get("target_language"),
-    )
-    if job is None:
-        raise ValueError("não encontrei o projeto para gerar a dublagem")
-    return {
-        "dubbing_job_id": str(job.id),
-        "status": job.status,
-        "progress": job.progress,
-        "target_language": job.target_language,
-    }
-
-
-async def _run_finalization(session: AsyncSession, project_id: UUID) -> dict[str, Any]:
-    animatic = await _latest(session, Animatic, project_id)
-    timeline = await _latest(session, Timeline, project_id)
-    if timeline is None:
-        timeline = await create_final_timeline(
-            session,
-            project_id,
-            animatic.id if animatic else None,
-        )
-    if timeline is None:
-        raise ValueError("gere clipes de video primeiro")
-    existing_export = await session.scalar(
-        select(Export)
-        .where(
-            Export.project_id == project_id,
-            Export.timeline_id == timeline.id,
-            Export.status == "RENDERED",
-        )
-        .order_by(Export.created_at.desc())
-        .limit(1)
-    )
-    if existing_export is not None:
-        return {"timeline_id": str(timeline.id), "export_id": str(existing_export.id)}
-    export = await export_timeline(
-        session,
-        project_id,
-        timeline.id,
-    )
-    return {
-        "timeline_id": str(timeline.id),
-        "export_id": str(export.id) if export is not None else None,
-    }
-
-
-async def _run_quality(session: AsyncSession, project_id: UUID) -> dict[str, Any]:
-    check = await run_quality_check(session, project_id)
-    return {"quality_check_id": str(check.id) if check is not None else None}
-
-
 async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
     async with AsyncSessionLocal() as session:
         job = await get_job(session, job_id)
@@ -374,12 +306,6 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
                 response = await _run_video(session, job.project_id, payload)
             elif step == ProjectStep.CONTINUOUS_VIDEO:
                 response = await _run_continuous_video(session, job.project_id, payload)
-            elif step == ProjectStep.DUBBING:
-                response = await _run_dubbing(session, job.project_id, payload)
-            elif step == ProjectStep.FINALIZATION:
-                response = await _run_finalization(session, job.project_id)
-            elif step == ProjectStep.QUALITY:
-                response = await _run_quality(session, job.project_id)
             else:
                 await mark_job_failed(
                     session,

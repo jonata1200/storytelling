@@ -3,7 +3,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_authenticated_user
 from app.config.settings import Settings, get_settings
 from app.database.session import get_session
 from app.observability.service import readiness_dashboard
@@ -20,7 +19,6 @@ async def live(settings: Annotated[Settings, Depends(get_settings)]) -> dict[str
 async def ready(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
-    _username: Annotated[str, Depends(require_authenticated_user)],
 ) -> dict[str, str]:
     dashboard = await readiness_dashboard(session, settings)
     return {"status": dashboard.status}

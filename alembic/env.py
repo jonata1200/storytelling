@@ -10,12 +10,10 @@ from app.assets import models as asset_models  # noqa: F401
 from app.config.settings import get_settings
 from app.costs import models as cost_models  # noqa: F401
 from app.database.base import Base
-from app.finalization import models as finalization_models  # noqa: F401
 from app.generation import models as generation_models  # noqa: F401
 from app.observability import models as observability_models  # noqa: F401
 from app.production import models as production_models  # noqa: F401
 from app.projects import models  # noqa: F401
-from app.quality import models as quality_models  # noqa: F401
 from app.storyboards import models as storyboard_models  # noqa: F401
 from app.storytelling import models as storytelling_models  # noqa: F401
 from app.video_generation import models as video_generation_models  # noqa: F401
