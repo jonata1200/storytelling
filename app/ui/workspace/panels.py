@@ -13,11 +13,9 @@ from app.config.provider_policy import (
 )
 from app.config.settings import (
     GOOGLE_AI_IMAGE_MODELS,
-    GOOGLE_AI_VIDEO_MODELS,
     OLLAMA_CLOUD_TEXT_MODELS,
     get_settings,
     normalize_google_ai_image_model,
-    normalize_google_ai_video_model,
     normalize_ollama_cloud_text_model,
 )
 from app.generation.model_settings import NARRATIVE_TASKS, TASK_LABELS
@@ -27,12 +25,9 @@ from app.production.service import (
     ASPECT_RATIOS,
     CONTENT_TYPES,
     IMAGE_RESOLUTIONS,
-    VIDEO_RESOLUTIONS,
     normalize_image_aspect_ratio,
     normalize_image_resolution,
-    normalize_video_resolution,
     resolve_image_model,
-    resolve_video_model,
 )
 from app.storyboards.models import StoryboardFrame, Timeline, TimelineItem
 from app.ui.layout.components import button_classes as _button_classes
@@ -149,22 +144,16 @@ def _render_director_cockpit(settings: ProjectProductionSettings, counts: dict[s
 def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) -> None:
     app_settings = get_settings()
     configured_image_provider = effective_provider_for_channel(app_settings, "image")
-    configured_video_provider = effective_provider_for_channel(app_settings, "video")
     effective_image_model = resolve_image_model(
         settings.image_model,
         provider_model(app_settings, configured_image_provider, "image"),
     )
     effective_image_model = normalize_google_ai_image_model(effective_image_model)
-    effective_video_model = resolve_video_model(
-        settings.video_model,
-        provider_model(app_settings, configured_video_provider, "video"),
-    )
-    effective_video_model = normalize_google_ai_video_model(effective_video_model)
     with ui.card().classes(_card_classes("w-full")):
         with ui.row().classes("items-center gap-2"):
             ui.icon("tune").classes("text-cyan-300")
             ui.label("Core Setup").classes("text-lg font-semibold")
-        _muted("Configure formato, workflow e modelos antes de gerar clipes caros.")
+        _muted("Configure formato, resolução e modelo de imagem usados no pacote do Google Flow.")
         with ui.grid(columns=2).classes("w-full gap-3"):
             content_type = ui.select(
                 CONTENT_TYPES,
@@ -181,11 +170,6 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
                 label="Imagem",
                 value=normalize_image_resolution(settings.image_resolution, settings.aspect_ratio),
             )
-            video_resolution = ui.select(
-                VIDEO_RESOLUTIONS,
-                label="Video",
-                value=normalize_video_resolution(settings.video_resolution),
-            )
             motion_intensity = ui.number(
                 "Movimento",
                 value=settings.motion_intensity,
@@ -197,11 +181,10 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
                 label="Modelo de imagem",
                 value=effective_image_model,
             ).props("options-dense")
-            video_model = ui.select(
-                list(GOOGLE_AI_VIDEO_MODELS),
-                label="Modelo de vídeo",
-                value=effective_video_model,
-            ).props("options-dense")
+            ui.label(
+                "O v\u00eddeo \u00e9 criado manualmente no Google Flow; "
+                "apenas imagens s\u00e3o geradas por IA aqui."
+            ).classes("text-xs text-slate-500 self-end")
 
         async def save() -> None:
             await _save_production_setup(
@@ -210,11 +193,9 @@ def _render_core_setup(project_id: UUID, settings: ProjectProductionSettings) ->
                     "content_type": content_type.value,
                     "aspect_ratio": aspect_ratio.value,
                     "image_resolution": image_resolution.value,
-                    "video_resolution": video_resolution.value,
                     "workflow_mode": CONTINUOUS_VIDEO_WORKFLOW_MODE,
                     "motion_intensity": int(motion_intensity.value or 5),
                     "image_model": image_model.value,
-                    "video_model": video_model.value,
                 },
             )
 

@@ -6,7 +6,7 @@ from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset
-from app.core.enums import ArtifactStatus, GenerationJobType
+from app.core.enums import ArtifactStatus
 from app.costs.service import project_cost_summary
 from app.database.session import AsyncSessionLocal
 from app.generation.model_settings import ensure_default_model_settings
@@ -21,7 +21,6 @@ from app.storyboards.models import Animatic, StoryboardFrame, Timeline, Timeline
 from app.storyboards.service import list_storyboard_prompt_previews
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
 from app.video_generation.models import ContinuousVideoSegment, GenerationJob, VideoClip
-from app.video_generation.planning import _video_effective_prompt, _video_prompt_override
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 
 
@@ -113,13 +112,13 @@ def project_counts_statement(project_id: UUID) -> Any:
         _plain("clips", VideoClip),
         _plain("continuous_video_segments", ContinuousVideoSegment),
         select(
-            literal("continuous_video_approved_segments").label("label"),
+            literal("continuous_video_done_segments").label("label"),
             func.count().label("value"),
         )
         .select_from(ContinuousVideoSegment)
         .where(
             ContinuousVideoSegment.project_id == project_id,
-            ContinuousVideoSegment.review_status == "approved",
+            ContinuousVideoSegment.review_status == "done",
         ),
         select(literal("stale_artifacts").label("label"), func.count().label("value"))
         .select_from(Artifact)
@@ -188,19 +187,8 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
         cost_summary = await project_cost_summary(session, project_id)
         latest_timeline = await latest(session, Timeline, project_id) if load_video else None
         execution_summary = await project_execution_summary(session, project_id)
-        video_jobs = []
         continuous_video_segments = []
         if load_video:
-            video_jobs_result = await session.execute(
-                select(GenerationJob)
-                .where(
-                    GenerationJob.project_id == project_id,
-                    GenerationJob.job_type == GenerationJobType.VIDEO,
-                )
-                .order_by(GenerationJob.created_at.desc())
-                .limit(20)
-            )
-            video_jobs = list(video_jobs_result.scalars())
             continuous_video_segments_result = await session.execute(
                 select(ContinuousVideoSegment)
                 .where(ContinuousVideoSegment.project_id == project_id)
@@ -247,49 +235,6 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             else []
         )
         clips = await latest_many(session, VideoClip, project_id, 100) if load_video else []
-        if load_video:
-            generated_clip_frame_result = await session.execute(
-                select(VideoClip.storyboard_frame_id).where(VideoClip.project_id == project_id)
-            )
-            generated_clip_frame_ids = set(generated_clip_frame_result.scalars())
-        else:
-            generated_clip_frame_ids = set()
-        video_prompt_previews: list[dict[str, Any]] = []
-        if frames and load_video:
-            frame_shot_ids = [frame.shot_id for frame in frames if frame.shot_id is not None]
-            shot_context: dict[UUID, tuple[Shot, Scene]] = {}
-            if frame_shot_ids:
-                shot_context_result = await session.execute(
-                    select(Shot, Scene)
-                    .join(Scene, Shot.scene_id == Scene.id)
-                    .where(Shot.id.in_(frame_shot_ids))
-                )
-                shot_context = {shot.id: (shot, scene) for shot, scene in shot_context_result.all()}
-            production_metadata = production_settings.metadata_json or {}
-            for frame in frames:
-                shot, scene = shot_context.get(frame.shot_id, (None, None))
-                video_prompt_previews.append(
-                    {
-                        "frame_id": frame.id,
-                        "shot_id": frame.shot_id,
-                        "frame_number": frame.frame_number,
-                        "scene_number": getattr(scene, "scene_number", None),
-                        "shot_number": getattr(shot, "shot_number", None),
-                        "duration_seconds": frame.duration_seconds,
-                        "prompt": _video_effective_prompt(
-                            production_metadata,
-                            frame,
-                            shot,
-                            scene,
-                        ),
-                        "custom_prompt": _video_prompt_override(
-                            production_metadata,
-                            frame.id,
-                        )
-                        is not None,
-                        "generated": frame.id in generated_clip_frame_ids,
-                    }
-                )
         visual_asset_ids = {
             reference.asset_id for reference in visual_refs if reference.asset_id is not None
         }
@@ -342,9 +287,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             "assets": assets,
             "frames": frames,
             "storyboard_prompt_previews": storyboard_prompt_previews,
-            "video_prompt_previews": video_prompt_previews,
             "continuous_video_segments": continuous_video_segments,
-            "video_jobs": video_jobs,
             "clips": clips,
             "timeline": latest_timeline,
             "timeline_items": timeline_items,

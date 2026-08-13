@@ -30,9 +30,7 @@ from app.storytelling.service import (
     generate_story_ideas,
     regenerate_scenes_and_shots,
 )
-from app.video_generation.continuous import generate_continuous_video_segments
 from app.video_generation.models import GenerationJob
-from app.video_generation.service import generate_video_clips
 from app.visual_bible.service import (
     generate_visual_bible,
     visual_reference_completion_message,
@@ -171,74 +169,6 @@ async def _run_storyboard(session: AsyncSession, project_id: UUID) -> dict[str, 
     }
 
 
-async def _run_video(
-    session: AsyncSession,
-    project_id: UUID,
-    payload: dict,
-) -> dict[str, Any]:
-    raw_frame_ids = payload.get("frame_ids")
-    frame_ids = (
-        [UUID(str(item)) for item in raw_frame_ids]
-        if isinstance(raw_frame_ids, list)
-        else None
-    )
-    result = await generate_video_clips(
-        session,
-        project_id,
-        frame_ids=frame_ids,
-        include_canonical_references=bool(payload.get("include_canonical_references")),
-        retry_failed=bool(payload.get("retry_failed")),
-    )
-    if result is None:
-        raise ValueError("não encontrei o projeto para gerar os clipes")
-    jobs, clips = result
-    failed_jobs = [
-        job
-        for job in jobs
-        if str(getattr(getattr(job, "status", ""), "value", getattr(job, "status", ""))).lower()
-        == "failed"
-    ]
-    if jobs and not clips and failed_jobs:
-        first_error = str(getattr(failed_jobs[0], "error", "") or "").strip()
-        raise RuntimeError(first_error or "nenhum clipe de vídeo foi gerado")
-    return {"job_count": len(jobs), "clip_count": len(clips)}
-
-
-async def _run_continuous_video(
-    session: AsyncSession,
-    project_id: UUID,
-    payload: dict,
-) -> dict[str, Any]:
-    raw_segment_ids = payload.get("segment_ids")
-    segment_ids = (
-        [UUID(str(item)) for item in raw_segment_ids]
-        if isinstance(raw_segment_ids, list)
-        else None
-    )
-    jobs, segments = await generate_continuous_video_segments(
-        session,
-        project_id,
-        segment_ids=segment_ids,
-        provider_name=str(payload.get("provider") or "auto"),
-        model=payload.get("model"),
-        retry_failed=bool(payload.get("retry_failed")),
-    )
-    failed_segments = [
-        segment
-        for segment in segments
-        if str(getattr(getattr(segment, "status", ""), "value", segment.status)).lower()
-        == "failed"
-    ]
-    if failed_segments:
-        metadata = (
-            failed_segments[0].metadata_json
-            if isinstance(failed_segments[0].metadata_json, dict)
-            else {}
-        )
-        raise RuntimeError(str(metadata.get("error") or "segmento de video falhou"))
-    return {"job_count": len(jobs), "segment_count": len(segments)}
-
-
 async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
     async with AsyncSessionLocal() as session:
         job = await get_job(session, job_id)
@@ -302,10 +232,6 @@ async def run_project_step_job(job_id: UUID) -> dict[str, Any]:
                 response = await _run_visual(session, job.project_id)
             elif step == ProjectStep.STORYBOARD:
                 response = await _run_storyboard(session, job.project_id)
-            elif step == ProjectStep.VIDEO:
-                response = await _run_video(session, job.project_id, payload)
-            elif step == ProjectStep.CONTINUOUS_VIDEO:
-                response = await _run_continuous_video(session, job.project_id, payload)
             else:
                 await mark_job_failed(
                     session,

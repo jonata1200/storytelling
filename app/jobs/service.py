@@ -26,8 +26,9 @@ PROJECT_STEP_JOB_TYPES = {
     ProjectStep.SCENES: GenerationJobType.ANALYSIS,
     ProjectStep.VISUAL: GenerationJobType.IMAGE,
     ProjectStep.STORYBOARD: GenerationJobType.IMAGE,
-    ProjectStep.VIDEO: GenerationJobType.VIDEO,
-    ProjectStep.CONTINUOUS_VIDEO: GenerationJobType.VIDEO,
+    # Nota: as etapas VIDEO/CONTINUOUS_VIDEO não são mais executadas como jobs
+    # internos — a produção de vídeo agora prepara o pacote para o Google Flow
+    # (app.video_generation.continuous) sem geração de vídeo por IA.
 }
 
 TERMINAL_JOB_STATUSES = {

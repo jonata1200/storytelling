@@ -1,24 +1,29 @@
-import sys
-from datetime import UTC, datetime, timedelta
+"""Testes da etapa de produção de vídeo como assistente do Google Flow.
+
+A geração de vídeo por IA foi removida: o pipeline agora planeja segmentos e
+prepara um pacote (prompt + frame inicial + frame final) para o usuário criar
+o vídeo manualmente no Google Flow. Estes testes cobrem o planejamento, a
+validação, a edição de prompt, a conclusão manual (done), a rejeição (refazer)
+e a invalidação downstream.
+"""
+
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
-from typing import cast
+from types import SimpleNamespace
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset
-from app.core.enums import GenerationJobStatus, GenerationJobType, ProjectStatus
-from app.costs.service import estimate_operation_cost
+from app.core.enums import GenerationJobStatus, ProjectStatus
 from app.projects.models import Project
-from app.providers import media_utils
-from app.providers.video.types import ProviderCapabilities, VideoRequest, VideoResult
 from app.storytelling.models import Scene, Script, Shot
 from app.video_generation import continuous
 from app.video_generation.continuous import (
-    CONTINUOUS_VIDEO_REVIEW_APPROVED,
+    CONTINUOUS_VIDEO_REVIEW_DONE,
     CONTINUOUS_VIDEO_REVIEW_PENDING,
     CONTINUOUS_VIDEO_REVIEW_READY,
     CONTINUOUS_VIDEO_REVIEW_REJECTED,
@@ -28,21 +33,17 @@ from app.video_generation.continuous import (
     continuous_video_segment_continuity_summary,
     continuous_video_segment_idempotency_key,
     continuous_video_segment_is_approved,
-    continuous_video_segment_needs_generation,
     continuous_video_segment_validation_errors,
     continuous_video_visual_context,
     create_or_get_continuous_video_segment,
-    generate_continuous_video_segments,
-    generate_next_continuous_video_segment,
     invalidate_continuous_video_downstream_segments,
+    prepare_continuous_video_flow_package,
     reject_continuous_video_segment,
-    retry_failed_continuous_video_segment,
     update_continuous_video_segment_prompt,
 )
 from app.video_generation.models import (
     ContinuousVideoPlan,
     ContinuousVideoSegment,
-    GenerationJob,
 )
 from app.video_generation.schemas import ContinuousVideoSegmentCreate
 from app.visual_bible.models import Character, Location, Prop
@@ -119,24 +120,13 @@ def _planned_segment(project_id: UUID, number: int) -> ContinuousVideoSegment:
         prompt=prompt,
         duration_seconds=7,
         status=GenerationJobStatus.PENDING,
-        provider="google_ai",
-        model="veo-3.1-fast-generate-preview",
+        provider="flow_assistant",
+        model="google_flow",
         request_fingerprint=f"{number}" * 64,
         idempotency_key=f"{number}" * 64,
-        cost_estimate=Decimal("0.700000"),
+        cost_estimate=Decimal("0.000000"),
         metadata_json=metadata,
     )
-
-
-class _FakeProjectRepository:
-    project: Project
-
-    def __init__(self, _session: object) -> None:
-        pass
-
-    async def get_project(self, requested_project_id: UUID) -> Project | None:
-        assert requested_project_id == self.project.id
-        return self.project
 
 
 class _FakeContinuousSession:
@@ -145,7 +135,7 @@ class _FakeContinuousSession:
         self.commits = 0
         self.flushed = 0
 
-    def add(self, item: object) -> None:
+    def add(self, item: Any) -> None:
         if getattr(item, "id", None) is None:
             item.id = uuid4()
         self.added.append(item)
@@ -158,152 +148,6 @@ class _FakeContinuousSession:
 
     async def refresh(self, _item: object) -> None:
         return None
-
-
-class _FakeContinuousProvider:
-    def __init__(self, tmp_path: Path, *, fail_operation: str | None = None) -> None:
-        self.capabilities = ProviderCapabilities(text_to_video=True)
-        self.tmp_path = tmp_path
-        self.fail_operation = fail_operation
-        self.submitted_prompts: list[str] = []
-        self.submitted_requests: list[VideoRequest] = []
-        self.polled_operations: list[str] = []
-
-    async def submit_from_text(self, request: VideoRequest) -> str:
-        self.submitted_prompts.append(request.prompt)
-        self.submitted_requests.append(request)
-        return f"operations/continuous-{len(self.submitted_prompts)}"
-
-    async def poll_submitted(
-        self,
-        request: VideoRequest,
-        external_job_id: str,
-    ) -> VideoResult:
-        self.polled_operations.append(external_job_id)
-        if external_job_id == self.fail_operation:
-            raise RuntimeError("limite temporario do provider")
-        path = self.tmp_path / f"{external_job_id.replace('/', '-')}.mp4"
-        path.write_bytes(f"video-{external_job_id}".encode())
-        return VideoResult(
-            external_job_id=external_job_id,
-            status=GenerationJobStatus.SUCCEEDED,
-            file_path=path,
-            storage_uri=path.as_posix(),
-            sha256="a" * 64,
-            provider="google_ai",
-            model=request.model,
-            metadata={"operation_name": external_job_id},
-        )
-
-
-async def _fake_continuous_generation_job(
-    session: _FakeContinuousSession,
-    segment: ContinuousVideoSegment,
-    *,
-    provider: str,
-    model: str,
-    operation: str,
-    aspect_ratio: str,
-    resolution: str,
-    continuation_mode: str,
-) -> GenerationJob:
-    job = GenerationJob(
-        id=uuid4(),
-        project_id=segment.project_id,
-        job_type=GenerationJobType.VIDEO,
-        status=GenerationJobStatus.RUNNING,
-        progress=5,
-        attempts=1,
-        max_attempts=3,
-        provider=provider,
-        model=model,
-        idempotency_key=f"continuous-video:{segment.idempotency_key}",
-        request_payload={
-            "step": "continuous_video",
-            "segment_id": str(segment.id),
-            "operation": operation,
-            "aspect_ratio": aspect_ratio,
-            "resolution": resolution,
-            "continuation_mode": continuation_mode,
-        },
-        response_payload={},
-        cost_estimate=segment.cost_estimate,
-    )
-    segment.generation_job_id = job.id
-    session.add(job)
-    return job
-
-
-def _patch_continuous_generation_dependencies(
-    monkeypatch: pytest.MonkeyPatch,
-    *,
-    project: Project,
-    segments: list[ContinuousVideoSegment],
-    provider: _FakeContinuousProvider,
-    captured_budget: list[Decimal],
-) -> None:
-    _FakeProjectRepository.project = project
-    plan = ContinuousVideoPlan(
-        id=uuid4(),
-        project_id=project.id,
-        mode="continuous_fast",
-        target_duration_seconds=sum(segment.duration_seconds for segment in segments),
-        segment_duration_seconds=7,
-        segment_count=len(segments),
-        status="planned",
-        metadata_json={},
-    )
-
-    async def fake_list_segments(
-        _session: object,
-        _project_id: UUID,
-    ) -> list[ContinuousVideoSegment]:
-        return segments
-
-    async def fake_provider(
-        _session: object,
-        _project_id: UUID,
-        _provider_name: str,
-        _model: str | None,
-    ) -> tuple[_FakeContinuousProvider, str, str, str, str]:
-        return provider, "google_ai", "veo-3.1-fast-generate-preview", "9:16", "720p"
-
-    async def fake_budget(
-        _session: object,
-        _project_id: UUID,
-        estimated: Decimal,
-        *,
-        stage: str,
-    ) -> None:
-        assert stage == "continuous_video"
-        captured_budget.append(estimated)
-
-    async def fake_active_segment(_session: object, _project_id: UUID) -> None:
-        return None
-
-    async def fake_emit(*_args: object, **_kwargs: object) -> None:
-        return None
-
-    async def fake_plan(*_args: object, **_kwargs: object) -> ContinuousVideoPlan:
-        return plan
-
-    async def fake_assets_by_id(_session: object, _asset_ids: set[UUID]) -> dict[UUID, Asset]:
-        return {}
-
-    monkeypatch.setattr(continuous, "ProjectRepository", _FakeProjectRepository)
-    monkeypatch.setattr(continuous, "list_continuous_video_segments", fake_list_segments)
-    monkeypatch.setattr(continuous, "_continuous_video_provider_for_project", fake_provider)
-    monkeypatch.setattr(continuous, "assert_project_budget_allows", fake_budget)
-    monkeypatch.setattr(continuous, "_active_continuous_video_segment", fake_active_segment)
-    monkeypatch.setattr(continuous, "_emit_continuous_video_segment_event", fake_emit)
-    monkeypatch.setattr(continuous, "get_or_create_continuous_video_plan", fake_plan)
-    monkeypatch.setattr(continuous, "advance_project_status", lambda *_args: None)
-    monkeypatch.setattr(continuous, "_continuous_video_assets_by_id", fake_assets_by_id)
-    monkeypatch.setattr(
-        continuous,
-        "_continuous_video_generation_job",
-        _fake_continuous_generation_job,
-    )
 
 
 def test_continuous_video_metadata_defines_plan_and_segment_tables() -> None:
@@ -367,81 +211,16 @@ def test_continuous_video_fingerprint_tracks_script_visual_and_previous_segment(
     assert continuous_video_segment_idempotency_key(
         project_id,
         2,
-        "google_ai",
-        "veo-3.1-fast-generate-preview",
+        "flow_assistant",
+        "google_flow",
         first,
     ) != continuous_video_segment_idempotency_key(
         project_id,
         2,
-        "google_ai",
-        "veo-3.1-fast-generate-preview",
+        "flow_assistant",
+        "google_flow",
         second,
     )
-
-
-def test_continuous_video_segment_generation_resume_rules() -> None:
-    stale_running = ContinuousVideoSegment(
-        project_id=uuid4(),
-        segment_number=1,
-        prompt="Segmento em processamento.",
-        request_fingerprint="f" * 64,
-        idempotency_key="k" * 64,
-        status=GenerationJobStatus.RUNNING,
-        updated_at=datetime.now(UTC) - timedelta(minutes=15),
-    )
-    fresh_failed = ContinuousVideoSegment(
-        project_id=uuid4(),
-        segment_number=2,
-        prompt="Segmento com falha.",
-        request_fingerprint="e" * 64,
-        idempotency_key="j" * 64,
-        status=GenerationJobStatus.FAILED,
-        updated_at=datetime.now(UTC),
-    )
-    succeeded = ContinuousVideoSegment(
-        project_id=uuid4(),
-        segment_number=3,
-        prompt="Segmento concluido.",
-        request_fingerprint="d" * 64,
-        idempotency_key="i" * 64,
-        status=GenerationJobStatus.SUCCEEDED,
-        updated_at=datetime.now(UTC),
-    )
-
-    assert continuous_video_segment_needs_generation(None) is True
-    assert continuous_video_segment_needs_generation(stale_running) is True
-    assert continuous_video_segment_needs_generation(fresh_failed) is False
-    assert continuous_video_segment_needs_generation(fresh_failed, retry_failed=True) is True
-    assert continuous_video_segment_needs_generation(succeeded, retry_failed=True) is False
-
-
-def test_continuous_video_fast_cost_estimate_uses_text_to_video_override() -> None:
-    estimate = estimate_operation_cost(
-        "text_to_video",
-        Decimal("7"),
-        provider="google_ai",
-        model="veo-3.1-fast-generate-preview",
-    )
-
-    assert estimate.unit == "second"
-    assert estimate.unit_cost == Decimal("0.100000")
-    assert estimate.estimated == Decimal("0.700000")
-
-
-def test_continuous_video_ffmpeg_path_uses_imageio_ffmpeg_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    ffmpeg_path = tmp_path / "ffmpeg.exe"
-    ffmpeg_path.write_bytes(b"binary")
-    module = ModuleType("imageio_ffmpeg")
-    module.get_ffmpeg_exe = lambda: str(ffmpeg_path)  # type: ignore[attr-defined]
-
-    monkeypatch.setattr(continuous, "get_settings", lambda: SimpleNamespace(ffmpeg_path=""))
-    monkeypatch.setattr(media_utils.shutil, "which", lambda _name: None)
-    monkeypatch.setitem(sys.modules, "imageio_ffmpeg", module)
-
-    assert continuous._continuous_video_ffmpeg_path() == str(ffmpeg_path)
 
 
 def test_continuous_video_planner_splits_short_script_without_scenes() -> None:
@@ -471,8 +250,10 @@ def test_continuous_video_planner_splits_short_script_without_scenes() -> None:
     assert "Segmento 01" in payloads[0].prompt
     assert "Plano unico vertical 9:16" in payloads[0].prompt
     assert "Acao" in payloads[0].prompt
-    assert "imagens de referencia anexadas" in payloads[0].prompt
     assert "Nao criar legendas" in payloads[0].prompt
+    assert "first frame" in payloads[0].prompt
+    assert "last frame" in payloads[0].prompt
+    assert "flow.google.com" in payloads[0].prompt
     assert payloads[0].metadata_json["action"].endswith(".")
     assert payloads[0].metadata_json["characters"] == ["Clara"]
     assert payloads[0].metadata_json["locations"] == ["Observatorio"]
@@ -559,7 +340,7 @@ def test_continuous_video_segment_validation_rejects_incomplete_action() -> None
         project_id=project_id,
         segment_number=1,
         prompt=(
-            "Prompt Veo 3.1 Fast - Segmento 01\n\n"
+            "Prompt para Google Flow - Segmento 01\n\n"
             "ACAO VISIVEL DO SEGMENTO\n"
             "Arthur carrega a exaustao de.\n\n"
             "Biblioteca Visual canonica\n"
@@ -608,7 +389,6 @@ def test_continuous_video_segment_prompt_uses_compact_visual_context() -> None:
 
     assert len(payload.prompt) < 1200
     assert "detalhe visual " * 20 not in payload.prompt
-    assert "imagens de referencia anexadas" in payload.prompt
 
 
 def test_continuous_video_planner_groups_medium_script_shots() -> None:
@@ -737,7 +517,9 @@ def test_continuous_video_segment_validation_rejects_generic_prompt() -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_continuous_video_segment_prompt_recomputes_fingerprint() -> None:
+async def test_update_continuous_video_segment_prompt_recomputes_fingerprint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     project_id = uuid4()
     segment = ContinuousVideoSegment(
         id=uuid4(),
@@ -747,8 +529,8 @@ async def test_update_continuous_video_segment_prompt_recomputes_fingerprint() -
         prompt="Prompt original com detalhes suficientes para passar pela validacao.",
         duration_seconds=7,
         status=GenerationJobStatus.PENDING,
-        provider="google_ai",
-        model="veo-3.1-fast-generate-preview",
+        provider="flow_assistant",
+        model="google_flow",
         request_fingerprint="f" * 64,
         idempotency_key="k" * 64,
         metadata_json={
@@ -776,6 +558,14 @@ async def test_update_continuous_video_segment_prompt_recomputes_fingerprint() -
     )
     fake_session = FakeSession(segment)
 
+    async def fake_list_segments(
+        _session: object,
+        _project_id: UUID,
+    ) -> list[ContinuousVideoSegment]:
+        return [segment]
+
+    monkeypatch.setattr(continuous, "list_continuous_video_segments", fake_list_segments)
+
     updated = await update_continuous_video_segment_prompt(
         cast(AsyncSession, fake_session),
         project_id,
@@ -790,196 +580,7 @@ async def test_update_continuous_video_segment_prompt_recomputes_fingerprint() -
     assert segment.metadata_json["custom_prompt"] is True
     assert segment.request_fingerprint != "f" * 64
     assert segment.idempotency_key != "k" * 64
-    assert fake_session.flushed == 1
-
-
-@pytest.mark.asyncio
-async def test_generate_continuous_video_segments_stops_at_review_gate(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    project_id = uuid4()
-    project = Project(id=project_id, title="Projeto", status=ProjectStatus.PRODUCTION_PLANNING)
-    segments = [_planned_segment(project_id, 1), _planned_segment(project_id, 2)]
-    provider = _FakeContinuousProvider(tmp_path)
-    captured_budget: list[Decimal] = []
-    _patch_continuous_generation_dependencies(
-        monkeypatch,
-        project=project,
-        segments=segments,
-        provider=provider,
-        captured_budget=captured_budget,
-    )
-    session = _FakeContinuousSession()
-
-    jobs, processed = await generate_continuous_video_segments(
-        cast(AsyncSession, session),
-        project_id,
-    )
-
-    assert [segment.segment_number for segment in processed] == [1]
-    assert [job.request_payload["step"] for job in jobs] == ["continuous_video"]
-    assert provider.submitted_prompts == [segments[0].prompt]
-    assert provider.polled_operations == ["operations/continuous-1"]
-    assert segments[0].status == GenerationJobStatus.SUCCEEDED
-    assert segments[0].review_status == CONTINUOUS_VIDEO_REVIEW_READY
-    assert segments[1].status == GenerationJobStatus.PENDING
-    assert segments[0].asset_id is not None
-    assert segments[1].source_segment_id is None
-    assert segments[1].source_video_asset_id is None
-    assert len([item for item in session.added if isinstance(item, Asset)]) == 1
-    assert captured_budget == [Decimal("0.700000")]
-
-
-@pytest.mark.asyncio
-async def test_generate_continuous_video_segments_can_generate_partial_queue(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    project_id = uuid4()
-    project = Project(id=project_id, title="Projeto", status=ProjectStatus.PRODUCTION_PLANNING)
-    segments = [_planned_segment(project_id, 1), _planned_segment(project_id, 2)]
-    provider = _FakeContinuousProvider(tmp_path)
-    captured_budget: list[Decimal] = []
-    _patch_continuous_generation_dependencies(
-        monkeypatch,
-        project=project,
-        segments=segments,
-        provider=provider,
-        captured_budget=captured_budget,
-    )
-
-    jobs, processed = await generate_continuous_video_segments(
-        cast(AsyncSession, _FakeContinuousSession()),
-        project_id,
-        max_segments=1,
-    )
-
-    assert [segment.segment_number for segment in processed] == [1]
-    assert len(jobs) == 1
-    assert provider.submitted_prompts == [segments[0].prompt]
-    assert segments[0].status == GenerationJobStatus.SUCCEEDED
-    assert segments[1].status == GenerationJobStatus.PENDING
-    assert captured_budget == [Decimal("0.700000")]
-
-
-@pytest.mark.asyncio
-async def test_generate_continuous_video_segments_stops_on_middle_failure(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    project_id = uuid4()
-    project = Project(id=project_id, title="Projeto", status=ProjectStatus.PRODUCTION_PLANNING)
-    first = _planned_segment(project_id, 1)
-    first.status = GenerationJobStatus.SUCCEEDED
-    first.review_status = CONTINUOUS_VIDEO_REVIEW_APPROVED
-    first.asset_id = uuid4()
-    segments = [first, _planned_segment(project_id, 2), _planned_segment(project_id, 3)]
-    provider = _FakeContinuousProvider(tmp_path, fail_operation="operations/continuous-1")
-    captured_budget: list[Decimal] = []
-    _patch_continuous_generation_dependencies(
-        monkeypatch,
-        project=project,
-        segments=segments,
-        provider=provider,
-        captured_budget=captured_budget,
-    )
-
-    _jobs, processed = await generate_continuous_video_segments(
-        cast(AsyncSession, _FakeContinuousSession()),
-        project_id,
-    )
-
-    assert [segment.segment_number for segment in processed] == [1, 2]
-    assert provider.submitted_prompts == [segments[1].prompt]
-    assert segments[0].status == GenerationJobStatus.SUCCEEDED
-    assert segments[1].status == GenerationJobStatus.FAILED
-    assert segments[1].metadata_json["error"] == "limite temporario do provider"
-    assert segments[2].status == GenerationJobStatus.PENDING
-    assert captured_budget == [Decimal("0.700000")]
-
-
-@pytest.mark.asyncio
-async def test_generate_continuous_video_segments_resumes_without_resubmitting_ready_segments(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    project_id = uuid4()
-    project = Project(id=project_id, title="Projeto", status=ProjectStatus.PRODUCTION_PLANNING)
-    first = _planned_segment(project_id, 1)
-    first.status = GenerationJobStatus.SUCCEEDED
-    first.review_status = CONTINUOUS_VIDEO_REVIEW_APPROVED
-    first.asset_id = uuid4()
-    second = _planned_segment(project_id, 2)
-    second.status = GenerationJobStatus.RUNNING
-    second.external_operation_id = "operations/resume-2"
-    second.updated_at = datetime.now(UTC) - timedelta(minutes=30)
-    segments = [first, second]
-    provider = _FakeContinuousProvider(tmp_path)
-    captured_budget: list[Decimal] = []
-    _patch_continuous_generation_dependencies(
-        monkeypatch,
-        project=project,
-        segments=segments,
-        provider=provider,
-        captured_budget=captured_budget,
-    )
-
-    jobs, processed = await generate_continuous_video_segments(
-        cast(AsyncSession, _FakeContinuousSession()),
-        project_id,
-    )
-
-    assert [segment.segment_number for segment in processed] == [1, 2]
-    assert len(jobs) == 1
-    assert provider.submitted_prompts == []
-    assert provider.polled_operations == ["operations/resume-2"]
-    assert second.status == GenerationJobStatus.SUCCEEDED
-    assert second.source_video_asset_id == first.asset_id
-    assert captured_budget == [Decimal("0.000000")]
-
-
-@pytest.mark.asyncio
-async def test_generate_continuous_video_segments_retries_failed_and_continues(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    project_id = uuid4()
-    project = Project(id=project_id, title="Projeto", status=ProjectStatus.PRODUCTION_PLANNING)
-    first = _planned_segment(project_id, 1)
-    first.status = GenerationJobStatus.SUCCEEDED
-    first.review_status = CONTINUOUS_VIDEO_REVIEW_APPROVED
-    first.asset_id = uuid4()
-    second = _planned_segment(project_id, 2)
-    second.status = GenerationJobStatus.FAILED
-    second.metadata_json = {**(second.metadata_json or {}), "error": "limite anterior"}
-    third = _planned_segment(project_id, 3)
-    segments = [first, second, third]
-    provider = _FakeContinuousProvider(tmp_path)
-    captured_budget: list[Decimal] = []
-    _patch_continuous_generation_dependencies(
-        monkeypatch,
-        project=project,
-        segments=segments,
-        provider=provider,
-        captured_budget=captured_budget,
-    )
-
-    jobs, processed = await generate_continuous_video_segments(
-        cast(AsyncSession, _FakeContinuousSession()),
-        project_id,
-        retry_failed=True,
-    )
-
-    assert [segment.segment_number for segment in processed] == [1, 2]
-    assert len(jobs) == 1
-    assert provider.submitted_prompts == [second.prompt]
-    assert second.status == GenerationJobStatus.SUCCEEDED
-    assert second.review_status == CONTINUOUS_VIDEO_REVIEW_READY
-    assert third.status == GenerationJobStatus.PENDING
-    assert second.source_video_asset_id == first.asset_id
-    assert third.source_video_asset_id is None
-    assert captured_budget == [Decimal("0.700000")]
+    assert fake_session.flushed == 2
 
 
 @pytest.mark.asyncio
@@ -1042,171 +643,19 @@ async def test_create_continuous_video_segment_is_idempotent(
     assert repeated is created
     assert fake_session.added == [created]
     assert fake_session.flushed == 1
-    assert created.provider == "google_ai"
-    assert created.model == "veo-3.1-fast-generate-preview"
+    assert created.provider == "flow_assistant"
+    assert created.model == "google_flow"
     assert created.status == GenerationJobStatus.PENDING
     assert created.review_status == CONTINUOUS_VIDEO_REVIEW_PENDING
-    assert created.cost_estimate == Decimal("0.700000")
 
 
 @pytest.mark.asyncio
-async def test_continuous_video_success_enters_review_and_stores_preview_frames(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    project_id = uuid4()
-    project = Project(id=project_id, title="Projeto", status=ProjectStatus.PRODUCTION_PLANNING)
-    segments = [_planned_segment(project_id, 1)]
-    provider = _FakeContinuousProvider(tmp_path)
-    captured_budget: list[Decimal] = []
-    _patch_continuous_generation_dependencies(
-        monkeypatch,
-        project=project,
-        segments=segments,
-        provider=provider,
-        captured_budget=captured_budget,
-    )
-
-    def fake_extract_initial(
-        _video_asset: Asset,
-        *,
-        segment_number: int,
-    ) -> tuple[Path | None, str | None]:
-        path = tmp_path / f"segment-{segment_number}-initial.jpg"
-        path.write_bytes(b"initial-frame")
-        return path, None
-
-    def fake_extract_final(
-        _video_asset: Asset,
-        *,
-        segment_number: int,
-    ) -> tuple[Path | None, str | None]:
-        path = tmp_path / f"segment-{segment_number}-final.jpg"
-        path.write_bytes(b"final-frame")
-        return path, None
-
-    monkeypatch.setattr(continuous, "_extract_continuous_video_initial_frame", fake_extract_initial)
-    monkeypatch.setattr(continuous, "_extract_continuous_video_final_frame", fake_extract_final)
-    session = _FakeContinuousSession()
-
-    _jobs, processed = await generate_continuous_video_segments(
-        cast(AsyncSession, session),
-        project_id,
-    )
-
-    segment = processed[0]
-    assert segment.status == GenerationJobStatus.SUCCEEDED
-    assert segment.review_status == CONTINUOUS_VIDEO_REVIEW_READY
-    assert segment.generated_video_asset_id == segment.asset_id
-    assert segment.metadata_json["initial_frame_asset_id"]
-    assert segment.final_frame_asset_id is not None
-    assert segment.metadata_json["final_frame_asset_id"] == str(segment.final_frame_asset_id)
-    assert len([item for item in session.added if isinstance(item, Asset)]) == 3
-
-
-@pytest.mark.asyncio
-async def test_continuous_video_generation_sends_visual_reference_uris(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    project_id = uuid4()
-    project = Project(id=project_id, title="Projeto", status=ProjectStatus.PRODUCTION_PLANNING)
-    segments = [_planned_segment(project_id, 1)]
-    provider = _FakeContinuousProvider(tmp_path)
-    provider.capabilities = ProviderCapabilities(
-        text_to_video=True,
-        reference_images=True,
-        max_reference_images=3,
-    )
-    reference_path = tmp_path / "clara-reference.png"
-    reference_path.write_bytes(b"image")
-    captured_budget: list[Decimal] = []
-    _patch_continuous_generation_dependencies(
-        monkeypatch,
-        project=project,
-        segments=segments,
-        provider=provider,
-        captured_budget=captured_budget,
-    )
-
-    async def fake_reference_uris(
-        _session: object,
-        _project_id: UUID,
-        _segment: ContinuousVideoSegment,
-        *,
-        limit: int,
-    ) -> list[str]:
-        assert limit == 3
-        return [reference_path.as_posix()]
-
-    monkeypatch.setattr(
-        continuous,
-        "_continuous_video_reference_uris_for_segment",
-        fake_reference_uris,
-    )
-    monkeypatch.setattr(
-        continuous,
-        "_extract_continuous_video_initial_frame",
-        lambda *_args, **_kwargs: (None, "sem frame inicial no teste"),
-    )
-    monkeypatch.setattr(
-        continuous,
-        "_extract_continuous_video_final_frame",
-        lambda *_args, **_kwargs: (None, "sem frame final no teste"),
-    )
-    session = _FakeContinuousSession()
-
-    jobs, processed = await generate_continuous_video_segments(
-        cast(AsyncSession, session),
-        project_id,
-    )
-
-    request = provider.submitted_requests[0]
-    assert request.reference_uris == [reference_path.as_posix()]
-    assert request.model == "veo-3.1-generate-preview"
-    assert jobs[0].request_payload["reference_count"] == 1
-    assert processed[0].metadata_json["reference_uris"] == [reference_path.as_posix()]
-    assert captured_budget == [Decimal("0.700000"), Decimal("2.800000")]
-
-
-@pytest.mark.asyncio
-async def test_generate_next_continuous_video_segment_waits_for_review_approval(
+async def test_approve_continuous_video_segment_marks_done_and_links_next_continuity_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
     first = _planned_segment(project_id, 1)
     first.status = GenerationJobStatus.SUCCEEDED
-    first.asset_id = uuid4()
-    first.review_status = CONTINUOUS_VIDEO_REVIEW_READY
-    second = _planned_segment(project_id, 2)
-
-    async def fake_list_segments(
-        _session: object,
-        _project_id: UUID,
-    ) -> list[ContinuousVideoSegment]:
-        return [first, second]
-
-    monkeypatch.setattr(continuous, "list_continuous_video_segments", fake_list_segments)
-
-    with pytest.raises(ValueError, match="Revise e aprove"):
-        await generate_next_continuous_video_segment(
-            cast(AsyncSession, _FakeContinuousSession()),
-            project_id,
-        )
-
-    first.review_status = CONTINUOUS_VIDEO_REVIEW_APPROVED
-    assert continuous_video_segment_is_approved(first) is True
-
-
-@pytest.mark.asyncio
-async def test_approve_continuous_video_segment_links_next_continuity_source(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project_id = uuid4()
-    first = _planned_segment(project_id, 1)
-    first.status = GenerationJobStatus.SUCCEEDED
-    first.asset_id = uuid4()
-    first.generated_video_asset_id = first.asset_id
     first.final_frame_asset_id = uuid4()
     first.review_status = CONTINUOUS_VIDEO_REVIEW_READY
     first.metadata_json = {
@@ -1231,11 +680,39 @@ async def test_approve_continuous_video_segment_links_next_continuity_source(
     ) -> ContinuousVideoSegment | None:
         return next((segment for segment in segments if segment.segment_number == number), None)
 
+    async def fake_list_segments(
+        _session: object,
+        _project_id: UUID,
+    ) -> list[ContinuousVideoSegment]:
+        return segments
+
+    async def fake_emit(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    async def fake_get_project(_session: object, _project_id: UUID) -> object | None:
+        return object()
+
+    async def fake_get_plan(
+        _session: object,
+        _project_id: UUID,
+        _payload: object = None,
+    ) -> ContinuousVideoPlan:
+        return ContinuousVideoPlan(project_id=_project_id)
+
     monkeypatch.setattr(
         continuous,
         "get_continuous_video_segment_by_number",
         fake_get_by_number,
     )
+    monkeypatch.setattr(continuous, "list_continuous_video_segments", fake_list_segments)
+    monkeypatch.setattr(continuous, "_emit_continuous_video_segment_event", fake_emit)
+    monkeypatch.setattr(continuous, "ProjectRepository", type(
+        "FakeRepo",
+        (),
+        {"__init__": lambda self, _s: None, "get_project": fake_get_project},
+    ))
+    monkeypatch.setattr(continuous, "get_or_create_continuous_video_plan", fake_get_plan)
+    monkeypatch.setattr(continuous, "advance_project_status", lambda *_args: None)
 
     approved = await approve_continuous_video_segment(
         cast(AsyncSession, FakeSession()),
@@ -1245,13 +722,13 @@ async def test_approve_continuous_video_segment_links_next_continuity_source(
     )
 
     assert approved is first
-    assert first.review_status == CONTINUOUS_VIDEO_REVIEW_APPROVED
-    assert first.metadata_json["review_decision"] == CONTINUOUS_VIDEO_REVIEW_APPROVED
+    assert first.review_status == CONTINUOUS_VIDEO_REVIEW_DONE
+    assert continuous_video_segment_is_approved(first) is True
+    assert first.metadata_json["review_decision"] == CONTINUOUS_VIDEO_REVIEW_DONE
     assert first.metadata_json["review_previous_status"] == CONTINUOUS_VIDEO_REVIEW_READY
     assert first.metadata_json["review_note"] == "bom corte"
     assert continuous_video_segment_continuity_summary(first).startswith("Segmento 01")
     assert second.source_segment_id == first.id
-    assert second.source_video_asset_id == first.asset_id
     assert second.source_frame_asset_id == first.final_frame_asset_id
     assert second.metadata_json["continuity_source_summary"] == first.metadata_json[
         "continuity_summary"
@@ -1265,11 +742,10 @@ async def test_reject_continuous_video_segment_blocks_downstream_continuity(
     project_id = uuid4()
     first = _planned_segment(project_id, 1)
     first.status = GenerationJobStatus.SUCCEEDED
-    first.asset_id = uuid4()
     first.review_status = CONTINUOUS_VIDEO_REVIEW_READY
     second = _planned_segment(project_id, 2)
     second.source_segment_id = first.id
-    second.source_video_asset_id = first.asset_id
+    second.source_video_asset_id = uuid4()
     second.source_frame_asset_id = uuid4()
     segments = [first, second]
 
@@ -1306,61 +782,20 @@ async def test_reject_continuous_video_segment_blocks_downstream_continuity(
 
 
 @pytest.mark.asyncio
-async def test_retry_failed_continuous_video_segment_requires_failed_status(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project_id = uuid4()
-    failed = _planned_segment(project_id, 1)
-    failed.status = GenerationJobStatus.FAILED
-    calls: list[dict[str, object]] = []
-
-    class FakeSession:
-        async def get(self, _model: object, item_id: object) -> ContinuousVideoSegment | None:
-            return failed if item_id == failed.id else None
-
-    async def fake_generate_segment(
-        _session: object,
-        _project_id: UUID,
-        segment_id: UUID,
-        **kwargs: object,
-    ) -> tuple[list[GenerationJob], list[ContinuousVideoSegment]]:
-        calls.append({"segment_id": segment_id, **kwargs})
-        return [], [failed]
-
-    monkeypatch.setattr(
-        continuous,
-        "generate_continuous_video_segment",
-        fake_generate_segment,
-    )
-
-    _jobs, processed = await retry_failed_continuous_video_segment(
-        cast(AsyncSession, FakeSession()),
-        project_id,
-        failed.id,
-    )
-
-    assert processed == [failed]
-    assert calls[0]["segment_id"] == failed.id
-    assert calls[0]["retry_failed"] is True
-
-
-@pytest.mark.asyncio
-async def test_downstream_invalidation_keeps_approved_segments(
+async def test_downstream_invalidation_keeps_done_segments(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
     first = _planned_segment(project_id, 1)
     first.status = GenerationJobStatus.SUCCEEDED
-    first.review_status = CONTINUOUS_VIDEO_REVIEW_APPROVED
+    first.review_status = CONTINUOUS_VIDEO_REVIEW_DONE
     second = _planned_segment(project_id, 2)
     second.status = GenerationJobStatus.SUCCEEDED
     second.review_status = CONTINUOUS_VIDEO_REVIEW_READY
-    second.asset_id = uuid4()
     second.final_frame_asset_id = uuid4()
     third = _planned_segment(project_id, 3)
     third.status = GenerationJobStatus.SUCCEEDED
-    third.review_status = CONTINUOUS_VIDEO_REVIEW_APPROVED
-    third.asset_id = uuid4()
+    third.review_status = CONTINUOUS_VIDEO_REVIEW_DONE
     segments = [first, second, third]
 
     async def fake_list_segments(
@@ -1381,8 +816,155 @@ async def test_downstream_invalidation_keeps_approved_segments(
     assert invalidated == [second]
     assert second.status == GenerationJobStatus.PENDING
     assert second.review_status == CONTINUOUS_VIDEO_REVIEW_PENDING
-    assert second.asset_id is None
     assert second.final_frame_asset_id is None
     assert third.status == GenerationJobStatus.SUCCEEDED
-    assert third.review_status == CONTINUOUS_VIDEO_REVIEW_APPROVED
+    assert third.review_status == CONTINUOUS_VIDEO_REVIEW_DONE
     assert session.flushed == 1
+
+
+@pytest.mark.asyncio
+async def test_prepare_continuous_video_flow_package_generates_final_frames(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Preparar o pacote gera o frame final (imagem) e grava final_frame_asset_id."""
+    project_id = uuid4()
+    segment = _planned_segment(project_id, 1)
+    segment.source_frame_asset_id = uuid4()
+    segment.metadata_json = {
+        **(segment.metadata_json or {}),
+        "initial_frame_asset_id": str(segment.source_frame_asset_id),
+    }
+
+    class FakeRepository:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        async def get_project(self, _requested_project_id: UUID) -> Project:
+            return Project(id=project_id, title="Projeto", status=ProjectStatus.PRODUCTION_PLANNING)
+
+    class FakeSession:
+        def __init__(self, item: ContinuousVideoSegment) -> None:
+            self.item = item
+            self.added: list[object] = []
+            self.commits = 0
+
+        async def execute(self, _statement: object) -> object:
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: self.item))
+
+        async def get(
+            self,
+            _model: object,
+            asset_id: UUID,
+        ) -> Asset | None:
+            return (
+                Asset(
+                    id=asset_id,
+                    project_id=project_id,
+                    kind="image",
+                    storage_uri="storage/frames/initial.jpg",
+                    content_type="image/jpeg",
+                    sha256="c" * 64,
+                )
+                if asset_id == segment.source_frame_asset_id
+                else None
+            )
+
+        def add(self, item: Any) -> None:
+            if getattr(item, "id", None) is None:
+                item.id = uuid4()
+            self.added.append(item)
+
+        async def flush(self) -> None:
+            return None
+
+        async def commit(self) -> None:
+            self.commits += 1
+
+        async def refresh(self, _item: object) -> None:
+            return None
+
+    session = FakeSession(segment)
+
+    async def fake_list_segments(
+        _session: object,
+        _project_id: UUID,
+    ) -> list[ContinuousVideoSegment]:
+        return [segment]
+
+    class FakeImageProvider:
+        provider_name = "google_ai"
+
+    async def fake_image_provider(
+        _session: object,
+        _project_id: UUID,
+    ) -> tuple[FakeImageProvider, str, str]:
+        return FakeImageProvider(), "gemini-3.1-flash-lite-image", "images"
+
+    class FakeImage:
+        storage_uri = "storage/frames/final.jpg"
+        content_type = "image/jpeg"
+        sha256 = "b" * 64
+        provider = "google_ai"
+        model = "gemini-3.1-flash-lite-image"
+        estimated_cost = Decimal("0.000000")
+
+    async def fake_generate_image(
+        _provider: object,
+        _request: object,
+    ) -> tuple[FakeImage, dict]:
+        return FakeImage(), {}
+
+    async def fake_emit(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    async def fake_budget(
+        _session: object,
+        _project_id: UUID,
+        estimated: Decimal,
+        *,
+        stage: str,
+    ) -> None:
+        assert stage == "continuous_video_flow"
+        assert estimated >= Decimal("0.000000")
+
+    def fake_settings() -> object:
+        return SimpleNamespace(local_storage_path=Path("storage"))
+
+    async def fake_production_settings(
+        _session: object,
+        _project_id: UUID,
+    ) -> object:
+        return SimpleNamespace(
+            aspect_ratio="9:16",
+            image_resolution="1K",
+            metadata_json={},
+        )
+
+    monkeypatch.setattr(continuous, "ProjectRepository", FakeRepository)
+    monkeypatch.setattr(continuous, "list_continuous_video_segments", fake_list_segments)
+    monkeypatch.setattr(continuous, "_image_provider_for_project", fake_image_provider)
+    monkeypatch.setattr(continuous, "_generate_image_with_provider_fallback", fake_generate_image)
+    monkeypatch.setattr(continuous, "get_settings", fake_settings)
+    monkeypatch.setattr(
+        continuous,
+        "get_or_create_production_settings",
+        fake_production_settings,
+    )
+    monkeypatch.setattr(continuous, "assert_project_budget_allows", fake_budget)
+    monkeypatch.setattr(continuous, "_emit_continuous_video_segment_event", fake_emit)
+
+    prepared, validation_errors = await prepare_continuous_video_flow_package(
+        cast(AsyncSession, session),
+        project_id,
+    )
+
+    assert validation_errors == {}
+    assert [item.segment_number for item in prepared] == [1]
+    assert segment.review_status == CONTINUOUS_VIDEO_REVIEW_READY
+    assert segment.status == GenerationJobStatus.SUCCEEDED
+    assert segment.final_frame_asset_id is not None
+    assert segment.metadata_json["final_frame_asset_id"] == str(segment.final_frame_asset_id)
+    assert segment.metadata_json["flow_url"] == "https://flow.google.com"
+    image_assets = [item for item in session.added if isinstance(item, Asset)]
+    assert len(image_assets) == 1
+    assert session.commits == 1

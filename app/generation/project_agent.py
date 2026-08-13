@@ -1,7 +1,6 @@
 ﻿from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.generation.director_agent import ask_director_agent
@@ -19,7 +18,6 @@ from app.generation.project_agent_context import (
 )
 from app.generation.project_agent_intent import (
     _is_ai_generation_failure_message,
-    _is_visual_reference_gate_message,
     _requested_storyboard_scene_number,
     _requests_full_script_regeneration,
     _requests_specific_script_scenes,
@@ -53,7 +51,6 @@ from app.generation.project_agent_visual import (  # noqa: E402,F401
     _visual_reference_views_for_target,
     _visual_target_kind_from_message,
 )
-from app.jobs.service import enqueue_project_step
 from app.production.service import get_or_create_production_settings
 from app.projects.versioning import (
     mark_dependents_stale,
@@ -79,8 +76,9 @@ from app.storytelling.service import (
 from app.video_generation.continuous import (
     list_continuous_video_segments,
     plan_continuous_video_segments,
+    prepare_continuous_video_flow_package,
 )
-from app.video_generation.models import ContinuousVideoSegment, VideoClip
+from app.video_generation.models import ContinuousVideoSegment
 from app.visual_bible.models import Character, Location, Prop, VisualReference
 from app.visual_bible.service import (  # noqa: F401
     approve_visual_target as approve_visual_target,
@@ -104,7 +102,6 @@ SCRIPT_AGENT_EDIT_BLOCKER_MODELS = (
     ("animatic", Animatic),
     ("timeline", Timeline),
     ("faixas de audio", AudioTrack),
-    ("clipes de video", VideoClip),
     ("segmentos de video continuo", ContinuousVideoSegment),
 )
 
@@ -424,58 +421,6 @@ async def _ensure_storyboard_scene_plan(
     return True
 
 
-async def _ensure_video_pipeline(
-    session: AsyncSession,
-    project_id: UUID,
-    force: bool = False,
-    progress: ProgressCallback | None = None,
-) -> ProjectChatResult:
-    storyboard_result = await _ensure_storyboard_pipeline(
-        session, project_id, force=force, progress=progress
-    )
-    changed = storyboard_result.changed
-    if _is_visual_reference_gate_message(storyboard_result.message):
-        return ProjectChatResult(
-            storyboard_result.message,
-            "generate_video",
-            changed,
-            storyboard_result.failed,
-        )
-    frames = await _latest_many(session, StoryboardFrame, project_id, 100)
-    if not frames:
-        return ProjectChatResult(
-            "Não há frames de storyboard para gerar vídeo.",
-            "generate_video",
-            changed,
-        )
-
-    pending_frame_ids = await _pending_video_frame_ids(session, project_id)
-    if not force and not pending_frame_ids:
-        return ProjectChatResult(
-            "Os clipes de vídeo já existem para este storyboard.",
-            "generate_video",
-            changed,
-        )
-    target_frame_ids = [frame.id for frame in frames] if force else pending_frame_ids
-    await _emit_progress(progress, "Prompts de vídeo aprovados. Vou enfileirar os clipes.")
-    await enqueue_project_step(
-        session,
-        project_id,
-        "video",
-        {
-            "frame_ids": [str(frame_id) for frame_id in target_frame_ids],
-            "include_canonical_references": False,
-            "request_id": uuid4().hex,
-            "retry_failed": True,
-        },
-    )
-    return ProjectChatResult(
-        f"{len(target_frame_ids)} prompt(s) de vídeo aprovado(s) e enviado(s) para geração.",
-        "generate_video",
-        True,
-    )
-
-
 async def _project_uses_continuous_video_mode(
     session: AsyncSession,
     project_id: UUID,
@@ -496,7 +441,7 @@ async def _project_uses_continuous_video_mode(
     return str(settings.workflow_mode or "").strip() == CONTINUOUS_VIDEO_WORKFLOW_MODE
 
 
-async def _ensure_continuous_video_pipeline(
+async def _ensure_flow_pipeline(
     session: AsyncSession,
     project_id: UUID,
     force: bool = False,
@@ -521,7 +466,7 @@ async def _ensure_continuous_video_pipeline(
 
     segments = await list_continuous_video_segments(session, project_id)
     if force or not segments:
-        await _emit_progress(progress, "Vou planejar os segmentos de vídeo contínuo.")
+        await _emit_progress(progress, "Vou planejar os segmentos para o Google Flow.")
         _plan, segments, validation_errors = await plan_continuous_video_segments(
             session,
             project_id,
@@ -543,44 +488,42 @@ async def _ensure_continuous_video_pipeline(
     pending_segments = [
         segment
         for segment in segments
-        if str(getattr(getattr(segment, "status", ""), "value", segment.status)).upper()
-        != "SUCCEEDED"
+        if str(getattr(segment, "review_status", "") or "").strip()
+        not in {"ready", "done", "ready_for_review", "approved"}
     ]
     if not force and not pending_segments:
-        return ProjectChatResult("Vídeo contínuo já gerado.", "generate_video", changed)
+        return ProjectChatResult(
+            "Pacote para o Google Flow já está pronto.",
+            "generate_video",
+            changed,
+        )
 
-    await _emit_progress(progress, "Vou enfileirar os segmentos de vídeo contínuo.")
-    await enqueue_project_step(
+    await _emit_progress(progress, "Vou preparar o pacote para o Google Flow.")
+    prepared, preparation_errors = await prepare_continuous_video_flow_package(
         session,
         project_id,
-        "continuous_video",
-        {
-            "retry_failed": True,
-            "request_id": uuid4().hex,
-        },
     )
+    await session.commit()
+    if preparation_errors:
+        first_segment_number = min(preparation_errors)
+        return ProjectChatResult(
+            (
+                "Não consegui preparar todos os segmentos: "
+                f"segmento {first_segment_number} - "
+                f"{'; '.join(preparation_errors[first_segment_number])}"
+            ),
+            "generate_video",
+            True,
+            True,
+        )
     return ProjectChatResult(
-        f"{len(pending_segments)} segmento(s) enviado(s) para geração contínua.",
+        (
+            "Pacote para o Google Flow pronto! Abra flow.google.com, copie o prompt "
+            "e carregue o frame inicial e o frame final de cada segmento na aba Vídeo."
+        ),
         "generate_video",
         True,
     )
-
-
-async def _pending_video_frame_ids(session: AsyncSession, project_id: UUID) -> list[UUID]:
-    generated_frame_result = await session.execute(
-        select(VideoClip.storyboard_frame_id).where(VideoClip.project_id == project_id)
-    )
-    generated_frame_ids = set(generated_frame_result.scalars())
-    frame_result = await session.execute(
-        select(StoryboardFrame.id)
-        .where(StoryboardFrame.project_id == project_id)
-        .order_by(StoryboardFrame.frame_number)
-    )
-    return [
-        frame_id
-        for frame_id in frame_result.scalars()
-        if frame_id not in generated_frame_ids
-    ]
 
 
 async def _approve_storyboard_prompts_from_chat(
@@ -811,7 +754,7 @@ async def handle_project_chat(
         )
     if action == "generate_storyboard":
         if await _project_uses_continuous_video_mode(session, project_id, project_context):
-            return await _ensure_continuous_video_pipeline(
+            return await _ensure_flow_pipeline(
                 session,
                 project_id,
                 force=force,
@@ -830,14 +773,12 @@ async def handle_project_chat(
             session, project_id, force=force, progress=progress
         )
     if action == "generate_video":
-        if await _project_uses_continuous_video_mode(session, project_id, project_context):
-            return await _ensure_continuous_video_pipeline(
-                session,
-                project_id,
-                force=force,
-                progress=progress,
-            )
-        return await _ensure_video_pipeline(session, project_id, force=force, progress=progress)
+        return await _ensure_flow_pipeline(
+            session,
+            project_id,
+            force=force,
+            progress=progress,
+        )
     response = await ask_director_agent(
         session,
         project_id,

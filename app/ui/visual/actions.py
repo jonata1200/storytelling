@@ -3,18 +3,13 @@ import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from nicegui import ui
 from sqlalchemy import select
 
 from app.database.session import AsyncSessionLocal
-from app.jobs.service import enqueue_project_step
 from app.storytelling.models import Script
-from app.ui.shared.generation_progress import (
-    OPERATION_CANCELLED_MESSAGE,
-    mark_dialog_task_cancelable,
-)
 from app.ui.shared.page_config import (
     block_if_missing_api_keys_for_channels,
     block_if_missing_api_keys_for_step,
@@ -511,52 +506,17 @@ async def _approve_video_prompts_from_ui(
     loading_dialog: Any | None = None,
     progress_callback: VisualBatchProgressCallback | None = None,
 ) -> None:
-    if block_if_missing_api_keys_for_step("video"):
-        return
+    """Fluxo legado de clipes por storyboard — desativado.
+
+    A produção de vídeo não gera mais clipes por IA: a aba Vídeo prepara o pacote
+    para o Google Flow (flow.google.com). Mantido apenas como ponte de compatibilidade
+    para a UI legada; a Fase 3 do plano remove este fluxo.
+    """
+    _ = (project_id, frame_ids, include_canonical_references, progress_callback)
     if loading_dialog is not None:
-        loading_dialog.open()
-    mark_dialog_task_cancelable(loading_dialog)
-    try:
-        await _emit_visual_batch_progress(
-            progress_callback,
-            0,
-            len(frame_ids),
-            (
-                f"Agora: preparando {len(frame_ids)} clipe(s) para a fila de video.\n"
-                "Falta: registrar os jobs e iniciar o processamento."
-            ),
-        )
-        async with AsyncSessionLocal() as session:
-            await enqueue_project_step(
-                session,
-                project_id,
-                "video",
-                {
-                    "frame_ids": [str(frame_id) for frame_id in frame_ids],
-                    "include_canonical_references": include_canonical_references,
-                    "request_id": uuid4().hex,
-                    "retry_failed": True,
-                },
-            )
-        await _emit_visual_batch_progress(
-            progress_callback,
-            1,
-            len(frame_ids) + 1,
-            (
-                f"Job de video enfileirado.\n"
-                f"Os {len(frame_ids)} clipe(s) serao gerados em segundo plano.\n"
-                "A pagina sera atualizada automaticamente."
-            ),
-        )
-        ui.notify(
-            f"{len(frame_ids)} clipe(s) enviados para geração. Acompanhe o progresso.",
-            color="positive",
-        )
-        ui.navigate.reload()
-    except asyncio.CancelledError:
-        ui.notify(OPERATION_CANCELLED_MESSAGE, color="warning")
-    except Exception as exc:
-        show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
-    finally:
-        if loading_dialog is not None:
-            safe_close_ui_element(loading_dialog)
+        safe_close_ui_element(loading_dialog)
+    ui.notify(
+        "Geração de clipes por storyboard foi desativada. Use a aba Vídeo para preparar "
+        "o pacote para o Google Flow.",
+        color="warning",
+    )

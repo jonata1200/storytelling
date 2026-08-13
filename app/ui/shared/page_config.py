@@ -265,9 +265,9 @@ def _created_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
         _append_count(
             created,
             counts,
-            "continuous_video_approved_segments",
-            "segmento continuo aprovado",
-            "segmentos continuos aprovados",
+            "continuous_video_done_segments",
+            "segmento concluido",
+            "segmentos concluidos",
         )
     return created
 
@@ -280,7 +280,7 @@ def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
     frames = _safe_count(counts, "frames")
     clips = _safe_count(counts, "clips")
     continuous_segments = _safe_count(counts, "continuous_video_segments")
-    approved_continuous_segments = _safe_count(counts, "continuous_video_approved_segments")
+    done_continuous_segments = _safe_count(counts, "continuous_video_done_segments")
     visual_refs = _safe_count(counts, "visual_refs")
     expected_visual_refs = _expected_visual_references(counts)
 
@@ -321,13 +321,13 @@ def _missing_items_for_step(step_key: str, counts: dict[str, Any]) -> list[str]:
             missing.append("animatic")
     if step_key == "video" and continuous_segments > 0:
         required_approved = min(CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS, continuous_segments)
-        if approved_continuous_segments < required_approved:
-            pending = required_approved - approved_continuous_segments
+        if done_continuous_segments < required_approved:
+            pending = required_approved - done_continuous_segments
             missing.append(
                 _count_text(
                     pending,
-                    "segmento continuo pendente de aprovacao",
-                    "segmentos continuos pendentes de aprovacao",
+                    "segmento continuo pendente de conclusao",
+                    "segmentos continuos pendentes de conclusao",
                 )
             )
     elif step_key == "video":
@@ -378,8 +378,8 @@ def _progress_for_step(step_key: str, counts: dict[str, Any]) -> tuple[int, int,
         continuous_segments = _safe_count(counts, "continuous_video_segments")
         if continuous_segments > 0:
             required_approved = min(CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS, continuous_segments)
-            approved = _safe_count(counts, "continuous_video_approved_segments")
-            return min(approved, required_approved), max(required_approved, 1), "segmento"
+            done = _safe_count(counts, "continuous_video_done_segments")
+            return min(done, required_approved), max(required_approved, 1), "segmento"
         frames = _safe_count(counts, "frames")
         total = max(frames, 1)
         return min(_safe_count(counts, "clips"), total), total, "clipe"

@@ -17,8 +17,6 @@ from app.config.settings import (
     OLLAMA_CLOUD_TEXT_MODELS,
     get_settings,
     normalize_google_ai_image_model,
-    normalize_google_ai_video_fast_model,
-    normalize_google_ai_video_model,
     normalize_ollama_cloud_text_model,
 )
 from app.storytelling.idea_lab import load_generated_ideas, load_saved_ideas
@@ -180,12 +178,6 @@ def register_settings_page(
                             def selected_google_ai_image_model(current_model: str) -> str:
                                 return normalize_google_ai_image_model(current_model)
 
-                            def selected_google_ai_video_model(current_model: str) -> str:
-                                return normalize_google_ai_video_model(current_model)
-
-                            def selected_google_ai_video_fast_model(current_model: str) -> str:
-                                return normalize_google_ai_video_fast_model(current_model)
-
                             def provider_header(icon: str, title: str, provider: str) -> None:
                                 with ui.row().classes("w-full items-center justify-between gap-3"):
                                     with ui.row().classes("items-center gap-2"):
@@ -197,12 +189,6 @@ def register_settings_page(
 
                             google_ai_image_model_value = selected_google_ai_image_model(
                                 current.google_ai_image_model
-                            )
-                            google_ai_video_model_value = selected_google_ai_video_model(
-                                current.google_ai_video_model
-                            )
-                            google_ai_video_fast_model_value = selected_google_ai_video_fast_model(
-                                current.google_ai_video_fast_model
                             )
 
                             with ui.grid().classes("w-full grid-cols-1 lg:grid-cols-2 gap-4 mt-5"):
@@ -289,24 +275,8 @@ def register_settings_page(
                                             .props("outlined stack-label readonly")
                                             .classes("w-full")
                                         )
-                                        (
-                                            ui.input(
-                                                "Modelo de vídeo",
-                                                value=google_ai_video_model_value,
-                                            )
-                                            .props("outlined stack-label readonly")
-                                            .classes("w-full")
-                                        )
-                                        (
-                                            ui.input(
-                                                "Modelo de vídeo contínuo",
-                                                value=google_ai_video_fast_model_value,
-                                            )
-                                            .props("outlined stack-label readonly")
-                                            .classes("w-full")
-                                        )
                                     with ui.grid().classes(
-                                        "w-full grid-cols-1 md:grid-cols-3 gap-3"
+                                        "w-full grid-cols-1 md:grid-cols-2 gap-3"
                                     ):
                                         (
                                             ui.input("Imagem 9:16", value="720 x 1280 px")
@@ -315,11 +285,6 @@ def register_settings_page(
                                         )
                                         (
                                             ui.input("Imagem 16:9", value="1280 x 720 px")
-                                            .props("outlined stack-label readonly")
-                                            .classes("w-full")
-                                        )
-                                        (
-                                            ui.input("Resolução de vídeo", value="720p")
                                             .props("outlined stack-label readonly")
                                             .classes("w-full")
                                         )
@@ -397,7 +362,6 @@ def register_settings_page(
                                         "AI_PROVIDER": "ollama_cloud",
                                         "TEXT_PROVIDER": "ollama_cloud",
                                         "IMAGE_PROVIDER": "google_ai",
-                                        "VIDEO_PROVIDER": "google_ai",
                                         "SPEECH_PROVIDER": "elevenlabs",
                                         "TEXT_PROVIDER_FALLBACKS": "",
                                         "OLLAMA_CLOUD_BASE_URL": str(
@@ -417,16 +381,7 @@ def register_settings_page(
                                             provider="google_ai",
                                         ),
                                         "GOOGLE_AI_IMAGE_SIZE": "1K",
-                                        "GOOGLE_AI_VIDEO_MODEL": validate_model_name(
-                                            google_ai_video_model_value,
-                                            "Modelo de vídeo Google AI",
-                                            provider="google_ai",
-                                        ),
-                                        "GOOGLE_AI_VIDEO_FAST_MODEL": validate_model_name(
-                                            google_ai_video_fast_model_value,
-                                            "Modelo rápido de vídeo Google AI",
-                                            provider="google_ai",
-                                        ),
+
                                         "ELEVENLABS_BASE_URL": str(
                                             elevenlabs_base_url.value or ""
                                         ).strip(),

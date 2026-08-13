@@ -50,7 +50,7 @@ def render_assistant_panel(
         "script": "Peça ajustes de tom, diálogo ou estrutura.",
         "assets": "Descreva um personagem, local ou objeto.",
         "storyboard": "Diga ao diretor o que enquadrar.",
-        "video": "Descreva movimento, câmera ou ritmo.",
+        "video": "Peça para preparar o pacote de produção para o Google Flow.",
     }
     assistant_suggestions = {
         "script": (
@@ -67,8 +67,8 @@ def render_assistant_panel(
             "melhorar enquadramentos, ajustar ritmo visual ou revisar continuidade entre cenas."
         ),
         "video": (
-            "Sugestões que posso ajudar agora: criar clipes a partir do storyboard, "
-            "orientar movimento de câmera, ajustar ritmo ou propor variações."
+            "Sugestões que posso ajudar agora: planejar os segmentos e preparar o pacote "
+            "(prompt + frames) para criar o vídeo no Google Flow."
         ),
     }
     counts = summary.get("counts")

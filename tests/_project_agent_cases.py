@@ -455,21 +455,21 @@ async def test_project_chat_routes_assets_storyboard_and_video(
         assert force is False
         return ProjectChatResult("storyboard ok", "generate_storyboard", True)
 
-    async def fake_video(
+    async def fake_flow(
         session: AsyncSession,
         requested_project_id: Any,
         force: bool = False,
         progress: Any = None,
     ) -> ProjectChatResult:
-        calls.append("video")
+        calls.append("flow")
         assert requested_project_id == project_id
         assert force is False
-        return ProjectChatResult("video ok", "generate_video", True)
+        return ProjectChatResult("flow ok", "generate_video", True)
 
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
     monkeypatch.setattr(project_agent, "_ensure_visual_pipeline", fake_assets)
     monkeypatch.setattr(project_agent, "_ensure_storyboard_pipeline", fake_storyboard)
-    monkeypatch.setattr(project_agent, "_ensure_video_pipeline", fake_video)
+    monkeypatch.setattr(project_agent, "_ensure_flow_pipeline", fake_flow)
 
     assets = await handle_project_chat(
         cast(AsyncSession, object()), project_id, "script", "crie os personagens", []
@@ -482,9 +482,9 @@ async def test_project_chat_routes_assets_storyboard_and_video(
     )
 
     assert assets.action == "generate_assets"
-    assert storyboard.action == "generate_storyboard"
+    assert storyboard.action == "generate_video"
     assert video.action == "generate_video"
-    assert calls == ["assets", "storyboard", "video"]
+    assert calls == ["assets", "flow", "flow"]
 
 
 @pytest.mark.asyncio
@@ -498,6 +498,7 @@ async def test_project_chat_routes_storyboard_scene_requests(
         assert requested_project_id == project_id
         return {
             "found": True,
+            "production_settings": {"workflow_mode": "keyframes_i2v"},
             "counts": {
                 "scripts": 1,
                 "scenes": 3,
@@ -905,27 +906,33 @@ async def test_video_pipeline_stops_when_visual_references_block_storyboard(
 ) -> None:
     project_id = uuid4()
 
-    async def fake_storyboard(
+    async def fake_script(
         session: AsyncSession,
         requested_project_id: Any,
-        force: bool = False,
         progress: Any = None,
-    ) -> ProjectChatResult:
+    ) -> tuple[SimpleNamespace, str, bool]:
         assert requested_project_id == project_id
-        return ProjectChatResult(
-            "Conclua a Biblioteca Visual antes do storyboard. "
-            "Ainda falta gerar 2 referência(s) visual(is).",
-            "generate_storyboard",
-            False,
-        )
+        return SimpleNamespace(id=uuid4()), "script ok", False
 
-    async def fail_latest_many(*args: Any, **kwargs: Any) -> list[Any]:
-        raise AssertionError("video não deve consultar frames quando o storyboard está bloqueado")
+    async def fake_incomplete_visual_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "complete": False,
+            "missing_categories": ["character"],
+            "missing_views": 2,
+        }
 
-    monkeypatch.setattr(project_agent, "_ensure_storyboard_pipeline", fake_storyboard)
-    monkeypatch.setattr(project_agent, "_latest_many", fail_latest_many)
+    async def fail_prepare(*args: Any, **kwargs: Any) -> tuple[list[Any], dict[int, list[str]]]:
+        raise AssertionError("não deve preparar pacote com biblioteca visual incompleta")
 
-    result = await project_agent._ensure_video_pipeline(
+    monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
+    monkeypatch.setattr(
+        project_agent,
+        "visual_reference_completion_report",
+        fake_incomplete_visual_report,
+    )
+    monkeypatch.setattr(project_agent, "prepare_continuous_video_flow_package", fail_prepare)
+
+    result = await project_agent._ensure_flow_pipeline(
         cast(AsyncSession, object()),
         project_id,
     )
@@ -933,67 +940,6 @@ async def test_video_pipeline_stops_when_visual_references_block_storyboard(
     assert result.action == "generate_video"
     assert result.changed is False
     assert "Biblioteca Visual" in result.message
-
-
-@pytest.mark.asyncio
-async def test_video_pipeline_enqueues_pending_frames_after_prompt_approval(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    project_id = uuid4()
-    frame_ids = [uuid4(), uuid4()]
-    calls: list[str] = []
-    captured_payload: dict[str, Any] = {}
-
-    async def fake_storyboard(
-        session: AsyncSession,
-        requested_project_id: Any,
-        force: bool = False,
-        progress: Any = None,
-    ) -> ProjectChatResult:
-        calls.append("storyboard")
-        assert requested_project_id == project_id
-        return ProjectChatResult("storyboard pronto", "generate_storyboard", False)
-
-    async def fake_latest_many(*args: Any, **kwargs: Any) -> list[SimpleNamespace]:
-        calls.append("frames")
-        return [SimpleNamespace(id=frame_id) for frame_id in frame_ids]
-
-    async def fake_pending_frame_ids(*args: Any, **kwargs: Any) -> list[Any]:
-        calls.append("pending")
-        return frame_ids
-
-    async def fake_enqueue(
-        session: AsyncSession,
-        requested_project_id: Any,
-        step: str,
-        payload: dict[str, Any],
-    ) -> SimpleNamespace:
-        calls.append("enqueue")
-        assert requested_project_id == project_id
-        assert step == "video"
-        captured_payload.update(payload)
-        return SimpleNamespace(id=uuid4())
-
-    monkeypatch.setattr(project_agent, "_ensure_storyboard_pipeline", fake_storyboard)
-    monkeypatch.setattr(project_agent, "_latest_many", fake_latest_many)
-    monkeypatch.setattr(project_agent, "_pending_video_frame_ids", fake_pending_frame_ids)
-    monkeypatch.setattr(project_agent, "enqueue_project_step", fake_enqueue)
-
-    result = await project_agent._ensure_video_pipeline(
-        cast(AsyncSession, object()),
-        project_id,
-    )
-
-    assert result == ProjectChatResult(
-        "2 prompt(s) de vídeo aprovado(s) e enviado(s) para geração.",
-        "generate_video",
-        True,
-    )
-    assert captured_payload["frame_ids"] == [str(frame_id) for frame_id in frame_ids]
-    assert isinstance(captured_payload["request_id"], str)
-    assert captured_payload["request_id"]
-    assert captured_payload["retry_failed"] is True
-    assert calls == ["storyboard", "frames", "pending", "enqueue"]
 
 
 @pytest.mark.asyncio
@@ -1016,27 +962,23 @@ async def test_project_chat_uses_continuous_video_pipeline_when_mode_is_continuo
             },
         }
 
-    async def fake_continuous_video(
+    async def fake_flow(
         session: AsyncSession,
         requested_project_id: Any,
         force: bool = False,
         progress: Any = None,
     ) -> ProjectChatResult:
-        calls.append("continuous")
+        calls.append("flow")
         assert requested_project_id == project_id
         assert force is False
-        return ProjectChatResult("continuo ok", "generate_video", True)
+        return ProjectChatResult("flow ok", "generate_video", True)
 
-    async def fail_classic_video(*args: Any, **kwargs: Any) -> ProjectChatResult:
-        raise AssertionError("modo continuo nao deve acionar pipeline classica")
+    async def fail_storyboard_pipeline(*args: Any, **kwargs: Any) -> ProjectChatResult:
+        raise AssertionError("modo continuo nao deve acionar pipeline de storyboard")
 
     monkeypatch.setattr(project_agent, "build_project_context", fake_context)
-    monkeypatch.setattr(
-        project_agent,
-        "_ensure_continuous_video_pipeline",
-        fake_continuous_video,
-    )
-    monkeypatch.setattr(project_agent, "_ensure_video_pipeline", fail_classic_video)
+    monkeypatch.setattr(project_agent, "_ensure_flow_pipeline", fake_flow)
+    monkeypatch.setattr(project_agent, "_ensure_storyboard_pipeline", fail_storyboard_pipeline)
 
     result = await handle_project_chat(
         cast(AsyncSession, object()),
@@ -1046,20 +988,19 @@ async def test_project_chat_uses_continuous_video_pipeline_when_mode_is_continuo
         [],
     )
 
-    assert result == ProjectChatResult("continuo ok", "generate_video", True)
-    assert calls == ["continuous"]
+    assert result == ProjectChatResult("flow ok", "generate_video", True)
+    assert calls == ["flow"]
 
 
 @pytest.mark.asyncio
-async def test_continuous_video_pipeline_plans_and_enqueues_generation(
+async def test_continuous_video_pipeline_plans_and_prepares_flow_package(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
     calls: list[str] = []
-    captured_payload: dict[str, Any] = {}
     segments = [
-        SimpleNamespace(id=uuid4(), status="PENDING"),
-        SimpleNamespace(id=uuid4(), status="PENDING"),
+        SimpleNamespace(id=uuid4(), segment_number=1, review_status="pending"),
+        SimpleNamespace(id=uuid4(), segment_number=2, review_status="pending"),
     ]
 
     async def fake_script(
@@ -1083,37 +1024,29 @@ async def test_continuous_video_pipeline_plans_and_enqueues_generation(
         calls.append("plan")
         return object(), segments, {}
 
-    async def fake_enqueue(
-        session: AsyncSession,
-        requested_project_id: Any,
-        step: str,
-        payload: dict[str, Any],
-    ) -> SimpleNamespace:
-        calls.append("enqueue")
-        assert requested_project_id == project_id
-        assert step == "continuous_video"
-        captured_payload.update(payload)
-        return SimpleNamespace(id=uuid4())
+    async def fake_prepare(*args: Any, **kwargs: Any) -> tuple[list[Any], dict[int, list[str]]]:
+        calls.append("prepare")
+        return segments, {}
+
+    class FakeSession:
+        async def commit(self) -> None:
+            calls.append("commit")
 
     monkeypatch.setattr(project_agent, "_ensure_script_pipeline", fake_script)
     monkeypatch.setattr(project_agent, "visual_reference_completion_report", fake_visual_report)
     monkeypatch.setattr(project_agent, "list_continuous_video_segments", fake_list_segments)
     monkeypatch.setattr(project_agent, "plan_continuous_video_segments", fake_plan)
-    monkeypatch.setattr(project_agent, "enqueue_project_step", fake_enqueue)
+    monkeypatch.setattr(project_agent, "prepare_continuous_video_flow_package", fake_prepare)
 
-    result = await project_agent._ensure_continuous_video_pipeline(
-        cast(AsyncSession, object()),
+    result = await project_agent._ensure_flow_pipeline(
+        cast(AsyncSession, FakeSession()),
         project_id,
     )
 
-    assert result == ProjectChatResult(
-        "2 segmento(s) enviado(s) para geração contínua.",
-        "generate_video",
-        True,
-    )
-    assert captured_payload["retry_failed"] is True
-    assert isinstance(captured_payload["request_id"], str)
-    assert calls == ["script", "visual_report", "list", "plan", "enqueue"]
+    assert result.action == "generate_video"
+    assert result.changed is True
+    assert "Google Flow" in result.message
+    assert calls == ["script", "visual_report", "list", "plan", "prepare", "commit"]
 
 
 @pytest.mark.asyncio
@@ -1196,7 +1129,10 @@ async def test_project_chat_routes_storyboard_prompt_approval(
 
     async def fake_context(session: AsyncSession, requested_project_id: Any) -> dict[str, Any]:
         assert requested_project_id == project_id
-        return {"counts": {"scripts": 1, "shots": 4, "frames": 0}}
+        return {
+            "production_settings": {"workflow_mode": "keyframes_i2v"},
+            "counts": {"scripts": 1, "shots": 4, "frames": 0},
+        }
 
     async def fake_approve_storyboard(
         session: AsyncSession,

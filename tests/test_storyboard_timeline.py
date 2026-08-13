@@ -841,7 +841,7 @@ async def test_generate_storyboard_frames_persists_successful_frames_before_fail
 
     class FakeSession:
         def __init__(self) -> None:
-            self.added: list[object] = []
+            self.added: list[Any] = []
             self.commits = 0
 
         async def get(self, model: object, requested_id: object) -> object | None:
@@ -849,7 +849,7 @@ async def test_generate_storyboard_frames_persists_successful_frames_before_fail
                 return script
             return None
 
-        def add(self, item: object) -> None:
+        def add(self, item: Any) -> None:
             self.added.append(item)
 
         async def flush(self) -> None:
@@ -864,8 +864,8 @@ async def test_generate_storyboard_frames_persists_successful_frames_before_fail
         async def refresh(self, item: object) -> None:
             return None
 
-    async def fake_generate_plan_images(*args: object, **kwargs: object) -> None:
-        plans = args[1]
+    async def fake_generate_plan_images(*args: Any, **kwargs: object) -> None:
+        plans: list[Any] = list(args[1])
         first_image_path = tmp_path / "frame-001.png"
         first_image_path.write_bytes(b"image")
         plans[0].image = ImageResult(
@@ -977,7 +977,11 @@ async def test_generate_storyboard_frames_persists_successful_frames_before_fail
     )
 
     with pytest.raises(RuntimeError, match="continuar de onde parou"):
-        await generate_storyboard_frames(fake_session, project_id, script.id)
+        await generate_storyboard_frames(
+            cast(AsyncSession, fake_session),
+            project_id,
+            script.id,
+        )
 
     saved_frames = [
         item for item in fake_session.added if isinstance(item, StoryboardFrame)

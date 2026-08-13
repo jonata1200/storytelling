@@ -36,12 +36,17 @@ def test_estimate_batch_cost_returns_uncertainty_range() -> None:
 
 
 def test_estimate_operation_cost_uses_default_policy() -> None:
-    estimate = estimate_operation_cost("image_to_video", Decimal("12.5"), model="video/model")
+    estimate = estimate_operation_cost(
+        "image_generation",
+        Decimal("12.5"),
+        provider="google_ai",
+        model="image/model",
+    )
 
-    assert estimate.unit == "second"
-    assert estimate.unit_cost == Decimal("0.400000")
-    assert estimate.estimated == Decimal("5.000000")
-    assert estimate.maximum == Decimal("5.750000")
+    assert estimate.unit == "image"
+    assert estimate.unit_cost == Decimal("0.067000")
+    assert estimate.estimated == Decimal("0.837500")
+    assert estimate.maximum == Decimal("0.963125")
 
 
 def test_budget_allows_blocks_when_projected_cost_exceeds_limit() -> None:
@@ -85,27 +90,17 @@ def test_google_ai_cost_policy_uses_model_overrides() -> None:
         provider="google_ai",
         model="gemini-3.1-flash-lite-image",
     )
-    video = estimate_operation_cost(
-        "image_to_video",
-        Decimal("8"),
+    image_edit = estimate_operation_cost(
+        "image_edit",
+        Decimal("1"),
         provider="google_ai",
-        model="veo-3.1-generate-preview",
-    )
-    fast_video = estimate_operation_cost(
-        "image_to_video",
-        Decimal("8"),
-        provider="google_ai",
-        model="veo-3.1-fast-generate-preview",
+        model="gemini-3.1-flash-lite-image",
     )
 
     assert image.unit == "image"
     assert image.unit_cost == Decimal("0.033600")
-    assert video.unit == "second"
-    assert video.unit_cost == Decimal("0.400000")
-    assert video.estimated == Decimal("3.200000")
-    assert fast_video.unit == "second"
-    assert fast_video.unit_cost == Decimal("0.100000")
-    assert fast_video.estimated == Decimal("0.800000")
+    assert image_edit.unit == "image"
+    assert image_edit.unit_cost == Decimal("0.033600")
 
 
 def test_operation_cost_text_formats_estimates_and_zero_quantity() -> None:

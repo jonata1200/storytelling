@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import suppress
+from typing import Any
 
 import pytest
 
@@ -35,13 +36,13 @@ def test_progress_percent_text_uses_percentage() -> None:
 
 async def test_cancel_button_cancels_bound_dialog_task() -> None:
     class Dialog:
-        pass
+        cancel_requested: Any = None
 
     class Button:
-        callback = None
+        callback: Any = None
         disabled = False
 
-        def on(self, _event: str, callback: object) -> None:
+        def on(self, _event: str, callback: Any) -> None:
             self.callback = callback
 
         def disable(self) -> None:

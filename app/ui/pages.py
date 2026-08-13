@@ -157,6 +157,9 @@ from app.ui.project.text import (
     format_idea_payload_for_project as _format_idea_payload_for_project,
 )
 from app.ui.project.workflows import (
+    _generate_initial_script_in_background as _generate_initial_script_in_background,  # noqa: F401
+)
+from app.ui.project.workflows import (
     _log_ai_background_failure as _workflow_log_ai_background_failure,
 )
 from app.ui.project.workflows import (

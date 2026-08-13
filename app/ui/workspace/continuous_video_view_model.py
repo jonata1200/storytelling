@@ -3,14 +3,16 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from app.costs.service import estimate_operation_cost
 from app.ui.workspace.rules import CONTINUOUS_VIDEO_WORKFLOW_MODE
-from app.video_generation.continuous import continuous_video_segment_validation_errors
+from app.video_generation.continuous import (
+    CONTINUOUS_VIDEO_FLOW_URL,
+    continuous_video_segment_validation_errors,
+)
 
 CONTROL_VISUAL_WORKFLOW_MODE = "keyframes_i2v"
 VIDEO_WORKFLOW_MODE_LABELS = {
     CONTROL_VISUAL_WORKFLOW_MODE: "Controle visual",
-    CONTINUOUS_VIDEO_WORKFLOW_MODE: "Video continuo economico",
+    CONTINUOUS_VIDEO_WORKFLOW_MODE: "Assistente Google Flow",
 }
 
 
@@ -27,8 +29,9 @@ class ContinuousVideoSegmentRow:
     status_label: str
     progress_state: str
     cost_estimate: Decimal
-    asset_id: UUID | None = None
-    model: str = "veo-3.1-fast-generate-preview"
+    initial_frame_asset_id: UUID | None = None
+    final_frame_asset_id: UUID | None = None
+    flow_url: str = CONTINUOUS_VIDEO_FLOW_URL
     validation_errors: list[str] = field(default_factory=list)
 
 
@@ -43,15 +46,10 @@ class ContinuousVideoViewModel:
     failed_segments: int
     running_segments: int
     total_seconds: int
-    remaining_seconds: int
-    total_cost: Decimal
-    remaining_cost: Decimal
     next_segment_id: UUID | None
     can_plan: bool
-    can_generate_next: bool
-    can_generate_all: bool
-    can_continue: bool
-    can_pause: bool
+    can_prepare: bool
+    can_conclude: bool
 
 
 def production_workflow_mode(settings: Any) -> str:
@@ -71,14 +69,17 @@ def normalize_continuous_video_status(value: object) -> str:
 def continuous_video_status_label(status: str) -> str:
     return {
         "pending": "Pendente",
-        "generating": "Processando",
-        "ready_for_review": "Revisar",
-        "approved": "Aprovado",
+        "preparing": "Preparando",
+        "ready": "Pronto",
+        "done": "Concluido",
         "rejected": "Rejeitado",
+        "failed": "Falhou",
+        "generating": "Preparando",
+        "ready_for_review": "Pronto",
+        "approved": "Concluido",
         "retry_scheduled": "Pendente",
         "running": "Processando",
         "succeeded": "Concluido",
-        "failed": "Falhou",
         "cancelled": "Cancelado",
         "skipped": "Ja existe",
         "sending": "Enviando",
@@ -94,15 +95,15 @@ def continuous_video_progress_state(
         getattr(segment, "review_status", None) or getattr(segment, "status", "")
     )
     segment_id = getattr(segment, "id", None)
-    if status in {"approved", "ready_for_review", "succeeded"} and segment_id in (
+    if status in {"done", "approved", "succeeded"} and segment_id in (
         preexisting_succeeded_ids or set()
     ):
         return "skipped"
-    if status in {"approved", "ready_for_review", "succeeded"}:
+    if status in {"done", "approved", "succeeded"}:
         return "done"
     if status in {"failed", "rejected"}:
         return "failed"
-    if status in {"running", "generating"}:
+    if status in {"running", "preparing", "generating"}:
         return "processing"
     return "pending"
 
@@ -116,12 +117,7 @@ def _segment_cost(segment: Any) -> Decimal:
             cost = Decimal("0")
         if cost > Decimal("0"):
             return cost
-    return estimate_operation_cost(
-        "text_to_video",
-        Decimal(int(getattr(segment, "duration_seconds", 0) or 0)),
-        provider=str(getattr(segment, "provider", "") or "google_ai"),
-        model=str(getattr(segment, "model", "") or "veo-3.1-fast-generate-preview"),
-    ).estimated
+    return Decimal("0.000000")
 
 
 def _visual_summary(metadata: dict[str, Any]) -> str:
@@ -157,8 +153,15 @@ def _row_from_segment(segment: Any) -> ContinuousVideoSegmentRow:
         status_label=continuous_video_status_label(status),
         progress_state=state,
         cost_estimate=_segment_cost(segment),
-        asset_id=getattr(segment, "asset_id", None),
-        model=str(getattr(segment, "model", "") or "veo-3.1-fast-generate-preview"),
+        initial_frame_asset_id=(
+            getattr(segment, "source_frame_asset_id", None)
+            or metadata.get("initial_frame_asset_id")
+        ),
+        final_frame_asset_id=(
+            getattr(segment, "final_frame_asset_id", None)
+            or metadata.get("final_frame_asset_id")
+        ),
+        flow_url=str(metadata.get("flow_url") or CONTINUOUS_VIDEO_FLOW_URL),
         validation_errors=continuous_video_segment_validation_errors(segment),
     )
 
@@ -174,10 +177,12 @@ def build_continuous_video_view_model(summary: dict[str, Any]) -> ContinuousVide
         )
     ]
     generated = sum(
-        1 for row in rows if row.status in {"ready_for_review", "approved", "succeeded"}
+        1 for row in rows if row.status in {"ready", "done", "approved", "succeeded"}
     )
     failed = sum(1 for row in rows if row.status in {"failed", "rejected"})
-    running = sum(1 for row in rows if row.status in {"generating", "running"})
+    running = sum(
+        1 for row in rows if row.status in {"preparing", "generating", "running"}
+    )
     pending = len(rows) - generated
     next_row = next(
         (
@@ -187,11 +192,10 @@ def build_continuous_video_view_model(summary: dict[str, Any]) -> ContinuousVide
         ),
         None,
     )
-    remaining_rows = [
-        row
-        for row in rows
-        if row.status in {"pending", "retry_scheduled", "failed", "rejected"}
-    ]
+    can_prepare = any(
+        row.status in {"pending", "retry_scheduled", "failed", "rejected"} for row in rows
+    )
+    can_conclude = any(row.status in {"ready", "ready_for_review"} for row in rows)
     return ContinuousVideoViewModel(
         workflow_mode=workflow_mode,
         is_continuous_mode=workflow_mode == CONTINUOUS_VIDEO_WORKFLOW_MODE,
@@ -202,13 +206,8 @@ def build_continuous_video_view_model(summary: dict[str, Any]) -> ContinuousVide
         failed_segments=failed,
         running_segments=running,
         total_seconds=sum(row.duration_seconds for row in rows),
-        remaining_seconds=sum(row.duration_seconds for row in remaining_rows),
-        total_cost=sum((row.cost_estimate for row in rows), Decimal("0.000000")),
-        remaining_cost=sum((row.cost_estimate for row in remaining_rows), Decimal("0.000000")),
         next_segment_id=next_row.id if next_row is not None else None,
         can_plan=True,
-        can_generate_next=next_row is not None and running <= 0,
-        can_generate_all=bool(remaining_rows) and running <= 0,
-        can_continue=failed > 0 and running <= 0,
-        can_pause=running > 0,
+        can_prepare=can_prepare,
+        can_conclude=can_conclude,
     )

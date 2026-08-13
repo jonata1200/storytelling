@@ -141,8 +141,8 @@ DEFAULT_TEMPLATES: dict[str, str] = {
     "generate_scenes_and_shots": (
         "Divida o roteiro em {script} em cenas e planos prontos para geração de video "
         "vertical 9:16. A duração total obrigatoria e {target_duration_seconds}s. "
-        "A etapa de video usa Veo 3.1 Lite: cada plano deve ter exatamente 4s, 6s "
-        "ou 8s. Use exatamente {expected_clip_count} "
+        "A etapa de video prepara pacotes para o Google Flow: cada segmento deve ter "
+        "exatamente 4s, 6s ou 8s. Use exatamente {expected_clip_count} "
         "planos com está distribuicao de duração, na ordem: {clip_durations}. "
         "A soma dos planos precisa ser exatamente {target_duration_seconds}s. "
         "Priorize menos planos e ações mais claras quando houver escolha; não divida uma "

@@ -7,7 +7,6 @@ from uuid import UUID
 
 from app.config.settings import get_settings
 from app.generation.prompt_language import ensure_portuguese_prompt_text
-from app.providers.video.types import VideoProvider
 from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Shot
 from app.video_generation.retry import exponential_backoff_seconds
@@ -172,44 +171,6 @@ def _local_storage_path(storage_uri: str | None) -> Path | None:
     except ValueError:
         return None
     return candidate
-
-
-def video_generation_validation_errors(
-    frame: StoryboardFrame,
-    source_image_uri: str | None,
-    provider: VideoProvider,
-    aspect_ratio: str,
-    video_prompt: str | None = None,
-) -> list[str]:
-    errors: list[str] = []
-    prompt_to_validate = video_prompt or frame.prompt
-    if frame.asset_id is None:
-        errors.append("frame sem asset_id")
-    if not str(prompt_to_validate or "").strip():
-        errors.append("prompt vazio")
-    elif len(str(prompt_to_validate).split()) < 10:
-        errors.append("prompt generico demais")
-    if not source_image_uri:
-        errors.append("imagem fonte ausente")
-    elif _local_storage_path(source_image_uri) is None and not source_image_uri.startswith(
-        ("http://", "https://", "data:", "asset://")
-    ):
-        errors.append("imagem fonte não encontrada no armazenamento local")
-    capabilities = provider.capabilities
-    if capabilities.supported_durations and (
-        frame.duration_seconds not in capabilities.supported_durations
-    ):
-        errors.append(
-            f"duração {frame.duration_seconds}s não suportada pelo provider"
-        )
-    if (
-        capabilities.supported_aspect_ratios
-        and aspect_ratio not in capabilities.supported_aspect_ratios
-    ):
-        errors.append(f"aspect_ratio {aspect_ratio} não suportado pelo provider")
-    if not capabilities.image_to_video:
-        errors.append("provedor não suporta video a partir de imagem")
-    return errors
 
 
 def _failed_job_payload(

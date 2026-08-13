@@ -9,10 +9,14 @@ from app.production.models import ProjectProductionSettings
 from app.projects.repository import ProjectRepository
 
 WORKFLOW_MODES = {
-    "keyframes_i2v": "Keyframes Images to Video",
-    "elements_sequential": "Elements to Video Sequential",
-    "elements_parallel": "Elements to Video Parallel",
     "continuous_fast": "Video continuo economico",
+}
+# Modos legados ainda gravados em projetos antigos: aceitos na leitura/salvamento
+# para nao quebrar a atualizacao de production settings, mas nao mais selecionaveis.
+_LEGACY_WORKFLOW_MODES = {
+    "keyframes_i2v",
+    "elements_sequential",
+    "elements_parallel",
 }
 
 CONTENT_TYPES = {
@@ -29,21 +33,8 @@ IMAGE_RESOLUTION_BY_ASPECT_RATIO = {
     "16:9": "1280x720",
 }
 VIDEO_RESOLUTIONS = ["720p"]
-RESOLUTIONS = IMAGE_RESOLUTIONS
 AUDIO_MODES = {"dialogue_only"}
 MOCK_IMAGE_MODEL = "mock-image"
-MOCK_VIDEO_MODEL = "mock-video"
-LEGACY_DEFAULT_IMAGE_MODELS = {
-    ".......",
-    "chatgpt-web/gpt-5.5",
-    "sourceful/riverflow-v2.5-pro",
-    "sourceful/riverflow-v2-fast",
-}
-LEGACY_DEFAULT_VIDEO_MODELS = {
-    ".......",
-    "bytedance/seedance-2.0-fast",
-    "Kling-3.0-omni",
-}
 
 
 def _validate_model_name(value: object, field_name: str) -> str:
@@ -90,7 +81,7 @@ def _validated_production_payload(payload: dict) -> dict:
         "content_type": set(CONTENT_TYPES),
         "aspect_ratio": set(ASPECT_RATIOS),
         "image_resolution": set(IMAGE_RESOLUTIONS),
-        "workflow_mode": set(WORKFLOW_MODES),
+        "workflow_mode": set(WORKFLOW_MODES) | _LEGACY_WORKFLOW_MODES,
         "audio_mode": AUDIO_MODES,
     }
     validated = dict(payload)
@@ -139,11 +130,7 @@ def _validated_production_payload(payload: dict) -> dict:
 def resolve_image_model(project_image_model: str | None, default_image_model: str | None) -> str:
     project_model = str(project_image_model or "").strip()
     default_model = str(default_image_model or "").strip()
-    if (
-        project_model
-        and not is_mock_model(project_model)
-        and project_model not in LEGACY_DEFAULT_IMAGE_MODELS
-    ):
+    if project_model and not is_mock_model(project_model):
         model = validate_model_name(project_model, "image_model")
         if model in GOOGLE_AI_IMAGE_MODELS:
             return model
@@ -153,25 +140,6 @@ def resolve_image_model(project_image_model: str | None, default_image_model: st
             return model
         return GOOGLE_AI_IMAGE_MODELS[0]
     raise ValueError("Configure um modelo real de imagem antes de gerar imagens.")
-
-
-def resolve_video_model(project_video_model: str | None, default_video_model: str | None) -> str:
-    project_model = str(project_video_model or "").strip()
-    default_model = str(default_video_model or "").strip()
-    if (
-        project_model
-        and not is_mock_model(project_model)
-        and project_model not in LEGACY_DEFAULT_VIDEO_MODELS
-    ):
-        model = validate_model_name(project_model, "video_model")
-        if model in GOOGLE_AI_VIDEO_MODELS:
-            return model
-    if default_model and not is_mock_model(default_model):
-        model = validate_model_name(default_model, "VIDEO_MODEL")
-        if model in GOOGLE_AI_VIDEO_MODELS:
-            return model
-        return GOOGLE_AI_VIDEO_MODELS[0]
-    raise ValueError("Configure um modelo real de vídeo antes de gerar clipes.")
 
 
 async def get_or_create_production_settings(

@@ -4,14 +4,13 @@ from app.production.service import (
     WORKFLOW_MODES,
     _validated_production_payload,
     resolve_image_model,
-    resolve_video_model,
     workflow_mode_label,
 )
 
 
 def test_workflow_mode_label_uses_known_name() -> None:
-    assert workflow_mode_label("keyframes_i2v") == WORKFLOW_MODES["keyframes_i2v"]
     assert workflow_mode_label("continuous_fast") == WORKFLOW_MODES["continuous_fast"]
+    assert workflow_mode_label("keyframes_i2v") == "keyframes_i2v"  # legado: sem rotulo ativo
 
 
 def test_workflow_mode_label_falls_back_to_raw_value() -> None:
@@ -87,13 +86,6 @@ def test_resolve_image_model_uses_global_default_for_legacy_project_default() ->
     assert (
         resolve_image_model("sourceful/riverflow-v2-fast", "gemini-3.1-flash-image")
         == "gemini-3.1-flash-lite-image"
-    )
-
-
-def test_resolve_video_model_uses_global_default_for_legacy_project_default() -> None:
-    assert (
-        resolve_video_model("bytedance/seedance-2.0-fast", "veo-3.1-generate-preview")
-        == "veo-3.1-generate-preview"
     )
 
 

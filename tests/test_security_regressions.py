@@ -5,11 +5,10 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 import app.providers.media_utils as media_utils
 import app.ui.workspace.assets_area as assets_area
-import app.video_generation.service as video_generation_service
+import app.video_generation.planning as video_generation_planning
 from app.config.runtime_preferences import load_runtime_preferences, save_runtime_preferences
 from app.core.enums import ProjectStatus
 from app.projects.models import Project
@@ -19,7 +18,6 @@ from app.storytelling.service import (
     _advance_project_status_when_reachable,
     _required_list,
 )
-from app.video_generation.schemas import GenerateVideoClipsRequest
 from app.workflows.state_machine import advance_project_status
 
 
@@ -124,7 +122,7 @@ def test_local_storage_helpers_reject_files_outside_storage_root(
         lambda: SimpleNamespace(local_storage_path=storage_root),
     )
     monkeypatch.setattr(
-        video_generation_service,
+        video_generation_planning,
         "get_settings",
         lambda: SimpleNamespace(local_storage_path=storage_root),
     )
@@ -144,8 +142,8 @@ def test_local_storage_helpers_reject_files_outside_storage_root(
         media_utils.local_uri_to_data_url("http://example.com/storage/avatar.png")
         == "http://example.com/storage/avatar.png"
     )
-    assert video_generation_service._local_storage_path(inside.as_posix()) == inside.resolve()
-    assert video_generation_service._local_storage_path(outside.as_posix()) is None
+    assert video_generation_planning._local_storage_path(inside.as_posix()) == inside.resolve()
+    assert video_generation_planning._local_storage_path(outside.as_posix()) is None
 
 
 def test_visual_library_tab_defaults_to_characters_on_entry(
@@ -169,11 +167,6 @@ def test_visual_library_tab_defaults_to_characters_on_entry(
 def test_generation_payload_validation_rejects_missing_lists() -> None:
     with pytest.raises(GenerationOutputError, match="ideas"):
         _required_list({}, "ideas", "generate_story_ideas")
-
-
-def test_video_schema_rejects_unknown_provider() -> None:
-    with pytest.raises(ValidationError):
-        GenerateVideoClipsRequest.model_validate({"provider": "unknown"})
 
 
 def test_project_status_advances_only_through_valid_transitions() -> None:

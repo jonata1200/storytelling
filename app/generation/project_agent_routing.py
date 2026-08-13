@@ -215,7 +215,7 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
     clips = counts.get("clips", 0)
     continuous_mode = _project_workflow_mode(project_context) == CONTINUOUS_VIDEO_WORKFLOW_MODE
     continuous_segments = counts.get("continuous_video_segments", 0)
-    approved_continuous_segments = counts.get("continuous_video_approved_segments", 0)
+    done_continuous_segments = counts.get("continuous_video_done_segments", 0)
 
     if scripts == 0:
         return "generate_script"
@@ -225,7 +225,7 @@ def _next_project_action(active: str, project_context: dict[str, Any]) -> Projec
         return "generate_assets"
     if continuous_mode and (
         continuous_segments == 0
-        or approved_continuous_segments
+        or done_continuous_segments
         < min(CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS, continuous_segments)
     ):
         return "generate_video"

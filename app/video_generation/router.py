@@ -1,63 +1,36 @@
-﻿from typing import Annotated
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.costs.service import CostBudgetExceededError
 from app.database.session import get_session
 from app.video_generation.continuous import (
     approve_continuous_video_segment,
-    generate_continuous_video_segments,
-    generate_next_continuous_video_segment,
     list_continuous_video_segments,
     plan_continuous_video_segments,
-    regenerate_rejected_continuous_video_segment,
+    prepare_continuous_video_flow_package,
     reject_continuous_video_segment,
-    retry_failed_continuous_video_segment,
     update_continuous_video_segment_prompt,
 )
 from app.video_generation.schemas import (
-    ClipReviewCreate,
-    ClipReviewRead,
-    ContinuousVideoGenerateRequest,
-    ContinuousVideoGenerationRead,
     ContinuousVideoPlanningRead,
     ContinuousVideoPlanRead,
     ContinuousVideoPlanSegmentsRequest,
+    ContinuousVideoPreparationRead,
+    ContinuousVideoPrepareRequest,
     ContinuousVideoReviewRequest,
     ContinuousVideoSegmentPromptUpdate,
     ContinuousVideoSegmentRead,
-    GenerateVideoClipsRequest,
     GenerationJobRead,
     VideoClipRead,
-    VideoCostEstimateRead,
-    VideoCostEstimateRequest,
-    VideoGenerationBatchRead,
 )
 from app.video_generation.service import (
-    estimate_video_batch_cost,
-    generate_video_clips,
     get_job_status,
     list_video_clips,
-    review_clip,
 )
 
 router = APIRouter(prefix="/video/projects", tags=["video"])
-
-
-@router.post("/{project_id}/cost-estimate", response_model=VideoCostEstimateRead)
-async def post_video_cost_estimate(
-    project_id: UUID,
-    payload: VideoCostEstimateRequest,
-) -> VideoCostEstimateRead:
-    _ = project_id
-    estimate = await estimate_video_batch_cost(
-        payload.clip_count,
-        payload.duration_seconds,
-        payload.unit_cost_per_second,
-    )
-    return VideoCostEstimateRead(**estimate)
 
 
 @router.post("/{project_id}/continuous/plan", response_model=ContinuousVideoPlanningRead)
@@ -85,29 +58,24 @@ async def post_plan_continuous_video_segments(
     )
 
 
-@router.post("/{project_id}/continuous/generate", response_model=ContinuousVideoGenerationRead)
-async def post_generate_continuous_video_segments(
+@router.post("/{project_id}/continuous/prepare", response_model=ContinuousVideoPreparationRead)
+async def post_prepare_continuous_video_flow_package(
     project_id: UUID,
-    payload: ContinuousVideoGenerateRequest,
+    payload: ContinuousVideoPrepareRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> ContinuousVideoGenerationRead:
+) -> ContinuousVideoPreparationRead:
+    """Prepara o pacote (prompt + frame inicial + frame final) para o Google Flow."""
     try:
-        jobs, segments = await generate_continuous_video_segments(
+        segments, validation_errors = await prepare_continuous_video_flow_package(
             session,
             project_id,
             segment_ids=payload.segment_ids,
-            provider_name=payload.provider,
-            model=payload.model,
-            retry_failed=payload.retry_failed,
-            max_segments=payload.max_segments,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return ContinuousVideoGenerationRead(
-        jobs=[GenerationJobRead.model_validate(job) for job in jobs],
+    return ContinuousVideoPreparationRead(
         segments=[ContinuousVideoSegmentRead.model_validate(segment) for segment in segments],
+        validation_errors=validation_errors,
     )
 
 
@@ -147,8 +115,13 @@ async def patch_continuous_video_segment_prompt(
 
 
 @router.post(
+    "/{project_id}/continuous/segments/{segment_id}/done",
+    response_model=ContinuousVideoSegmentRead,
+)
+@router.post(
     "/{project_id}/continuous/segments/{segment_id}/approve",
     response_model=ContinuousVideoSegmentRead,
+    include_in_schema=False,
 )
 async def post_approve_continuous_video_segment(
     project_id: UUID,
@@ -156,6 +129,7 @@ async def post_approve_continuous_video_segment(
     payload: ContinuousVideoReviewRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ContinuousVideoSegmentRead:
+    """Conclui o segmento: o usuário criou o vídeo no Google Flow e marcou como feito."""
     try:
         segment = await approve_continuous_video_segment(
             session,
@@ -196,115 +170,6 @@ async def post_reject_continuous_video_segment(
     return ContinuousVideoSegmentRead.model_validate(segment)
 
 
-@router.post("/{project_id}/continuous/generate-next", response_model=ContinuousVideoGenerationRead)
-async def post_generate_next_continuous_video_segment(
-    project_id: UUID,
-    payload: ContinuousVideoGenerateRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> ContinuousVideoGenerationRead:
-    try:
-        jobs, segments = await generate_next_continuous_video_segment(
-            session,
-            project_id,
-            provider_name=payload.provider,
-            model=payload.model,
-            retry_failed=payload.retry_failed,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return ContinuousVideoGenerationRead(
-        jobs=[GenerationJobRead.model_validate(job) for job in jobs],
-        segments=[ContinuousVideoSegmentRead.model_validate(segment) for segment in segments],
-    )
-
-
-@router.post(
-    "/{project_id}/continuous/segments/{segment_id}/retry",
-    response_model=ContinuousVideoGenerationRead,
-)
-async def post_retry_failed_continuous_video_segment(
-    project_id: UUID,
-    segment_id: UUID,
-    payload: ContinuousVideoGenerateRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> ContinuousVideoGenerationRead:
-    try:
-        jobs, segments = await retry_failed_continuous_video_segment(
-            session,
-            project_id,
-            segment_id,
-            provider_name=payload.provider,
-            model=payload.model,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return ContinuousVideoGenerationRead(
-        jobs=[GenerationJobRead.model_validate(job) for job in jobs],
-        segments=[ContinuousVideoSegmentRead.model_validate(segment) for segment in segments],
-    )
-
-
-@router.post(
-    "/{project_id}/continuous/segments/{segment_id}/regenerate",
-    response_model=ContinuousVideoGenerationRead,
-)
-async def post_regenerate_rejected_continuous_video_segment(
-    project_id: UUID,
-    segment_id: UUID,
-    payload: ContinuousVideoGenerateRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> ContinuousVideoGenerationRead:
-    try:
-        jobs, segments = await regenerate_rejected_continuous_video_segment(
-            session,
-            project_id,
-            segment_id,
-            provider_name=payload.provider,
-            model=payload.model,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return ContinuousVideoGenerationRead(
-        jobs=[GenerationJobRead.model_validate(job) for job in jobs],
-        segments=[ContinuousVideoSegmentRead.model_validate(segment) for segment in segments],
-    )
-
-
-@router.post("/{project_id}/clips/generate", response_model=VideoGenerationBatchRead)
-async def post_generate_video_clips(
-    project_id: UUID,
-    payload: GenerateVideoClipsRequest,
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> VideoGenerationBatchRead:
-    try:
-        result = await generate_video_clips(
-            session,
-            project_id,
-            payload.storyboard_frame_ids,
-            payload.variants_per_frame,
-            payload.provider,
-            payload.model,
-            payload.include_canonical_references,
-        )
-    except CostBudgetExceededError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    if result is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    jobs, clips = result
-    return VideoGenerationBatchRead(
-        jobs=[GenerationJobRead.model_validate(job) for job in jobs],
-        clips=[VideoClipRead.model_validate(clip) for clip in clips],
-    )
-
-
 @router.get("/{project_id}/clips", response_model=list[VideoClipRead])
 async def get_video_clips(
     project_id: UUID,
@@ -324,18 +189,3 @@ async def get_video_job(
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     return GenerationJobRead.model_validate(job)
-
-
-@router.post("/{project_id}/clips/{clip_id}/review", response_model=ClipReviewRead)
-async def post_clip_review(
-    project_id: UUID,
-    clip_id: UUID,
-    payload: ClipReviewCreate,
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> ClipReviewRead:
-    review = await review_clip(
-        session, project_id, clip_id, payload.decision, payload.notes, payload.selected
-    )
-    if review is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clip not found")
-    return ClipReviewRead.model_validate(review)

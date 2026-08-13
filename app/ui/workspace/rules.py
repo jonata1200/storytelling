@@ -54,9 +54,9 @@ def continuous_video_required_approved(counts: dict[str, int]) -> int:
 
 
 def continuous_video_ready(counts: dict[str, int]) -> bool:
-    approved = int(counts.get("continuous_video_approved_segments", 0) or 0)
+    done = int(counts.get("continuous_video_done_segments", 0) or 0)
     required = continuous_video_required_approved(counts)
-    return required > 0 and approved >= required
+    return required > 0 and done >= required
 
 
 def workspace_section_access(

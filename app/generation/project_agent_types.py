@@ -67,7 +67,7 @@ ACTION_PROGRESS_MESSAGES: dict[ProjectChatAction, str] = {
     "approve_visual_prompt": "Aprovando prompt visual.",
     "approve_storyboard_prompt": "Aprovando prompts de storyboard.",
     "generate_storyboard": "Criando storyboard.",
-    "generate_video": "Preparando video.",
+    "generate_video": "Preparando pacote para o Google Flow.",
     "chat": "Analisando projeto.",
 }
 

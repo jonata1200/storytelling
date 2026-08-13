@@ -33,7 +33,7 @@ def _counts_without_storyboard() -> dict[str, int]:
         "clips": 0,
         "exports": 0,
         "qa_issues": 0,
-        "continuous_video_approved_segments": 0,
+        "continuous_video_done_segments": 0,
     }
 
 
@@ -49,11 +49,11 @@ def _segment(number: int, status: GenerationJobStatus) -> ContinuousVideoSegment
         ),
         duration_seconds=7,
         status=status,
-        provider="google_ai",
-        model="veo-3.1-fast-generate-preview",
+        provider="flow_assistant",
+        model="google_flow",
         request_fingerprint=f"{number}" * 64,
         idempotency_key=f"{number}" * 64,
-        cost_estimate=Decimal("0.700000"),
+        cost_estimate=Decimal("0.000000"),
         metadata_json={
             "action": f"Acao principal {number}",
             "continuity": "continuidade temporal",
@@ -173,13 +173,13 @@ def test_continuous_project_progression_skips_storyboard_requirement() -> None:
     assert intent.action == "generate_video"
 
 
-def test_continuous_project_progression_finalizes_after_all_segments_are_approved() -> None:
+def test_continuous_project_progression_finalizes_after_all_segments_are_done() -> None:
     context = {
         "production_settings": {"workflow_mode": CONTINUOUS_VIDEO_WORKFLOW_MODE},
         "counts": {
             **_counts_without_storyboard(),
             "continuous_video_segments": 2,
-            "continuous_video_approved_segments": 2,
+            "continuous_video_done_segments": 2,
         },
     }
 
@@ -193,7 +193,7 @@ def test_continuous_project_progression_finalizes_after_all_segments_are_approve
     assert intent.action == "chat"
 
 
-def test_continuous_video_view_model_calculates_actions_and_remaining_cost() -> None:
+def test_continuous_video_view_model_calculates_actions_and_prepare_state() -> None:
     first = _segment(1, GenerationJobStatus.SUCCEEDED)
     second = _segment(2, GenerationJobStatus.PENDING)
     failed = _segment(3, GenerationJobStatus.FAILED)
@@ -209,11 +209,10 @@ def test_continuous_video_view_model_calculates_actions_and_remaining_cost() -> 
     assert view_model.generated_segments == 1
     assert view_model.pending_segments == 2
     assert view_model.failed_segments == 1
-    assert view_model.remaining_cost == Decimal("1.400000")
     assert view_model.next_segment_id == second.id
-    assert view_model.can_generate_next is True
-    assert view_model.can_generate_all is True
-    assert view_model.can_continue is True
+    assert view_model.can_plan is True
+    assert view_model.can_prepare is True
+    assert view_model.can_conclude is False
 
 
 def test_continuous_video_view_model_keeps_control_visual_mode() -> None:
@@ -225,17 +224,17 @@ def test_continuous_video_view_model_keeps_control_visual_mode() -> None:
     )
 
     assert view_model.is_continuous_mode is False
-    assert view_model.can_generate_all is False
+    assert view_model.can_prepare is False
+    assert view_model.can_conclude is False
 
 
 @pytest.mark.asyncio
-async def test_generate_continuous_video_ui_handler_passes_queue_options(
+async def test_prepare_continuous_video_flow_package_ui_handler_passes_segment_ids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
     segment_id = uuid4()
     calls: list[dict[str, Any]] = []
-    dialog_events: list[str] = []
     notifications: list[tuple[str, str | None]] = []
     reloads = 0
 
@@ -246,67 +245,45 @@ async def test_generate_continuous_video_ui_handler_passes_queue_options(
         async def __aexit__(self, *_args: object) -> None:
             return None
 
-    class FakeLoadingDialog:
-        def open(self) -> None:
-            dialog_events.append("open")
-
-        def close(self) -> None:
-            dialog_events.append("close")
-
-    async def fake_generate(_session: object, requested_project_id: object, **kwargs: Any) -> tuple:
+    async def fake_prepare(_session: object, requested_project_id: object, **kwargs: Any) -> tuple:
         assert requested_project_id == project_id
-        dialog_events.append("generate")
         calls.append(kwargs)
-        return [object()], [_segment(1, GenerationJobStatus.SUCCEEDED)]
-
-    async def fake_sleep(seconds: float) -> None:
-        dialog_events.append(f"sleep:{seconds}")
+        return [_segment(1, GenerationJobStatus.SUCCEEDED)], {}
 
     def fake_reload() -> None:
         nonlocal reloads
         reloads += 1
 
+    def fake_safe_notify(message: str, **kwargs: Any) -> bool:
+        notifications.append((message, kwargs.get("color")))
+        return True
+
     monkeypatch.setattr(storyboard_video_area, "AsyncSessionLocal", lambda: FakeSessionContext())
-    monkeypatch.setattr(storyboard_video_area, "generate_continuous_video_segments", fake_generate)
-    monkeypatch.setattr(storyboard_video_area.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        storyboard_video_area,
+        "prepare_continuous_video_flow_package",
+        fake_prepare,
+    )
     monkeypatch.setattr(
         storyboard_video_area,
         "block_if_missing_api_keys_for_step",
         lambda _step: False,
     )
-    monkeypatch.setattr(
-        storyboard_video_area.ui,
-        "notify",
-        lambda message, color=None: notifications.append((message, color)),
-    )
-    monkeypatch.setattr(storyboard_video_area.ui.navigate, "reload", fake_reload)
+    monkeypatch.setattr(storyboard_video_area, "_safe_notify", fake_safe_notify)
+    monkeypatch.setattr(storyboard_video_area, "_safe_reload", fake_reload)
 
-    await storyboard_video_area._generate_continuous_video_segments_from_ui(
+    await storyboard_video_area._prepare_continuous_video_flow_package_from_ui(
         project_id,
         segment_ids=[segment_id],
-        retry_failed=True,
-        max_segments=1,
-        loading_dialog=FakeLoadingDialog(),
-        progress_callback=lambda *_args: None,
-        pause_after_current=lambda: False,
     )
 
-    assert dialog_events == ["open", "sleep:0.1", "generate", "close"]
-    assert calls == [
-        {
-            "segment_ids": [segment_id],
-            "retry_failed": True,
-            "max_segments": 1,
-            "progress_callback": calls[0]["progress_callback"],
-            "pause_after_current": calls[0]["pause_after_current"],
-        }
-    ]
-    assert notifications[-1] == ("Fila de v\u00eddeo cont\u00ednuo conclu\u00edda.", "positive")
+    assert calls == [{"segment_ids": [segment_id]}]
+    assert notifications[-1] == ("Pacote para o Google Flow pronto!", "positive")
     assert reloads == 1
 
 
 @pytest.mark.asyncio
-async def test_generate_continuous_video_ui_handler_ignores_removed_page_context(
+async def test_prepare_continuous_video_flow_package_ui_handler_ignores_removed_page_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_id = uuid4()
@@ -318,8 +295,8 @@ async def test_generate_continuous_video_ui_handler_ignores_removed_page_context
         async def __aexit__(self, *_args: object) -> None:
             return None
 
-    async def fake_generate(*_args: Any, **_kwargs: Any) -> tuple:
-        return [object()], [_segment(1, GenerationJobStatus.SUCCEEDED)]
+    async def fake_prepare(*_args: Any, **_kwargs: Any) -> tuple:
+        return [_segment(1, GenerationJobStatus.SUCCEEDED)], {}
 
     def stale_notify(*_args: Any, **_kwargs: Any) -> None:
         raise RuntimeError("The client this element belongs to has been deleted.")
@@ -327,15 +304,17 @@ async def test_generate_continuous_video_ui_handler_ignores_removed_page_context
     monkeypatch.setattr(storyboard_video_area, "AsyncSessionLocal", lambda: FakeSessionContext())
     monkeypatch.setattr(
         storyboard_video_area,
-        "generate_continuous_video_segments",
-        fake_generate,
+        "prepare_continuous_video_flow_package",
+        fake_prepare,
     )
-    monkeypatch.setattr(storyboard_video_area.ui, "notify", stale_notify)
+    monkeypatch.setattr(
+        storyboard_video_area,
+        "block_if_missing_api_keys_for_step",
+        lambda _step: False,
+    )
+    monkeypatch.setattr(storyboard_video_area, "ui", SimpleNamespace(notify=stale_notify))
 
-    await storyboard_video_area._generate_continuous_video_segments_from_ui(
-        project_id,
-        progress_callback=lambda *_args: None,
-    )
+    await storyboard_video_area._prepare_continuous_video_flow_package_from_ui(project_id)
 
 
 @pytest.mark.asyncio

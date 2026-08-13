@@ -47,13 +47,13 @@ async def _count(session: AsyncSession, model: type[Any], project_id: UUID) -> i
     return int(value or 0)
 
 
-async def _count_approved_continuous_segments(session: AsyncSession, project_id: UUID) -> int:
+async def _count_done_continuous_segments(session: AsyncSession, project_id: UUID) -> int:
     value = await session.scalar(
         select(func.count())
         .select_from(ContinuousVideoSegment)
         .where(
             ContinuousVideoSegment.project_id == project_id,
-            ContinuousVideoSegment.review_status == "approved",
+            ContinuousVideoSegment.review_status == "done",
         )
     )
     return int(value or 0)
@@ -151,7 +151,7 @@ async def build_project_context(session: AsyncSession, project_id: UUID) -> dict
                 ContinuousVideoSegment,
                 project_id,
             ),
-            "continuous_video_approved_segments": await _count_approved_continuous_segments(
+            "continuous_video_done_segments": await _count_done_continuous_segments(
                 session,
                 project_id,
             ),

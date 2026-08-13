@@ -3,11 +3,9 @@ from typing import Any
 from uuid import UUID
 
 from nicegui import ui
-from sqlalchemy import select
 
 from app.database.session import AsyncSessionLocal
 from app.jobs.service import enqueue_project_step
-from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Script
 from app.ui.project.data import latest as _latest
 from app.ui.shared.assistant_state import (
@@ -40,7 +38,7 @@ async def _run_step(
         "scenes": "Criando cenas e planos.",
         "visual": "Criando prompts visuais.",
         "storyboard": "Criando storyboard.",
-        "video": "Preparando video.",
+        "video": "Preparando pacote para o Google Flow.",
     }
     if block_if_missing_api_keys_for_step(step_key):
         return
@@ -54,17 +52,37 @@ async def _run_step(
         )
         async with AsyncSessionLocal() as session:
             if step_key == "video":
-                result = await session.execute(
-                    select(StoryboardFrame)
-                    .where(StoryboardFrame.project_id == project_id)
-                    .order_by(StoryboardFrame.frame_number)
+                from app.video_generation.continuous import (
+                    plan_continuous_video_segments,
+                    prepare_continuous_video_flow_package,
                 )
-                frames = list(result.scalars())
-                if not frames:
-                    raise ValueError("gere o storyboard primeiro")
+
+                _plan, segments, validation_errors = await plan_continuous_video_segments(
+                    session,
+                    project_id,
+                    replace_existing=False,
+                )
+                if validation_errors:
+                    first_segment_number = min(validation_errors)
+                    raise ValueError(
+                        "Revise o planejamento dos segmentos: "
+                        + "; ".join(validation_errors[first_segment_number])
+                    )
+                prepared, preparation_errors = await prepare_continuous_video_flow_package(
+                    session,
+                    project_id,
+                )
+                await session.commit()
+                if preparation_errors:
+                    first_segment_number = min(preparation_errors)
+                    raise ValueError(
+                        "N\u00e3o foi poss\u00edvel preparar todos os pacotes: "
+                        + "; ".join(preparation_errors[first_segment_number])
+                    )
                 ui.notify(
-                    "Prompts de video prontos. Aprove-os na aba Video para gerar os clipes.",
-                    color="info",
+                    f"Pacote para o Google Flow pronto ({len(prepared)} segmento(s)). "
+                    "Abra a aba V\u00eddeo para copiar o prompt e os frames no Flow.",
+                    color="positive",
                 )
                 ui.navigate.reload()
                 return

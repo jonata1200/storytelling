@@ -38,7 +38,7 @@ async def test_readiness_dashboard_degrades_without_redis_and_providers(
         )
 
     monkeypatch.setattr(observability_service, "_redis_check", degraded_redis)
-    monkeypatch.setattr(observability_service.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(observability_service, "resolve_ffmpeg_path", lambda _configured=None: None)
 
     dashboard = await observability_service.readiness_dashboard(
         _ReadySession(),  # type: ignore[arg-type]

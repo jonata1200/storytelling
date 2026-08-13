@@ -24,8 +24,8 @@ test_project_chat_routes_script_request = (
 test_project_chat_uses_continuous_video_pipeline_when_mode_is_continuous = (
     cases.test_project_chat_uses_continuous_video_pipeline_when_mode_is_continuous
 )
-test_continuous_video_pipeline_plans_and_enqueues_generation = (
-    cases.test_continuous_video_pipeline_plans_and_enqueues_generation
+test_continuous_video_pipeline_plans_and_prepares_flow_package = (
+    cases.test_continuous_video_pipeline_plans_and_prepares_flow_package
 )
 test_project_chat_routes_visual_prompt_approval = (
     cases.test_project_chat_routes_visual_prompt_approval

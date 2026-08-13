@@ -1,15 +1,18 @@
 # Storytelling Studio
 
 Storytelling Studio é uma aplicação local para criar projetos audiovisuais com apoio de IA.
-Ela transforma uma ideia em roteiro, cenas, biblioteca visual e segmentos de vídeo contínuo.
+Ela transforma uma ideia em roteiro, cenas, biblioteca visual e pacotes de vídeo prontos
+para produção no Google Flow (flow.google.com).
 
 ## Recursos
 
 - Criação de projetos por prompt, ideia salva ou briefing.
 - Geração de ideias, roteiro, cenas e planos.
 - Biblioteca visual de personagens, locais, objetos e referências.
-- Vídeo contínuo por segmentos, com revisão e aprovação antes de avançar.
-- Continuidade por frame final aprovado como ponto de partida do próximo segmento.
+- Assistente de produção: a etapa de vídeo prepara, por segmento, um pacote com prompt,
+  frame inicial e frame final para você criar o vídeo manualmente no Google Flow.
+- Continuidade por frame final do segmento como ponto de partida do próximo.
+- Conclusão manual por segmento (sem gerar vídeo por IA dentro da aplicação).
 - Storyboard e animatic permanecem como caminho legado para projetos antigos.
 - Custos, storage e observabilidade.
 
@@ -79,10 +82,10 @@ OLLAMA_CLOUD_API_KEY=sua_chave_ollama
 OLLAMA_CLOUD_DEFAULT_MODEL=deepseek-v4-flash:cloud
 
 IMAGE_PROVIDER=google_ai
-VIDEO_PROVIDER=google_ai
 GOOGLE_AI_API_KEY=sua_chave_google_ai
 GOOGLE_AI_IMAGE_MODEL=gemini-3.1-flash-lite-image
-GOOGLE_AI_VIDEO_MODEL=veo-3.1-lite-generate-preview
+# A etapa de vídeo é um assistente do Google Flow: a aplicação não gera vídeo.
+# As variáveis VIDEO_PROVIDER/GOOGLE_AI_VIDEO_* abaixo são legadas e podem ser ignoradas.
 FFMPEG_PATH=C:\caminho\para\ffmpeg.exe
 
 SPEECH_PROVIDER=elevenlabs
@@ -233,7 +236,12 @@ POST /api/v1/storytelling/projects/{project_id}/script/generate
 POST /api/v1/storytelling/projects/{project_id}/scenes/generate
 POST /api/v1/visual-bible/projects/{project_id}/generate
 POST /api/v1/storyboards/projects/{project_id}/generate
-POST /api/v1/video/projects/{project_id}/clips/generate
+POST /api/v1/video/projects/{project_id}/continuous/plan
+POST /api/v1/video/projects/{project_id}/continuous/prepare
+GET  /api/v1/video/projects/{project_id}/continuous/segments
+PATCH /api/v1/video/projects/{project_id}/continuous/segments/{segment_id}
+POST /api/v1/video/projects/{project_id}/continuous/segments/{segment_id}/done
+POST /api/v1/video/projects/{project_id}/continuous/segments/{segment_id}/reject
 GET  /api/v1/observability/projects/{project_id}/summary
 GET  /api/v1/storage/usage
 GET  /api/v1/costs/projects/{project_id}/summary
@@ -255,7 +263,7 @@ app/
   storytelling/      briefing, ideias, roteiro, cenas e planos
   storage/           uso e limpeza local
   ui/                interface NiceGUI
-  video_generation/  clipes e revisão
+  video_generation/  pacote de produção para o Google Flow
   visual_bible/      personagens, locais, objetos e referências
 
 tests/               suíte automatizada

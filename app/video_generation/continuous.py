@@ -1,32 +1,35 @@
-import asyncio
+"""Planejamento e preparação do pacote de produção para o Google Flow.
+
+A etapa de produção de vídeo não gera mais vídeos por IA dentro da aplicação.
+Para cada segmento ela prepara um pacote (prompt + frame inicial + frame final)
+que o usuário usa para criar o vídeo manualmente no Google Flow (flow.google.com).
+
+Os valores de ``review_status`` são (valores legados são normalizados):
+- ``pending``: planejado, aguardando preparação;
+- ``preparing`` (legado ``generating``): frames do pacote sendo gerados (imagem);
+- ``ready`` (legado ``ready_for_review``): pacote pronto (prompt + frame inicial + frame final);
+- ``done`` (legado ``approved``): usuário concluiu o segmento (vídeo criado no Flow);
+- ``rejected``: usuário pediu para refazer o pacote;
+- ``failed``: erro técnico ao preparar o pacote.
+"""
+
 import hashlib
 import json
 import logging
 import math
-import mimetypes
 import re
-import subprocess
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
-from inspect import isawaitable
-from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetVersion
-from app.config.provider_policy import effective_provider_for_channel
 from app.config.settings import get_settings
-from app.core.enums import (
-    AssetKind,
-    CostEntryType,
-    GenerationJobStatus,
-    GenerationJobType,
-    ProjectStatus,
-)
+from app.core.enums import AssetKind, CostEntryType, GenerationJobStatus, ProjectStatus
 from app.costs.models import CostEntry
 from app.costs.service import (
     assert_project_budget_allows,
@@ -36,23 +39,22 @@ from app.costs.service import (
 )
 from app.observability.schemas import OperationalEventCreate
 from app.observability.service import emit_project_event
-from app.production.service import (
-    get_or_create_production_settings,
-    normalize_video_resolution,
-)
+from app.production.service import get_or_create_production_settings
 from app.projects.repository import ProjectRepository
-from app.providers.media_utils import resolve_ffmpeg_path
-from app.providers.video.google_ai import GoogleAIVideoProvider
-from app.providers.video.types import VideoProvider, VideoRequest, VideoResult
+from app.providers.image.types import ImageGenerationRequest
 from app.storage.service import apply_asset_storage_metadata
+from app.storyboards.models import StoryboardFrame
 from app.storytelling.models import Scene, Script, Shot
-from app.video_generation.models import ContinuousVideoPlan, ContinuousVideoSegment, GenerationJob
-from app.video_generation.retry import exponential_backoff_seconds
+from app.video_generation.models import ContinuousVideoPlan, ContinuousVideoSegment
 from app.video_generation.schemas import (
     ContinuousVideoPlanCreate,
     ContinuousVideoSegmentCreate,
 )
-from app.visual_bible.models import Character, Location, Prop, VisualReference
+from app.visual_bible.image_generation import (
+    _generate_image_with_provider_fallback,
+    _image_provider_for_project,
+)
+from app.visual_bible.models import Character, Location, Prop
 from app.workflows.state_machine import advance_project_status
 
 logger = logging.getLogger(__name__)
@@ -61,25 +63,34 @@ ContinuousVideoProgressCallback = Callable[
     Awaitable[None] | None,
 ]
 
-CONTINUOUS_VIDEO_DEFAULT_PROVIDER = "google_ai"
-CONTINUOUS_VIDEO_DEFAULT_MODEL = "veo-3.1-generate-preview"
-CONTINUOUS_VIDEO_FAST_MODEL = "veo-3.1-fast-generate-preview"
+CONTINUOUS_VIDEO_DEFAULT_PROVIDER = "flow_assistant"
+CONTINUOUS_VIDEO_DEFAULT_MODEL = "google_flow"
 CONTINUOUS_VIDEO_DEFAULT_SEGMENT_SECONDS = 8
-CONTINUOUS_VIDEO_REFERENCE_LIMIT = 3
 CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS = 3
+CONTINUOUS_VIDEO_FLOW_URL = "https://flow.google.com"
 CONTINUOUS_VIDEO_REVIEW_PENDING = "pending"
-CONTINUOUS_VIDEO_REVIEW_GENERATING = "generating"
-CONTINUOUS_VIDEO_REVIEW_READY = "ready_for_review"
-CONTINUOUS_VIDEO_REVIEW_APPROVED = "approved"
+CONTINUOUS_VIDEO_REVIEW_PREPARING = "preparing"
+CONTINUOUS_VIDEO_REVIEW_READY = "ready"
+CONTINUOUS_VIDEO_REVIEW_DONE = "done"
 CONTINUOUS_VIDEO_REVIEW_REJECTED = "rejected"
 CONTINUOUS_VIDEO_REVIEW_FAILED = "failed"
+# Aliases legados: valores gravados antes da transição para o assistente Flow.
+CONTINUOUS_VIDEO_REVIEW_GENERATING = CONTINUOUS_VIDEO_REVIEW_PREPARING
+CONTINUOUS_VIDEO_REVIEW_APPROVED = CONTINUOUS_VIDEO_REVIEW_DONE
+CONTINUOUS_VIDEO_REVIEW_READY_FOR_REVIEW = CONTINUOUS_VIDEO_REVIEW_READY
 CONTINUOUS_VIDEO_REVIEW_STATUSES = {
     CONTINUOUS_VIDEO_REVIEW_PENDING,
-    CONTINUOUS_VIDEO_REVIEW_GENERATING,
+    CONTINUOUS_VIDEO_REVIEW_PREPARING,
     CONTINUOUS_VIDEO_REVIEW_READY,
-    CONTINUOUS_VIDEO_REVIEW_APPROVED,
+    CONTINUOUS_VIDEO_REVIEW_DONE,
     CONTINUOUS_VIDEO_REVIEW_REJECTED,
     CONTINUOUS_VIDEO_REVIEW_FAILED,
+}
+# Mapeamento de valores legados para os novos estados do pacote Flow.
+_LEGACY_CONTINUOUS_VIDEO_REVIEW_MAP = {
+    "generating": CONTINUOUS_VIDEO_REVIEW_PREPARING,
+    "ready_for_review": CONTINUOUS_VIDEO_REVIEW_READY,
+    "approved": CONTINUOUS_VIDEO_REVIEW_DONE,
 }
 CONTINUOUS_VIDEO_NEGATIVE_PROMPT = (
     "Nao criar legendas, marcas d'agua, logos, texto na imagem, troca de identidade, "
@@ -136,6 +147,8 @@ def normalize_continuous_video_review_status(value: object) -> str:
     normalized = str(value or "").strip().casefold()
     if normalized in CONTINUOUS_VIDEO_REVIEW_STATUSES:
         return normalized
+    if normalized in _LEGACY_CONTINUOUS_VIDEO_REVIEW_MAP:
+        return _LEGACY_CONTINUOUS_VIDEO_REVIEW_MAP[normalized]
     return CONTINUOUS_VIDEO_REVIEW_PENDING
 
 
@@ -159,11 +172,11 @@ def _set_continuous_video_review_status(
 
 
 def continuous_video_segment_is_approved(segment: ContinuousVideoSegment | None) -> bool:
+    """True quando o usuário concluiu o segmento (vídeo criado no Google Flow)."""
     if segment is None:
         return False
     return (
-        segment.status == GenerationJobStatus.SUCCEEDED
-        and normalize_continuous_video_review_status(getattr(segment, "review_status", None))
+        normalize_continuous_video_review_status(getattr(segment, "review_status", None))
         == CONTINUOUS_VIDEO_REVIEW_APPROVED
     )
 
@@ -209,37 +222,6 @@ def continuous_video_segment_idempotency_key(
 ) -> str:
     raw = f"{project_id}:{segment_number}:{provider}:{model}:{request_fingerprint}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def continuous_video_segment_is_stale_running(
-    segment: ContinuousVideoSegment,
-    *,
-    after_minutes: int = 10,
-) -> bool:
-    if segment.status != GenerationJobStatus.RUNNING:
-        return False
-    updated_at = segment.updated_at or segment.created_at
-    if updated_at is None:
-        return False
-    if updated_at.tzinfo is None:
-        updated_at = updated_at.replace(tzinfo=UTC)
-    return datetime.now(UTC) - updated_at >= timedelta(minutes=after_minutes)
-
-
-def continuous_video_segment_needs_generation(
-    segment: ContinuousVideoSegment | None,
-    *,
-    retry_failed: bool = False,
-) -> bool:
-    if segment is None:
-        return True
-    if continuous_video_segment_is_stale_running(segment):
-        return True
-    if segment.status in {GenerationJobStatus.PENDING, GenerationJobStatus.RETRY_SCHEDULED}:
-        return True
-    if retry_failed and segment.status == GenerationJobStatus.FAILED:
-        return True
-    return False
 
 
 async def get_or_create_continuous_video_plan(
@@ -357,13 +339,6 @@ async def create_or_get_continuous_video_segment(
         cost_estimate=payload.cost_estimate,
         metadata_json=payload.metadata_json,
     )
-    if segment.cost_estimate <= Decimal("0"):
-        segment.cost_estimate = estimate_operation_cost(
-            "image_to_video",
-            Decimal(segment.duration_seconds),
-            provider=provider,
-            model=model,
-        ).estimated
     session.add(segment)
     await session.flush()
     return segment
@@ -511,21 +486,25 @@ def _chunk_text_fallback(content: str, segment_count: int) -> list[str]:
         return ["acao visual principal do roteiro"] * segment_count
     total_words = sum(len(unit.split()) for unit in action_units)
     target_words = max(1, math.ceil(total_words / segment_count))
-    chunks: list[str] = []
+    chunks_by_units: list[str] = []
     current_units: list[str] = []
     current_words = 0
     for unit in action_units:
-        if current_units and current_words >= target_words and len(chunks) < segment_count - 1:
-            chunks.append(" ".join(current_units).strip())
+        if (
+            current_units
+            and current_words >= target_words
+            and len(chunks_by_units) < segment_count - 1
+        ):
+            chunks_by_units.append(" ".join(current_units).strip())
             current_units = []
             current_words = 0
         current_units.append(unit)
         current_words += len(unit.split())
     if current_units:
-        chunks.append(" ".join(current_units).strip())
-    while len(chunks) < segment_count:
-        chunks.append(chunks[-1])
-    return chunks[:segment_count]
+        chunks_by_units.append(" ".join(current_units).strip())
+    while len(chunks_by_units) < segment_count:
+        chunks_by_units.append(chunks_by_units[-1])
+    return chunks_by_units[:segment_count]
 
 
 def _script_visual_paragraphs(content: str) -> list[str]:
@@ -544,10 +523,6 @@ def _script_visual_paragraphs(content: str) -> list[str]:
             continue
         paragraphs.append(paragraph)
     return paragraphs
-
-
-def _script_action_text_for_chunks(paragraphs: list[str]) -> str:
-    return " ".join(_script_action_units_for_chunks(paragraphs))
 
 
 def _script_action_units_for_chunks(paragraphs: list[str]) -> list[str]:
@@ -691,15 +666,18 @@ def _segment_prompt(
     continuity_sentence = _normalize_segment_action(continuity)
     action_guidance = _segment_action_guidance(action)
     return (
-        f"Prompt Veo 3.1 - Segmento {segment_number:02d}\n\n"
+        f"Prompt para Google Flow - Segmento {segment_number:02d}\n\n"
         f"Plano unico vertical 9:16, live action realista, {int(duration_seconds)}s. "
         "Sem montagem, texto na tela ou salto temporal interno.\n\n"
+        "Como usar no Google Flow (flow.google.com)\n"
+        "Cole este prompt, carregue o frame inicial como 'first frame' e o frame final "
+        "como 'last frame', e gere o video.\n\n"
         "Acao\n"
         f"{action}\n"
         f"{action_guidance}\n\n"
         "Continuidade\n"
-        f"{continuity_sentence} Se houver frame inicial, comece exatamente dele. "
-        "Use as imagens de referencia anexadas como fonte de identidade visual.\n\n"
+        f"{continuity_sentence} Comece exatamente pelo frame inicial e termine "
+        "exatamente no frame final.\n\n"
         "Negativo\n"
         f"{CONTINUOUS_VIDEO_NEGATIVE_PROMPT}"
     )
@@ -758,6 +736,7 @@ def build_continuous_video_segment_payloads(
             "visual_fingerprint": visual_fingerprint,
             "previous_segment_fingerprint": previous_segment_fingerprint,
             "custom_prompt": False,
+            "flow_url": CONTINUOUS_VIDEO_FLOW_URL,
         }
         fingerprint = continuous_video_request_fingerprint(
             project_id=project_id,
@@ -975,12 +954,6 @@ async def plan_continuous_video_segments(
                     existing.request_fingerprint,
                 )
             )
-            existing.cost_estimate = estimate_operation_cost(
-                "text_to_video",
-                Decimal(existing.duration_seconds),
-                provider=existing.provider,
-                model=existing.model,
-            ).estimated
             existing.metadata_json = payload.metadata_json
             existing.status = GenerationJobStatus.PENDING
             segment = existing
@@ -998,119 +971,186 @@ async def plan_continuous_video_segments(
     return plan, planned_segments, validation_errors
 
 
-async def _continuous_video_provider_for_project(
+async def _ensure_flow_initial_frame(
     session: AsyncSession,
     project_id: UUID,
-    provider_name: str,
-    model: str | None,
-) -> tuple[VideoProvider, str, str, str, str]:
-    app_settings = get_settings()
-    production_settings = await get_or_create_production_settings(session, project_id)
-    requested_provider = str(provider_name or "auto").strip().casefold()
-    resolved_provider = (
-        effective_provider_for_channel(app_settings, "video")
-        if requested_provider == "auto"
-        else requested_provider
-    )
-    if resolved_provider != "google_ai":
-        raise ValueError("Provider de video continuo nao suportado. Use Google AI.")
-    resolved_model = str(model or app_settings.google_ai_video_model).strip()
-    if not resolved_model:
-        resolved_model = CONTINUOUS_VIDEO_DEFAULT_MODEL
-    return (
-        GoogleAIVideoProvider(),
-        "google_ai",
-        resolved_model,
-        production_settings.aspect_ratio,
-        normalize_video_resolution(production_settings.video_resolution),
-    )
-
-
-async def _active_continuous_video_segment(
-    session: AsyncSession,
-    project_id: UUID,
-) -> ContinuousVideoSegment | None:
-    result = await session.execute(
-        select(ContinuousVideoSegment)
-        .where(
-            ContinuousVideoSegment.project_id == project_id,
-            ContinuousVideoSegment.status == GenerationJobStatus.RUNNING,
-        )
-        .order_by(ContinuousVideoSegment.segment_number)
-    )
-    for segment in result.scalars():
-        if not continuous_video_segment_is_stale_running(segment):
-            return segment
-    return None
-
-
-def _continuous_video_job_idempotency_key(segment: ContinuousVideoSegment) -> str:
-    return f"continuous-video:{segment.idempotency_key}"
-
-
-async def _continuous_video_generation_job(
-    session: AsyncSession,
     segment: ContinuousVideoSegment,
-    *,
-    provider: str,
-    model: str,
-    operation: str,
-    aspect_ratio: str,
-    resolution: str,
-    continuation_mode: str,
-) -> GenerationJob:
-    idempotency_key = _continuous_video_job_idempotency_key(segment)
-    result = await session.execute(
-        select(GenerationJob).where(GenerationJob.idempotency_key == idempotency_key)
-    )
-    job = result.scalars().first()
-    if job is None:
-        job = GenerationJob(
-            project_id=segment.project_id,
-            job_type=GenerationJobType.VIDEO,
-            status=GenerationJobStatus.RUNNING,
-            progress=5,
-            attempts=1,
-            max_attempts=3,
-            provider=provider,
-            model=model,
-            idempotency_key=idempotency_key,
-            request_payload={},
-            response_payload={},
-            cost_estimate=segment.cost_estimate,
-            started_at=datetime.now(UTC),
-        )
-        session.add(job)
+) -> None:
+    """Garante o frame inicial do pacote (storyboard no 1º segmento; frame final do
+    segmento anterior nos demais)."""
+    metadata = dict(segment.metadata_json or {})
+    if segment.segment_number <= 1:
+        if segment.source_frame_asset_id is None:
+            result = await session.execute(
+                select(StoryboardFrame)
+                .where(StoryboardFrame.project_id == project_id)
+                .order_by(StoryboardFrame.frame_number)
+                .limit(1)
+            )
+            first_frame = result.scalars().first()
+            if first_frame is not None and first_frame.asset_id is not None:
+                segment.source_frame_asset_id = first_frame.asset_id
+                metadata["initial_frame_asset_id"] = str(first_frame.asset_id)
     else:
-        job.status = GenerationJobStatus.RUNNING
-        job.progress = 5
-        job.attempts += 1
-        job.error = None
-        job.completed_at = None
-        job.provider = provider
-        job.model = model
-        job.started_at = datetime.now(UTC)
-    job.request_payload = {
-        "step": "continuous_video",
-        "segment_id": str(segment.id),
-        "segment_number": segment.segment_number,
-        "duration_seconds": segment.duration_seconds,
-        "prompt": segment.prompt,
-        "provider": provider,
-        "model": model,
-        "operation": operation,
-        "aspect_ratio": aspect_ratio,
-        "resolution": resolution,
-        "source_segment_id": str(segment.source_segment_id) if segment.source_segment_id else None,
-        "source_video_asset_id": (
-            str(segment.source_video_asset_id) if segment.source_video_asset_id else None
-        ),
-        "continuation_mode": continuation_mode,
-        "request_fingerprint": segment.request_fingerprint,
-    }
+        previous = await get_continuous_video_segment_by_number(
+            session,
+            project_id,
+            segment.segment_number - 1,
+        )
+        if previous is not None and previous.final_frame_asset_id is not None:
+            segment.source_frame_asset_id = previous.final_frame_asset_id
+            metadata["initial_frame_asset_id"] = str(previous.final_frame_asset_id)
+    segment.metadata_json = metadata
     await session.flush()
-    segment.generation_job_id = job.id
-    return job
+
+
+def _segment_final_frame_prompt(segment: ContinuousVideoSegment) -> str:
+    metadata = segment.metadata_json if isinstance(segment.metadata_json, dict) else {}
+    action = str(metadata.get("action") or "").strip()
+    continuity = str(metadata.get("continuity") or "").strip()
+    names = [
+        *list(metadata.get("characters") or []),
+        *list(metadata.get("locations") or []),
+        *list(metadata.get("props") or []),
+    ]
+    visual_anchor = ", ".join(str(name) for name in names if str(name).strip())
+    prompt = (
+        f"Frame final do Segmento {int(getattr(segment, 'segment_number', 0) or 0):02d} - "
+        "estado de chegada do bloco de video.\n\n"
+        "Imagem unica vertical 9:16, live action realista, sem texto na tela, "
+        "sem legendas e sem marcas d'agua.\n\n"
+        "Estado final\n"
+        f"{action or str(getattr(segment, 'prompt', '') or '')}\n"
+        f"{_segment_action_guidance(action)}\n\n"
+        "Continuidade\n"
+        f"{continuity}\n"
+        "Este quadro sera carregado como 'last frame' no Google Flow (flow.google.com) "
+        "para gerar o video do segmento."
+    )
+    if visual_anchor:
+        prompt += f"\n\nReferencias visuais: {visual_anchor}"
+    return prompt
+
+
+async def _generate_segment_final_frame(
+    session: AsyncSession,
+    project_id: UUID,
+    segment: ContinuousVideoSegment,
+    production_settings: Any,
+) -> None:
+    """Gera o frame final do segmento com o provedor de imagem e persiste como Asset."""
+    provider, image_model, image_dir_name = await _image_provider_for_project(
+        session, project_id
+    )
+    provider_name = str(getattr(provider, "provider_name", "google_ai") or "google_ai")
+    estimate = estimate_operation_cost(
+        "image_generation",
+        Decimal("1"),
+        provider=provider_name,
+        model=image_model,
+    )
+    await assert_project_budget_allows(
+        session,
+        project_id,
+        estimate.estimated,
+        stage="continuous_video_flow",
+    )
+    app_settings = get_settings()
+    output_dir = app_settings.local_storage_path / image_dir_name / str(project_id)
+    references: list[str] = []
+    if segment.source_frame_asset_id is not None:
+        source_asset = await session.get(Asset, segment.source_frame_asset_id)
+        if source_asset is not None:
+            source_uri = str(source_asset.storage_uri or "").strip()
+            if source_uri:
+                references.append(source_uri)
+    prompt = _segment_final_frame_prompt(segment)
+    request = ImageGenerationRequest(
+        prompt=prompt,
+        target_id=f"segmento-{segment.segment_number:03d}",
+        view_type="frame_final",
+        output_dir=output_dir,
+        aspect_ratio=production_settings.aspect_ratio,
+        resolution=production_settings.image_resolution,
+        negative_prompt=CONTINUOUS_VIDEO_NEGATIVE_PROMPT,
+        references=references,
+        model=image_model,
+    )
+    image, fallback_metadata = await _generate_image_with_provider_fallback(provider, request)
+    asset = Asset(
+        project_id=project_id,
+        artifact_id=None,
+        kind=AssetKind.IMAGE,
+        name=f"Frame final Segmento {segment.segment_number:03d}",
+        storage_uri=image.storage_uri,
+        content_type=image.content_type,
+        sha256=image.sha256,
+        metadata_json={
+            "provider": image.provider,
+            "model": image.model,
+            "segment_id": str(segment.id),
+            "segment_number": segment.segment_number,
+            "technical_role": "continuous_video_final_frame",
+            "prompt": prompt,
+            **(fallback_metadata or {}),
+        },
+    )
+    apply_asset_storage_metadata(asset)
+    session.add(asset)
+    await session.flush()
+    session.add(
+        AssetVersion(
+            asset_id=asset.id,
+            version_number=1,
+            storage_uri=asset.storage_uri,
+            sha256=asset.sha256,
+            metadata_json=asset.metadata_json,
+        )
+    )
+    provider_cost = Decimal(str(image.estimated_cost or "0.000000"))
+    total_cost = final_budget_cost(estimate.estimated, provider_cost)
+    session.add(
+        CostEntry(
+            project_id=project_id,
+            artifact_id=None,
+            entry_type=CostEntryType.ESTIMATE,
+            provider=image.provider,
+            model=image.model,
+            operation="image_generation",
+            quantity=Decimal("1"),
+            unit="image",
+            unit_cost=estimate.unit_cost,
+            total_cost=total_cost,
+            currency="USD",
+            metadata_json=cost_audit_metadata(
+                estimated_cost=estimate.estimated,
+                provider_reported_cost=provider_cost,
+                final_budget_cost=total_cost,
+                stage="continuous_video_flow",
+                extra={
+                    "segment_id": str(segment.id),
+                    "segment_number": segment.segment_number,
+                    "role": "final_frame_flow",
+                },
+            ),
+        )
+    )
+    segment.final_frame_asset_id = asset.id
+    metadata = dict(segment.metadata_json or {})
+    metadata["final_frame_asset_id"] = str(asset.id)
+    metadata["final_frame_storage_uri"] = asset.storage_uri
+    segment.metadata_json = metadata
+    await _emit_continuous_video_segment_event(
+        session,
+        segment=segment,
+        status="frames_ready",
+        provider=image.provider,
+        model=image.model,
+        message="Frame final do segmento gerado para o Google Flow.",
+        estimated_cost=total_cost,
+        details={"final_frame_asset_id": str(asset.id)},
+    )
+    await session.flush()
 
 
 async def _emit_continuous_video_segment_event(
@@ -1121,7 +1161,6 @@ async def _emit_continuous_video_segment_event(
     provider: str,
     model: str,
     message: str,
-    job: GenerationJob | None = None,
     estimated_cost: Decimal | None = None,
     details: dict[str, Any] | None = None,
 ) -> None:
@@ -1136,12 +1175,12 @@ async def _emit_continuous_video_segment_event(
         session,
         OperationalEventCreate(
             project_id=segment.project_id,
-            job_id=job.id if job is not None else segment.generation_job_id,
+            job_id=segment.generation_job_id,
             event_type="continuous_video_segment",
             status=status,
             provider=provider,
             model=model,
-            operation="text_to_video",
+            operation="flow_package",
             estimated_cost=estimated_cost,
             message=message,
             details=payload,
@@ -1149,1113 +1188,118 @@ async def _emit_continuous_video_segment_event(
     )
 
 
-def _is_transient_continuous_video_error(error: str) -> bool:
-    normalized = error.casefold()
-    return any(
-        marker in normalized
-        for marker in (
-            "timeout",
-            "network",
-            "connection",
-            "internal error",
-            "api_error",
-            "rate limit",
-            "429",
-            "500",
-            "502",
-            "503",
-            "504",
-        )
-    )
-
-
-async def _mark_continuous_video_segment_failed(
-    session: AsyncSession,
-    *,
-    segment: ContinuousVideoSegment,
-    job: GenerationJob | None,
-    reason: str,
-    provider: str,
-    model: str,
-) -> None:
-    segment.status = GenerationJobStatus.FAILED
-    segment.review_status = CONTINUOUS_VIDEO_REVIEW_FAILED
-    metadata = dict(segment.metadata_json or {})
-    metadata["error"] = reason
-    metadata["failed_at"] = datetime.now(UTC).isoformat()
-    metadata["review_status"] = CONTINUOUS_VIDEO_REVIEW_FAILED
-    segment.metadata_json = metadata
-    if job is not None:
-        job.status = GenerationJobStatus.FAILED
-        job.progress = 100
-        job.error = reason
-        job.completed_at = datetime.now(UTC)
-        job.response_payload = {
-            **(job.response_payload or {}),
-            "error": reason,
-            "segment_id": str(segment.id),
-        }
-    logger.warning(
-        "continuous_video_generation_failed project_id=%s segment_number=%s "
-        "provider=%s model=%s reason=%s",
-        segment.project_id,
-        segment.segment_number,
-        provider,
-        model,
-        reason,
-    )
-    await _emit_continuous_video_segment_event(
-        session,
-        segment=segment,
-        job=job,
-        status="failed",
-        provider=provider,
-        model=model,
-        message=reason,
-    )
-
-
-async def _persist_continuous_video_segment_success(
-    session: AsyncSession,
-    *,
-    segment: ContinuousVideoSegment,
-    job: GenerationJob,
-    result: VideoResult,
-    resumed_external_operation: bool,
-) -> Asset:
-    asset = Asset(
-        project_id=segment.project_id,
-        artifact_id=None,
-        kind=AssetKind.VIDEO,
-        name=f"Continuous segment {segment.segment_number:03d}",
-        storage_uri=result.storage_uri or "",
-        content_type=result.content_type,
-        sha256=result.sha256,
-        metadata_json={
-            **result.metadata,
-            "segment_id": str(segment.id),
-            "segment_number": segment.segment_number,
-            "request_fingerprint": segment.request_fingerprint,
-        },
-    )
-    apply_asset_storage_metadata(asset)
-    session.add(asset)
-    await session.flush()
-    session.add(
-        AssetVersion(
-            asset_id=asset.id,
-            version_number=1,
-            storage_uri=asset.storage_uri,
-            sha256=asset.sha256,
-            metadata_json=asset.metadata_json,
-        )
-    )
-    estimate = estimate_operation_cost(
-        "text_to_video",
-        Decimal(segment.duration_seconds),
-        provider=result.provider,
-        model=result.model,
-    )
-    provider_cost = Decimal(str(result.estimated_cost or "0.000000"))
-    total_cost = final_budget_cost(estimate.estimated, provider_cost)
-    segment.asset_id = asset.id
-    segment.generated_video_asset_id = asset.id
-    segment.external_operation_id = result.external_job_id
-    segment.provider = result.provider
-    segment.model = result.model
-    segment.status = GenerationJobStatus.SUCCEEDED
-    segment.cost_estimate = total_cost
-    metadata = dict(segment.metadata_json or {})
-    metadata["asset_id"] = str(asset.id)
-    metadata["generated_video_asset_id"] = str(asset.id)
-    metadata["external_operation_id"] = result.external_job_id
-    metadata["completed_at"] = datetime.now(UTC).isoformat()
-    metadata["resumed_external_operation"] = resumed_external_operation
-    segment.metadata_json = metadata
-    await _extract_and_persist_continuous_video_frames(
-        session,
-        segment=segment,
-        video_asset=asset,
-        force=True,
-    )
-    _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_READY)
-    job.status = GenerationJobStatus.SUCCEEDED
-    job.progress = 100
-    job.external_job_id = result.external_job_id
-    job.response_payload = result.metadata
-    job.cost_estimate = total_cost
-    job.completed_at = datetime.now(UTC)
-    session.add(
-        CostEntry(
-            project_id=segment.project_id,
-            artifact_id=None,
-            entry_type=CostEntryType.ESTIMATE,
-            provider=result.provider,
-            model=result.model,
-            operation="text_to_video",
-            quantity=Decimal(segment.duration_seconds),
-            unit="second",
-            unit_cost=estimate.unit_cost,
-            total_cost=total_cost,
-            currency="USD",
-            metadata_json=cost_audit_metadata(
-                estimated_cost=estimate.estimated,
-                provider_reported_cost=provider_cost,
-                final_budget_cost=total_cost,
-                stage="continuous_video",
-                extra={
-                    "job_id": str(job.id),
-                    "segment_id": str(segment.id),
-                    "segment_number": segment.segment_number,
-                    "external_job_id": result.external_job_id,
-                    "resumed_external_operation": resumed_external_operation,
-                },
-            ),
-        )
-    )
-    await _emit_continuous_video_segment_event(
-        session,
-        segment=segment,
-        job=job,
-        status="succeeded",
-        provider=result.provider,
-        model=result.model,
-        message="Segmento de video continuo concluido",
-        estimated_cost=total_cost,
-        details={
-            "asset_id": str(asset.id),
-            "external_job_id": result.external_job_id,
-            "resumed_external_operation": resumed_external_operation,
-        },
-    )
-    await session.flush()
-    return asset
-
-
-async def _run_continuous_video_provider_request(
-    provider: VideoProvider,
-    request: VideoRequest,
-    *,
-    external_operation_id: str | None = None,
-    previous_video_uri: str | None = None,
-) -> tuple[VideoResult | None, str | None, str | None]:
-    resumed_operation = external_operation_id
-    if external_operation_id:
-        poller = getattr(provider, "poll_submitted", None)
-        if not callable(poller):
-            return None, None, "Provider nao permite retomar operacao de video."
-        try:
-            return await poller(request, external_operation_id), resumed_operation, None
-        except Exception as exc:
-            return None, resumed_operation, str(exc)
-    if previous_video_uri:
-        extension_generator = getattr(provider, "generate_extension", None)
-        if callable(extension_generator):
-            try:
-                return await extension_generator(request, previous_video_uri), None, None
-            except Exception as exc:
-                return None, None, str(exc)
-        extension_submitter = getattr(provider, "submit_extension", None)
-        extension_poller = getattr(provider, "poll_submitted", None)
-        if callable(extension_submitter) and callable(extension_poller):
-            try:
-                operation_id = await extension_submitter(request, previous_video_uri)
-                result = await extension_poller(request, operation_id)
-            except Exception as exc:
-                return None, None, str(exc)
-            return result, operation_id, None
-        return (
-            None,
-            None,
-            "Provider nao permite estender video anterior para continuidade temporal.",
-        )
-    if request.source_image_uri:
-        submitter = getattr(provider, "submit_from_image", None)
-        poller = getattr(provider, "poll_submitted_from_image", None) or getattr(
-            provider,
-            "poll_submitted",
-            None,
-        )
-        if callable(submitter) and callable(poller):
-            try:
-                operation_id = await submitter(request)
-                result = await poller(request, operation_id)
-            except Exception as exc:
-                return None, None, str(exc)
-            return result, operation_id, None
-        try:
-            return await provider.generate_from_image(request), None, None
-        except Exception as exc:
-            return None, None, str(exc)
-    submitter = getattr(provider, "submit_from_text", None)
-    poller = getattr(provider, "poll_submitted", None)
-    if callable(submitter) and callable(poller):
-        for attempt in range(1, 3):
-            try:
-                operation_id = await submitter(request)
-                result = await poller(request, operation_id)
-            except Exception as exc:
-                error = str(exc)
-                if attempt == 2 or not _is_transient_continuous_video_error(error):
-                    return None, None, error
-                await asyncio.sleep(
-                    exponential_backoff_seconds(attempt, base_seconds=1, cap_seconds=8)
-                )
-                continue
-            return result, operation_id, None
-    try:
-        return await provider.generate_from_text(request), None, None
-    except Exception as exc:
-        return None, None, str(exc)
-
-
-async def _continuous_video_assets_by_id(
-    session: AsyncSession,
-    asset_ids: set[UUID],
-) -> dict[UUID, Asset]:
-    if not asset_ids:
-        return {}
-    result = await session.execute(select(Asset).where(Asset.id.in_(asset_ids)))
-    return {asset.id: asset for asset in result.scalars()}
-
-
-def _continuous_video_reference_view_priority(target_kind: str, view_type: str) -> int:
-    priorities = {
-        "character": {"front_portrait": 0, "character_reference_sheet": 1},
-        "location": {"establishing": 0},
-        "prop": {"front": 0, "side": 1, "prop_reference_sheet": 2},
-    }
-    return priorities.get(target_kind, {}).get(view_type, 99)
-
-
-def _continuous_video_reference_match_text(segment: ContinuousVideoSegment) -> str:
-    metadata = segment.metadata_json if isinstance(segment.metadata_json, dict) else {}
-    return " ".join(
-        str(value or "")
-        for value in (
-            metadata.get("source_text"),
-            metadata.get("action"),
-            segment.prompt,
-        )
-    ).casefold()
-
-
-async def _continuous_video_reference_uris_for_segment(
-    session: AsyncSession,
-    project_id: UUID,
-    segment: ContinuousVideoSegment,
-    *,
-    limit: int = CONTINUOUS_VIDEO_REFERENCE_LIMIT,
-) -> list[str]:
-    if limit <= 0 or not hasattr(session, "execute"):
-        return []
-    normalized_text = _continuous_video_reference_match_text(segment)
-    target_rows: list[tuple[str, UUID, str, int]] = []
-    for target_kind, model, kind_priority in (
-        ("character", Character, 0),
-        ("location", Location, 1),
-        ("prop", Prop, 2),
-    ):
-        result = await session.execute(
-            select(model).where(model.project_id == project_id).order_by(model.created_at)
-        )
-        for item in result.scalars():
-            item = cast(Character | Location | Prop, item)
-            name = str(getattr(item, "name", "") or "").strip()
-            score = 20 if name and name.casefold() in normalized_text else 0
-            target_rows.append((target_kind, item.id, name, score - kind_priority))
-    if not target_rows:
-        return []
-
-    target_ids_by_kind: dict[str, list[UUID]] = {}
-    for target_kind, target_id, _name, _score in target_rows:
-        target_ids_by_kind.setdefault(target_kind, []).append(target_id)
-
-    references_by_target: dict[tuple[str, UUID], list[VisualReference]] = {}
-    for target_kind, target_ids in target_ids_by_kind.items():
-        refs_result = await session.execute(
-            select(VisualReference)
-            .where(
-                VisualReference.project_id == project_id,
-                VisualReference.target_kind == target_kind,
-                VisualReference.target_id.in_(target_ids),
-                VisualReference.asset_id.is_not(None),
-            )
-            .order_by(VisualReference.created_at.desc())
-        )
-        for reference in refs_result.scalars():
-            key = (reference.target_kind, reference.target_id)
-            references_by_target.setdefault(key, []).append(reference)
-
-    selected_targets = sorted(target_rows, key=lambda row: (-row[3], row[0], row[2]))[:limit]
-    reference_uris: list[str] = []
-    seen: set[str] = set()
-    for target_kind, target_id, _name, _score in selected_targets:
-        references = sorted(
-            references_by_target.get((target_kind, target_id), []),
-            key=lambda item: (
-                _continuous_video_reference_view_priority(item.target_kind, item.view_type),
-                -item.created_at.timestamp(),
-            ),
-        )
-        if not references:
-            continue
-        asset = await session.get(Asset, references[0].asset_id)
-        storage_uri = str(getattr(asset, "storage_uri", "") or "").strip() if asset else ""
-        if storage_uri and storage_uri not in seen:
-            seen.add(storage_uri)
-            reference_uris.append(storage_uri)
-        if len(reference_uris) >= limit:
-            break
-    return reference_uris
-
-
-def _continuous_video_model_for_reference_images(
-    resolved_provider: str,
-    resolved_model: str,
-    reference_uris: list[str],
-) -> str:
-    if not reference_uris or resolved_provider != "google_ai":
-        return resolved_model
-    if GoogleAIVideoProvider._model_supports_reference_images(resolved_model):
-        return resolved_model
-    configured_model = str(getattr(get_settings(), "google_ai_video_model", "") or "").strip()
-    if GoogleAIVideoProvider._model_supports_reference_images(configured_model):
-        return configured_model
-    return CONTINUOUS_VIDEO_DEFAULT_MODEL
-
-
-def _continuous_video_local_storage_path(storage_uri: str) -> Path | None:
-    if not storage_uri or storage_uri.startswith(("http://", "https://", "data:")):
-        return None
-    storage_root = get_settings().local_storage_path.resolve()
-    candidate = Path(storage_uri)
-    candidates = [candidate] if candidate.is_absolute() else [storage_root / candidate, candidate]
-    for path in candidates:
-        try:
-            resolved = path.resolve(strict=False)
-            resolved.relative_to(storage_root)
-        except (OSError, RuntimeError, ValueError):
-            continue
-        if resolved.is_file():
-            return resolved
-    return None
-
-
-def _continuous_video_ffmpeg_path() -> str | None:
-    return resolve_ffmpeg_path(getattr(get_settings(), "ffmpeg_path", ""))
-
-
-def _continuous_video_frame_extract_commands(
-    ffmpeg_path: str,
-    source_path: Path,
-    output_path: Path,
-    *,
-    normalized_role: str,
-) -> list[list[str]]:
-    base_args = [
-        ffmpeg_path,
-        "-y",
-        "-i",
-        str(source_path),
-        "-map",
-        "0:v:0",
-        "-an",
-        "-sn",
-        "-dn",
-        "-frames:v",
-        "1",
-        "-q:v",
-        "2",
-        str(output_path),
-    ]
-    if normalized_role == "initial":
-        return [base_args]
-    return [
-        [
-            ffmpeg_path,
-            "-y",
-            "-sseof",
-            "-0.1",
-            "-i",
-            str(source_path),
-            "-map",
-            "0:v:0",
-            "-an",
-            "-sn",
-            "-dn",
-            "-frames:v",
-            "1",
-            "-q:v",
-            "2",
-            str(output_path),
-        ],
-        [
-            ffmpeg_path,
-            "-y",
-            "-sseof",
-            "-1",
-            "-i",
-            str(source_path),
-            "-map",
-            "0:v:0",
-            "-an",
-            "-sn",
-            "-dn",
-            "-frames:v",
-            "1",
-            "-q:v",
-            "2",
-            str(output_path),
-        ],
-        base_args,
-    ]
-
-
-def _extract_continuous_video_frame(
-    video_asset: Asset,
-    *,
-    segment_number: int,
-    frame_role: str,
-) -> tuple[Path | None, str | None]:
-    normalized_role = "initial" if frame_role == "initial" else "final"
-    role_label = "inicial" if normalized_role == "initial" else "final"
-    ffmpeg_path = _continuous_video_ffmpeg_path()
-    if not ffmpeg_path:
-        return None, f"FFmpeg nao encontrado para extrair frame {role_label}."
-    source_path = _continuous_video_local_storage_path(str(video_asset.storage_uri or ""))
-    if source_path is None:
-        return None, "Arquivo de video nao encontrado no armazenamento local."
-    output_dir = source_path.parent / "frames"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = (
-        output_dir / f"{source_path.stem}_segment_{segment_number:03d}_{normalized_role}.jpg"
-    )
-    command_errors: list[str] = []
-    for command in _continuous_video_frame_extract_commands(
-        ffmpeg_path,
-        source_path,
-        output_path,
-        normalized_role=normalized_role,
-    ):
-        try:
-            completed = subprocess.run(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            command_errors.append(str(exc))
-            continue
-        if completed.returncode == 0 and output_path.is_file():
-            return output_path, None
-        detail = (completed.stderr or completed.stdout or "").strip()
-        if detail:
-            command_errors.append(detail[:500])
-    if command_errors:
-        return None, f"FFmpeg nao extraiu frame {role_label}: {command_errors[-1]}"
-    if not output_path.is_file():
-        return None, f"FFmpeg nao gerou arquivo para o frame {role_label}."
-    return output_path, None
-
-
-def _extract_continuous_video_initial_frame(
-    video_asset: Asset,
-    *,
-    segment_number: int,
-) -> tuple[Path | None, str | None]:
-    return _extract_continuous_video_frame(
-        video_asset,
-        segment_number=segment_number,
-        frame_role="initial",
-    )
-
-
-def _extract_continuous_video_final_frame(
-    video_asset: Asset,
-    *,
-    segment_number: int,
-) -> tuple[Path | None, str | None]:
-    return _extract_continuous_video_frame(
-        video_asset,
-        segment_number=segment_number,
-        frame_role="final",
-    )
-
-
-async def _persist_continuous_video_frame_asset(
-    session: AsyncSession,
-    *,
-    segment: ContinuousVideoSegment,
-    video_asset: Asset,
-    frame_path: Path,
-    frame_role: str,
-) -> Asset:
-    normalized_role = "initial" if frame_role == "initial" else "final"
-    role_label = "initial" if normalized_role == "initial" else "final"
-    frame_bytes = await asyncio.to_thread(frame_path.read_bytes)
-    content_type = mimetypes.guess_type(frame_path.name)[0] or "image/jpeg"
-    asset = Asset(
-        project_id=segment.project_id,
-        artifact_id=None,
-        kind=AssetKind.IMAGE,
-        name=f"Continuous segment {segment.segment_number:03d} {role_label} frame",
-        storage_uri=frame_path.as_posix(),
-        content_type=content_type,
-        sha256=hashlib.sha256(frame_bytes).hexdigest(),
-        metadata_json={
-            "segment_id": str(segment.id),
-            "segment_number": segment.segment_number,
-            "source_video_asset_id": str(video_asset.id),
-            "technical_role": f"continuous_video_{role_label}_frame",
-        },
-    )
-    apply_asset_storage_metadata(asset)
-    session.add(asset)
-    await session.flush()
-    session.add(
-        AssetVersion(
-            asset_id=asset.id,
-            version_number=1,
-            storage_uri=asset.storage_uri,
-            sha256=asset.sha256,
-            metadata_json=asset.metadata_json,
-        )
-    )
-    if normalized_role == "final":
-        segment.final_frame_asset_id = asset.id
-    return asset
-
-
-async def _persist_continuous_video_final_frame_asset(
-    session: AsyncSession,
-    *,
-    segment: ContinuousVideoSegment,
-    video_asset: Asset,
-    frame_path: Path,
-) -> Asset:
-    return await _persist_continuous_video_frame_asset(
-        session,
-        segment=segment,
-        video_asset=video_asset,
-        frame_path=frame_path,
-        frame_role="final",
-    )
-
-
-async def _extract_and_persist_continuous_video_frames(
-    session: AsyncSession,
-    *,
-    segment: ContinuousVideoSegment,
-    video_asset: Asset,
-    force: bool = False,
-) -> dict[str, str]:
-    metadata = dict(segment.metadata_json or {})
-    errors: dict[str, str] = {}
-    for frame_role, extractor in (
-        ("initial", _extract_continuous_video_initial_frame),
-        ("final", _extract_continuous_video_final_frame),
-    ):
-        metadata.pop(f"{frame_role}_frame_error", None)
-        existing_asset_id = (
-            segment.final_frame_asset_id
-            if frame_role == "final"
-            else metadata.get("initial_frame_asset_id")
-        )
-        if existing_asset_id and not force:
-            continue
-        frame_path, frame_error = extractor(video_asset, segment_number=segment.segment_number)
-        if frame_path is None:
-            if frame_error:
-                metadata[f"{frame_role}_frame_error"] = frame_error
-                errors[frame_role] = frame_error
-            continue
-        frame_asset = await _persist_continuous_video_frame_asset(
-            session,
-            segment=segment,
-            video_asset=video_asset,
-            frame_path=frame_path,
-            frame_role=frame_role,
-        )
-        metadata[f"{frame_role}_frame_asset_id"] = str(frame_asset.id)
-        metadata[f"{frame_role}_frame_storage_uri"] = frame_asset.storage_uri
-    segment.metadata_json = metadata
-    await session.flush()
-    return errors
-
-
-def _continuous_video_progress_rows(
-    segments: list[ContinuousVideoSegment],
-    *,
-    preexisting_succeeded_ids: set[UUID],
-    active_segment_id: UUID | None = None,
-    active_state: str | None = None,
-) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for segment in segments:
-        status = str(getattr(segment.status, "value", segment.status)).lower()
-        if segment.id == active_segment_id and active_state:
-            state = active_state
-        elif status == "succeeded" and segment.id in preexisting_succeeded_ids:
-            state = "skipped"
-        elif status == "succeeded":
-            state = "done"
-        elif status == "failed":
-            state = "failed"
-        elif status == "running":
-            state = "processing"
-        else:
-            state = "pending"
-        rows.append(
-            {
-                "segment_id": str(segment.id),
-                "segment_number": segment.segment_number,
-                "title": segment.title or f"Segmento {segment.segment_number:02d}",
-                "state": state,
-                "duration_seconds": segment.duration_seconds,
-                "cost_estimate": str(segment.cost_estimate or Decimal("0")),
-                "error": (
-                    (segment.metadata_json or {}).get("error")
-                    if isinstance(segment.metadata_json, dict)
-                    else None
-                ),
-            }
-        )
-    return rows
-
-
-def _continuous_video_remaining_cost(segments: list[ContinuousVideoSegment]) -> Decimal:
-    return sum(
-        (
-            Decimal(str(segment.cost_estimate or "0"))
-            for segment in segments
-            if segment.status
-            not in {
-                GenerationJobStatus.SUCCEEDED,
-                GenerationJobStatus.CANCELLED,
-            }
-        ),
-        Decimal("0.000000"),
-    )
-
-
-async def _publish_continuous_video_progress(
-    callback: ContinuousVideoProgressCallback | None,
-    segments: list[ContinuousVideoSegment],
-    *,
-    preexisting_succeeded_ids: set[UUID],
-    active_segment_id: UUID | None = None,
-    active_state: str | None = None,
-) -> None:
-    if callback is None:
-        return
-    result = callback(
-        _continuous_video_progress_rows(
-            segments,
-            preexisting_succeeded_ids=preexisting_succeeded_ids,
-            active_segment_id=active_segment_id,
-            active_state=active_state,
-        ),
-        _continuous_video_remaining_cost(segments),
-    )
-    if isawaitable(result):
-        await result
-
-
-async def generate_continuous_video_segments(
+async def prepare_continuous_video_flow_package(
     session: AsyncSession,
     project_id: UUID,
     *,
     segment_ids: list[UUID] | None = None,
-    provider_name: str = "auto",
-    model: str | None = None,
-    retry_failed: bool = False,
-    max_segments: int | None = None,
-    pause_after_current: Callable[[], bool] | None = None,
-    progress_callback: ContinuousVideoProgressCallback | None = None,
-) -> tuple[list[GenerationJob], list[ContinuousVideoSegment]]:
+) -> tuple[list[ContinuousVideoSegment], dict[int, list[str]]]:
+    """Prepara o pacote (prompt + frame inicial + frame final) para o Google Flow.
+
+    Gera o frame final de cada segmento com o modelo de imagem (sem gerar vídeo).
+    """
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         raise ValueError("Projeto nao encontrado.")
-    active_segment = await _active_continuous_video_segment(session, project_id)
-    if active_segment is not None:
-        raise RuntimeError(
-            f"Segmento {active_segment.segment_number} ja esta em geracao. "
-            "Aguarde finalizar ou retome depois."
-        )
     segments = await list_continuous_video_segments(session, project_id)
     if not segments:
-        _plan, segments, validation_errors = await plan_continuous_video_segments(
+        _plan, segments, _plan_validation_errors = await plan_continuous_video_segments(
             session,
             project_id,
             replace_existing=False,
         )
-        if validation_errors:
-            first_segment_number = min(validation_errors)
+        if _plan_validation_errors:
+            first_segment_number = min(_plan_validation_errors)
             raise ValueError(
-                "Revise o planejamento antes de gerar: "
-                + "; ".join(validation_errors[first_segment_number])
+                "Revise o planejamento antes de preparar: "
+                + "; ".join(_plan_validation_errors[first_segment_number])
             )
-    selected_ids = set(segment_ids or [])
-    if selected_ids:
+    if segment_ids:
+        selected_ids = set(segment_ids)
         segments = [segment for segment in segments if segment.id in selected_ids]
     if not segments:
-        return [], []
-    preexisting_succeeded_ids = {
-        segment.id for segment in segments if segment.status == GenerationJobStatus.SUCCEEDED
-    }
-    provider, resolved_provider, resolved_model, aspect_ratio, resolution = (
-        await _continuous_video_provider_for_project(session, project_id, provider_name, model)
-    )
-    dependency_segments = {
-        segment.segment_number: segment
-        for segment in await list_continuous_video_segments(session, project_id)
-    }
-    billable_segments: list[ContinuousVideoSegment] = []
+        return [], {}
+    production_settings = await get_or_create_production_settings(session, project_id)
+    prepared: list[ContinuousVideoSegment] = []
+    validation_errors: dict[int, list[str]] = {}
     for segment in segments:
+        existing_errors = continuous_video_segment_validation_errors(segment)
+        if existing_errors:
+            validation_errors[segment.segment_number] = existing_errors
+            continue
         if (
-            not continuous_video_segment_needs_generation(segment, retry_failed=retry_failed)
-            or segment.external_operation_id
-            or segment.status == GenerationJobStatus.SUCCEEDED
+            segment.review_status
+            in {
+                CONTINUOUS_VIDEO_REVIEW_READY,
+                CONTINUOUS_VIDEO_REVIEW_APPROVED,
+            }
+            and segment.final_frame_asset_id is not None
         ):
+            prepared.append(segment)
             continue
-        previous_for_budget = dependency_segments.get(segment.segment_number - 1)
-        if segment.segment_number > 1 and not continuous_video_segment_is_approved(
-            previous_for_budget
-        ):
-            break
-        billable_segments.append(segment)
-        break
-    if max_segments is not None:
-        billable_segments = billable_segments[: max(0, max_segments)]
-    billable_seconds = sum(
-        int(segment.duration_seconds or 0) for segment in billable_segments
-    )
-    estimate = estimate_operation_cost(
-        "text_to_video",
-        Decimal(billable_seconds),
-        provider=resolved_provider,
-        model=resolved_model,
-    )
-    await assert_project_budget_allows(
-        session,
-        project_id,
-        estimate.estimated,
-        stage="continuous_video",
-    )
-    video_dir = get_settings().local_storage_path / "google_ai_continuous_videos" / str(project_id)
-    jobs: list[GenerationJob] = []
-    processed: list[ContinuousVideoSegment] = []
-    attempted_segments = 0
-    previous_segment: ContinuousVideoSegment | None = None
-    existing_asset_ids = {
-        asset_id
-        for segment in await list_continuous_video_segments(session, project_id)
-        for asset_id in (
-            segment.asset_id,
-            segment.generated_video_asset_id,
-            segment.source_video_asset_id,
-            segment.source_frame_asset_id,
-            segment.final_frame_asset_id,
-        )
-        if asset_id is not None
-    }
-    assets_by_id = await _continuous_video_assets_by_id(session, existing_asset_ids)
-    provider_supports_extension = bool(
-        getattr(getattr(provider, "capabilities", None), "video_extension", False)
-    )
-    await _publish_continuous_video_progress(
-        progress_callback,
-        segments,
-        preexisting_succeeded_ids=preexisting_succeeded_ids,
-    )
-    for segment in segments:
-        if max_segments is not None and attempted_segments >= max(0, max_segments):
-            break
-        all_project_segments = await list_continuous_video_segments(session, project_id)
-        previous_by_number = {
-            item.segment_number: item for item in all_project_segments
-        }.get(segment.segment_number - 1)
-        if segment.segment_number > 1 and previous_by_number is not None:
-            if previous_by_number.status != GenerationJobStatus.SUCCEEDED:
-                message = (
-                    f"Segmento {segment.segment_number} depende do segmento "
-                    f"{previous_by_number.segment_number} concluido."
-                )
-                await _mark_continuous_video_segment_failed(
-                    session,
-                    segment=segment,
-                    job=None,
-                    reason=message,
-                    provider=resolved_provider,
-                    model=resolved_model,
-                )
-                await session.commit()
-                processed.append(segment)
-                break
-            if not continuous_video_segment_is_approved(previous_by_number):
-                break
-            segment.source_segment_id = previous_by_number.id
-            segment.source_video_asset_id = previous_by_number.asset_id
-            segment.source_frame_asset_id = previous_by_number.final_frame_asset_id
-            if previous_by_number.final_frame_asset_id is not None:
-                previous_metadata = (
-                    previous_by_number.metadata_json
-                    if isinstance(previous_by_number.metadata_json, dict)
-                    else {}
-                )
-                metadata = dict(segment.metadata_json or {})
-                metadata["source_frame_asset_id"] = str(previous_by_number.final_frame_asset_id)
-                if previous_metadata.get("final_frame_storage_uri"):
-                    metadata["source_frame_storage_uri"] = previous_metadata[
-                        "final_frame_storage_uri"
-                    ]
-                segment.metadata_json = metadata
-            previous_segment = previous_by_number
-        elif segment.segment_number > 1 and previous_segment is None:
-            raise ValueError(
-                f"Segmento {segment.segment_number} nao possui segmento anterior planejado."
-            )
-        if segment.status == GenerationJobStatus.SUCCEEDED:
-            processed.append(segment)
-            continue
-        if not continuous_video_segment_needs_generation(segment, retry_failed=retry_failed):
-            processed.append(segment)
-            continue
-        attempted_segments += 1
-        validation_errors = continuous_video_segment_validation_errors(segment)
-        previous_asset = (
-            assets_by_id.get(segment.source_video_asset_id)
-            if segment.source_video_asset_id is not None
-            else None
-        )
-        source_frame_asset = (
-            assets_by_id.get(segment.source_frame_asset_id)
-            if segment.source_frame_asset_id is not None
-            else None
-        )
-        previous_video_uri = (
-            str(previous_asset.storage_uri or "").strip() if previous_asset is not None else ""
-        )
-        source_frame_uri = (
-            str(source_frame_asset.storage_uri or "").strip()
-            if source_frame_asset is not None
-            else str((segment.metadata_json or {}).get("source_frame_storage_uri") or "").strip()
-        )
-        continuation_mode = (
-            "final_frame_i2v"
-            if source_frame_uri and getattr(provider.capabilities, "image_to_video", False)
-            else
-            "video_extension"
-            if previous_video_uri and provider_supports_extension
-            else "prompt_continuity"
-        )
-        operation = "image_to_video" if continuation_mode == "final_frame_i2v" else "text_to_video"
-        reference_limit = (
-            int(getattr(provider.capabilities, "max_reference_images", 0) or 0)
-            if getattr(provider.capabilities, "reference_images", False)
-            else 0
-        )
-        reference_uris = await _continuous_video_reference_uris_for_segment(
-            session,
-            project_id,
-            segment,
-            limit=reference_limit,
-        )
-        request_model = _continuous_video_model_for_reference_images(
-            resolved_provider,
-            resolved_model,
-            reference_uris,
-        )
-        if request_model != resolved_model:
-            request_estimate = estimate_operation_cost(
-                operation,
-                Decimal(segment.duration_seconds),
-                provider=resolved_provider,
-                model=request_model,
-            )
-            await assert_project_budget_allows(
+        segment.review_status = CONTINUOUS_VIDEO_REVIEW_GENERATING
+        segment.status = GenerationJobStatus.RUNNING
+        metadata = dict(segment.metadata_json or {})
+        metadata.pop("error", None)
+        metadata.pop("package_error", None)
+        segment.metadata_json = metadata
+        await session.flush()
+        try:
+            await _ensure_flow_initial_frame(session, project_id, segment)
+            await _generate_segment_final_frame(
                 session,
                 project_id,
-                request_estimate.estimated,
-                stage="continuous_video",
+                segment,
+                production_settings,
             )
-        job = await _continuous_video_generation_job(
-            session,
-            segment,
-            provider=resolved_provider,
-            model=request_model,
-            operation=operation,
-            aspect_ratio=aspect_ratio,
-            resolution=resolution,
-            continuation_mode=continuation_mode,
-        )
-        job.request_payload = {
-            **(job.request_payload or {}),
-            "source_video_uri": previous_video_uri or None,
-            "source_frame_uri": source_frame_uri or None,
-            "reference_uris": reference_uris,
-            "reference_count": len(reference_uris),
-        }
-        jobs.append(job)
-        if validation_errors:
-            await _mark_continuous_video_segment_failed(
-                session,
-                segment=segment,
-                job=job,
-                reason="; ".join(validation_errors),
-                provider=resolved_provider,
-                model=request_model,
+        except Exception as exc:
+            logger.warning(
+                "continuous_video_flow_package_failed project_id=%s segment_number=%s reason=%s",
+                project_id,
+                segment.segment_number,
+                exc,
             )
-            await session.commit()
-            processed.append(segment)
-            await _publish_continuous_video_progress(
-                progress_callback,
-                segments,
-                preexisting_succeeded_ids=preexisting_succeeded_ids,
-                active_segment_id=segment.id,
-                active_state="failed",
-            )
-            break
-        segment.status = GenerationJobStatus.RUNNING
-        _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_GENERATING)
-        segment.provider = resolved_provider
-        segment.model = request_model
-        metadata = dict(segment.metadata_json or {})
-        metadata["continuation_mode"] = continuation_mode
-        metadata["reference_uris"] = reference_uris
-        metadata["reference_count"] = len(reference_uris)
-        if request_model != resolved_model:
-            metadata["requested_model_before_reference_upgrade"] = resolved_model
-        metadata["started_at"] = datetime.now(UTC).isoformat()
-        segment.metadata_json = metadata
-        await _publish_continuous_video_progress(
-            progress_callback,
-            segments,
-            preexisting_succeeded_ids=preexisting_succeeded_ids,
-            active_segment_id=segment.id,
-            active_state="sending",
-        )
-        await _emit_continuous_video_segment_event(
-            session,
-            segment=segment,
-            job=job,
-            status="started",
-            provider=resolved_provider,
-            model=request_model,
-            message="Segmento de video continuo iniciado",
-            estimated_cost=estimate.estimated,
-            details={
-                "continuation_mode": continuation_mode,
-                "reference_count": len(reference_uris),
-            },
-        )
-        await session.commit()
-        request = VideoRequest(
-            prompt=segment.prompt,
-            duration_seconds=segment.duration_seconds,
-            aspect_ratio=aspect_ratio,
-            resolution=resolution,
-            size=resolution,
-            source_image_uri=source_frame_uri or None,
-            reference_uris=reference_uris,
-            output_dir=video_dir,
-            model=request_model,
-        )
-        resumed_external_operation = bool(segment.external_operation_id)
-        result, operation_id, error = await _run_continuous_video_provider_request(
-            provider,
-            request,
-            external_operation_id=segment.external_operation_id,
-            previous_video_uri=(
-                previous_video_uri if continuation_mode == "video_extension" else None
-            ),
-        )
-        if operation_id:
-            segment.external_operation_id = operation_id
-            job.external_job_id = operation_id
-            job.progress = max(job.progress, 25)
-            job.response_payload = {
-                **(job.response_payload or {}),
-                "external_operation_id": operation_id,
-            }
+            error_message = str(exc)
+            segment.status = GenerationJobStatus.FAILED
+            segment.review_status = CONTINUOUS_VIDEO_REVIEW_FAILED
+            metadata = dict(segment.metadata_json or {})
+            metadata["error"] = error_message
+            metadata["package_error"] = error_message
+            metadata["failed_at"] = datetime.now(UTC).isoformat()
+            segment.metadata_json = metadata
+            validation_errors[segment.segment_number] = [error_message]
             await _emit_continuous_video_segment_event(
                 session,
                 segment=segment,
-                job=job,
-                status="submitted",
-                provider=resolved_provider,
-                model=request_model,
-                message="Segmento enviado ao provider",
-                details={
-                    "external_operation_id": operation_id,
-                    "resumed_external_operation": resumed_external_operation,
-                },
+                status="failed",
+                provider=CONTINUOUS_VIDEO_DEFAULT_PROVIDER,
+                model=CONTINUOUS_VIDEO_DEFAULT_MODEL,
+                message=error_message,
             )
-            await session.commit()
-        await _publish_continuous_video_progress(
-            progress_callback,
-            segments,
-            preexisting_succeeded_ids=preexisting_succeeded_ids,
-            active_segment_id=segment.id,
-            active_state="processing",
-        )
-        if error is not None or result is None:
-            await _mark_continuous_video_segment_failed(
-                session,
-                segment=segment,
-                job=job,
-                reason=error or "Provider nao retornou video para o segmento.",
-                provider=resolved_provider,
-                model=request_model,
-            )
-            await session.commit()
-            processed.append(segment)
-            await _publish_continuous_video_progress(
-                progress_callback,
-                segments,
-                preexisting_succeeded_ids=preexisting_succeeded_ids,
-                active_segment_id=segment.id,
-                active_state="failed",
-            )
-            break
-        job.progress = 90
-        asset = await _persist_continuous_video_segment_success(
+            await session.flush()
+            continue
+        _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_READY)
+        segment.status = GenerationJobStatus.SUCCEEDED
+        metadata = dict(segment.metadata_json or {})
+        metadata.pop("error", None)
+        metadata.pop("package_error", None)
+        metadata["flow_url"] = CONTINUOUS_VIDEO_FLOW_URL
+        metadata["package_ready_at"] = datetime.now(UTC).isoformat()
+        segment.metadata_json = metadata
+        prepared.append(segment)
+        await _emit_continuous_video_segment_event(
             session,
             segment=segment,
-            job=job,
-            result=result,
-            resumed_external_operation=resumed_external_operation,
+            status="ready",
+            provider=CONTINUOUS_VIDEO_DEFAULT_PROVIDER,
+            model=CONTINUOUS_VIDEO_DEFAULT_MODEL,
+            message="Pacote para o Google Flow pronto: copie o prompt e os frames no Flow.",
         )
-        assets_by_id[asset.id] = asset
-        processed.append(segment)
-        await session.commit()
-        await _publish_continuous_video_progress(
-            progress_callback,
-            segments,
-            preexisting_succeeded_ids=preexisting_succeeded_ids,
-            active_segment_id=segment.id,
-            active_state="done",
-        )
-        if pause_after_current is not None and pause_after_current():
-            break
-    all_segments = await list_continuous_video_segments(session, project_id)
-    if all_segments and all(
-        segment.status == GenerationJobStatus.SUCCEEDED for segment in all_segments
-    ):
-        plan = await get_or_create_continuous_video_plan(session, project_id)
-        plan.status = "completed"
-        advance_project_status(project, ProjectStatus.COMPLETED)
-    elif processed:
-        plan = await get_or_create_continuous_video_plan(session, project_id)
-        plan.status = "generating"
-        advance_project_status(project, ProjectStatus.VIDEO_GENERATION)
+        await session.flush()
     await session.commit()
-    for item in [*jobs, *processed]:
+    for item in prepared:
         await session.refresh(item)
-    return jobs, processed
+    return prepared, validation_errors
 
 
 async def approve_continuous_video_segment(
@@ -2265,15 +1309,20 @@ async def approve_continuous_video_segment(
     *,
     note: str | None = None,
 ) -> ContinuousVideoSegment | None:
+    """Conclui o segmento: o usuário criou o vídeo no Google Flow e marcou como feito."""
     segment = await session.get(ContinuousVideoSegment, segment_id)
     if segment is None or segment.project_id != project_id:
         return None
-    if segment.status != GenerationJobStatus.SUCCEEDED or segment.asset_id is None:
-        raise ValueError("Somente segmentos gerados podem ser aprovados.")
+    if (
+        segment.review_status != CONTINUOUS_VIDEO_REVIEW_READY
+        or segment.final_frame_asset_id is None
+    ):
+        raise ValueError("Somente segmentos com pacote pronto podem ser concluidos.")
     previous_status = normalize_continuous_video_review_status(
         getattr(segment, "review_status", None)
     )
     _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_APPROVED, note=note)
+    segment.status = GenerationJobStatus.SUCCEEDED
     metadata = dict(segment.metadata_json or {})
     metadata["review_decision"] = CONTINUOUS_VIDEO_REVIEW_APPROVED
     metadata["review_decision_at"] = datetime.now(UTC).isoformat()
@@ -2287,21 +1336,61 @@ async def approve_continuous_video_segment(
         project_id,
         segment.segment_number + 1,
     )
-    if next_segment is not None and not continuous_video_segment_is_approved(next_segment):
+    if next_segment is not None:
         next_segment.source_segment_id = segment.id
-        next_segment.source_video_asset_id = segment.asset_id
         next_segment.source_frame_asset_id = segment.final_frame_asset_id
         next_metadata = dict(next_segment.metadata_json or {})
         next_metadata["source_segment_id"] = str(segment.id)
-        next_metadata["source_video_asset_id"] = str(segment.asset_id)
-        if segment.final_frame_asset_id is not None:
-            next_metadata["source_frame_asset_id"] = str(segment.final_frame_asset_id)
+        next_metadata["source_frame_asset_id"] = str(segment.final_frame_asset_id)
+        next_metadata["initial_frame_asset_id"] = str(segment.final_frame_asset_id)
         if metadata.get("final_frame_storage_uri"):
             next_metadata["source_frame_storage_uri"] = metadata["final_frame_storage_uri"]
         next_metadata["continuity_source_summary"] = metadata["continuity_summary"]
         next_segment.metadata_json = next_metadata
+    await _emit_continuous_video_segment_event(
+        session,
+        segment=segment,
+        status="done",
+        provider=segment.provider,
+        model=segment.model,
+        message="Segmento concluido: vídeo criado no Google Flow.",
+    )
+    await _advance_project_when_all_flow_segments_done(session, project_id, segment)
     await session.flush()
     return segment
+
+
+async def mark_continuous_video_segment_done(
+    session: AsyncSession,
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    note: str | None = None,
+) -> ContinuousVideoSegment | None:
+    return await approve_continuous_video_segment(
+        session,
+        project_id,
+        segment_id,
+        note=note,
+    )
+
+
+async def _advance_project_when_all_flow_segments_done(
+    session: AsyncSession,
+    project_id: UUID,
+    changed_segment: ContinuousVideoSegment,
+) -> None:
+    if not continuous_video_segment_is_approved(changed_segment):
+        return
+    segments = await list_continuous_video_segments(session, project_id)
+    if not segments or not all(continuous_video_segment_is_approved(item) for item in segments):
+        return
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        return
+    plan = await get_or_create_continuous_video_plan(session, project_id)
+    plan.status = "completed"
+    advance_project_status(project, ProjectStatus.COMPLETED)
 
 
 def continuous_video_segment_continuity_summary(segment: ContinuousVideoSegment) -> str:
@@ -2331,19 +1420,32 @@ async def reject_continuous_video_segment(
     *,
     note: str | None = None,
 ) -> ContinuousVideoSegment | None:
+    """Rejeita o pacote: pede para refazer os frames do segmento e downstream."""
     segment = await session.get(ContinuousVideoSegment, segment_id)
     if segment is None or segment.project_id != project_id:
         return None
-    if segment.status != GenerationJobStatus.SUCCEEDED or segment.asset_id is None:
-        raise ValueError("Somente segmentos gerados podem ser rejeitados.")
+    if segment.review_status not in {
+        CONTINUOUS_VIDEO_REVIEW_READY,
+        CONTINUOUS_VIDEO_REVIEW_APPROVED,
+    }:
+        raise ValueError("Somente segmentos com pacote pronto podem ser rejeitados.")
     previous_status = normalize_continuous_video_review_status(
         getattr(segment, "review_status", None)
     )
     _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_REJECTED, note=note)
+    segment.status = GenerationJobStatus.PENDING
+    segment.final_frame_asset_id = None
     metadata = dict(segment.metadata_json or {})
     metadata["review_decision"] = CONTINUOUS_VIDEO_REVIEW_REJECTED
     metadata["review_decision_at"] = datetime.now(UTC).isoformat()
     metadata["review_previous_status"] = previous_status
+    for key in (
+        "final_frame_asset_id",
+        "final_frame_storage_uri",
+        "package_ready_at",
+        "flow_url",
+    ):
+        metadata.pop(key, None)
     if note is not None:
         metadata["review_note"] = note
     segment.metadata_json = metadata
@@ -2357,116 +1459,34 @@ async def reject_continuous_video_segment(
     return segment
 
 
-async def retry_failed_continuous_video_segment(
-    session: AsyncSession,
-    project_id: UUID,
-    segment_id: UUID,
-    *,
-    provider_name: str = "auto",
-    model: str | None = None,
-    progress_callback: ContinuousVideoProgressCallback | None = None,
-) -> tuple[list[GenerationJob], list[ContinuousVideoSegment]]:
-    segment = await session.get(ContinuousVideoSegment, segment_id)
-    if segment is None or segment.project_id != project_id:
-        return [], []
-    if segment.status != GenerationJobStatus.FAILED:
-        raise ValueError("Somente segmentos com falha podem ser reenviados.")
-    return await generate_continuous_video_segment(
-        session,
-        project_id,
-        segment_id,
-        provider_name=provider_name,
-        model=model,
-        retry_failed=True,
-        progress_callback=progress_callback,
-    )
-
-
-async def extract_continuous_video_segment_frames(
-    session: AsyncSession,
-    project_id: UUID,
-    segment_id: UUID,
-    *,
-    force: bool = False,
-) -> tuple[ContinuousVideoSegment | None, dict[str, str]]:
-    segment = await session.get(ContinuousVideoSegment, segment_id)
-    if segment is None or segment.project_id != project_id:
-        return None, {}
-    video_asset_id = segment.generated_video_asset_id or segment.asset_id
-    if segment.status != GenerationJobStatus.SUCCEEDED or video_asset_id is None:
-        raise ValueError("Somente segmentos com video gerado podem ter frames extraidos.")
-    video_asset = await session.get(Asset, video_asset_id)
-    if video_asset is None:
-        raise ValueError("Asset de video do segmento nao encontrado.")
-    errors = await _extract_and_persist_continuous_video_frames(
-        session,
-        segment=segment,
-        video_asset=video_asset,
-        force=force,
-    )
-    return segment, errors
-
-
-async def regenerate_rejected_continuous_video_segment(
-    session: AsyncSession,
-    project_id: UUID,
-    segment_id: UUID,
-    *,
-    provider_name: str = "auto",
-    model: str | None = None,
-    progress_callback: ContinuousVideoProgressCallback | None = None,
-) -> tuple[list[GenerationJob], list[ContinuousVideoSegment]]:
-    segment = await session.get(ContinuousVideoSegment, segment_id)
-    if segment is None or segment.project_id != project_id:
-        return [], []
-    review_status = normalize_continuous_video_review_status(
-        getattr(segment, "review_status", None)
-    )
-    if review_status != CONTINUOUS_VIDEO_REVIEW_REJECTED:
-        raise ValueError("Somente segmentos rejeitados podem ser regenerados por este fluxo.")
-    return await generate_continuous_video_segment(
-        session,
-        project_id,
-        segment_id,
-        provider_name=provider_name,
-        model=model,
-        force=True,
-        progress_callback=progress_callback,
-    )
-
-
 def _reset_continuous_video_segment_for_regeneration(
     segment: ContinuousVideoSegment,
     *,
     reason: str,
 ) -> None:
     metadata = dict(segment.metadata_json or {})
-    previous_asset_id = segment.asset_id or segment.generated_video_asset_id
-    if previous_asset_id is not None:
-        metadata["previous_generated_video_asset_id"] = str(previous_asset_id)
-    if metadata.get("initial_frame_asset_id"):
-        metadata["previous_initial_frame_asset_id"] = str(metadata["initial_frame_asset_id"])
     if segment.final_frame_asset_id is not None:
         metadata["previous_final_frame_asset_id"] = str(segment.final_frame_asset_id)
+    if metadata.get("initial_frame_asset_id"):
+        metadata["previous_initial_frame_asset_id"] = str(metadata["initial_frame_asset_id"])
     for key in (
         "initial_frame_asset_id",
         "initial_frame_storage_uri",
-        "initial_frame_error",
         "final_frame_asset_id",
         "final_frame_storage_uri",
-        "final_frame_error",
+        "package_ready_at",
+        "flow_url",
+        "package_error",
+        "error",
     ):
         metadata.pop(key, None)
-    metadata.pop("error", None)
     metadata["regeneration_reason"] = reason
     metadata["regeneration_requested_at"] = datetime.now(UTC).isoformat()
     segment.status = GenerationJobStatus.PENDING
     segment.review_status = CONTINUOUS_VIDEO_REVIEW_PENDING
-    segment.asset_id = None
-    segment.generated_video_asset_id = None
     segment.final_frame_asset_id = None
-    segment.external_operation_id = None
     segment.generation_job_id = None
+    segment.external_operation_id = None
     metadata["review_status"] = CONTINUOUS_VIDEO_REVIEW_PENDING
     segment.metadata_json = metadata
 
@@ -2494,52 +1514,30 @@ async def invalidate_continuous_video_downstream_segments(
     return invalidated
 
 
-async def generate_continuous_video_segment(
+async def generate_continuous_video_segments(
     session: AsyncSession,
     project_id: UUID,
-    segment_id: UUID,
     *,
+    segment_ids: list[UUID] | None = None,
     provider_name: str = "auto",
     model: str | None = None,
     retry_failed: bool = False,
-    force: bool = False,
+    max_segments: int | None = None,
+    pause_after_current: Callable[[], bool] | None = None,
     progress_callback: ContinuousVideoProgressCallback | None = None,
-) -> tuple[list[GenerationJob], list[ContinuousVideoSegment]]:
-    segment = await session.get(ContinuousVideoSegment, segment_id)
-    if segment is None or segment.project_id != project_id:
-        return [], []
-    if segment.segment_number > 1:
-        previous = await get_continuous_video_segment_by_number(
-            session,
-            project_id,
-            segment.segment_number - 1,
-        )
-        if not continuous_video_segment_is_approved(previous):
-            raise ValueError(
-                f"Aprove o segmento {segment.segment_number - 1} antes de gerar "
-                f"o segmento {segment.segment_number}."
-            )
-        segment.source_segment_id = previous.id
-        segment.source_video_asset_id = previous.asset_id
-        segment.source_frame_asset_id = previous.final_frame_asset_id
-    if force:
-        _reset_continuous_video_segment_for_regeneration(segment, reason="force_regeneration")
-        await invalidate_continuous_video_downstream_segments(
-            session,
-            project_id,
-            segment.segment_number,
-            reason="upstream_force_regeneration",
-        )
-    return await generate_continuous_video_segments(
+) -> tuple[list[Any], list[ContinuousVideoSegment]]:
+    """Compatibilidade: prepara o pacote para o Google Flow (sem gerar vídeo).
+
+    Mantém a assinatura antiga para a UI; a Fase 3 substitui o uso pela função
+    ``prepare_continuous_video_flow_package`` e remove esta ponte.
+    """
+    _ = (provider_name, model, retry_failed, max_segments, pause_after_current, progress_callback)
+    segments, _validation_errors = await prepare_continuous_video_flow_package(
         session,
         project_id,
-        segment_ids=[segment.id],
-        provider_name=provider_name,
-        model=model,
-        retry_failed=retry_failed or force,
-        max_segments=1,
-        progress_callback=progress_callback,
+        segment_ids=segment_ids,
     )
+    return [], segments
 
 
 async def generate_next_continuous_video_segment(
@@ -2550,7 +1548,9 @@ async def generate_next_continuous_video_segment(
     model: str | None = None,
     retry_failed: bool = False,
     progress_callback: ContinuousVideoProgressCallback | None = None,
-) -> tuple[list[GenerationJob], list[ContinuousVideoSegment]]:
+) -> tuple[list[Any], list[ContinuousVideoSegment]]:
+    """Compatibilidade: prepara o próximo segmento pendente/rejeitado."""
+    _ = (provider_name, model, retry_failed, progress_callback)
     segments = await list_continuous_video_segments(session, project_id)
     if not segments:
         _plan, segments, validation_errors = await plan_continuous_video_segments(
@@ -2565,33 +1565,132 @@ async def generate_next_continuous_video_segment(
                 + "; ".join(validation_errors[first_segment_number])
             )
     ordered = sorted(segments, key=lambda item: int(item.segment_number or 0))
-    previous: ContinuousVideoSegment | None = None
-    for segment in ordered:
-        review_status = normalize_continuous_video_review_status(
-            getattr(segment, "review_status", None)
-        )
-        if continuous_video_segment_is_approved(segment):
-            previous = segment
-            continue
-        if review_status == CONTINUOUS_VIDEO_REVIEW_READY:
-            raise ValueError(
-                f"Revise e aprove o segmento {segment.segment_number} antes de continuar."
-            )
-        if segment.segment_number > 1 and not continuous_video_segment_is_approved(previous):
-            raise ValueError(
-                f"Aprove o segmento {segment.segment_number - 1} antes de gerar "
-                f"o segmento {segment.segment_number}."
-            )
-        return await generate_continuous_video_segment(
+    next_segment = next(
+        (
+            segment
+            for segment in ordered
+            if segment.review_status
+            in {
+                CONTINUOUS_VIDEO_REVIEW_PENDING,
+                CONTINUOUS_VIDEO_REVIEW_REJECTED,
+                CONTINUOUS_VIDEO_REVIEW_FAILED,
+            }
+        ),
+        None,
+    )
+    if next_segment is None:
+        return [], []
+    prepared, _validation_errors = await prepare_continuous_video_flow_package(
+        session,
+        project_id,
+        segment_ids=[next_segment.id],
+    )
+    return [], prepared
+
+
+async def generate_continuous_video_segment(
+    session: AsyncSession,
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    provider_name: str = "auto",
+    model: str | None = None,
+    retry_failed: bool = False,
+    force: bool = False,
+    progress_callback: ContinuousVideoProgressCallback | None = None,
+) -> tuple[list[Any], list[ContinuousVideoSegment]]:
+    """Compatibilidade: (re)prepara o pacote de um único segmento."""
+    _ = (provider_name, model, retry_failed, progress_callback)
+    segment = await session.get(ContinuousVideoSegment, segment_id)
+    if segment is None or segment.project_id != project_id:
+        return [], []
+    if force:
+        _reset_continuous_video_segment_for_regeneration(segment, reason="force_regeneration")
+        await invalidate_continuous_video_downstream_segments(
             session,
             project_id,
-            segment.id,
-            provider_name=provider_name,
-            model=model,
-            retry_failed=retry_failed,
-            progress_callback=progress_callback,
+            segment.segment_number,
+            reason="upstream_force_regeneration",
         )
-    return [], []
+    prepared, _validation_errors = await prepare_continuous_video_flow_package(
+        session,
+        project_id,
+        segment_ids=[segment_id],
+    )
+    return [], prepared
+
+
+async def retry_failed_continuous_video_segment(
+    session: AsyncSession,
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    provider_name: str = "auto",
+    model: str | None = None,
+    progress_callback: ContinuousVideoProgressCallback | None = None,
+) -> tuple[list[Any], list[ContinuousVideoSegment]]:
+    """Compatibilidade: reenvia (prepara) um segmento com falha."""
+    segment = await session.get(ContinuousVideoSegment, segment_id)
+    if segment is None or segment.project_id != project_id:
+        return [], []
+    if segment.review_status != CONTINUOUS_VIDEO_REVIEW_FAILED:
+        raise ValueError("Somente segmentos com falha podem ser reenviados.")
+    return await generate_continuous_video_segment(
+        session,
+        project_id,
+        segment_id,
+        provider_name=provider_name,
+        model=model,
+        retry_failed=True,
+        progress_callback=progress_callback,
+    )
+
+
+async def regenerate_rejected_continuous_video_segment(
+    session: AsyncSession,
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    provider_name: str = "auto",
+    model: str | None = None,
+    progress_callback: ContinuousVideoProgressCallback | None = None,
+) -> tuple[list[Any], list[ContinuousVideoSegment]]:
+    """Compatibilidade: (re)prepara um segmento rejeitado."""
+    segment = await session.get(ContinuousVideoSegment, segment_id)
+    if segment is None or segment.project_id != project_id:
+        return [], []
+    review_status = normalize_continuous_video_review_status(
+        getattr(segment, "review_status", None)
+    )
+    if review_status != CONTINUOUS_VIDEO_REVIEW_REJECTED:
+        raise ValueError("Somente segmentos rejeitados podem ser regenerados por este fluxo.")
+    return await generate_continuous_video_segment(
+        session,
+        project_id,
+        segment_id,
+        provider_name=provider_name,
+        model=model,
+        force=True,
+        progress_callback=progress_callback,
+    )
+
+
+async def extract_continuous_video_segment_frames(
+    session: AsyncSession,
+    project_id: UUID,
+    segment_id: UUID,
+    *,
+    force: bool = False,
+) -> tuple[ContinuousVideoSegment | None, dict[str, str]]:
+    """Compatibilidade: os frames do pacote são gerados (não extraídos de vídeo).
+
+    Mantido apenas para a UI; a Fase 3 remove o uso.
+    """
+    _ = force
+    segment = await session.get(ContinuousVideoSegment, segment_id)
+    if segment is None or segment.project_id != project_id:
+        return None, {}
+    return segment, {}
 
 
 async def update_continuous_video_segment_prompt(
@@ -2605,7 +1704,7 @@ async def update_continuous_video_segment_prompt(
     segment = await session.get(ContinuousVideoSegment, segment_id)
     if segment is None or segment.project_id != project_id:
         return None
-    if segment.status == GenerationJobStatus.SUCCEEDED:
+    if segment.review_status == CONTINUOUS_VIDEO_REVIEW_APPROVED:
         raise ValueError("Segmento ja concluido nao pode ter prompt editado.")
     clean_prompt = prompt.strip()
     if len(clean_prompt.split()) < 20:
@@ -2634,6 +1733,27 @@ async def update_continuous_video_segment_prompt(
         segment.model,
         segment.request_fingerprint,
     )
+    # O prompt mudou: o frame final (e o pacote) ficam desatualizados.
+    segment.review_status = CONTINUOUS_VIDEO_REVIEW_PENDING
+    segment.status = GenerationJobStatus.PENDING
+    segment.final_frame_asset_id = None
+    for key in (
+        "final_frame_asset_id",
+        "final_frame_storage_uri",
+        "package_ready_at",
+        "flow_url",
+        "package_error",
+        "error",
+    ):
+        metadata.pop(key, None)
+    metadata["review_status"] = CONTINUOUS_VIDEO_REVIEW_PENDING
+    segment.metadata_json = metadata
+    await invalidate_continuous_video_downstream_segments(
+        session,
+        project_id,
+        segment.segment_number,
+        reason="prompt_updated",
+    )
     await session.flush()
     return segment
 
@@ -2646,6 +1766,7 @@ async def attach_continuous_video_segment_result(
     generation_job_id: UUID | None = None,
     external_operation_id: str | None = None,
 ) -> ContinuousVideoSegment:
+    """Legado: registra um resultado de vídeo já existente no segmento."""
     segment.asset_id = asset_id
     if generation_job_id is not None:
         segment.generation_job_id = generation_job_id
