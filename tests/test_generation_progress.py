@@ -1,0 +1,116 @@
+import asyncio
+from contextlib import suppress
+from typing import Any
+
+import pytest
+
+from app.ui.shared import page_config
+from app.ui.shared.generation_progress import (
+    attach_cancel_button,
+    mark_dialog_task_cancelable,
+    progress_percent_text,
+    progress_ratio,
+)
+from app.ui.shared.page_config import (
+    is_deleted_ui_context_error,
+    play_completion_sound,
+    safe_close_ui_element,
+    safe_notify,
+)
+
+
+def test_progress_ratio_is_clamped() -> None:
+    assert progress_ratio(0, 0) == 0.0
+    assert progress_ratio(-1, 10) == 0.0
+    assert progress_ratio(5, 10) == 0.5
+    assert progress_ratio(12, 10) == 1.0
+
+
+def test_progress_percent_text_uses_percentage() -> None:
+    assert progress_percent_text(0, 10) == "0%"
+    assert progress_percent_text(1, 4) == "25%"
+    assert progress_percent_text(2, 3) == "67%"
+    assert progress_percent_text(10, 10) == "100%"
+
+
+async def test_cancel_button_cancels_bound_dialog_task() -> None:
+    class Dialog:
+        cancel_requested: Any = None
+
+    class Button:
+        callback: Any = None
+        disabled = False
+
+        def on(self, _event: str, callback: Any) -> None:
+            self.callback = callback
+
+        def disable(self) -> None:
+            self.disabled = True
+
+        def enable(self) -> None:
+            self.disabled = False
+
+    dialog = Dialog()
+    button = Button()
+    task = asyncio.create_task(asyncio.sleep(60))
+
+    attach_cancel_button(dialog, button)
+    mark_dialog_task_cancelable(dialog, task)
+    assert button.callback is not None
+
+    await button.callback()
+    with suppress(asyncio.CancelledError):
+        await task
+
+    assert button.disabled is True
+    assert task.cancelled()
+    assert dialog.cancel_requested()
+
+
+def test_deleted_ui_context_errors_are_detected() -> None:
+    assert is_deleted_ui_context_error(
+        RuntimeError("The client this element belongs to has been deleted.")
+    )
+    assert is_deleted_ui_context_error(
+        RuntimeError("The parent element this slot belongs to has been deleted.")
+    )
+    assert not is_deleted_ui_context_error(RuntimeError("other failure"))
+
+
+def test_safe_close_ui_element_ignores_deleted_client() -> None:
+    class DeletedDialog:
+        def close(self) -> None:
+            raise RuntimeError("The client this element belongs to has been deleted.")
+
+    safe_close_ui_element(DeletedDialog())
+
+
+def test_safe_notify_ignores_deleted_slot(monkeypatch: pytest.MonkeyPatch) -> None:
+    def deleted_notify(_message: str, **_kwargs: object) -> None:
+        raise RuntimeError("The parent element this slot belongs to has been deleted.")
+
+    monkeypatch.setattr(page_config.ui, "notify", deleted_notify)
+
+    safe_notify("Ideia apagada definitivamente.", color="warning")
+
+
+def test_play_completion_sound_runs_browser_audio_script(monkeypatch: pytest.MonkeyPatch) -> None:
+    scripts: list[str] = []
+    monkeypatch.setattr(page_config.core, "loop", object())
+    monkeypatch.setattr(page_config.ui, "run_javascript", scripts.append)
+
+    play_completion_sound()
+
+    assert scripts
+    assert "AudioContext" in scripts[0]
+    assert "storytellingCompletionSound" in scripts[0]
+
+
+def test_play_completion_sound_ignores_deleted_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    def deleted_context(_script: str) -> None:
+        raise RuntimeError("The client this element belongs to has been deleted.")
+
+    monkeypatch.setattr(page_config.core, "loop", object())
+    monkeypatch.setattr(page_config.ui, "run_javascript", deleted_context)
+
+    play_completion_sound()

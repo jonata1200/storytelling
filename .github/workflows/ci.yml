@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: storytelling
+          POSTGRES_PASSWORD: storytelling
+          POSTGRES_DB: storytelling
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U storytelling -d storytelling"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      APP_ENV: test
+      APP_DEBUG: "false"
+      APP_SECRET_KEY: ci-test-secret
+      DATABASE_URL: postgresql+asyncpg://storytelling:storytelling@localhost:5432/storytelling
+      REDIS_URL: redis://localhost:6379/0
+      RUN_PROVIDER_SMOKE_TESTS: "0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose configuration
+        run: docker compose config --quiet
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements.dev.lock
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock -r requirements.dev.lock
+          pip install -e . --no-deps
+          pip check
+
+      - name: Validate app import
+        run: python -c "from app.factory import create_app; create_app(include_ui=False)"
+
+      - name: Validate migrations
+        run: alembic upgrade head
+
+      - name: Check for model/migration drift
+        run: alembic check
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Type check
+        run: mypy app tests
+
+      - name: Validate test markers
+        run: pytest --collect-only -q -m "unit or integration or provider or ui or security"
+
+      - name: Test
+        run: pytest -m "not smoke"

@@ -1,0 +1,62 @@
+﻿import _storytelling_normalization_cases as cases
+
+test_script_payload_accepts_common_ai_field_names = (
+    cases.test_script_payload_accepts_common_ai_field_names
+)
+test_script_payload_preserves_briefing_duration_over_model_output = (
+    cases.test_script_payload_preserves_briefing_duration_over_model_output
+)
+test_script_payload_unwraps_serialized_json_content = (
+    cases.test_script_payload_unwraps_serialized_json_content
+)
+test_script_payload_unwraps_malformed_embedded_json_content = (
+    cases.test_script_payload_unwraps_malformed_embedded_json_content
+)
+test_script_payload_adds_scene_markers_to_screenplay_without_cena_labels = (
+    cases.test_script_payload_adds_scene_markers_to_screenplay_without_cena_labels
+)
+test_script_payload_normalizes_inline_scene_heading_from_model_response = (
+    cases.test_script_payload_normalizes_inline_scene_heading_from_model_response
+)
+test_script_payload_removes_screenplay_parentheticals = (
+    cases.test_script_payload_removes_screenplay_parentheticals
+)
+test_screenplay_válidator_rejects_technical_planning_document = (
+    cases.test_screenplay_válidator_rejects_technical_planning_document
+)
+test_screenplay_validator_accepts_combined_scene_heading = (
+    cases.test_screenplay_validator_accepts_combined_scene_heading
+)
+test_screenplay_válidator_rejects_compacted_inline_numbered_sluglines = (
+    cases.test_screenplay_válidator_rejects_compacted_inline_numbered_sluglines
+)
+test_screenplay_validator_rejects_location_used_as_dialogue_cue = (
+    cases.test_screenplay_validator_rejects_location_used_as_dialogue_cue
+)
+test_script_payload_repairs_compacted_inline_numbered_sluglines = (
+    cases.test_script_payload_repairs_compacted_inline_numbered_sluglines
+)
+test_script_payload_preserves_embedded_production_plan_separately = (
+    cases.test_script_payload_preserves_embedded_production_plan_separately
+)
+test_scene_plan_payload_normalizes_shots_to_package_duration_values = (
+    cases.test_scene_plan_payload_normalizes_shots_to_package_duration_values
+)
+test_scene_plan_payload_uses_script_scene_markers_when_ai_returns_one_scene = (
+    cases.test_scene_plan_payload_uses_script_scene_markers_when_ai_returns_one_scene
+)
+test_scene_plan_payload_can_be_derived_from_structured_script_without_llm = (
+    cases.test_scene_plan_payload_can_be_derived_from_structured_script_without_llm
+)
+test_script_payload_builds_content_from_scene_list_when_content_is_empty = (
+    cases.test_script_payload_builds_content_from_scene_list_when_content_is_empty
+)
+test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_script = (
+    cases.test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_script
+)
+test_fallback_script_content_from_idea_scales_scene_count_with_duration = (
+    cases.test_fallback_script_content_from_idea_scales_scene_count_with_duration
+)
+test_idea_script_contract_uses_canonical_protagonist_name_and_dialogue_rules = (
+    cases.test_idea_script_contract_uses_canonical_protagonist_name_and_dialogue_rules
+)

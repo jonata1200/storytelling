@@ -1,0 +1,127 @@
+from enum import StrEnum
+
+
+class ProjectStep(StrEnum):
+    """Etapas do pipeline de projeto executadas como jobs internos.
+
+    Fonte única de verdade para os nomes de etapa usados em jobs, runner e UI
+    (antes eram strings espalhadas por vários módulos).
+    """
+
+    INITIAL_SCRIPT = "initial_script"
+    IDEAS = "ideas"
+    SCRIPT = "script"
+    SCENES = "scenes"
+    VIDEO = "video"
+    CONTINUOUS_VIDEO = "continuous_video"
+
+
+class ProjectStatus(StrEnum):
+    DRAFT = "DRAFT"
+    IDEA_GENERATION = "IDEA_GENERATION"
+    IDEA_APPROVAL = "IDEA_APPROVAL"
+    STORY_DESIGN = "STORY_DESIGN"
+    STORY_APPROVAL = "STORY_APPROVAL"
+    SCRIPT_GENERATION = "SCRIPT_GENERATION"
+    SCRIPT_APPROVAL = "SCRIPT_APPROVAL"
+    VISUAL_BIBLE_GENERATION = "VISUAL_BIBLE_GENERATION"
+    VISUAL_BIBLE_APPROVAL = "VISUAL_BIBLE_APPROVAL"
+    STORYBOARD_GENERATION = "STORYBOARD_GENERATION"
+    STORYBOARD_APPROVAL = "STORYBOARD_APPROVAL"
+    PRODUCTION_PLANNING = "PRODUCTION_PLANNING"
+    VIDEO_GENERATION = "VIDEO_GENERATION"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    ARCHIVED = "ARCHIVED"
+
+
+class ArtifactStatus(StrEnum):
+    PENDING = "PENDING"
+    GENERATING = "GENERATING"
+    READY_FOR_REVIEW = "READY_FOR_REVIEW"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    STALE = "STALE"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class ApprovalDecision(StrEnum):
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    CHANGES_REQUESTED = "CHANGES_REQUESTED"
+    BLOCKED = "BLOCKED"
+
+
+class ArtifactType(StrEnum):
+    BRIEFING = "BRIEFING"
+    STORY_IDEA = "STORY_IDEA"
+    STORY_BIBLE = "STORY_BIBLE"
+    SCRIPT = "SCRIPT"
+    CHARACTER = "CHARACTER"
+    LOCATION = "LOCATION"
+    SCENE = "SCENE"
+    SHOT = "SHOT"
+    STORYBOARD = "STORYBOARD"
+    ANIMATIC = "ANIMATIC"
+    AUDIO_TRACK = "AUDIO_TRACK"
+    TIMELINE = "TIMELINE"
+    VISUAL_REFERENCE = "VISUAL_REFERENCE"
+    VIDEO_CLIP = "VIDEO_CLIP"
+
+
+class DependencyKind(StrEnum):
+    DERIVED_FROM = "DERIVED_FROM"
+    REQUIRES_APPROVAL_OF = "REQUIRES_APPROVAL_OF"
+    REFERENCES = "REFERENCES"
+    INVALIDATES = "INVALIDATES"
+
+
+class AssetKind(StrEnum):
+    IMAGE = "IMAGE"
+    VIDEO = "VIDEO"
+    AUDIO = "AUDIO"
+    SUBTITLE = "SUBTITLE"
+    DOCUMENT = "DOCUMENT"
+    OTHER = "OTHER"
+
+
+class CostEntryType(StrEnum):
+    ESTIMATE = "ESTIMATE"
+    ACTUAL = "ACTUAL"
+    CREDIT = "CREDIT"
+
+
+class GenerationJobStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    RETRY_SCHEDULED = "RETRY_SCHEDULED"
+
+
+class GenerationJobType(StrEnum):
+    IMAGE = "IMAGE"
+    VIDEO = "VIDEO"
+    SPEECH = "SPEECH"
+    ANALYSIS = "ANALYSIS"
+    INGREDIENT = "INGREDIENT"
+    QA = "QA"
+
+
+# Política central de tentativas por operação (INC-07). Antes, os limites
+# ficavam soltos em cada ponto de enqueue; centralizados aqui, o número total
+# de gerações cobradas por segmento é previsível:
+#   - vídeo: 1 submit + até (MEDIA_MAX_ATTEMPTS - 1) regenerações encadeadas
+#     via QA (o QA só regenera enquanto source_job.attempts < max_attempts);
+#   - QA: MEDIA_QA_MAX_ATTEMPTS tentativas de análise por vídeo gerado;
+#   - referência visual: MEDIA_MAX_ATTEMPTS tentativas do job IMAGE.
+MEDIA_MAX_ATTEMPTS = 3
+MEDIA_QA_MAX_ATTEMPTS = 2
+
+
+class ClipReviewDecision(StrEnum):
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    NEEDS_REGENERATION = "NEEDS_REGENERATION"

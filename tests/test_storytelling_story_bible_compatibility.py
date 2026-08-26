@@ -1,0 +1,8 @@
+import _storytelling_normalization_cases as cases
+
+test_story_bible_payload_is_normalized_to_structured_model = (
+    cases.test_story_bible_payload_is_normalized_to_structured_model
+)
+test_story_bible_payload_accepts_named_location_and_prop_maps = (
+    cases.test_story_bible_payload_accepts_named_location_and_prop_maps
+)
