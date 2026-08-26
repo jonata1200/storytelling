@@ -16,6 +16,7 @@ from app.config.provider_policy import (
 DEFAULT_APP_SECRET_KEY = "change-me-in-development"
 
 LOCKED_OLLAMA_CLOUD_TEXT_MODEL = "mistral-large-3:675b-cloud"
+DEFAULT_META_TEXT_MODEL = "muse-spark-1.2"
 
 OLLAMA_CLOUD_TEXT_MODELS = (
     "deepseek-v4-flash:0731-cloud",
@@ -42,15 +43,15 @@ class Settings(BaseSettings):
     local_storage_path: Path = Path("./storage")
     max_generated_asset_bytes: int = 750 * 1024 * 1024
 
-    ai_provider: str = "ollama_cloud"
-    text_provider: str | None = "ollama_cloud"
-    text_provider_fallbacks: str = ""
+    ai_provider: str = "meta"
+    text_provider: str | None = "meta"
+    text_provider_fallbacks: str = "ollama_cloud"
     image_provider: str | None = "meta"
     meta_integration_mode: str = "api"
     meta_image_integration_mode: str = "api"
     meta_api_key: str | None = Field(default=None, repr=False)
     meta_base_url: str = ""
-    meta_default_model: str = ""
+    meta_default_model: str = DEFAULT_META_TEXT_MODEL
     meta_image_model: str = ""
     meta_browser_profile_path: Path = Path("./runtime/browser_profiles/meta")
     ollama_cloud_api_key: str | None = Field(default=None, repr=False)

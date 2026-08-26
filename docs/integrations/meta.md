@@ -2,9 +2,12 @@
 
 ## Estado
 
-Ainda não validada com uma conta de desenvolvimento. Este documento não autoriza o uso de
-endpoints privados nem presume que recursos anunciados estejam disponíveis para a conta do
-projeto.
+A interface OpenAI-compatible e structured output da Meta Model API foram confirmados na
+documentação pública oficial em 2026-08-26. A URL base, o identificador de modelo liberado para
+a conta e uma chamada real continuam pendentes porque o guia operacional exige autenticação.
+Este documento não autoriza endpoints privados.
+
+Fonte oficial: <https://ai.meta.com/llama/>.
 
 ## Capacidades
 

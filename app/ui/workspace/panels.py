@@ -8,7 +8,7 @@ from app.config.provider_policy import (
     provider_api_key,
     provider_display_name,
 )
-from app.config.settings import OLLAMA_CLOUD_TEXT_MODELS, get_settings
+from app.config.settings import get_settings
 from app.generation.model_settings import NARRATIVE_TASKS, TASK_LABELS
 from app.generation.models import ProjectModelSetting
 from app.production.models import ProjectProductionSettings
@@ -48,24 +48,23 @@ def _render_model_settings(project_id: UUID, settings_list: list[ProjectModelSet
                 "text-xs px-2 py-1 rounded-md bg-amber-950 text-amber-200 "
                 "border border-amber-800"
             )
-        _muted("Escolha o modelo Ollama Cloud usado em cada etapa narrativa.")
+        _muted("Escolha o modelo Meta usado em cada etapa narrativa.")
         for task in NARRATIVE_TASKS:
             task_setting = settings_by_task.get(task)
             selected_model = (
                 task_setting.model
-                if task_setting is not None and task_setting.model in OLLAMA_CLOUD_TEXT_MODELS
-                else app_settings.ollama_cloud_default_model
+                if task_setting is not None
+                else app_settings.meta_default_model
             )
             with ui.row().classes("w-full items-end gap-2"):
                 ui.label(TASK_LABELS[task]).classes("w-28 text-sm text-slate-300")
-                ui.label("Ollama Cloud").classes("w-36 text-sm text-slate-300")
-                ui.select(
-                    list(OLLAMA_CLOUD_TEXT_MODELS),
+                ui.label("Meta").classes("w-36 text-sm text-slate-300")
+                ui.input(
                     value=selected_model,
                     on_change=lambda event, selected_task=task: _save_model_setting(
                         project_id,
                         selected_task,
-                        "ollama_cloud",
+                        "meta",
                         str(event.value),
                     ),
                 ).props("outlined dense options-dense").classes("flex-1")

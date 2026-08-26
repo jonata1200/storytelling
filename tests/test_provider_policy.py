@@ -18,7 +18,7 @@ def test_validate_model_name_blocks_free_and_mock_models() -> None:
 
 def test_provider_policy_resolves_all_channels() -> None:
     settings = Settings(_env_file=None)
-    assert effective_provider_for_channel(settings, "text") == "ollama_cloud"
+    assert effective_provider_for_channel(settings, "text") == "meta"
     assert effective_provider_for_channel(settings, "image") == "meta"
     assert effective_provider_for_channel(settings, "video") == "openrouter"
     assert provider_model(settings, "openrouter", "video") == settings.openrouter_video_model

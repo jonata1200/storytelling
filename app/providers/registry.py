@@ -51,7 +51,14 @@ def _openrouter_factory() -> object:
     return OpenRouterVideoProvider()
 
 
+def _meta_text_factory() -> object:
+    from app.providers.llm.meta import MetaLLMProvider
+
+    return MetaLLMProvider()
+
+
 provider_registry = ProviderRegistry()
+provider_registry.register("text", "meta", _meta_text_factory)
 provider_registry.register("text", "ollama_cloud", _ollama_cloud_factory)
 provider_registry.register("video", "openrouter", _openrouter_factory)
 

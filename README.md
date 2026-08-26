@@ -128,9 +128,12 @@ docker images
 Configure as chaves no `.env` ou pela tela de Configurações de IA:
 
 ```env
-TEXT_PROVIDER=ollama_cloud
-OLLAMA_CLOUD_API_KEY=sua_chave_ollama
-OLLAMA_CLOUD_DEFAULT_MODEL=mistral-large-3:675b-cloud
+TEXT_PROVIDER=meta
+TEXT_PROVIDER_FALLBACKS=ollama_cloud
+META_INTEGRATION_MODE=api
+META_API_KEY=sua_chave_meta
+META_BASE_URL=url_oficial_exibida_para_sua_conta
+META_DEFAULT_MODEL=muse-spark-1.2
 
 VIDEO_PROVIDER=openrouter
 OPENROUTER_API_KEY=sua_chave_openrouter

@@ -7,11 +7,7 @@ from fastapi import Request
 from nicegui import ui
 
 from app.config.preferences import save_preferences
-from app.config.settings import (
-    OLLAMA_CLOUD_TEXT_MODELS,
-    get_settings,
-    normalize_ollama_cloud_text_model,
-)
+from app.config.settings import get_settings
 from app.storytelling.idea_lab import load_generated_ideas, load_saved_ideas
 
 BodyStyle = Callable[[], None]
@@ -103,23 +99,23 @@ def register_settings_page(
                                 with ui.element("div").classes(
                                     provider_card_classes
                                 ):
-                                    provider_header("edit_note", "Texto", "Ollama Cloud")
-                                    ollama_cloud_base_url = (
+                                    provider_header("edit_note", "Texto", "Meta")
+                                    meta_base_url = (
                                         ui.input(
-                                            "URL base Ollama Cloud",
-                                            value=current.ollama_cloud_base_url,
-                                            placeholder="https://ollama.com/api",
+                                            "URL base Meta Model API",
+                                            value=current.meta_base_url,
+                                            placeholder="Consulte a documentação da sua conta",
                                         )
                                         .props("outlined stack-label")
                                         .classes("w-full")
                                     )
-                                    ollama_cloud_api_key = (
+                                    meta_api_key = (
                                         ui.input(
-                                            "Chave Ollama Cloud",
+                                            "Chave Meta Model API",
                                             placeholder=(
                                                 "Chave configurada; digite para substituir"
-                                                if current.ollama_cloud_api_key
-                                                else "ollama-..."
+                                                if current.meta_api_key
+                                                else "Chave da Meta Model API"
                                             ),
                                             password=True,
                                             password_toggle_button=True,
@@ -127,13 +123,10 @@ def register_settings_page(
                                         .props("outlined stack-label")
                                         .classes("w-full")
                                     )
-                                    ollama_cloud_default_model = ui.select(
-                                        list(OLLAMA_CLOUD_TEXT_MODELS),
-                                        label="Modelo de texto",
-                                        value=normalize_ollama_cloud_text_model(
-                                            current.ollama_cloud_default_model
-                                        ),
-                                    ).props("outlined stack-label options-dense").classes("w-full")
+                                    meta_default_model = ui.input(
+                                        "Modelo de texto",
+                                        value=current.meta_default_model,
+                                    ).props("outlined stack-label").classes("w-full")
 
                                 with ui.element("div").classes(
                                     provider_card_classes
@@ -172,23 +165,20 @@ def register_settings_page(
                             ui.separator().classes("my-5")
 
                             def save_ai() -> None:
-                                typed_ollama_cloud_api_key = str(
-                                    ollama_cloud_api_key.value or ""
-                                ).strip()
+                                typed_meta_api_key = str(meta_api_key.value or "").strip()
                                 try:
                                     values = {
-                                        "AI_PROVIDER": "ollama_cloud",
-                                        "TEXT_PROVIDER": "ollama_cloud",
+                                        "AI_PROVIDER": "meta",
+                                        "TEXT_PROVIDER": "meta",
                                         "VIDEO_PROVIDER": "openrouter",
-                                        "TEXT_PROVIDER_FALLBACKS": "",
-                                        "OLLAMA_CLOUD_BASE_URL": str(
-                                            ollama_cloud_base_url.value or ""
+                                        "TEXT_PROVIDER_FALLBACKS": "ollama_cloud",
+                                        "META_INTEGRATION_MODE": "api",
+                                        "META_BASE_URL": str(
+                                            meta_base_url.value or ""
                                         ).strip(),
-                                        "OLLAMA_CLOUD_DEFAULT_MODEL": (
-                                            normalize_ollama_cloud_text_model(
-                                                ollama_cloud_default_model.value
-                                            )
-                                        ),
+                                        "META_DEFAULT_MODEL": str(
+                                            meta_default_model.value or ""
+                                        ).strip(),
                                         "OPENROUTER_VIDEO_BASE_URL": str(
                                             openrouter_video_base_url.value or ""
                                         ).strip()
@@ -199,8 +189,8 @@ def register_settings_page(
                                 except ValueError as exc:
                                     ui.notify(str(exc), color="negative")
                                     return
-                                if typed_ollama_cloud_api_key:
-                                    values["OLLAMA_CLOUD_API_KEY"] = typed_ollama_cloud_api_key
+                                if typed_meta_api_key:
+                                    values["META_API_KEY"] = typed_meta_api_key
                                 typed_openrouter_api_key = str(
                                     openrouter_api_key.value or ""
                                 ).strip()

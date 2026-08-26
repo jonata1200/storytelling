@@ -4,7 +4,7 @@ from typing import Any, Literal
 ProviderChannel = Literal["text", "image", "video"]
 IntegrationMode = Literal["api", "browser"]
 
-DEFAULT_PROVIDER = "ollama_cloud"
+DEFAULT_PROVIDER = "meta"
 DEFAULT_VIDEO_PROVIDER = "openrouter"
 SUPPORTED_TEXT_PROVIDERS = ("meta", "ollama_cloud")
 # OpenRouter remains accepted temporarily so existing local/runtime configuration

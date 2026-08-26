@@ -27,5 +27,5 @@ async def test_configured_text_provider_real_smoke() -> None:
         )
     )
 
-    assert provider_name == "ollama_cloud"
+    assert result.provider == provider_name
     assert result.content.get("ok") is True

@@ -30,6 +30,7 @@ class OpenAICompatibleLLMConfig:
     api_key: str | None = None
     api_key_env: str | None = None
     require_api_key: bool = True
+    allow_response_format_fallback: bool = True
 
 
 def _raw_response_preview(value: str, limit: int = 800) -> str:
@@ -110,7 +111,17 @@ class OpenAICompatibleLLMProvider:
                 "stream": False,
             }
             if current_use_format:
-                body["response_format"] = {"type": "json_object"}
+                if request.output_schema:
+                    body["response_format"] = {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": request.task,
+                            "strict": True,
+                            "schema": request.output_schema,
+                        },
+                    }
+                else:
+                    body["response_format"] = {"type": "json_object"}
 
             headers = {
                 "Content-Type": "application/json",
@@ -140,6 +151,7 @@ class OpenAICompatibleLLMProvider:
                         current_use_format
                         and exc.code in {400, 422}
                         and not attempted_without_format
+                        and config.allow_response_format_fallback
                     ):
                         attempted_without_format = True
                         current_use_format = False
