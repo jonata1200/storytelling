@@ -352,7 +352,7 @@ async def _generate_continuous_video_from_ui(
     loading_dialog: Any | None = None,
     progress_callback: Callable[[int, int, str], Any] | None = None,
 ) -> None:
-    """Gera os vídeos reais dos segmentos via OpenRouter.
+    """Gera os vídeos reais dos segmentos via provider configurado.
 
     Prepara os frames que ainda faltam e, em seguida, submete a geração de vídeo
     de cada segmento usando as referências da Biblioteca Visual.

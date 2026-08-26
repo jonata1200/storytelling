@@ -7,6 +7,7 @@ from app.config.settings import LOCKED_OLLAMA_CLOUD_TEXT_MODEL, OLLAMA_CLOUD_TEX
 def test_settings_defaults_to_text_and_video_providers() -> None:
     settings = Settings(_env_file=None)
     assert effective_provider_for_channel(settings, "text") == "ollama_cloud"
+    assert effective_provider_for_channel(settings, "image") == "meta"
     assert effective_provider_for_channel(settings, "video") == "openrouter"
 
 

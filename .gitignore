@@ -17,6 +17,7 @@ logs/
 *.pid
 .runtime/
 .runtime/playwright-screenshots/
+/runtime/browser_profiles/
 *.json
 .idea/
 .vscode/

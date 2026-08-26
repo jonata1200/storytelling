@@ -6,7 +6,12 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from app.config.provider_policy import SUPPORTED_AI_PROVIDERS
+from app.config.provider_policy import (
+    SUPPORTED_AI_PROVIDERS,
+    SUPPORTED_IMAGE_PROVIDERS,
+    SUPPORTED_TEXT_PROVIDERS,
+    SUPPORTED_VIDEO_PROVIDERS,
+)
 
 # Limitação conhecida: as preferências são persistidas em .runtime/preferences.json
 # (JSON em disco) com cache em memória (lru_cache + get_settings.cache_clear()).
@@ -18,7 +23,20 @@ PREFERENCE_KEYS = {
     "AI_PROVIDER",
     "TEXT_PROVIDER",
     "TEXT_PROVIDER_FALLBACKS",
+    "IMAGE_PROVIDER",
     "VIDEO_PROVIDER",
+    "META_INTEGRATION_MODE",
+    "META_IMAGE_INTEGRATION_MODE",
+    "META_API_KEY",
+    "META_BASE_URL",
+    "META_DEFAULT_MODEL",
+    "META_IMAGE_MODEL",
+    "META_BROWSER_PROFILE_PATH",
+    "VIBES_INTEGRATION_MODE",
+    "VIBES_API_KEY",
+    "VIBES_BASE_URL",
+    "VIBES_VIDEO_MODEL",
+    "VIBES_BROWSER_PROFILE_PATH",
     "OLLAMA_CLOUD_BASE_URL",
     "OLLAMA_CLOUD_DEFAULT_MODEL",
     "OLLAMA_CLOUD_API_KEY",
@@ -37,9 +55,15 @@ logger = logging.getLogger(__name__)
 PROVIDER_PREFERENCE_KEYS = {
     "AI_PROVIDER",
     "TEXT_PROVIDER",
+    "IMAGE_PROVIDER",
     "VIDEO_PROVIDER",
 }
-ALLOWED_PROVIDER_PREFERENCE_VALUES = set(SUPPORTED_AI_PROVIDERS)
+PROVIDER_VALUES_BY_KEY = {
+    "AI_PROVIDER": set(SUPPORTED_AI_PROVIDERS),
+    "TEXT_PROVIDER": set(SUPPORTED_TEXT_PROVIDERS),
+    "IMAGE_PROVIDER": set(SUPPORTED_IMAGE_PROVIDERS),
+    "VIDEO_PROVIDER": set(SUPPORTED_VIDEO_PROVIDERS),
+}
 
 
 def load_runtime_preferences(path: Path = PREFERENCES_PATH) -> dict[str, str]:
@@ -59,7 +83,8 @@ def load_runtime_preferences(path: Path = PREFERENCES_PATH) -> dict[str, str]:
         normalized_value = str(value)
         if (
             normalized_key in PROVIDER_PREFERENCE_KEYS
-            and normalized_value.strip().casefold() not in ALLOWED_PROVIDER_PREFERENCE_VALUES
+            and normalized_value.strip().casefold()
+            not in PROVIDER_VALUES_BY_KEY[normalized_key]
         ):
             continue
         preferences[normalized_key.lower()] = normalized_value

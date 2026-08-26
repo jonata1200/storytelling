@@ -28,18 +28,18 @@ Em agosto de 2026:
 
 ## Checklist — inventário do projeto
 
-- [ ] Criar branch de migração, por exemplo `feat/meta-vibes-migration`.
-- [ ] Registrar o SHA da `main` que servirá de baseline.
-- [ ] Rodar `pytest`, Ruff e mypy antes de qualquer alteração.
-- [ ] Salvar o resultado dos checks como baseline.
-- [ ] Mapear todas as referências a `ollama_cloud`.
-- [ ] Mapear todas as referências a `openrouter`.
-- [ ] Mapear `TEXT_PROVIDER`, `VIDEO_PROVIDER`, `AI_PROVIDER` e variáveis derivadas.
-- [ ] Mapear textos de UI que mencionam Ollama/OpenRouter.
-- [ ] Mapear testes e fixtures específicos dos providers legados.
-- [ ] Mapear custos/observabilidade que codificam nomes de providers.
-- [ ] Mapear diretórios de storage provider-specific, por exemplo `openrouter_videos`.
-- [ ] Mapear metadados provider-specific, por exemplo `openrouter_job_id`.
+- [x] Criar branch de migração, por exemplo `feat/meta-vibes-migration`.
+- [x] Registrar o SHA da `main` que servirá de baseline.
+- [x] Rodar `pytest`, Ruff e mypy antes de qualquer alteração.
+- [x] Salvar o resultado dos checks como baseline.
+- [x] Mapear todas as referências a `ollama_cloud`.
+- [x] Mapear todas as referências a `openrouter`.
+- [x] Mapear `TEXT_PROVIDER`, `VIDEO_PROVIDER`, `AI_PROVIDER` e variáveis derivadas.
+- [x] Mapear textos de UI que mencionam Ollama/OpenRouter.
+- [x] Mapear testes e fixtures específicos dos providers legados.
+- [x] Mapear custos/observabilidade que codificam nomes de providers.
+- [x] Mapear diretórios de storage provider-specific, por exemplo `openrouter_videos`.
+- [x] Mapear metadados provider-specific, por exemplo `openrouter_job_id`.
 
 ## Checklist — Meta Text
 
@@ -95,7 +95,7 @@ Em agosto de 2026:
 
 - [ ] Escolher Playwright como mecanismo padrão.
 - [ ] Criar perfil persistente separado por serviço.
-- [ ] Colocar `runtime/browser_profiles/` no `.gitignore`.
+- [x] Colocar `runtime/browser_profiles/` no `.gitignore`.
 - [ ] Nunca salvar cookie/token de sessão em `.env.example`.
 - [ ] Implementar login manual inicial quando necessário.
 - [ ] Implementar detecção de sessão expirada.
@@ -109,12 +109,12 @@ Em agosto de 2026:
 
 ## Artefatos de saída
 
-- [ ] Criar `docs/integrations/meta.md`.
-- [ ] Criar `docs/integrations/vibes.md`.
-- [ ] Criar uma tabela `capability → integration_mode`.
+- [x] Criar `docs/integrations/meta.md`.
+- [x] Criar `docs/integrations/vibes.md`.
+- [x] Criar uma tabela `capability → integration_mode`.
 - [ ] Registrar modelos escolhidos e limites conhecidos.
-- [ ] Registrar riscos de cada integração.
-- [ ] Registrar decisão de API vs navegador em ADR, por exemplo `docs/adr/001-meta-vibes-integration.md`.
+- [x] Registrar riscos de cada integração.
+- [x] Registrar decisão de API vs navegador em ADR, por exemplo `docs/adr/001-meta-vibes-integration.md`.
 
 ## Critérios de aceite
 

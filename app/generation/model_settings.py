@@ -7,9 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.provider_policy import (
     SUPPORTED_MODEL_PROVIDERS,
+    SUPPORTED_TEXT_PROVIDERS,
     effective_provider_for_channel,
     ensure_provider_api_key,
+    provider_api_key,
     provider_model,
+    provider_requires_api_key,
     validate_model_name,
 )
 from app.config.settings import (
@@ -18,8 +21,8 @@ from app.config.settings import (
     normalize_ollama_cloud_text_model,
 )
 from app.generation.models import ProjectModelSetting
-from app.providers.llm.ollama_cloud import OllamaCloudLLMProvider
 from app.providers.llm.types import LLMProvider
+from app.providers.registry import resolve_text_provider
 
 logger = logging.getLogger(__name__)
 
@@ -41,21 +44,20 @@ TASK_LABELS = {
 
 
 def llm_provider_for_name(settings: Any, provider: str) -> LLMProvider:
-    if provider == "ollama_cloud":
+    if provider not in SUPPORTED_TEXT_PROVIDERS:
+        raise ValueError("Provider de texto não suportado.")
+    if provider_requires_api_key(settings, provider):
         ensure_provider_api_key(
-            settings.ollama_cloud_api_key,
-            "ollama_cloud",
-            "OLLAMA_CLOUD_API_KEY",
+            provider_api_key(settings, provider),
+            provider,
         )
-        return OllamaCloudLLMProvider()
     if provider == "mock":
         raise ValueError("Provider mock bloqueado. Configure um modelo real de IA.")
-    raise ValueError("Provider de texto não suportado.")
+    return resolve_text_provider(settings, provider)
 
 
 def configured_text_llm_provider(settings: Any) -> tuple[LLMProvider, str, str]:
-    _ = effective_provider_for_channel(settings, "text")
-    provider = "ollama_cloud"
+    provider = effective_provider_for_channel(settings, "text")
     llm_provider = llm_provider_for_name(settings, provider)
     model = validate_text_provider_model(provider, provider_model(settings, provider, "text"))
     return llm_provider, model, provider
@@ -95,8 +97,6 @@ async def set_model_setting(
     provider = provider.strip().casefold()
     if provider not in SUPPORTED_MODEL_PROVIDERS:
         raise ValueError("Use um provider de IA real. Providers mock estão bloqueados.")
-    if provider != "ollama_cloud":
-        raise ValueError("O provedor de texto deve ser Ollama Cloud.")
     model = validate_text_provider_model(provider, model)
     result = await session.execute(
         select(ProjectModelSetting).where(
@@ -130,7 +130,6 @@ async def ensure_default_model_settings(
     settings = get_settings()
     created: list[ProjectModelSetting] = []
     provider = effective_provider_for_channel(settings, "text")
-    provider = "ollama_cloud"
     try:
         model = validate_text_provider_model(provider, provider_model(settings, provider, "text"))
     except ValueError as exc:
@@ -153,7 +152,10 @@ async def llm_provider_for_task(
 ) -> tuple[LLMProvider, str]:
     settings = get_settings()
     setting = await get_model_setting(session, project_id, task)
-    provider = str(getattr(setting, "provider", "") or "ollama_cloud")
+    provider = str(
+        getattr(setting, "provider", "")
+        or effective_provider_for_channel(settings, "text")
+    )
     configured_model = (
         getattr(setting, "model", None)
         if setting is not None

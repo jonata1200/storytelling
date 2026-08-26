@@ -18,6 +18,7 @@ tempfile.tempdir = str(PYTEST_TMP_ROOT)
 PROVIDER_ENV_VARS = (
     "AI_PROVIDER",
     "TEXT_PROVIDER",
+    "IMAGE_PROVIDER",
     "VIDEO_PROVIDER",
 )
 

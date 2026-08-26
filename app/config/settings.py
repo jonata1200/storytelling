@@ -5,7 +5,13 @@ from typing import Any, cast
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.config.provider_policy import normalize_api_key, normalize_provider_name
+from app.config.provider_policy import (
+    SUPPORTED_IMAGE_PROVIDERS,
+    SUPPORTED_TEXT_PROVIDERS,
+    SUPPORTED_VIDEO_PROVIDERS,
+    normalize_api_key,
+    normalize_provider_name,
+)
 
 DEFAULT_APP_SECRET_KEY = "change-me-in-development"
 
@@ -39,6 +45,14 @@ class Settings(BaseSettings):
     ai_provider: str = "ollama_cloud"
     text_provider: str | None = "ollama_cloud"
     text_provider_fallbacks: str = ""
+    image_provider: str | None = "meta"
+    meta_integration_mode: str = "api"
+    meta_image_integration_mode: str = "api"
+    meta_api_key: str | None = Field(default=None, repr=False)
+    meta_base_url: str = ""
+    meta_default_model: str = ""
+    meta_image_model: str = ""
+    meta_browser_profile_path: Path = Path("./runtime/browser_profiles/meta")
     ollama_cloud_api_key: str | None = Field(default=None, repr=False)
     ollama_cloud_base_url: str = "https://ollama.com/api"
     ollama_cloud_default_model: str = LOCKED_OLLAMA_CLOUD_TEXT_MODEL
@@ -49,6 +63,11 @@ class Settings(BaseSettings):
     openrouter_video_model: str = "bytedance/seedance-2.0-mini"
     openrouter_video_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_video_generate_audio: bool = True
+    vibes_integration_mode: str = "browser"
+    vibes_api_key: str | None = Field(default=None, repr=False)
+    vibes_base_url: str = ""
+    vibes_video_model: str = ""
+    vibes_browser_profile_path: Path = Path("./runtime/browser_profiles/vibes")
     user_theme: str = "dark"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -60,9 +79,33 @@ class Settings(BaseSettings):
             self.ollama_cloud_default_model
         )
         self.openrouter_api_key = normalize_api_key(self.openrouter_api_key)
+        self.meta_api_key = normalize_api_key(self.meta_api_key)
+        self.vibes_api_key = normalize_api_key(self.vibes_api_key)
         self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
-        self.text_provider = self._optional_provider(self.text_provider, "TEXT_PROVIDER")
-        self.video_provider = self._optional_provider(self.video_provider, "VIDEO_PROVIDER")
+        self.text_provider = self._optional_provider(
+            self.text_provider, "TEXT_PROVIDER", SUPPORTED_TEXT_PROVIDERS
+        )
+        self.image_provider = self._optional_provider(
+            self.image_provider, "IMAGE_PROVIDER", SUPPORTED_IMAGE_PROVIDERS
+        )
+        self.video_provider = self._optional_provider(
+            self.video_provider, "VIDEO_PROVIDER", SUPPORTED_VIDEO_PROVIDERS
+        )
+        self.meta_integration_mode = self._integration_mode(
+            self.meta_integration_mode, "META_INTEGRATION_MODE"
+        )
+        self.meta_image_integration_mode = self._integration_mode(
+            self.meta_image_integration_mode, "META_IMAGE_INTEGRATION_MODE"
+        )
+        self.vibes_integration_mode = self._integration_mode(
+            self.vibes_integration_mode, "VIBES_INTEGRATION_MODE"
+        )
+        self.meta_browser_profile_path = self._browser_profile_path(
+            self.meta_browser_profile_path, "META_BROWSER_PROFILE_PATH"
+        )
+        self.vibes_browser_profile_path = self._browser_profile_path(
+            self.vibes_browser_profile_path, "VIBES_BROWSER_PROFILE_PATH"
+        )
         if self.app_env.lower() not in {"local", "development", "test"}:
             if self.app_secret_key == DEFAULT_APP_SECRET_KEY:
                 raise ValueError("APP_SECRET_KEY must be changed outside local environments")
@@ -89,10 +132,30 @@ class Settings(BaseSettings):
     def _optional_provider(
         value: str | None,
         field_name: str,
+        allowed: tuple[str, ...],
     ) -> str | None:
         if not str(value or "").strip():
             return None
-        return normalize_provider_name(value, field_name)
+        return normalize_provider_name(value, field_name, allowed)
+
+    @staticmethod
+    def _integration_mode(value: object, field_name: str) -> str:
+        mode = str(value or "").strip().casefold()
+        if mode not in {"api", "browser"}:
+            raise ValueError(f"{field_name} inválido: {mode or '(vazio)'}. Use: api, browser")
+        return mode
+
+    @staticmethod
+    def _browser_profile_path(value: Path, field_name: str) -> Path:
+        root = (Path.cwd() / "runtime" / "browser_profiles").resolve()
+        resolved = value.resolve(strict=False)
+        try:
+            resolved.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name} deve ficar dentro de {root}. Recebido: {value}"
+            ) from exc
+        return resolved
 
 
 def normalize_ollama_cloud_text_model(value: object) -> str:

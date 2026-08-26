@@ -1,7 +1,7 @@
-"""Geração de vídeo dos segmentos contínuos via OpenRouter.
+"""Geração de vídeo dos segmentos contínuos via provider configurado.
 
-A etapa de Produção de vídeo gera o vídeo real de cada segmento usando o
-modelo ``bytedance/seedance-2.0-mini`` do OpenRouter. O fluxo é:
+A etapa de Produção gera o vídeo real de cada segmento usando o provider e o
+modelo configurados. O fluxo é:
 
 1. Primeiro segmento: usa apenas o prompt para gerar vídeo
 2. Segmentos seguintes: extrai último frame do vídeo anterior + prompt → gera vídeo
@@ -22,6 +22,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetVersion
+from app.config.provider_policy import (
+    effective_provider_for_channel,
+    provider_display_name,
+    provider_model,
+)
 from app.config.settings import get_settings
 from app.core.enums import AssetKind, CostEntryType, GenerationJobStatus
 from app.costs.models import CostEntry
@@ -35,8 +40,14 @@ from app.providers.media_utils import (
     extract_last_frame_from_video,
     local_uri_to_data_url,
 )
-from app.providers.video.openrouter import OpenRouterVideoProvider
-from app.providers.video.types import VideoGenerationRequest, VideoImageInput, VideoJob
+from app.providers.registry import resolve_video_provider
+from app.providers.storage import generated_output_dir
+from app.providers.video.types import (
+    VideoGenerationRequest,
+    VideoImageInput,
+    VideoJob,
+    VideoProvider,
+)
 from app.storage.service import apply_asset_storage_metadata
 from app.video_generation.continuous import (
     CONTINUOUS_VIDEO_REVIEW_FAILED,
@@ -47,8 +58,8 @@ from app.video_generation.continuous import (
 )
 from app.video_generation.models import ContinuousVideoSegment
 
-OPENROUTER_VIDEO_POLL_INTERVAL_SECONDS = 10.0
-OPENROUTER_VIDEO_MAX_POLL_ATTEMPTS = 180  # ~30 minutos por rodada de polling
+VIDEO_POLL_INTERVAL_SECONDS = 10.0
+VIDEO_MAX_POLL_ATTEMPTS = 180  # ~30 minutos por rodada de polling
 TERMINAL_VIDEO_JOB_STATUSES = {"completed", "failed", "cancelled", "expired"}
 VIDEO_OPERATION = "video_generation"
 
@@ -58,29 +69,21 @@ logger = logging.getLogger(__name__)
 
 
 def _effective_video_model(production_settings: Any) -> str:
-    """Retorna o modelo de vídeo: usa seedance-2.0-mini do OpenRouter."""
+    """Retorna o modelo do projeto ou do provider de vídeo configurado."""
     per_project = str(getattr(production_settings, "video_model", "") or "").strip()
     if per_project and per_project not in {"", "manual_package"}:
         return per_project
-    return str(get_settings().openrouter_video_model or "").strip() or (
-        "bytedance/seedance-2.0-mini"
-    )
+    settings = get_settings()
+    provider = effective_provider_for_channel(settings, "video")
+    return provider_model(settings, provider, "video")
 
 
 def _resolve_video_provider() -> str:
-    from app.config.provider_policy import effective_provider_for_channel
-
     return effective_provider_for_channel(get_settings(), "video")
 
 
-def _video_provider() -> OpenRouterVideoProvider:
-    provider_name = _resolve_video_provider()
-    if provider_name != "openrouter":
-        raise ValueError(
-            "Provedor de vídeo não suportado para geração real: "
-            f"{provider_name or '(vazio)'}. Configure VIDEO_PROVIDER=openrouter."
-        )
-    return OpenRouterVideoProvider()
+def _video_provider() -> VideoProvider:
+    return resolve_video_provider(get_settings(), _resolve_video_provider())
 
 
 async def _submit_video_job(
@@ -89,16 +92,17 @@ async def _submit_video_job(
     segment: ContinuousVideoSegment,
     production_settings: Any,
 ) -> str:
-    """Submete o job de vídeo do segmento e retorna o job id do OpenRouter."""
+    """Submete o job de vídeo do segmento e retorna seu identificador externo."""
+    provider_name = _resolve_video_provider()
     await _emit_continuous_video_segment_event(
         session,
         segment=segment,
         status="generating",
-        provider="openrouter",
+        provider=provider_name,
         model=_effective_video_model(production_settings),
         message=(
             f"Enviando Segmento {segment.segment_number:02d} para geração "
-            "de vídeo no OpenRouter (seedance-2.0-mini)."
+            f"de vídeo no {provider_display_name(provider_name)}."
         ),
         operation=VIDEO_OPERATION,
     )
@@ -130,7 +134,7 @@ async def _build_video_request(
     segment: ContinuousVideoSegment,
     production_settings: Any,
 ) -> VideoGenerationRequest:
-    """Constrói a requisição de vídeo para o OpenRouter.
+    """Constrói uma requisição neutra para o provider de vídeo.
 
     O primeiro segmento usa somente texto. Segmentos seguintes podem usar o
     último frame extraído do vídeo anterior como first_frame.
@@ -146,7 +150,8 @@ async def _build_video_request(
     if initial_url:
         frame_images.append(VideoImageInput(url=initial_url, frame_type="first_frame"))
 
-    output_dir = settings.local_storage_path / "openrouter_videos" / str(project_id)
+    output_dir = generated_output_dir("video", project_id, settings.local_storage_path)
+    provider_name = _resolve_video_provider()
 
     return VideoGenerationRequest(
         model=model,
@@ -154,7 +159,9 @@ async def _build_video_request(
         duration=max(1, int(getattr(segment, "duration_seconds", 0) or 0) or 8),
         aspect_ratio=str(production_settings.aspect_ratio or "9:16").strip(),
         resolution=str(production_settings.video_resolution or "720p").strip(),
-        generate_audio=bool(getattr(settings, "openrouter_video_generate_audio", True)),
+        generate_audio=bool(
+            getattr(settings, f"{provider_name}_video_generate_audio", True)
+        ),
         frame_images=frame_images,
         input_references=[],
         output_dir=output_dir,
@@ -180,8 +187,8 @@ async def _removed_video_reference_data_urls(
 ) -> list[VideoImageInput]:
     """Retorna referências visuais para o vídeo, filtrando apenas locais.
 
-    Imagens de personagens (fotorrealistas) são excluídas porque ativam
-    o filtro de conteúdo do OpenRouter (InputImageSensitiveContentDetected).
+    Imagens de personagens (fotorrealistas) são excluídas por compatibilidade
+    com filtros de conteúdo de providers de vídeo.
     """
     from app.visual_bible.models import Location, VisualReference
 
@@ -247,8 +254,9 @@ async def _finalize_segment_video(
     usage_cost: Decimal | None,
 ) -> None:
     """Finaliza o vídeo do segmento: baixa, salva como Asset e extrai último frame."""
-    settings = get_settings()
-    output_dir = settings.local_storage_path / "openrouter_videos" / str(project_id)
+    output_dir = generated_output_dir(
+        "video", project_id, get_settings().local_storage_path
+    )
     result = await _download_video_job(job, output_dir)
     model = _effective_video_model(await get_or_create_production_settings(session, project_id))
 
@@ -256,7 +264,7 @@ async def _finalize_segment_video(
     estimate = estimate_operation_cost(
         VIDEO_OPERATION,
         Decimal(max(1, segment.duration_seconds)),
-        provider="openrouter",
+        provider=result.provider,
         model=model,
     )
     provider_cost = Decimal(str(usage_cost or result.estimated_cost or "0.000000"))
@@ -276,7 +284,8 @@ async def _finalize_segment_video(
             "segment_id": str(segment.id),
             "segment_number": segment.segment_number,
             "technical_role": "continuous_video_segment",
-            "openrouter_job_id": job.id,
+            "external_job_id": job.id,
+            "provider_job_id": job.id,
             "duration_seconds": segment.duration_seconds,
         },
     )
@@ -445,7 +454,7 @@ async def generate_video_for_segment(
     production_settings: Any,
     progress_callback: VideoProgressCallback | None = None,
 ) -> tuple[bool, str]:
-    """Gera o vídeo para um segmento usando OpenRouter (seedance-2.0-mini).
+    """Gera o vídeo para um segmento usando o provider configurado.
 
     Retorna (sucesso, mensagem).
     """
@@ -461,16 +470,16 @@ async def generate_video_for_segment(
         # Polling até completar
         job = VideoJob(
             id=job_id,
-            polling_url=f"{get_settings().openrouter_video_base_url}/videos/{job_id}",
+            polling_url=str((segment.metadata_json or {}).get("video_polling_url", "")),
             status="pending",
         )
 
         poll_count = 0
         while True:
-            if poll_count >= OPENROUTER_VIDEO_MAX_POLL_ATTEMPTS:
-                raise RuntimeError("OpenRouter excedeu tempo limite de polling")
+            if poll_count >= VIDEO_MAX_POLL_ATTEMPTS:
+                raise RuntimeError("Provider de vídeo excedeu o tempo limite de polling")
 
-            await asyncio.sleep(OPENROUTER_VIDEO_POLL_INTERVAL_SECONDS)
+            await asyncio.sleep(VIDEO_POLL_INTERVAL_SECONDS)
             job_update = await _poll_video_job(job)
             poll_count += 1
             if job_update.unsigned_urls:
@@ -509,7 +518,7 @@ async def generate_video_for_segment(
             session,
             segment=segment,
             status="failed",
-            provider="openrouter",
+            provider=_resolve_video_provider(),
             model=_effective_video_model(
                 await get_or_create_production_settings(session, project_id)
             ),

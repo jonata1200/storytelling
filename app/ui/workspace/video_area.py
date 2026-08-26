@@ -57,7 +57,7 @@ def render_video_area(
         "Gerando vídeo",
         1,
         "vídeo",
-        "Agora: enviando requisição para o OpenRouter...",
+        "Agora: enviando requisição para o provider de vídeo...",
     )
 
     has_any_frame_generated = any(
@@ -83,7 +83,7 @@ def render_video_area(
         with ui.column().classes("gap-1 min-w-0 flex-1"):
             ui.label("Produção de vídeo").classes("brand-type text-3xl font-bold")
             ui.label(
-                "Gere o vídeo de cada segmento individualmente em cadeia com o OpenRouter usando o "
+                "Gere o vídeo de cada segmento individualmente em cadeia com o provider configurado usando o "
                 "prompts e os frames extraídos dos vídeos anteriores."
             ).classes("text-sm text-[#8e948f]")
         with ui.column().classes("items-end gap-2 ml-auto shrink-0"):
@@ -445,7 +445,7 @@ def render_video_area(
                             with ui.row().classes("items-center gap-2 mt-3 text-sm text-[#d1d4d1]"):
                                 ui.spinner(size="sm").classes("acid")
                                 ui.label(
-                                    "Gerando vídeo contínuo no OpenRouter. Atualize para verificar."
+                                    "Gerando vídeo contínuo. Atualize para verificar."
                                 )
                         if visual_summary:
                             ui.label(visual_summary).classes("text-xs text-[#8d938e] mt-2")

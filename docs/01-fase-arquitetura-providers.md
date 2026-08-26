@@ -52,30 +52,30 @@ tests/
 
 ## Checklist — canais de provider
 
-- [ ] Expandir `ProviderChannel` para suportar `text`, `image` e `video`.
-- [ ] Introduzir `SUPPORTED_IMAGE_PROVIDERS`.
-- [ ] Preparar `meta` como provider permitido para `text`.
-- [ ] Preparar `meta` como provider permitido para `image`.
-- [ ] Preparar `vibes` como provider permitido para `video`.
-- [ ] Manter providers antigos apenas como compatibilidade temporária nesta fase.
-- [ ] Garantir que `provider_display_name()` seja neutro e extensível.
-- [ ] Garantir que `provider_api_key()` não suponha que todo provider usa API key.
-- [ ] Permitir providers com autenticação via perfil de browser.
-- [ ] Separar "provider configurado" de "modo de integração" (`api`, `browser`).
+- [x] Expandir `ProviderChannel` para suportar `text`, `image` e `video`.
+- [x] Introduzir `SUPPORTED_IMAGE_PROVIDERS`.
+- [x] Preparar `meta` como provider permitido para `text`.
+- [x] Preparar `meta` como provider permitido para `image`.
+- [x] Preparar `vibes` como provider permitido para `video`.
+- [x] Manter providers antigos apenas como compatibilidade temporária nesta fase.
+- [x] Garantir que `provider_display_name()` seja neutro e extensível.
+- [x] Garantir que `provider_api_key()` não suponha que todo provider usa API key.
+- [x] Permitir providers com autenticação via perfil de browser.
+- [x] Separar "provider configurado" de "modo de integração" (`api`, `browser`).
 
 ## Checklist — Settings
 
-- [ ] Adicionar `image_provider`.
-- [ ] Adicionar configurações Meta.
-- [ ] Adicionar configurações Vibes.
-- [ ] Não apagar ainda configurações Ollama/OpenRouter.
-- [ ] Introduzir `meta_integration_mode`.
-- [ ] Introduzir `vibes_integration_mode`.
-- [ ] Introduzir caminhos de browser profile fora do storage público.
-- [ ] Validar que caminhos de browser profile não possam escapar da raiz permitida.
-- [ ] Não imprimir secrets em `repr`.
-- [ ] Atualizar redaction para novos secrets.
-- [ ] Preparar runtime preferences para os novos campos.
+- [x] Adicionar `image_provider`.
+- [x] Adicionar configurações Meta.
+- [x] Adicionar configurações Vibes.
+- [x] Não apagar ainda configurações Ollama/OpenRouter.
+- [x] Introduzir `meta_integration_mode`.
+- [x] Introduzir `vibes_integration_mode`.
+- [x] Introduzir caminhos de browser profile fora do storage público.
+- [x] Validar que caminhos de browser profile não possam escapar da raiz permitida.
+- [x] Não imprimir secrets em `repr`.
+- [x] Atualizar redaction para novos secrets.
+- [x] Preparar runtime preferences para os novos campos.
 
 Exemplo conceitual:
 
@@ -96,84 +96,84 @@ VIBES_BROWSER_PROFILE_PATH=./runtime/browser_profiles/vibes
 
 ## Checklist — contrato ImageProvider
 
-- [ ] Criar `ImageReference`.
-- [ ] Criar `ImageGenerationRequest`.
-- [ ] Criar `ImageGenerationJob`, se a integração for assíncrona.
-- [ ] Criar `ImageGenerationResult`.
-- [ ] Criar `ImageProvider(Protocol)`.
-- [ ] Definir suporte a prompt.
-- [ ] Definir suporte a múltiplas referências.
-- [ ] Definir aspect ratio.
-- [ ] Definir output_dir.
-- [ ] Definir provider/model.
-- [ ] Definir metadata externa.
-- [ ] Validar que o output fique dentro do storage permitido.
-- [ ] Evitar qualquer campo Meta-specific no contrato genérico.
+- [x] Criar `ImageReference`.
+- [x] Criar `ImageGenerationRequest`.
+- [x] Criar `ImageGenerationJob`, se a integração for assíncrona.
+- [x] Criar `ImageGenerationResult`.
+- [x] Criar `ImageProvider(Protocol)`.
+- [x] Definir suporte a prompt.
+- [x] Definir suporte a múltiplas referências.
+- [x] Definir aspect ratio.
+- [x] Definir output_dir.
+- [x] Definir provider/model.
+- [x] Definir metadata externa.
+- [x] Validar que o output fique dentro do storage permitido.
+- [x] Evitar qualquer campo Meta-specific no contrato genérico.
 
 ## Checklist — registry/factory
 
-- [ ] Criar uma única resolução central para provider de texto.
-- [ ] Criar uma única resolução central para provider de imagem.
-- [ ] Criar uma única resolução central para provider de vídeo.
-- [ ] Eliminar imports concretos de provider nos serviços de domínio.
-- [ ] Fazer `continuous_generation.py` depender de `VideoProvider`.
-- [ ] Fazer a futura Visual Bible depender de `ImageProvider`.
-- [ ] Garantir erro claro para provider não suportado.
-- [ ] Garantir testes de resolução por canal.
-- [ ] Garantir testes para provider configurado sem credencial.
-- [ ] Garantir que browser provider não exija artificialmente API key.
+- [x] Criar uma única resolução central para provider de texto.
+- [x] Criar uma única resolução central para provider de imagem.
+- [x] Criar uma única resolução central para provider de vídeo.
+- [x] Eliminar imports concretos de provider nos serviços de domínio.
+- [x] Fazer `continuous_generation.py` depender de `VideoProvider`.
+- [x] Fazer a futura Visual Bible depender de `ImageProvider`.
+- [x] Garantir erro claro para provider não suportado.
+- [x] Garantir testes de resolução por canal.
+- [x] Garantir testes para provider configurado sem credencial.
+- [x] Garantir que browser provider não exija artificialmente API key.
 
 ## Checklist — neutralização de nomes internos
 
-- [ ] Introduzir diretório de storage neutro `generated_videos/`.
-- [ ] Introduzir diretório neutro `generated_images/`.
-- [ ] Para novos assets, usar `external_job_id` em vez de nomes como `openrouter_job_id`.
-- [ ] Para novos metadados, usar `provider_job_id`.
-- [ ] Manter leitura de metadados antigos para projetos existentes.
-- [ ] Não regravar assets históricos apenas para trocar nome de chave.
-- [ ] Neutralizar mensagens de observabilidade.
-- [ ] Neutralizar mensagens de UI.
-- [ ] Neutralizar nomes de operações de custo quando possível.
+- [x] Introduzir diretório de storage neutro `generated_videos/`.
+- [x] Introduzir diretório neutro `generated_images/`.
+- [x] Para novos assets, usar `external_job_id` em vez de nomes como `openrouter_job_id`.
+- [x] Para novos metadados, usar `provider_job_id`.
+- [x] Manter leitura de metadados antigos para projetos existentes.
+- [x] Não regravar assets históricos apenas para trocar nome de chave.
+- [x] Neutralizar mensagens de observabilidade.
+- [x] Neutralizar mensagens de UI.
+- [x] Neutralizar nomes de operações de custo quando possível.
 
 ## Checklist — GenerationSpec
 
 Criar um contrato intermediário que represente o que deve existir na tomada antes de traduzi-la para Meta/Vibes.
 
-- [ ] Criar `ShotGenerationSpec`.
-- [ ] Incluir `shot_id`.
-- [ ] Incluir `scene_id`.
-- [ ] Incluir duração.
-- [ ] Incluir personagens.
-- [ ] Incluir local.
-- [ ] Incluir props.
-- [ ] Incluir action.
-- [ ] Incluir emotion.
-- [ ] Incluir camera.
-- [ ] Incluir lighting.
-- [ ] Incluir continuity.
-- [ ] Incluir visual references.
-- [ ] Incluir previous frame/reference quando existir.
-- [ ] Manter o objeto independente de provider.
+- [x] Criar `ShotGenerationSpec`.
+- [x] Incluir `shot_id`.
+- [x] Incluir `scene_id`.
+- [x] Incluir duração.
+- [x] Incluir personagens.
+- [x] Incluir local.
+- [x] Incluir props.
+- [x] Incluir action.
+- [x] Incluir emotion.
+- [x] Incluir camera.
+- [x] Incluir lighting.
+- [x] Incluir continuity.
+- [x] Incluir visual references.
+- [x] Incluir previous frame/reference quando existir.
+- [x] Manter o objeto independente de provider.
 
 ## Testes
 
-- [ ] Teste unitário do registry de texto.
-- [ ] Teste unitário do registry de imagem.
-- [ ] Teste unitário do registry de vídeo.
-- [ ] Teste de provider inválido.
-- [ ] Teste de auth mode API.
-- [ ] Teste de auth mode browser.
-- [ ] Teste de path traversal para output/profile path.
-- [ ] Teste de serialização do `ShotGenerationSpec`.
+- [x] Teste unitário do registry de texto.
+- [x] Teste unitário do registry de imagem.
+- [x] Teste unitário do registry de vídeo.
+- [x] Teste de provider inválido.
+- [x] Teste de auth mode API.
+- [x] Teste de auth mode browser.
+- [x] Teste de path traversal para output/profile path.
+- [x] Teste de serialização do `ShotGenerationSpec`.
 - [ ] Rodar Ruff.
-- [ ] Rodar mypy.
-- [ ] Rodar pytest completo.
+- [x] Rodar mypy.
+- [x] Rodar pytest completo.
 
 ## Critérios de aceite
 
-- [ ] Nenhum serviço de domínio precisa instanciar diretamente `OpenRouterVideoProvider`.
-- [ ] Existe um contrato genérico para imagem.
-- [ ] Existe registry/factory por canal.
-- [ ] `ShotGenerationSpec` existe e não contém nomes Meta/Vibes.
-- [ ] O comportamento legado ainda funciona.
-- [ ] Todos os testes existentes continuam verdes.
+- [x] Nenhum serviço de domínio precisa instanciar diretamente `OpenRouterVideoProvider`.
+- [x] Existe um contrato genérico para imagem.
+- [x] Existe registry/factory por canal.
+- [x] `ShotGenerationSpec` existe e não contém nomes Meta/Vibes.
+- [x] O comportamento legado ainda funciona.
+- [x] Todos os testes existentes continuam verdes.

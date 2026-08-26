@@ -1,13 +1,19 @@
 from collections.abc import Iterable
 from typing import Any, Literal
 
-ProviderChannel = Literal["text", "video"]
+ProviderChannel = Literal["text", "image", "video"]
+IntegrationMode = Literal["api", "browser"]
 
 DEFAULT_PROVIDER = "ollama_cloud"
 DEFAULT_VIDEO_PROVIDER = "openrouter"
-SUPPORTED_TEXT_PROVIDERS = ("ollama_cloud",)
-SUPPORTED_VIDEO_PROVIDERS = ("openrouter",)
+SUPPORTED_TEXT_PROVIDERS = ("meta", "ollama_cloud")
+# OpenRouter remains accepted temporarily so existing local/runtime configuration
+# can be loaded during the migration. No generic image adapter is registered for it.
+SUPPORTED_IMAGE_PROVIDERS = ("meta", "openrouter")
+SUPPORTED_VIDEO_PROVIDERS = ("vibes", "openrouter")
 SUPPORTED_AI_PROVIDERS = (
+    "meta",
+    "vibes",
     "ollama_cloud",
     "openrouter",
 )
@@ -45,15 +51,17 @@ def normalize_provider_name(
 
 def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> str:
     """Resolve the effective provider for a channel using settings."""
-    if channel == "video":
-        configured_provider = getattr(settings, "video_provider", None) or DEFAULT_VIDEO_PROVIDER
+    if channel in {"image", "video"}:
+        default = "meta" if channel == "image" else DEFAULT_VIDEO_PROVIDER
+        allowed = SUPPORTED_IMAGE_PROVIDERS if channel == "image" else SUPPORTED_VIDEO_PROVIDERS
+        configured_provider = getattr(settings, f"{channel}_provider", None) or default
         return normalize_provider_name(
-            configured_provider, "VIDEO_PROVIDER", SUPPORTED_VIDEO_PROVIDERS
+            configured_provider, f"{channel.upper()}_PROVIDER", allowed
         )
     channel_provider = getattr(settings, f"{channel}_provider", None)
     configured_provider = channel_provider or getattr(settings, "ai_provider", DEFAULT_PROVIDER)
     return normalize_provider_name(
-        configured_provider, f"{channel.upper()}_PROVIDER", SUPPORTED_AI_PROVIDERS
+        configured_provider, f"{channel.upper()}_PROVIDER", SUPPORTED_TEXT_PROVIDERS
     )
 
 
@@ -61,6 +69,8 @@ def provider_display_name(provider: str) -> str:
     names = {
         "ollama_cloud": "Ollama Cloud",
         "openrouter": "OpenRouter",
+        "meta": "Meta",
+        "vibes": "Vibes",
     }
     return names.get(provider, provider)
 
@@ -72,6 +82,7 @@ def provider_api_key(settings: Any, provider: str) -> str | None:
 def provider_model(settings: Any, provider: str, channel: ProviderChannel) -> str:
     suffix_by_channel = {
         "text": "default_model",
+        "image": "image_model",
         "video": "video_model",
     }
     suffix = suffix_by_channel[channel]
@@ -96,7 +107,31 @@ def provider_requires_api_key(settings: Any, provider: str) -> bool:
     provider_name = str(provider or "").strip().casefold()
     if not provider_name or provider_name in MOCK_MODEL_IDS:
         return False
-    return provider_name in SUPPORTED_AI_PROVIDERS
+    mode = provider_integration_mode(settings, provider)
+    return provider_name in SUPPORTED_AI_PROVIDERS and mode == "api"
+
+
+def provider_integration_mode(
+    settings: Any,
+    provider: str,
+    channel: ProviderChannel | None = None,
+) -> IntegrationMode:
+    provider_name = str(provider or "").strip().casefold()
+    channel_mode = (
+        str(getattr(settings, f"{provider_name}_{channel}_integration_mode", "") or "")
+        if channel
+        else ""
+    )
+    raw_mode = channel_mode or str(
+        getattr(settings, f"{provider_name}_integration_mode", "api") or "api"
+    )
+    mode = raw_mode.strip().casefold()
+    if mode not in {"api", "browser"}:
+        raise ValueError(
+            f"Modo de integração inválido para {provider_display_name(provider_name)}: {mode}. "
+            "Use: api, browser"
+        )
+    return mode  # type: ignore[return-value]
 
 
 def normalize_model_name(value: object, field_name: str = "modelo") -> str:

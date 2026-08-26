@@ -275,7 +275,7 @@ async def generate_continuous_video_segments(
     pause_after_current: Callable[[], bool] | None = None,
     progress_callback: Callable[..., Any] | None = None,
 ) -> tuple[list[ContinuousVideoSegment], dict[int, list[str]]]:
-    """Gera os vídeos reais dos segmentos usando OpenRouter (seedance-2.0-mini).
+    """Gera os vídeos reais dos segmentos usando o provider configurado.
 
     Fluxo:
     1. Prepara pacotes (frames) dos segmentos pendentes
