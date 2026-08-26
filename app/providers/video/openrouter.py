@@ -116,6 +116,9 @@ class OpenRouterVideoProvider:
             id=job_id,
             polling_url=str(response.get("polling_url") or "").strip(),
             status=str(response.get("status") or "pending"),
+            provider=self.provider_name,
+            model=request.model,
+            prompt=request.prompt,
         )
 
     def _poll(self, job: VideoJob) -> VideoJobUpdate:

@@ -1,40 +1,33 @@
-# Integração Vibes — registro de descoberta
+# Integração Vibes
 
-## Estado
+O Vibes é o provider alvo de vídeo. Em agosto de 2026, a Meta apresenta geração,
+animação de imagens, música e remix no produto Vibes, em `meta.ai` e no app Meta AI,
+mas não publica uma API de geração para desenvolvedores.
 
-Ainda não validada com uma conta de desenvolvimento. Somente API pública documentada ou
-automação de navegador expressamente autorizada são opções aceitáveis.
+Por segurança, `VIBES_INTEGRATION_MODE=api` falha explicitamente. A aplicação não
+descobre nem chama endpoints internos. O modo browser usa uma porta isolada em
+`app/providers/video/vibes_browser.py`; o backend Playwright só deve ser habilitado
+depois de autorizado e validado contra a interface disponível para a conta.
 
-## Capacidade
+```env
+VIDEO_PROVIDER=vibes
+VIBES_INTEGRATION_MODE=browser
+VIBES_VIDEO_MODEL=vibes
+VIBES_BROWSER_PROFILE_PATH=./runtime/browser_profiles/vibes
+VIBES_BROWSER_AUTOMATION_ENABLED=false
+```
 
-| Capacidade | Modo pretendido | Estado | Evidência necessária |
-| --- | --- | --- | --- |
-| Texto para vídeo | API oficial, se disponível | Pendente | Chamada real e documentação oficial |
-| Imagem para vídeo | API oficial, se disponível | Pendente | Upload/referência e download validados |
-| Ingredients/referências | API oficial, se disponível | Pendente | Identidade estável e reutilização comprovada |
-| Geração pela interface | Playwright autorizado, como fallback | Bloqueado por decisão | Confirmação dos termos e autorização da conta |
+O perfil fica em `runtime/browser_profiles/vibes` e nunca deve ser versionado. Não
+grave senhas, cookies ou screenshots fora dos diretórios de runtime. O OpenRouter
+continua aceito temporariamente como provider legado para comparação e cutover.
 
-## Roteiro de validação
+O contrato neutro suporta texto, frame inicial/final, referências aprovadas,
+ingredients versionados, duração, proporção, áudio, polling, custo e download. Um
+download só é aceito dentro de `storage`, com MIME e assinatura de vídeo válidos.
 
-Registrar autenticação, limites, duração, 9:16, áudio ligado/desligado, concorrência e rate
-limits. Executar texto para vídeo, imagem para vídeo e reutilização de personagem, local e
-estilo. Confirmar como uma geração é identificada, como o término é detectado e como o arquivo
-original é baixado.
+## Estado operacional
 
-Se a operação for assíncrona, preservar exemplos sanitizados de submit, poll, estados de erro
-e download. Não inspecionar nem reproduzir chamadas internas não documentadas do site.
-
-## Credenciais e sessão
-
-- Credenciais ficam no ambiente/secret store local e nunca no Git.
-- Um eventual perfil persistente deve ficar em `runtime/browser_profiles/vibes/`.
-- O primeiro login pode ser manual; o adapter deve detectar sessão expirada.
-- Um lock exclusivo deve impedir dois workers de usar o mesmo perfil.
-- Screenshots são apenas diagnósticos locais e não devem conter segredos no repositório.
-
-## Riscos em aberto
-
-- API pública e acesso pela conta ainda não foram confirmados;
-- limites, custo, polling e identidade de ingredients são desconhecidos;
-- automação depende de autorização e é sensível a mudanças de UI;
-- não há fallback operacional escolhido para indisponibilidade do serviço.
+Enquanto não houver um backend browser autorizado, o readiness de vídeo permanece
+`degraded` e a submissão falha com mensagem diagnóstica. Isso é intencional: não há
+um smoke real honesto sem uma sessão Vibes autorizada e uma automação compatível com
+a UI liberada para a conta.

@@ -145,9 +145,20 @@ def register_settings_page(
                                 with ui.element("div").classes(
                                     provider_card_classes
                                 ):
-                                    provider_header(
-                                        "movie_filter", "Vídeo", "OpenRouter"
+                                    provider_header("movie_filter", "Vídeo", "Vibes / legado")
+                                    video_provider = (
+                                        ui.select(
+                                            {"vibes": "Vibes", "openrouter": "OpenRouter (legado)"},
+                                            label="Provider de vídeo",
+                                            value=current.video_provider or "vibes",
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
                                     )
+                                    ui.label(
+                                        "Vibes usa modo browser autorizado e perfil dedicado; "
+                                        "não há API pública documentada."
+                                    ).classes("text-xs text-slate-400")
                                     openrouter_video_base_url = (
                                         ui.input(
                                             "URL base OpenRouter",
@@ -185,7 +196,7 @@ def register_settings_page(
                                         "AI_PROVIDER": "meta",
                                         "TEXT_PROVIDER": "meta",
                                         "IMAGE_PROVIDER": "meta",
-                                        "VIDEO_PROVIDER": "openrouter",
+                                        "VIDEO_PROVIDER": str(video_provider.value or "vibes"),
                                         "TEXT_PROVIDER_FALLBACKS": "ollama_cloud",
                                         "META_INTEGRATION_MODE": "api",
                                         "META_BASE_URL": str(

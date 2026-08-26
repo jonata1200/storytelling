@@ -139,7 +139,12 @@ META_IMAGE_INTEGRATION_MODE=api
 META_IMAGE_ENDPOINT=endpoint_oficial_disponibilizado_para_sua_conta
 META_IMAGE_MODEL=muse-image
 
-VIDEO_PROVIDER=openrouter
+VIDEO_PROVIDER=vibes
+VIBES_INTEGRATION_MODE=browser
+VIBES_VIDEO_MODEL=vibes
+VIBES_BROWSER_PROFILE_PATH=./runtime/browser_profiles/vibes
+VIBES_BROWSER_AUTOMATION_ENABLED=false # habilite só após instalar/autorizar o backend browser
+# Legado temporário para comparação/cutover:
 OPENROUTER_API_KEY=sua_chave_openrouter
 OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0-mini
 FFMPEG_PATH=C:\caminho\para\ffmpeg.exe

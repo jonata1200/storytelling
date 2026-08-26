@@ -5,7 +5,7 @@ ProviderChannel = Literal["text", "image", "video"]
 IntegrationMode = Literal["api", "browser"]
 
 DEFAULT_PROVIDER = "meta"
-DEFAULT_VIDEO_PROVIDER = "openrouter"
+DEFAULT_VIDEO_PROVIDER = "vibes"
 SUPPORTED_TEXT_PROVIDERS = ("meta", "ollama_cloud")
 # OpenRouter remains accepted temporarily so existing local/runtime configuration
 # can be loaded during the migration. No generic image adapter is registered for it.

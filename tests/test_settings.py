@@ -8,7 +8,7 @@ def test_settings_defaults_to_text_and_video_providers() -> None:
     settings = Settings(_env_file=None)
     assert effective_provider_for_channel(settings, "text") == "meta"
     assert effective_provider_for_channel(settings, "image") == "meta"
-    assert effective_provider_for_channel(settings, "video") == "openrouter"
+    assert effective_provider_for_channel(settings, "video") == "vibes"
 
 
 def test_settings_normalizes_provider_keys() -> None:

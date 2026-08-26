@@ -1,5 +1,4 @@
 import re
-from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -259,27 +258,11 @@ def prepare_vibes_ingredient_metadata(
     ingredient_id: str,
     ingredient_type: str,
 ) -> bool:
-    if reference.status != "approved":
-        raise ValueError("Somente referências aprovadas podem virar ingredients")
-    metadata = dict(reference.metadata_json or {})
-    vibes = dict(metadata.get("vibes") or {})
-    if (
-        vibes.get("ingredient_id") == ingredient_id
-        and vibes.get("ingredient_type") == ingredient_type
-        and vibes.get("sync_status") == "synced"
-    ):
-        return False
-    vibes.update(
-        {
-            "ingredient_id": ingredient_id,
-            "ingredient_type": ingredient_type,
-            "synced_at": datetime.now(UTC).isoformat(),
-            "sync_status": "synced",
-        }
+    from app.vibes.ingredients import mark_ingredient_synced
+
+    return mark_ingredient_synced(
+        reference, ingredient_id=ingredient_id, ingredient_type=ingredient_type
     )
-    metadata["vibes"] = vibes
-    reference.metadata_json = metadata
-    return True
 
 
 async def _visual_target(

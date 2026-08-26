@@ -45,6 +45,7 @@ from app.providers.storage import generated_output_dir
 from app.providers.video.types import (
     VideoGenerationRequest,
     VideoImageInput,
+    VideoIngredientInput,
     VideoJob,
     VideoProvider,
 )
@@ -68,13 +69,13 @@ VideoProgressCallback = Callable[[int, int, str], Awaitable[None] | None]
 logger = logging.getLogger(__name__)
 
 
-def _effective_video_model(production_settings: Any) -> str:
+def _effective_video_model(production_settings: Any, provider_name: str | None = None) -> str:
     """Retorna o modelo do projeto ou do provider de vídeo configurado."""
     per_project = str(getattr(production_settings, "video_model", "") or "").strip()
     if per_project and per_project not in {"", "manual_package"}:
         return per_project
     settings = get_settings()
-    provider = effective_provider_for_channel(settings, "video")
+    provider = provider_name or effective_provider_for_channel(settings, "video")
     return provider_model(settings, provider, "video")
 
 
@@ -82,8 +83,8 @@ def _resolve_video_provider() -> str:
     return effective_provider_for_channel(get_settings(), "video")
 
 
-def _video_provider() -> VideoProvider:
-    return resolve_video_provider(get_settings(), _resolve_video_provider())
+def _video_provider(provider_name: str | None = None) -> VideoProvider:
+    return resolve_video_provider(get_settings(), provider_name or _resolve_video_provider())
 
 
 async def _submit_video_job(
@@ -140,7 +141,7 @@ async def _build_video_request(
     último frame extraído do vídeo anterior como first_frame.
     """
     settings = get_settings()
-    model = _effective_video_model(production_settings)
+    model = _effective_video_model(production_settings, _resolve_video_provider())
 
     # Preparar frames de referência
     frame_images: list[VideoImageInput] = []
@@ -153,17 +154,17 @@ async def _build_video_request(
     output_dir = generated_output_dir("video", project_id, settings.local_storage_path)
     provider_name = _resolve_video_provider()
 
+    input_references, ingredients = await _approved_video_inputs(session, project_id, segment)
     return VideoGenerationRequest(
         model=model,
         prompt=str(segment.prompt or "").strip(),
         duration=max(1, int(getattr(segment, "duration_seconds", 0) or 0) or 8),
         aspect_ratio=str(production_settings.aspect_ratio or "9:16").strip(),
         resolution=str(production_settings.video_resolution or "720p").strip(),
-        generate_audio=bool(
-            getattr(settings, f"{provider_name}_video_generate_audio", True)
-        ),
+        generate_audio=bool(getattr(settings, f"{provider_name}_video_generate_audio", True)),
         frame_images=frame_images,
-        input_references=[],
+        input_references=input_references,
+        ingredients=ingredients,
         output_dir=output_dir,
     )
 
@@ -180,48 +181,68 @@ async def _asset_data_url(session: AsyncSession, asset_id: UUID | None) -> str |
     return local_uri_to_data_url(uri)
 
 
-async def _removed_video_reference_data_urls(
+async def _approved_video_inputs(
     session: AsyncSession,
     project_id: UUID,
     segment: ContinuousVideoSegment,
-) -> list[VideoImageInput]:
-    """Retorna referências visuais para o vídeo, filtrando apenas locais.
+) -> tuple[list[VideoImageInput], list[VideoIngredientInput]]:
+    """Mapeia somente referências aprovadas e ingredients sincronizados."""
+    from app.visual_bible.models import Character, Location, VisualReference
 
-    Imagens de personagens (fotorrealistas) são excluídas por compatibilidade
-    com filtros de conteúdo de providers de vídeo.
-    """
-    from app.visual_bible.models import Location, VisualReference
-
-    metadata = segment.metadata_json if isinstance(segment.metadata_json, dict) else {}
-    loc_names = [
+    raw_metadata = getattr(segment, "metadata_json", {})
+    metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+    target_names = [
         str(name or "").strip()
-        for name in (metadata.get("locations") or [])
+        for name in [
+            *(metadata.get("locations") or []),
+            *(metadata.get("characters") or []),
+        ]
         if str(name or "").strip()
     ]
-    if not loc_names:
-        return []
+    if not target_names:
+        return [], []
 
     loc_result = await session.execute(select(Location).where(Location.project_id == project_id))
-    wanted = {name.casefold() for name in loc_names}
-    loc_ids = [
-        loc.id
-        for loc in loc_result.scalars().all()
-        if str(getattr(loc, "name", "") or "").strip().casefold() in wanted
-    ]
-    if not loc_ids:
-        return []
+    char_result = await session.execute(select(Character).where(Character.project_id == project_id))
+    wanted = {name.casefold() for name in target_names}
+    target_ids = {
+        item.id
+        for item in loc_result.scalars().all()
+        if str(item.name or "").strip().casefold() in wanted
+    }
+    target_ids.update(
+        item.id
+        for item in char_result.scalars().all()
+        if str(item.name or "").strip().casefold() in wanted
+    )
+    if not target_ids:
+        return [], []
 
     ref_result = await session.execute(
-        select(VisualReference).where(
+        select(VisualReference)
+        .where(
             VisualReference.project_id == project_id,
-            VisualReference.target_kind == "location",
-            VisualReference.target_id.in_(loc_ids),
+            VisualReference.target_id.in_(target_ids),
             VisualReference.asset_id.is_not(None),
+            VisualReference.status == "approved",
         )
+        .order_by(VisualReference.is_canonical.desc(), VisualReference.created_at.desc())
     )
     references: list[VideoImageInput] = []
+    ingredients: list[VideoIngredientInput] = []
     seen: set[str] = set()
     for ref in ref_result.scalars().all():
+        vibes = dict((ref.metadata_json or {}).get("vibes") or {})
+        ingredient_id = str(vibes.get("ingredient_id") or "").strip()
+        ingredient_type = str(vibes.get("ingredient_type") or "").strip()
+        if ingredient_id and ingredient_type and vibes.get("sync_status") == "synced":
+            ingredients.append(
+                VideoIngredientInput(
+                    id=ingredient_id,
+                    type=ingredient_type,
+                    reference_id=str(ref.id),
+                )
+            )
         asset = await session.get(Asset, ref.asset_id)
         uri = str(getattr(asset, "storage_uri", "") or "").strip() if asset else ""
         if not uri:
@@ -231,18 +252,18 @@ async def _removed_video_reference_data_urls(
             continue
         seen.add(data_url)
         references.append(VideoImageInput(url=data_url))
-        if len(references) >= 2:
+        if len(references) >= 4:
             break
-    return references
+    return references, ingredients
 
 
 async def _poll_video_job(job: Any) -> Any:
-    provider = _video_provider()
+    provider = _video_provider(str(getattr(job, "provider", "") or "") or None)
     return await provider.poll(job)
 
 
 async def _download_video_job(job: Any, output_dir: Path) -> Any:
-    provider = _video_provider()
+    provider = _video_provider(str(getattr(job, "provider", "") or "") or None)
     return await provider.download(job, output_dir)
 
 
@@ -254,11 +275,13 @@ async def _finalize_segment_video(
     usage_cost: Decimal | None,
 ) -> None:
     """Finaliza o vídeo do segmento: baixa, salva como Asset e extrai último frame."""
-    output_dir = generated_output_dir(
-        "video", project_id, get_settings().local_storage_path
-    )
+    output_dir = generated_output_dir("video", project_id, get_settings().local_storage_path)
     result = await _download_video_job(job, output_dir)
-    model = _effective_video_model(await get_or_create_production_settings(session, project_id))
+    model = str(getattr(result, "model", "") or getattr(job, "model", "") or "").strip()
+    if not model:
+        model = _effective_video_model(
+            await get_or_create_production_settings(session, project_id), result.provider
+        )
 
     # Salvar vídeo como Asset
     estimate = estimate_operation_cost(
@@ -472,6 +495,9 @@ async def generate_video_for_segment(
             id=job_id,
             polling_url=str((segment.metadata_json or {}).get("video_polling_url", "")),
             status="pending",
+            provider=str(segment.provider or _resolve_video_provider()),
+            model=str(segment.model or ""),
+            prompt=str(segment.prompt or ""),
         )
 
         poll_count = 0

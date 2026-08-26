@@ -335,6 +335,12 @@ def _provider_channel_readiness(
             missing.append(base_field.upper())
         else:
             missing.append(f"{provider.upper()}_BASE_URL")
+    if (
+        channel == "video"
+        and provider == "vibes"
+        and not bool(getattr(settings, "vibes_browser_automation_enabled", False))
+    ):
+        missing.append("VIBES_BROWSER_AUTOMATION_ENABLED")
 
     labels = {
         "text": "texto",

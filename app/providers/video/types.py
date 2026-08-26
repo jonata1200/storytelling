@@ -13,6 +13,14 @@ class VideoImageInput(BaseModel):
     frame_type: str | None = None
 
 
+class VideoIngredientInput(BaseModel):
+    """Referência já sincronizada no provider, versionada pela bíblia visual."""
+
+    id: str
+    type: str
+    reference_id: str
+
+
 class VideoGenerationRequest(BaseModel):
     model: str
     prompt: str
@@ -23,6 +31,7 @@ class VideoGenerationRequest(BaseModel):
     seed: int | None = None
     frame_images: list[VideoImageInput] = Field(default_factory=list)
     input_references: list[VideoImageInput] = Field(default_factory=list)
+    ingredients: list[VideoIngredientInput] = Field(default_factory=list)
     output_dir: Path
 
     @model_validator(mode="after")
@@ -45,6 +54,9 @@ class VideoJob(BaseModel):
     status: str = "pending"
     error: str | None = None
     unsigned_urls: list[str] = Field(default_factory=list)
+    provider: str = ""
+    model: str = ""
+    prompt: str = ""
 
 
 class VideoJobUpdate(BaseModel):

@@ -51,6 +51,12 @@ def _openrouter_factory() -> object:
     return OpenRouterVideoProvider()
 
 
+def _vibes_factory() -> object:
+    from app.providers.video.vibes import VibesVideoProvider
+
+    return VibesVideoProvider()
+
+
 def _meta_text_factory() -> object:
     from app.providers.llm.meta import MetaLLMProvider
 
@@ -68,6 +74,7 @@ provider_registry.register("text", "meta", _meta_text_factory)
 provider_registry.register("image", "meta", _meta_image_factory)
 provider_registry.register("text", "ollama_cloud", _ollama_cloud_factory)
 provider_registry.register("video", "openrouter", _openrouter_factory)
+provider_registry.register("video", "vibes", _vibes_factory)
 
 
 def resolve_text_provider(settings: Any, name: str | None = None) -> LLMProvider:

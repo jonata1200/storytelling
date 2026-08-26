@@ -20,7 +20,7 @@ def test_provider_policy_resolves_all_channels() -> None:
     settings = Settings(_env_file=None)
     assert effective_provider_for_channel(settings, "text") == "meta"
     assert effective_provider_for_channel(settings, "image") == "meta"
-    assert effective_provider_for_channel(settings, "video") == "openrouter"
+    assert effective_provider_for_channel(settings, "video") == "vibes"
     assert provider_model(settings, "openrouter", "video") == settings.openrouter_video_model
 
 

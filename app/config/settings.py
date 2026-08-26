@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     ollama_cloud_default_model: str = LOCKED_OLLAMA_CLOUD_TEXT_MODEL
     ffmpeg_path: str = ""
     video_generation_concurrency: int = Field(default=2, ge=1, le=4)
-    video_provider: str | None = "openrouter"
+    video_provider: str | None = "vibes"
     openrouter_api_key: str | None = Field(default=None, repr=False)
     openrouter_video_model: str = "bytedance/seedance-2.0-mini"
     openrouter_video_base_url: str = "https://openrouter.ai/api/v1"
@@ -70,7 +70,9 @@ class Settings(BaseSettings):
     vibes_integration_mode: str = "browser"
     vibes_api_key: str | None = Field(default=None, repr=False)
     vibes_base_url: str = ""
-    vibes_video_model: str = ""
+    vibes_video_model: str = "vibes"
+    vibes_video_generate_audio: bool = True
+    vibes_browser_automation_enabled: bool = False
     vibes_browser_profile_path: Path = Path("./runtime/browser_profiles/vibes")
     user_theme: str = "dark"
 
