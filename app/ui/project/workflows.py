@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -147,17 +147,10 @@ async def _set_project_ai_action_status(
     settings = await get_or_create_production_settings(session, project_id)
     metadata = dict(settings.metadata_json or {})
     previous_action = metadata.get("ai_action")
-    previous_events = (
-        previous_action.get("events", []) if isinstance(previous_action, dict) else []
-    )
+    previous_events = previous_action.get("events", []) if isinstance(previous_action, dict) else []
     events = [event for event in previous_events if isinstance(event, dict)]
-    if (
-        record_event
-        and (
-            not events
-            or events[-1].get("message") != message
-            or events[-1].get("status") != status
-        )
+    if record_event and (
+        not events or events[-1].get("message") != message or events[-1].get("status") != status
     ):
         events.append(
             {
@@ -278,9 +271,7 @@ async def _resume_initial_script_in_background(project_id: UUID) -> None:
             if story_idea is None:
                 settings = await get_or_create_production_settings(session, project_id)
                 metadata = settings.metadata_json or {}
-                source_idea = (
-                    metadata.get("source_idea") if isinstance(metadata, dict) else None
-                )
+                source_idea = metadata.get("source_idea") if isinstance(metadata, dict) else None
                 if isinstance(source_idea, dict):
                     await _set_project_ai_action_status(
                         session,
@@ -486,5 +477,3 @@ async def _develop_script_for_existing_project(
         source="script title",
     )
     return "Roteiro criado.", True
-
-

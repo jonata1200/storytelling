@@ -1,4 +1,4 @@
-﻿from typing import Any, cast
+from typing import Any, cast
 from uuid import UUID
 
 from nicegui import app as nicegui_app
@@ -6,9 +6,7 @@ from nicegui import app as nicegui_app
 HIDDEN_AI_ACTION_CHAT_EVENTS = {("create_initial_script", "queued")}
 
 
-def assistant_initial_message(
-    active: str, assistant_suggestions: dict[str, str]
-) -> dict[str, str]:
+def assistant_initial_message(active: str, assistant_suggestions: dict[str, str]) -> dict[str, str]:
     return {
         "role": "assistant",
         "content": (
@@ -154,14 +152,10 @@ def sync_ai_action_events_to_chat(project_id: UUID, ai_action: dict[str, Any]) -
     raw_messages = store.get(str(project_id), [])
     messages = [item for item in raw_messages if isinstance(item, dict)]
     known_event_ids = {
-        str(item.get("event_id"))
-        for item in messages
-        if item.get("event_id") is not None
+        str(item.get("event_id")) for item in messages if item.get("event_id") is not None
     }
     known_event_actions = {
-        str(item.get("event_action"))
-        for item in messages
-        if item.get("event_action") is not None
+        str(item.get("event_action")) for item in messages if item.get("event_action") is not None
     }
     changed = False
     for event in raw_events:

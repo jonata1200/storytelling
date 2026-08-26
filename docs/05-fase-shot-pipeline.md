@@ -30,36 +30,36 @@ tests/
 
 ## Checklist — migration
 
-- [ ] Criar migration Alembic para `shot_id`.
-- [ ] Campo inicialmente nullable.
-- [ ] Criar índice.
-- [ ] Não apagar segmentos históricos.
-- [ ] Criar backfill quando associação puder ser deduzida com segurança.
-- [ ] Não inventar associação para projetos legados ambíguos.
+- [x] Criar migration Alembic para `shot_id`.
+- [x] Campo inicialmente nullable.
+- [x] Criar índice.
+- [x] Não apagar segmentos históricos.
+- [x] Criar backfill quando associação puder ser deduzida com segurança.
+- [x] Não inventar associação para projetos legados ambíguos.
 - [ ] Testar upgrade.
-- [ ] Testar downgrade se a política do projeto exigir.
+- [x] Testar downgrade se a política do projeto exigir.
 - [ ] Testar banco com dados existentes.
 
 ## Checklist — ShotGenerationSpec
 
 Para cada Shot:
 
-- [ ] Carregar Scene.
-- [ ] Carregar personagem(s) mencionados.
-- [ ] Carregar local.
-- [ ] Carregar props relevantes.
-- [ ] Carregar estado/roupa do personagem.
-- [ ] Carregar referências aprovadas.
-- [ ] Carregar frame final do shot anterior quando aplicável.
-- [ ] Carregar action.
-- [ ] Carregar emotion.
-- [ ] Carregar visual composition.
-- [ ] Carregar camera movement.
-- [ ] Carregar duração.
-- [ ] Carregar regras de continuidade.
-- [ ] Produzir `ShotGenerationSpec`.
-- [ ] Validar que campos obrigatórios estejam preenchidos.
-- [ ] Registrar warnings para referências ausentes.
+- [x] Carregar Scene.
+- [x] Carregar personagem(s) mencionados.
+- [x] Carregar local.
+- [x] Carregar props relevantes.
+- [x] Carregar estado/roupa do personagem.
+- [x] Carregar referências aprovadas.
+- [x] Carregar frame final do shot anterior quando aplicável.
+- [x] Carregar action.
+- [x] Carregar emotion.
+- [x] Carregar visual composition.
+- [x] Carregar camera movement.
+- [x] Carregar duração.
+- [x] Carregar regras de continuidade.
+- [x] Produzir `ShotGenerationSpec`.
+- [x] Validar que campos obrigatórios estejam preenchidos.
+- [x] Registrar warnings para referências ausentes.
 
 ## Checklist — compilador de prompt
 
@@ -75,90 +75,90 @@ VibesPromptCompiler
 VideoGenerationRequest
 ```
 
-- [ ] Criar compilador Vibes.
-- [ ] Descrever uma ação principal por shot.
-- [ ] Descrever um movimento de câmera principal.
-- [ ] Descrever elementos que devem permanecer estáveis.
-- [ ] Evitar repetir toda a bíblia visual em texto quando ingredient/referência existir.
-- [ ] Referenciar continuidade explícita.
-- [ ] Produzir prompt em idioma que melhor performar no provider, sem alterar a UI do usuário.
-- [ ] Manter prompt final persistido/auditável.
-- [ ] Guardar versão do compilador.
-- [ ] Permitir regenerar usando o mesmo spec.
+- [x] Criar compilador Vibes.
+- [x] Descrever uma ação principal por shot.
+- [x] Descrever um movimento de câmera principal.
+- [x] Descrever elementos que devem permanecer estáveis.
+- [x] Evitar repetir toda a bíblia visual em texto quando ingredient/referência existir.
+- [x] Referenciar continuidade explícita.
+- [x] Produzir prompt em idioma que melhor performar no provider, sem alterar a UI do usuário.
+- [x] Manter prompt final persistido/auditável.
+- [x] Guardar versão do compilador.
+- [x] Permitir regenerar usando o mesmo spec.
 
 ## Checklist — continuidade
 
-- [ ] Usar frame final anterior como referência quando fizer sentido.
-- [ ] Usar VisualReference do personagem.
-- [ ] Usar VisualReference de roupa/estado.
-- [ ] Usar VisualReference de local.
-- [ ] Usar ingredient Vibes quando disponível.
-- [ ] Manter mão/objeto/posição importantes no `continuity`.
-- [ ] Manter orientação espacial da cena.
-- [ ] Não forçar frame anterior quando há corte temporal/espacial deliberado.
-- [ ] Adicionar `continuity_break=true` quando necessário.
+- [x] Usar frame final anterior como referência quando fizer sentido.
+- [x] Usar VisualReference do personagem.
+- [x] Usar VisualReference de roupa/estado.
+- [x] Usar VisualReference de local.
+- [x] Usar ingredient Vibes quando disponível.
+- [x] Manter mão/objeto/posição importantes no `continuity`.
+- [x] Manter orientação espacial da cena.
+- [x] Não forçar frame anterior quando há corte temporal/espacial deliberado.
+- [x] Adicionar `continuity_break=true` quando necessário.
 - [ ] Permitir ao diretor marcar uma quebra consciente.
 
 ## Checklist — estados do personagem
 
 Criar estrutura semântica por shot, inicialmente em payload/metadata se não justificar tabela:
 
-- [ ] outfit.
-- [ ] hair state.
-- [ ] injuries.
-- [ ] carried props.
-- [ ] emotional state.
-- [ ] position.
-- [ ] wet/dry/dirty state.
-- [ ] time-of-day relevant state.
-- [ ] continuity notes.
+- [x] outfit.
+- [x] hair state.
+- [x] injuries.
+- [x] carried props.
+- [x] emotional state.
+- [x] position.
+- [x] wet/dry/dirty state.
+- [x] time-of-day relevant state.
+- [x] continuity notes.
 
-- [ ] Distinguir atributo canônico de estado temporário.
-- [ ] Não alterar `Character.canonical_profile` para representar estado de uma cena.
+- [x] Distinguir atributo canônico de estado temporário.
+- [x] Não alterar `Character.canonical_profile` para representar estado de uma cena.
 - [ ] Versionar mudança permanente real.
 
 ## Checklist — review/regeneração
 
-- [ ] Review deve apontar para Shot.
-- [ ] Rejeitar uma tomada não deve invalidar toda a Scene.
-- [ ] Regenerar somente o Shot necessário.
-- [ ] Guardar variantes.
-- [ ] Permitir selecionar uma variante.
-- [ ] Manter histórico.
-- [ ] Preservar custo de tentativas rejeitadas.
-- [ ] Permitir nota de rejeição.
-- [ ] Usar nota de rejeição na próxima tentativa quando apropriado.
+- [x] Review deve apontar para Shot.
+- [x] Rejeitar uma tomada não deve invalidar toda a Scene.
+- [x] Regenerar somente o Shot necessário.
+- [x] Guardar variantes.
+- [x] Permitir selecionar uma variante.
+- [x] Manter histórico.
+- [x] Preservar custo de tentativas rejeitadas.
+- [x] Permitir nota de rejeição.
+- [x] Usar nota de rejeição na próxima tentativa quando apropriado.
 
 ## Checklist — montagem
 
-- [ ] Ordenar vídeos por Scene + Shot.
-- [ ] Validar que todos os shots obrigatórios possuem clip aprovado.
-- [ ] Não montar vídeo final com shot em estado failed/rejected sem override explícito.
-- [ ] Preservar duração esperada.
-- [ ] Produzir diagnóstico de gaps.
-- [ ] Reaproveitar FFmpeg/finalization existente.
+- [x] Ordenar vídeos por Scene + Shot.
+- [x] Validar que todos os shots obrigatórios possuem clip aprovado.
+- [x] Não montar vídeo final com shot em estado failed/rejected sem override explícito.
+- [x] Preservar duração esperada.
+- [x] Produzir diagnóstico de gaps.
+- [x] Reaproveitar FFmpeg/finalization existente.
 
 ## Testes
 
 - [ ] Migration com dados legados.
-- [ ] Construção de `ShotGenerationSpec`.
+- [x] Construção de `ShotGenerationSpec`.
 - [ ] Shot sem personagem.
-- [ ] Shot com dois personagens.
+- [x] Shot com dois personagens.
 - [ ] Shot sem referência visual.
-- [ ] Shot com frame anterior.
-- [ ] Shot com continuity break.
-- [ ] Prompt compiler.
-- [ ] Regeneração de um único shot.
-- [ ] Seleção de variante.
-- [ ] Ordenação de montagem.
-- [ ] Ruff.
-- [ ] mypy.
-- [ ] pytest.
+- [x] Shot com frame anterior.
+- [x] Shot com continuity break.
+- [x] Prompt compiler.
+- [x] Regeneração de um único shot.
+- [x] Seleção de variante.
+- [x] Ordenação de montagem.
+- [x] Ruff.
+- [x] mypy.
+- [x] pytest.
 
 ## Critérios de aceite
 
-- [ ] Todo novo segmento de vídeo aponta para um Shot.
-- [ ] É possível rastrear `Script → Scene → Shot → Segment → Asset`.
-- [ ] Uma referência visual aprovada chega automaticamente ao request do Vibes.
-- [ ] A continuidade não depende apenas do frame anterior.
-- [ ] É possível regenerar um único Shot sem refazer o projeto inteiro.
+- [x] Todo novo segmento de vídeo aponta para um Shot.
+- [x] É possível rastrear `Script → Scene → Shot → Segment → Asset`.
+- [x] Uma referência visual aprovada chega automaticamente ao request do Vibes.
+- [x] A continuidade não depende apenas do frame anterior.
+- [x] É possível regenerar um único Shot sem refazer o projeto inteiro.

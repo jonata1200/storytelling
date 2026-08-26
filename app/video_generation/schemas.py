@@ -34,6 +34,7 @@ class ContinuousVideoPlanRead(BaseModel):
 class ContinuousVideoSegmentCreate(BaseModel):
     segment_number: int = Field(ge=1)
     script_id: UUID | None = None
+    shot_id: UUID | None = None
     title: str = ""
     prompt: str
     duration_seconds: int = Field(default=7, ge=1)
@@ -53,6 +54,7 @@ class ContinuousVideoSegmentRead(BaseModel):
     id: UUID
     project_id: UUID
     script_id: UUID | None
+    shot_id: UUID | None
     segment_number: int
     title: str
     prompt: str
@@ -93,6 +95,10 @@ class ContinuousVideoSegmentPromptUpdate(BaseModel):
 
 class ContinuousVideoReviewRequest(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
+
+
+class ContinuousVideoVariantSelectRequest(BaseModel):
+    asset_id: UUID
 
 
 class ContinuousVideoPlanningRead(BaseModel):

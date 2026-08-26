@@ -56,11 +56,7 @@ VISUAL_CHARACTER_HONORIFIC_PREFIXES = {
 
 def _visual_item_name(item: dict) -> str:
     name = str(
-        item.get("name")
-        or item.get("nome")
-        or item.get("title")
-        or item.get("titulo")
-        or ""
+        item.get("name") or item.get("nome") or item.get("title") or item.get("titulo") or ""
     ).strip()
     return name
 
@@ -99,10 +95,27 @@ def _invalid_visual_item(target_kind: str, item: dict) -> bool:
 
 
 LOCATION_MERGE_STOPWORDS = {
-    "de", "da", "do", "das", "dos",
-    "na", "no", "nas", "nos",
-    "em", "o", "a", "os", "as",
-    "para", "com", "ao", "aos", "à", "às", "e",
+    "de",
+    "da",
+    "do",
+    "das",
+    "dos",
+    "na",
+    "no",
+    "nas",
+    "nos",
+    "em",
+    "o",
+    "a",
+    "os",
+    "as",
+    "para",
+    "com",
+    "ao",
+    "aos",
+    "à",
+    "às",
+    "e",
 }
 
 

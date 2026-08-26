@@ -79,8 +79,9 @@ def generation_progress_dialog(
     *,
     on_cancel: Callable[[], Any] | None = None,
 ) -> tuple[Any, Callable[[int, int, str], None]]:
-    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as progress_dialog, ui.card().classes(
-        "entity-card rounded-2xl p-6 w-[min(520px,92vw)]"
+    with (
+        ui.dialog().props(BLOCKING_DIALOG_PROPS) as progress_dialog,
+        ui.card().classes("entity-card rounded-2xl p-6 w-[min(520px,92vw)]"),
     ):
         with ui.column().classes("w-full items-center gap-4"):
             ui.spinner(size="lg").classes("acid")

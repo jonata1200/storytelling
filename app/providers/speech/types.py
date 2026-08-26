@@ -23,5 +23,4 @@ class SpeechResult(BaseModel):
 
 
 class SpeechProvider(Protocol):
-    async def synthesize(self, request: SpeechRequest) -> SpeechResult:
-        ...
+    async def synthesize(self, request: SpeechRequest) -> SpeechResult: ...

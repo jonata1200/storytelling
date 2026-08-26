@@ -58,6 +58,7 @@ def create_app(include_ui: bool = True) -> FastAPI:
         _request: Request, exc: WorkflowStateError
     ) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
+
     if ui_enabled:
         from nicegui import ui
 

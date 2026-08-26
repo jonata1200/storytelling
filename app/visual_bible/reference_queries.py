@@ -33,7 +33,5 @@ async def canonical_visual_reference(
     target_kind: str,
     target_id: UUID,
 ) -> tuple[VisualReference, Asset] | None:
-    references = await approved_visual_references(
-        session, project_id, target_kind, target_id
-    )
+    references = await approved_visual_references(session, project_id, target_kind, target_id)
     return next((item for item in references if item[0].is_canonical), None)

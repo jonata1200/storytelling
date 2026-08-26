@@ -1,4 +1,4 @@
-﻿from typing import Any
+from typing import Any
 from uuid import UUID
 
 from nicegui import ui
@@ -224,6 +224,3 @@ async def _create_next_episode(project_id: UUID) -> None:
         ui.navigate.to(f"/projects/{next_project.id}")
     except Exception as exc:
         ui.notify(f"Não foi possível criar próximo episódio: {exc}", color="negative")
-
-
-

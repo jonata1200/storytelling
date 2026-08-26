@@ -12,8 +12,7 @@ def validate_video_clip_duration(duration_seconds: int) -> int:
     if duration not in VIDEO_CLIP_ALLOWED_SECONDS:
         allowed = ", ".join(f"{value}s" for value in VIDEO_CLIP_ALLOWED_SECONDS)
         raise ValueError(
-            "O pacote de video aceita somente segmentos de "
-            f"{allowed}; recebido {duration}s."
+            f"O pacote de video aceita somente segmentos de {allowed}; recebido {duration}s."
         )
     return duration
 
@@ -25,9 +24,7 @@ def video_clip_durations(
 ) -> list[int]:
     total = int(total_duration_seconds)
     if total < VIDEO_CLIP_MIN_SECONDS:
-        raise ValueError(
-            f"A duração total precisa ter pelo menos {VIDEO_CLIP_MIN_SECONDS}s."
-        )
+        raise ValueError(f"A duração total precisa ter pelo menos {VIDEO_CLIP_MIN_SECONDS}s.")
     if total % 2 != 0:
         raise ValueError("A duracao total precisa ser par para distribuir segmentos de video.")
 

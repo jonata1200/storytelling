@@ -1,4 +1,4 @@
-﻿from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -61,10 +61,7 @@ def script_generation_in_progress(
     ai_status: str,
     should_resume_stale_script: bool,
 ) -> bool:
-    return (
-        (script is None and ai_status in {"queued", "running"})
-        or should_resume_stale_script
-    )
+    return (script is None and ai_status in {"queued", "running"}) or should_resume_stale_script
 
 
 async def _refresh_script_derivatives_from_ui(project_id: UUID, script_id: UUID) -> None:
@@ -177,12 +174,11 @@ def _open_story_hooks_dialog(
                 icon.props("name=radio_button_unchecked").classes(remove="text-cyan-300")
         generate_button.enable()
 
-    with ui.dialog().props(BLOCKING_DIALOG_PROPS) as hooks_dialog, ui.card().classes(
-        "entity-card rounded-2xl p-6 w-[min(680px,94vw)] gap-4"
+    with (
+        ui.dialog().props(BLOCKING_DIALOG_PROPS) as hooks_dialog,
+        ui.card().classes("entity-card rounded-2xl p-6 w-[min(680px,94vw)] gap-4"),
     ):
-        ui.label("Escolha um gancho para a história").classes(
-            "brand-type text-2xl font-bold"
-        )
+        ui.label("Escolha um gancho para a história").classes("brand-type text-2xl font-bold")
         ui.label(
             "A IA criou 5 ganchos a partir da sua ideia. Escolha como a história "
             "vai abrir e prender a audiência; o roteiro será gerado com o gancho escolhido."
@@ -356,13 +352,13 @@ async def _update_script_generation_progress(
     completed, total, detail, terminal = await _script_generation_progress_state(project_id)
     update_progress(completed, total, detail)
     if terminal and hasattr(loading_dialog, "close"):
-            safe_close_ui_element(loading_dialog)
-            project_key = str(project_id)
-            if completed >= total and not _completion_sound_played.get(project_key):
-                _completion_sound_played[project_key] = True
-                play_completion_sound()
-            ui.navigate.reload()
-            return
+        safe_close_ui_element(loading_dialog)
+        project_key = str(project_id)
+        if completed >= total and not _completion_sound_played.get(project_key):
+            _completion_sound_played[project_key] = True
+            play_completion_sound()
+        ui.navigate.reload()
+        return
     ui.timer(
         script_progress_poll_interval(attempt + 1),
         lambda: _update_script_generation_progress(
@@ -517,9 +513,12 @@ def render_script_area(
     edit_dialog = None
     if script is not None:
         script_id = script.id
-        with ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_dialog, ui.card().classes(
-            "entity-card rounded-2xl p-6 w-[min(1040px,94vw)] h-[min(860px,92vh)] "
-            "max-h-[92vh] flex flex-col"
+        with (
+            ui.dialog().props(BLOCKING_DIALOG_PROPS) as edit_dialog,
+            ui.card().classes(
+                "entity-card rounded-2xl p-6 w-[min(1040px,94vw)] h-[min(860px,92vh)] "
+                "max-h-[92vh] flex flex-col"
+            ),
         ):
             edit_state = script_editor_state(script.title, script.content)
 
@@ -542,9 +541,7 @@ def render_script_area(
                 )
 
             ui.label("Editar roteiro").classes("brand-type text-2xl font-bold shrink-0")
-            ui.input("Título").bind_value(edit_state, "title").props("outlined").classes(
-                "w-full"
-            )
+            ui.input("Título").bind_value(edit_state, "title").props("outlined").classes("w-full")
             ui.textarea("Conteúdo do roteiro").bind_value(edit_state, "content").props(
                 "outlined"
             ).classes("script-editor-textarea w-full flex-1 min-h-0 font-mono text-sm")
@@ -558,13 +555,14 @@ def render_script_area(
                 save_button.props("unelevated no-caps").classes("acid-bg rounded-xl font-semibold")
     duration_dialog = None
     if script is None and not generation_in_progress:
-        with ui.dialog().props(BLOCKING_DIALOG_PROPS) as duration_dialog, ui.card().classes(
-            "entity-card rounded-2xl p-6 w-[min(460px,92vw)] gap-4"
+        with (
+            ui.dialog().props(BLOCKING_DIALOG_PROPS) as duration_dialog,
+            ui.card().classes("entity-card rounded-2xl p-6 w-[min(460px,92vw)] gap-4"),
         ):
             ui.label("Duração do roteiro").classes("brand-type text-2xl font-bold")
-            ui.label(
-                "Escolha a duração alvo da história antes de gerar o roteiro."
-            ).classes("text-sm text-[#8f9590] leading-6")
+            ui.label("Escolha a duração alvo da história antes de gerar o roteiro.").classes(
+                "text-sm text-[#8f9590] leading-6"
+            )
             duration_select = (
                 ui.select(
                     SCRIPT_DURATION_OPTIONS,
@@ -591,9 +589,9 @@ def render_script_area(
         "Roteiro",
         "Edite e revise o roteiro cinematográfico que orienta as próximas etapas.",
         "Editar roteiro" if edit_dialog is not None else "Gerar roteiro",
-        edit_dialog.open if edit_dialog is not None else (
-            duration_dialog.open if duration_dialog is not None else None
-        ),
+        edit_dialog.open
+        if edit_dialog is not None
+        else (duration_dialog.open if duration_dialog is not None else None),
     )
     with ui.row().classes("w-full gap-4 items-start"):
         with ui.column().classes("flex-1 gap-4"):
@@ -607,6 +605,7 @@ def render_script_area(
                     )
                 ).classes("text-xs text-[#8d938e]")
             if script is None and ai_status == "failed":
+
                 async def cancel_retry_generation() -> None:
                     await cancel_initial_script_generation(project_id)
                     safe_close_ui_element(retry_loading_dialog)
@@ -650,9 +649,7 @@ def render_script_area(
                 with ui.element("div").classes(
                     "border border-red-900 bg-red-950/40 rounded-2xl p-4 text-red-100"
                 ):
-                    ui.label("A IA não conseguiu criar o roteiro inicial.").classes(
-                        "font-semibold"
-                    )
+                    ui.label("A IA não conseguiu criar o roteiro inicial.").classes("font-semibold")
                     ui.label(str(ai_action.get("error") or ai_action.get("message") or "")).classes(
                         "text-sm opacity-80"
                     )
@@ -671,7 +668,3 @@ def render_script_area(
                     else "A IA está desenvolvendo o roteiro com base na ideia do projeto."
                 )
                 ui.label(content).classes("whitespace-pre-wrap leading-8 text-[#d9dcd9]")
-
-
-
-

@@ -72,9 +72,7 @@ def job_idempotency_key(project_id: UUID, step: str | ProjectStep, payload: dict
 def project_job_can_run(job: GenerationJob) -> bool:
     if job.status in TERMINAL_JOB_STATUSES:
         return False
-    return not (
-        job.status == GenerationJobStatus.FAILED and job.attempts >= job.max_attempts
-    )
+    return not (job.status == GenerationJobStatus.FAILED and job.attempts >= job.max_attempts)
 
 
 def pending_job_is_stale(job: GenerationJob, now: datetime | None = None) -> bool:
@@ -123,9 +121,7 @@ async def _set_project_job_action(
     metadata = dict(settings.metadata_json or {})
     action = str(job.request_payload.get("step") or "project_step")
     previous_action = metadata.get("ai_action")
-    previous_events = (
-        previous_action.get("events", []) if isinstance(previous_action, dict) else []
-    )
+    previous_events = previous_action.get("events", []) if isinstance(previous_action, dict) else []
     events = [event for event in previous_events if isinstance(event, dict)]
     events.append(
         {

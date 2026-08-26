@@ -286,38 +286,41 @@ def data_url_parts(uri: str) -> tuple[str, str] | None:
 
 def extract_last_frame_from_video(video_path: Path) -> Path:
     """Extrai o último frame de um vídeo usando ffmpeg.
-    
+
     Args:
         video_path: Caminho para o arquivo de vídeo
-        
+
     Returns:
         Caminho para a imagem do último frame (JPEG)
-        
+
     Raises:
         RuntimeError: Se o ffmpeg falhar ou o vídeo não existir
     """
     if not video_path.exists():
         raise RuntimeError(f"Arquivo de vídeo não encontrado: {video_path}")
-    
+
     # Obter caminho do ffmpeg
     ffmpeg_path = resolve_ffmpeg_path()
     if not ffmpeg_path:
         raise RuntimeError("ffmpeg não encontrado. Instale o ffmpeg para usar esta funcionalidade.")
-    
+
     # Criar arquivo temporário para o frame
     output_dir = video_path.parent
     output_path = output_dir / f"{video_path.stem}_last_frame.jpg"
-    
+
     # Comando ffmpeg para extrair o último frame (-sseof -0.1 para suportar vídeos curtos)
     cmd = [
         ffmpeg_path,
-        "-sseof", "-0.1",  # Ir para 0.1 segundo antes do fim
-        "-i", str(video_path),
-        "-vframes", "1",
+        "-sseof",
+        "-0.1",  # Ir para 0.1 segundo antes do fim
+        "-i",
+        str(video_path),
+        "-vframes",
+        "1",
         "-y",  # Sobrescrever se existir
         str(output_path),
     ]
-    
+
     try:
         result = subprocess.run(
             cmd,
@@ -325,14 +328,17 @@ def extract_last_frame_from_video(video_path: Path) -> Path:
             text=True,
             timeout=30,
         )
-        
+
         if result.returncode != 0 or not output_path.exists():
             # Fallback: extrair o último frame sem -sseof
             fallback_cmd = [
                 ffmpeg_path,
-                "-i", str(video_path),
-                "-update", "1",
-                "-q:v", "2",
+                "-i",
+                str(video_path),
+                "-update",
+                "1",
+                "-q:v",
+                "2",
                 "-y",
                 str(output_path),
             ]
@@ -341,30 +347,30 @@ def extract_last_frame_from_video(video_path: Path) -> Path:
                 err_msg = (result.stderr or fallback_res.stderr)[:500]
                 logger.error(f"ffmpeg falhou: {err_msg}")
                 raise RuntimeError(f"ffmpeg falhou ao extrair último frame: {err_msg}")
-        
+
         logger.info(f"Último frame extraído: {output_path}")
         return output_path
-        
+
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError("ffmpeg excedeu tempo limite ao extrair frame") from exc
 
 
 def get_video_duration(video_path: Path) -> float:
     """Obtém a duração de um vídeo em segundos usando ffprobe.
-    
+
     Args:
         video_path: Caminho para o arquivo de vídeo
-        
+
     Returns:
         Duração em segundos
     """
     if not video_path.exists():
         raise RuntimeError(f"Arquivo de vídeo não encontrado: {video_path}")
-    
+
     ffmpeg_path = resolve_ffmpeg_path()
     if not ffmpeg_path:
         raise RuntimeError("ffmpeg não encontrado")
-    
+
     # Usar ffprobe (normalmente está no mesmo diretório que o ffmpeg)
     ffmpeg_p = Path(ffmpeg_path)
     candidates = [
@@ -378,18 +384,21 @@ def get_video_duration(video_path: Path) -> float:
         if cand.is_file():
             ffprobe_path = cand
             break
-    
+
     if ffprobe_path is None:
         raise RuntimeError("ffprobe não encontrado")
-    
+
     cmd = [
         str(ffprobe_path),
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         str(video_path),
     ]
-    
+
     try:
         result = subprocess.run(
             cmd,
@@ -397,15 +406,15 @@ def get_video_duration(video_path: Path) -> float:
             text=True,
             timeout=10,
         )
-        
+
         if result.returncode != 0:
             raise RuntimeError(f"ffprobe falhou: {result.stderr[:500]}")
-        
+
         duration_str = result.stdout.strip()
         if not duration_str:
             raise RuntimeError("ffprobe não retornou duração")
-        
+
         return float(duration_str)
-        
+
     except (ValueError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(f"Erro ao obter duração do vídeo: {exc}") from exc

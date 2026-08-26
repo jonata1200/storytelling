@@ -29,6 +29,7 @@ OLLAMA_CLOUD_TEXT_MODELS = (
     "qwen3.5:397b-cloud",
 )
 
+
 class Settings(BaseSettings):
     app_name: str = "Storytelling"
     app_env: str = "local"

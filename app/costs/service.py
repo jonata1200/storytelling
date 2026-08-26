@@ -248,8 +248,7 @@ async def update_project_cost_budget(
     else:
         metadata["cost_budget_usd"] = str(_money(payload.project_budget_usd))
     metadata["cost_stage_budgets_usd"] = {
-        key.strip().lower(): str(_money(value))
-        for key, value in payload.stage_budgets_usd.items()
+        key.strip().lower(): str(_money(value)) for key, value in payload.stage_budgets_usd.items()
     }
     settings.metadata_json = metadata
     await session.commit()
@@ -325,9 +324,7 @@ async def check_project_budget(
     budget = await get_project_cost_budget(session, project_id)
     normalized_stage = stage.strip().lower() if stage else None
     stage_limit = (
-        budget.stage_budgets_usd.get(normalized_stage)
-        if normalized_stage is not None
-        else None
+        budget.stage_budgets_usd.get(normalized_stage) if normalized_stage is not None else None
     )
     limit = stage_limit if stage_limit is not None else budget.project_budget_usd
     current = await project_cost_for_budget(

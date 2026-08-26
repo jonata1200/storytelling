@@ -22,6 +22,7 @@ from app.config.settings import get_settings
 from app.core.enums import AssetKind
 from app.providers.media_utils import resolve_ffmpeg_path
 from app.storage.service import apply_asset_storage_metadata, resolve_storage_path
+from app.storytelling.models import Scene, Shot
 from app.video_generation.continuous import (
     continuous_video_segment_is_done,
     list_continuous_video_segments,
@@ -39,10 +40,7 @@ def _segment_has_completed_video(segment: ContinuousVideoSegment) -> bool:
         getattr(segment, "generated_video_asset_id", None)
         or getattr(segment, "asset_id", None)
         or continuous_video_segment_is_done(segment)
-        or (
-            isinstance(segment.metadata_json, dict)
-            and segment.metadata_json.get("video_asset_id")
-        )
+        or (isinstance(segment.metadata_json, dict) and segment.metadata_json.get("video_asset_id"))
     )
 
 
@@ -51,20 +49,20 @@ async def check_all_segments_completed(
     project_id: UUID,
 ) -> tuple[bool, int, int]:
     """Verifica se os requisitos de segmentos para finalização foram atingidos.
-    
+
     Retorna (pode_finalizar, total_segmentos, segmentos_com_video).
     """
     segments = await list_continuous_video_segments(session, project_id)
     if not segments:
         return False, 0, 0
-    
+
     total = len(segments)
     completed = sum(1 for seg in segments if _segment_has_completed_video(seg))
-    
+
     # Exige pelo menos 3 vídeos de segmentos criados
     has_minimum = completed >= MIN_SEGMENTS_FOR_FINALIZATION
     is_ready = has_minimum and (completed == total or total < MIN_SEGMENTS_FOR_FINALIZATION)
-    
+
     return is_ready, total, completed
 
 
@@ -74,7 +72,7 @@ async def get_finalization_status(
 ) -> dict[str, Any]:
     """Retorna o status da finalização para um projeto."""
     all_completed, total, completed = await check_all_segments_completed(session, project_id)
-    
+
     # Verificar se já existe um vídeo final
     result = await session.execute(
         select(Asset).where(
@@ -84,7 +82,7 @@ async def get_finalization_status(
         )
     )
     existing_final = result.scalars().first()
-    
+
     return {
         "all_segments_completed": all_completed,
         "total_segments": total,
@@ -104,9 +102,9 @@ async def concatenate_videos(
     project_id: UUID,
 ) -> Asset:
     """Concatena todos os vídeos dos segmentos em um único vídeo final.
-    
+
     Retorna o Asset do vídeo final criado.
-    
+
     Raises:
         RuntimeError: Se não houver pelo menos 3 segmentos concluídos ou se o ffmpeg falhar
     """
@@ -122,11 +120,14 @@ async def concatenate_videos(
             "Todos os segmentos precisam ter vídeo antes da finalização "
             f"({completed}/{total} concluídos)."
         )
-    
-    # Obter todos os segmentos ordenados
+
+    # Obter todos os segmentos ordenados por Scene + Shot.
     segments = await list_continuous_video_segments(session, project_id)
-    ordered_segments = sorted(segments, key=lambda s: int(s.segment_number or 0))
-    
+    gaps = assembly_gaps(segments)
+    if gaps:
+        raise RuntimeError("Montagem bloqueada: " + "; ".join(gaps))
+    ordered_segments = await order_segments_for_assembly(session, segments)
+
     # Obter caminhos dos vídeos
     video_paths: list[Path] = []
     for segment in ordered_segments:
@@ -139,7 +140,7 @@ async def concatenate_videos(
             asset = await session.get(Asset, asset_id)
             if asset and asset.storage_uri:
                 video_uri = str(asset.storage_uri)
-        
+
         if video_uri:
             video_path = resolve_storage_path(video_uri)
             if video_path is not None and video_path.is_file():  # noqa: ASYNC240
@@ -149,26 +150,63 @@ async def concatenate_videos(
                     f"Vídeo do segmento {segment.segment_number} não encontrado no disco: "
                     f"{video_uri}"
                 )
-    
+
     if len(video_paths) < MIN_SEGMENTS_FOR_FINALIZATION:
         raise RuntimeError(
             f"Nenhum ou poucos vídeos de segmento encontrados para concatenação "
             f"({len(video_paths)}/{MIN_SEGMENTS_FOR_FINALIZATION} disponíveis)."
         )
-    
+
     # Concatenar vídeos usando ffmpeg
     final_video_path = await _concatenate_with_ffmpeg(video_paths, project_id)
-    
+
     # Criar Asset do vídeo final
     final_asset = await _create_final_video_asset(
         session, project_id, final_video_path, len(video_paths)
     )
-    
-    logger.info(
-        f"Vídeo final criado para projeto {project_id}: {final_video_path}"
-    )
-    
+
+    logger.info(f"Vídeo final criado para projeto {project_id}: {final_video_path}")
+
     return final_asset
+
+
+def assembly_gaps(segments: list[ContinuousVideoSegment]) -> list[str]:
+    gaps: list[str] = []
+    for segment in segments:
+        is_legacy = not hasattr(segment, "shot_id")
+        if not is_legacy and segment.shot_id is None:
+            gaps.append(f"segmento {segment.segment_number} sem Shot")
+        review_status = str(segment.review_status or "").casefold()
+        if review_status not in {"approved", "done"}:
+            gaps.append(
+                f"shot/segmento {segment.segment_number} sem clip aprovado "
+                f"({segment.review_status})"
+            )
+        if not _segment_has_completed_video(segment):
+            gaps.append(f"shot/segmento {segment.segment_number} sem vídeo")
+    return gaps
+
+
+async def order_segments_for_assembly(
+    session: AsyncSession,
+    segments: list[ContinuousVideoSegment],
+) -> list[ContinuousVideoSegment]:
+    order: dict[UUID, tuple[int, int]] = {}
+    for segment in segments:
+        shot_id = getattr(segment, "shot_id", None)
+        if shot_id is None:
+            continue
+        shot = await session.get(Shot, shot_id)
+        scene = await session.get(Scene, shot.scene_id) if shot else None
+        if shot and scene:
+            order[segment.id] = (int(scene.scene_number), int(shot.shot_number))
+    return sorted(
+        segments,
+        key=lambda item: (
+            *order.get(getattr(item, "id", UUID(int=0)), (2**31 - 1, 2**31 - 1)),
+            item.segment_number,
+        ),
+    )
 
 
 async def _concatenate_with_ffmpeg(
@@ -176,20 +214,20 @@ async def _concatenate_with_ffmpeg(
     project_id: UUID,
 ) -> Path:
     """Concatena vídeos usando ffmpeg.
-    
+
     Usa o método concat demuxer para melhor compatibilidade.
     """
     ffmpeg_path = resolve_ffmpeg_path()
     if not ffmpeg_path:
         raise RuntimeError("ffmpeg não encontrado. Instale o ffmpeg para usar esta funcionalidade.")
-    
+
     # Criar diretório de saída
     settings = get_settings()
     output_dir = settings.local_storage_path / "final_videos" / str(project_id)
     output_dir.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
-    
+
     output_path = output_dir / "video_final.mp4"
-    
+
     # Criar arquivo de lista para o concat demuxer
     with tempfile.NamedTemporaryFile(
         mode="w",
@@ -202,49 +240,51 @@ async def _concatenate_with_ffmpeg(
             absolute_path = video_path.resolve().as_posix()
             list_file.write(f"file '{absolute_path}'\n")
         list_file_path = Path(list_file.name)
-    
+
     try:
         # Comando ffmpeg para concatenar
         cmd = [
             ffmpeg_path,
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(list_file_path),
-            "-c", "copy",  # Copiar sem re-encoding para manter qualidade
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(list_file_path),
+            "-c",
+            "copy",  # Copiar sem re-encoding para manter qualidade
             "-y",  # Sobrescrever se existir
             str(output_path),
         ]
-        
+
         logger.info(f"Executando ffmpeg: {' '.join(cmd)}")
-        
+
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            _stdout, stderr_bytes = await asyncio.wait_for(
-                process.communicate(), timeout=300
-            )
+            _stdout, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=300)
         except TimeoutError as exc:
             process.kill()
             await process.wait()
             raise RuntimeError("ffmpeg excedeu o limite de 5 minutos") from exc
         stderr = stderr_bytes.decode("utf-8", errors="replace")
-        
+
         if process.returncode != 0:
             logger.error("ffmpeg falhou: %s", stderr)
             raise RuntimeError(f"ffmpeg falhou ao concatenar vídeos: {stderr[:500]}")
-        
+
         if not output_path.exists():  # noqa: ASYNC240
             raise RuntimeError("ffmpeg não criou o arquivo de vídeo final")
-        
+
         # Verificar tamanho do arquivo
         file_size = output_path.stat().st_size  # noqa: ASYNC240
         logger.info(f"Vídeo final criado: {output_path} ({file_size} bytes)")
-        
+
         return output_path
-        
+
     finally:
         # Limpar arquivo temporário da lista
         if list_file_path.exists():  # noqa: ASYNC240
@@ -259,7 +299,7 @@ async def _create_final_video_asset(
 ) -> Asset:
     """Cria o Asset do vídeo final."""
     video_sha256 = await asyncio.to_thread(_sha256_file, video_path)
-    
+
     asset = Asset(
         project_id=project_id,
         artifact_id=None,
@@ -279,7 +319,7 @@ async def _create_final_video_asset(
     apply_asset_storage_metadata(asset)
     session.add(asset)
     await session.flush()
-    
+
     # Registrar versão
     session.add(
         AssetVersion(
@@ -290,9 +330,9 @@ async def _create_final_video_asset(
             metadata_json=asset.metadata_json,
         )
     )
-    
+
     await session.flush()
-    
+
     return asset
 
 
@@ -310,11 +350,13 @@ async def get_final_video_asset(
 ) -> Asset | None:
     """Retorna o asset do vídeo final se existir."""
     result = await session.execute(
-        select(Asset).where(
+        select(Asset)
+        .where(
             Asset.project_id == project_id,
             Asset.kind == AssetKind.VIDEO,
             Asset.metadata_json["technical_role"].astext == "final_video",
-        ).order_by(Asset.created_at.desc())
+        )
+        .order_by(Asset.created_at.desc())
     )
     return result.scalars().first()
 
@@ -327,19 +369,17 @@ async def delete_final_video(
     asset = await get_final_video_asset(session, project_id)
     if asset is None:
         return False
-    
+
     # Deletar arquivo físico
     storage_uri = getattr(asset, "storage_uri", None)
     if storage_uri:
         file_path = resolve_storage_path(storage_uri)
         if file_path is not None and file_path.is_file():  # noqa: ASYNC240
             file_path.unlink()  # noqa: ASYNC240
-    
+
     # Deletar registros
-    await session.execute(
-        delete(AssetVersion).where(AssetVersion.asset_id == asset.id)
-    )
+    await session.execute(delete(AssetVersion).where(AssetVersion.asset_id == asset.id))
     await session.delete(asset)
     await session.flush()
-    
+
     return True

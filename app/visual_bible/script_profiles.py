@@ -8,6 +8,7 @@ PLACEHOLDER_PROFILE_NAMES = {"", "item", "personagem", "protagonista"}
 # Funções auxiliares mantidas (usadas por profiles.py, service.py, etc.)
 # ---------------------------------------------------------------------------
 
+
 def _prompt_text(value: object) -> str:
     if isinstance(value, dict):
         parts = [
@@ -324,9 +325,7 @@ def _looks_like_non_character_name(name: str) -> bool:
         return True
     if re.fullmatch(r"(?:sentimento|emocao|emoção)\s+(?:de\s+)?[\w\s]+", normalized):
         return True
-    if any(
-        re.search(rf"\b{re.escape(word)}\b", normalized) for word in GROUP_CHARACTER_WORDS
-    ):
+    if any(re.search(rf"\b{re.escape(word)}\b", normalized) for word in GROUP_CHARACTER_WORDS):
         return True
     if normalized.startswith(
         (
@@ -452,6 +451,7 @@ def _repair_missing_character_names(
 # Extração via LLM (Ollama Cloud)
 # ---------------------------------------------------------------------------
 
+
 async def _llm_extract_characters_and_locations(
     session: Any,
     project_id: object,
@@ -511,6 +511,7 @@ ROTEIRO:
 
     # Parse do JSON retornado pelo LLM
     import json as _json
+
     text = str(result.raw_content or "").strip()
     # Remover markdown code blocks se presentes
     if text.startswith("```"):

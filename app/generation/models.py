@@ -1,4 +1,4 @@
-﻿from decimal import Decimal
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
@@ -41,9 +41,7 @@ class PromptExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class ProjectModelSetting(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "project_model_settings"
     __table_args__ = (
-        UniqueConstraint(
-            "project_id", "task", name="uq_project_model_settings_project_task"
-        ),
+        UniqueConstraint("project_id", "task", name="uq_project_model_settings_project_task"),
     )
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)

@@ -199,10 +199,7 @@ def sort_by_text[T](
             present.append(pair)
         else:
             missing.append(pair)
-    return [
-        item
-        for _index, item in [*sorted(present, key=key, reverse=descending), *missing]
-    ]
+    return [item for _index, item in [*sorted(present, key=key, reverse=descending), *missing]]
 
 
 def sort_by_number[T](
@@ -331,11 +328,7 @@ def _duration_filter_matches(idea: dict[str, object], duration_filter: object) -
 
 
 def unique_idea_filter_options(ideas: Iterable[dict[str, object]], key: str) -> list[str]:
-    values = {
-        str(value).strip()
-        for idea in ideas
-        if (value := idea.get(key)) not in {None, ""}
-    }
+    values = {str(value).strip() for idea in ideas if (value := idea.get(key)) not in {None, ""}}
     return sorted(values, key=normalize_search_text)
 
 
@@ -375,9 +368,7 @@ def filter_ideas(
     if duration_filter not in {None, "", "all"}:
         filtered = [idea for idea in filtered if _duration_filter_matches(idea, duration_filter)]
     if complexity_filter != "all":
-        filtered = [
-            idea for idea in filtered if idea_complexity_bucket(idea) == complexity_filter
-        ]
+        filtered = [idea for idea in filtered if idea_complexity_bucket(idea) == complexity_filter]
     if sort == "retention_desc":
         return sort_by_number(filtered, "retention_potential", descending=True)
     if sort == "cliche_asc":

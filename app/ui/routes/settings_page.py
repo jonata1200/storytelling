@@ -57,20 +57,14 @@ def register_settings_page(
                 ):
                     ai_tab = ui.tab("Inteligência artificial", icon="auto_awesome")
                     data_tab = ui.tab("Dados", icon="delete_sweep")
-                initial_settings_tab = {"ai": ai_tab, "data": data_tab}[
-                    active_settings_tab
-                ]
+                initial_settings_tab = {"ai": ai_tab, "data": data_tab}[active_settings_tab]
                 with ui.tab_panels(settings_tabs, value=initial_settings_tab).classes(
                     "w-full bg-transparent p-0"
                 ):
                     with ui.tab_panel(ai_tab).classes("px-0"):
-                        with ui.element("div").classes(
-                            "entity-card rounded-2xl p-6 w-full"
-                        ):
+                        with ui.element("div").classes("entity-card rounded-2xl p-6 w-full"):
                             with ui.column().classes("w-full gap-1"):
-                                ui.label("Provedores de IA").classes(
-                                    "text-xl font-semibold"
-                                )
+                                ui.label("Provedores de IA").classes("text-xl font-semibold")
                                 ui.label(
                                     "Organize as chaves e os modelos usados pelo fluxo de produção."
                                 ).classes("text-sm text-[#858b86]")
@@ -79,9 +73,7 @@ def register_settings_page(
                                 with ui.row().classes(
                                     "w-full items-center justify-between gap-3 flex-nowrap"
                                 ):
-                                    with ui.row().classes(
-                                        "items-center gap-2 min-w-0 flex-1"
-                                    ):
+                                    with ui.row().classes("items-center gap-2 min-w-0 flex-1"):
                                         ui.icon(icon).classes("text-lg acid")
                                         ui.label(title).classes("font-semibold truncate")
                                     ui.label(provider).classes(
@@ -96,9 +88,7 @@ def register_settings_page(
                             with ui.element("div").classes(
                                 "grid grid-cols-1 lg:grid-cols-3 gap-4 mt-5 w-full"
                             ):
-                                with ui.element("div").classes(
-                                    provider_card_classes
-                                ):
+                                with ui.element("div").classes(provider_card_classes):
                                     provider_header("edit_note", "Texto", "Meta")
                                     meta_base_url = (
                                         ui.input(
@@ -123,28 +113,36 @@ def register_settings_page(
                                         .props("outlined stack-label")
                                         .classes("w-full")
                                     )
-                                    meta_default_model = ui.input(
-                                        "Modelo de texto",
-                                        value=current.meta_default_model,
-                                    ).props("outlined stack-label").classes("w-full")
+                                    meta_default_model = (
+                                        ui.input(
+                                            "Modelo de texto",
+                                            value=current.meta_default_model,
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
+                                    )
 
-                                with ui.element("div").classes(
-                                    provider_card_classes
-                                ):
+                                with ui.element("div").classes(provider_card_classes):
                                     provider_header("image", "Imagem", "Meta Muse Image")
-                                    meta_image_endpoint = ui.input(
-                                        "Endpoint oficial de imagem",
-                                        value=current.meta_image_endpoint,
-                                        placeholder="Disponibilizado pela Meta para sua conta",
-                                    ).props("outlined stack-label").classes("w-full")
-                                    meta_image_model = ui.input(
-                                        "Modelo de imagem",
-                                        value=current.meta_image_model,
-                                    ).props("outlined stack-label").classes("w-full")
+                                    meta_image_endpoint = (
+                                        ui.input(
+                                            "Endpoint oficial de imagem",
+                                            value=current.meta_image_endpoint,
+                                            placeholder="Disponibilizado pela Meta para sua conta",
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
+                                    )
+                                    meta_image_model = (
+                                        ui.input(
+                                            "Modelo de imagem",
+                                            value=current.meta_image_model,
+                                        )
+                                        .props("outlined stack-label")
+                                        .classes("w-full")
+                                    )
 
-                                with ui.element("div").classes(
-                                    provider_card_classes
-                                ):
+                                with ui.element("div").classes(provider_card_classes):
                                     provider_header("movie_filter", "Vídeo", "Vibes / legado")
                                     video_provider = (
                                         ui.select(
@@ -199,9 +197,7 @@ def register_settings_page(
                                         "VIDEO_PROVIDER": str(video_provider.value or "vibes"),
                                         "TEXT_PROVIDER_FALLBACKS": "ollama_cloud",
                                         "META_INTEGRATION_MODE": "api",
-                                        "META_BASE_URL": str(
-                                            meta_base_url.value or ""
-                                        ).strip(),
+                                        "META_BASE_URL": str(meta_base_url.value or "").strip(),
                                         "META_DEFAULT_MODEL": str(
                                             meta_default_model.value or ""
                                         ).strip(),
@@ -232,9 +228,7 @@ def register_settings_page(
                                 save_preferences(values)
                                 ui.notify("Configurações de IA salvas.", color="positive")
 
-                            with ui.row().classes(
-                                "w-full mt-5 justify-end gap-3"
-                            ):
+                            with ui.row().classes("w-full mt-5 justify-end gap-3"):
                                 ui.button(
                                     "Salvar configurações", icon="save", on_click=save_ai
                                 ).props("unelevated no-caps").classes(
@@ -255,12 +249,11 @@ def register_settings_page(
                                 projects_dialog.close()
                                 await purge_all_projects_from_ui()
 
-                            with ui.dialog() as ideas_dialog, ui.card().classes(
-                                "entity-card rounded-2xl p-6 min-w-96"
+                            with (
+                                ui.dialog() as ideas_dialog,
+                                ui.card().classes("entity-card rounded-2xl p-6 min-w-96"),
                             ):
-                                ui.label("Apagar todas as ideias?").classes(
-                                    "text-xl font-semibold"
-                                )
+                                ui.label("Apagar todas as ideias?").classes("text-xl font-semibold")
                                 ui.label(
                                     "Isso remove as ideias do laboratório e os registros internos "
                                     "de ideias no banco. Projetos serão mantidos, mas roteiros, "
@@ -278,8 +271,9 @@ def register_settings_page(
                                         "bg-red-600 text-white rounded-xl"
                                     )
 
-                            with ui.dialog() as projects_dialog, ui.card().classes(
-                                "entity-card rounded-2xl p-6 min-w-96"
+                            with (
+                                ui.dialog() as projects_dialog,
+                                ui.card().classes("entity-card rounded-2xl p-6 min-w-96"),
                             ):
                                 ui.label("Apagar todos os projetos?").classes(
                                     "text-xl font-semibold"
@@ -300,8 +294,9 @@ def register_settings_page(
                                         "bg-red-600 text-white rounded-xl"
                                     )
 
-                            with ui.dialog() as purge_dialog, ui.card().classes(
-                                "entity-card rounded-2xl p-6 min-w-96"
+                            with (
+                                ui.dialog() as purge_dialog,
+                                ui.card().classes("entity-card rounded-2xl p-6 min-w-96"),
                             ):
                                 ui.label("Limpar banco da aplicação?").classes(
                                     "text-xl font-semibold"
@@ -374,4 +369,3 @@ def register_settings_page(
                                     ).props("outline no-caps").classes(
                                         "text-red-300 border-red-900 rounded-xl"
                                     )
-

@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from urllib.parse import quote
 
 from app.config.settings import get_settings

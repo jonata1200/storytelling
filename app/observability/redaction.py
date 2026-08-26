@@ -44,11 +44,13 @@ def redact_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
 
 def _redact_sequence(value: Sequence[Any]) -> list[Any]:
     return [
-        redact_mapping(item) if isinstance(item, Mapping)
+        redact_mapping(item)
+        if isinstance(item, Mapping)
         else (
             _redact_sequence(item)
             if isinstance(item, Sequence) and not isinstance(item, (str, bytes))
-            else redact_secrets(item) if isinstance(item, str)
+            else redact_secrets(item)
+            if isinstance(item, str)
             else item
         )
         for item in value

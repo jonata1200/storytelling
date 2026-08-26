@@ -80,9 +80,7 @@ async def generate_visual_bible(
         ).scalars()
     )
     existing_locations = list(
-        (
-            await session.execute(select(Location).where(Location.project_id == project_id))
-        ).scalars()
+        (await session.execute(select(Location).where(Location.project_id == project_id))).scalars()
     )
     characters = [
         await _upsert_character_profile(

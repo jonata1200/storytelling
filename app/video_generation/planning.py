@@ -1,4 +1,4 @@
-﻿import hashlib
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -70,8 +70,7 @@ def _video_motion_prompt(
     )
     shot_label = f"plano {shot.shot_number}" if shot is not None else "plano do storyboard"
     action = (
-        str(getattr(shot, "action", "") or "").strip()
-        or "animar a acao descrita no storyboard"
+        str(getattr(shot, "action", "") or "").strip() or "animar a acao descrita no storyboard"
     )
     emotion = str(getattr(shot, "emotion", "") or "").strip() or "emocao coerente com o plano"
     camera_movement = (
@@ -88,8 +87,7 @@ def _video_motion_prompt(
         f"não gerar narracao, legendas visuais ou cartelas: {dialogue}."
         if dialogue
         else (
-            "Cena sem fala neste plano; não criar narracao, legendas, "
-            "cartelas ou palavras na cena."
+            "Cena sem fala neste plano; não criar narracao, legendas, cartelas ou palavras na cena."
         )
     )
     return (

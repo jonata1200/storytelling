@@ -435,6 +435,7 @@ async def create_or_get_continuous_video_segment(
     segment = ContinuousVideoSegment(
         project_id=project_id,
         script_id=payload.script_id,
+        shot_id=payload.shot_id,
         segment_number=payload.segment_number,
         title=payload.title.strip(),
         prompt=payload.prompt.strip(),
@@ -589,6 +590,10 @@ async def plan_continuous_video_segments(
     if script is None:
         raise ValueError("Roteiro aprovado nao encontrado para planejar video continuo.")
     scenes, shots_by_scene = await _project_scenes_and_shots(session, project_id)
+    if not any(shots_by_scene.values()):
+        raise ValueError(
+            "Nenhum Shot encontrado. Novos segmentos exigem vínculo explícito com um Shot."
+        )
     visual_context = await _project_visual_context(session, project_id)
     payloads = build_continuous_video_segment_payloads(
         project_id=project_id,
@@ -653,7 +658,8 @@ async def plan_continuous_video_segments(
     planned_segments: list[ContinuousVideoSegment] = []
     previous_segment: ContinuousVideoSegment | None = None
     for payload in payloads:
-        if previous_segment is not None:
+        continuity_break = bool(payload.metadata_json.get("continuity_break"))
+        if previous_segment is not None and not continuity_break:
             payload.source_segment_id = previous_segment.id
             payload.source_video_asset_id = previous_segment.asset_id
             payload.source_frame_asset_id = previous_segment.final_frame_asset_id
@@ -669,6 +675,10 @@ async def plan_continuous_video_segments(
                     else None
                 ),
             }
+        elif continuity_break:
+            payload.source_segment_id = None
+            payload.source_video_asset_id = None
+            payload.source_frame_asset_id = None
         existing = existing_segments.get(payload.segment_number)
         if existing is not None and existing.status == GenerationJobStatus.SUCCEEDED:
             planned_segments.append(existing)
@@ -681,6 +691,7 @@ async def plan_continuous_video_segments(
         if existing is not None:
             existing.title = payload.title.strip()
             existing.script_id = payload.script_id
+            existing.shot_id = payload.shot_id
             existing.prompt = payload.prompt.strip()
             existing.duration_seconds = payload.duration_seconds
             existing.review_status = normalize_continuous_video_review_status(payload.review_status)

@@ -174,11 +174,7 @@ async def dashboard_metrics() -> dict[str, str]:
 
 
 async def project_summary(project_id: UUID, section: str = "script") -> dict[str, Any] | None:
-    active_section = (
-        section
-        if section in {"script", "video"}
-        else "script"
-    )
+    active_section = section if section in {"script", "video"} else "script"
     load_script_details = active_section == "script"
     load_visual = active_section == "visual"
     load_video = active_section == "video"
@@ -205,9 +201,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             continuous_video_segments = list(continuous_video_segments_result.scalars())
         script = await latest(session, Script, project_id)
         visual_refs = (
-            await active_many(session, VisualReference, project_id, 200)
-            if load_visual
-            else []
+            await active_many(session, VisualReference, project_id, 200) if load_visual else []
         )
         clips = await latest_many(session, VideoClip, project_id, 100) if load_video else []
         visual_asset_ids = {

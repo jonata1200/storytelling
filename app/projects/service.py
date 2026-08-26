@@ -322,9 +322,7 @@ async def hard_delete_project(session: AsyncSession, project_id: UUID) -> bool:
     ]
     try:
         for statement in PROJECT_GRAPH_DELETE_STATEMENTS:
-            await session.execute(
-                text(statement.replace("target_projects", "tmp_target_projects"))
-            )
+            await session.execute(text(statement.replace("target_projects", "tmp_target_projects")))
         await session.commit()
     except Exception:
         await session.rollback()

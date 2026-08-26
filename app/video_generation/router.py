@@ -14,6 +14,7 @@ from app.video_generation.continuous import (
     reject_continuous_video_segment,
     update_continuous_video_segment_prompt,
 )
+from app.video_generation.continuous_review import select_continuous_video_segment_variant
 from app.video_generation.schemas import (
     ContinuousVideoPlanningRead,
     ContinuousVideoPlanRead,
@@ -23,6 +24,7 @@ from app.video_generation.schemas import (
     ContinuousVideoReviewRequest,
     ContinuousVideoSegmentPromptUpdate,
     ContinuousVideoSegmentRead,
+    ContinuousVideoVariantSelectRequest,
     GenerationJobRead,
     VideoClipRead,
 )
@@ -173,6 +175,28 @@ async def post_reject_continuous_video_segment(
             project_id,
             segment_id,
             note=payload.note,
+        )
+        await session.commit()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if segment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
+    return ContinuousVideoSegmentRead.model_validate(segment)
+
+
+@router.post(
+    "/{project_id}/continuous/segments/{segment_id}/variants/select",
+    response_model=ContinuousVideoSegmentRead,
+)
+async def post_select_continuous_video_segment_variant(
+    project_id: UUID,
+    segment_id: UUID,
+    payload: ContinuousVideoVariantSelectRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ContinuousVideoSegmentRead:
+    try:
+        segment = await select_continuous_video_segment_variant(
+            session, project_id, segment_id, payload.asset_id
         )
         await session.commit()
     except ValueError as exc:

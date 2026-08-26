@@ -191,4 +191,3 @@ async def _upsert_location_profile(
     )
     existing_locations.append(location)
     return location
-

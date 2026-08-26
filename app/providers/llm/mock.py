@@ -1,4 +1,4 @@
-﻿# ruff: noqa: E501
+# ruff: noqa: E501
 
 from app.providers.llm.types import LLMRequest, LLMResult
 from app.video_generation.durations import video_clip_durations
@@ -75,7 +75,11 @@ class MockLLMProvider:
                 "protagonist_desire": "Impedir um acidente sem abandonar os passageiros",
                 "emotional_need": "Aceitar que controle absoluto tambem pode ferir",
                 "conflict": "Frear o trem salva uma memória coletiva, mas coloca vidas reais em risco",
-                "obstacles": ["sinalizacao contraditoria", "passageiros em panico", "um supervisor que nega a rota"],
+                "obstacles": [
+                    "sinalizacao contraditoria",
+                    "passageiros em panico",
+                    "um supervisor que nega a rota",
+                ],
                 "stakes": "Centenas de pessoas podem sumir dos registros da cidade",
                 "twist": "A estácao fantasma foi criada para esconder um despejo ilegal",
                 "climax": "Nina corta a energia do trem no tunel antes da ultima curva",
@@ -96,7 +100,11 @@ class MockLLMProvider:
                 "protagonist_desire": "Salvar a dona do restáurante sem desaparecer",
                 "emotional_need": "Parar de confundir sacrificio com amor",
                 "conflict": "Cada prato perfeito devolve alguem a uma familia e rouba uma lembranca de Davi",
-                "obstacles": ["clientes desesperados", "receitas que mudam sozinhas", "a dona escondendo a origem da cozinha"],
+                "obstacles": [
+                    "clientes desesperados",
+                    "receitas que mudam sozinhas",
+                    "a dona escondendo a origem da cozinha",
+                ],
                 "stakes": "Davi pode virar um funcionario sem nome em uma cidade que esquece seus cuidadores",
                 "twist": "A primeira péssoa salva por aquela cozinha foi ele mesmo",
                 "climax": "Davi serve um prato incompleto para quebrar o pacto sem abandonar a cliente",
@@ -117,7 +125,11 @@ class MockLLMProvider:
                 "protagonist_desire": "Recuperar o tempo roubado da irma",
                 "emotional_need": "Confiar em aliados em vez de atuar sempre sozinha",
                 "conflict": "Para devolver o tempo roubado, Lia precisa destruir a única prova que salvaria sua irma",
-                "obstacles": ["segurança do leilao", "um comprador que reconhece suas falsificacoes", "o relogio falhando a cada mentira"],
+                "obstacles": [
+                    "segurança do leilao",
+                    "um comprador que reconhece suas falsificacoes",
+                    "o relogio falhando a cada mentira",
+                ],
                 "stakes": "Centenas de trabalhadores podem envelhecer anos em uma única noite",
                 "twist": "A irma de Lia vendeu minutos voluntariamente para financiar a fuga das duas",
                 "climax": "Lia troca o relogio mestre por uma copia imperfeita diante de todos",
@@ -138,7 +150,11 @@ class MockLLMProvider:
                 "protagonist_desire": "Fazer os depoimentos chegarem as pessoas certas",
                 "emotional_need": "Reconhecer a propria voz como prova",
                 "conflict": "Publicar as fitas liberta vitimas, mas tambem incrimina alguem que a protegeu",
-                "obstacles": ["lacres adulterados", "ameacas administrativas", "uma testemunha que pede silencio"],
+                "obstacles": [
+                    "lacres adulterados",
+                    "ameacas administrativas",
+                    "uma testemunha que pede silencio",
+                ],
                 "stakes": "Um julgamento historico pode ser decidido por arquivos falsificados",
                 "twist": "A voz mais importante nas fitas e da propria Helena quando crianca",
                 "climax": "Helena reproduz o audio no alto-falante do tribunal lotado",
@@ -159,7 +175,11 @@ class MockLLMProvider:
                 "protagonist_desire": "Sair do elevador antes da assembleia decisiva",
                 "emotional_need": "Parar de terceirizar decisoes que afetam outras vidas",
                 "conflict": "Cada andar impossível mostra uma consequencia real das omissoes do condomínio",
-                "obstacles": ["vizinhos acusando uns aos outros", "portas que abrem em memórias materiais", "o painel cobrando uma escolha unanime"],
+                "obstacles": [
+                    "vizinhos acusando uns aos outros",
+                    "portas que abrem em memórias materiais",
+                    "o painel cobrando uma escolha unanime",
+                ],
                 "stakes": "O predio pode repetir para sempre a mesma assembleia sem resolver seus danos",
                 "twist": "O elevador foi instalado para transformar decisoes coletivas em experiencia fisica",
                 "climax": "Caio segura a porta aberta e obriga todos a votar olhando para os efeitos",
@@ -180,7 +200,11 @@ class MockLLMProvider:
                 "protagonist_desire": "Salvar o viveiro antes que a cidade o transforme em estácionamento",
                 "emotional_need": "Trocar paciencia silenciosa por confronto público",
                 "conflict": "Expor o jardim salva a memória ambiental, mas pode destruir o trabalho de sua equipe",
-                "obstacles": ["plantas adoecendo em cadeia", "contratos assinados as pressas", "moradores descrentes"],
+                "obstacles": [
+                    "plantas adoecendo em cadeia",
+                    "contratos assinados as pressas",
+                    "moradores descrentes",
+                ],
                 "stakes": "A ultima area verde do bairro pode virar propaganda de sustentabilidade falsa",
                 "twist": "O jardim não reage a mentiras, mas a promessas que ninguem pretende cobrar",
                 "climax": "Rosa planta as mudas no asfalto durante a inauguracao oficial",
@@ -201,7 +225,11 @@ class MockLLMProvider:
                 "protagonist_desire": "Completar a ultima viagem sem deixar passageiros para tras",
                 "emotional_need": "Aceitar que ser necessario não é o mesmo que ser amado",
                 "conflict": "A rota so termina quando cada passageiro admite o medo que trouxe consigo",
-                "obstacles": ["ruas alagadas por lembrancas", "um motorista que quer abandonar a linha", "passageiros recusando ajuda"],
+                "obstacles": [
+                    "ruas alagadas por lembrancas",
+                    "um motorista que quer abandonar a linha",
+                    "passageiros recusando ajuda",
+                ],
                 "stakes": "A linha pode desaparecer levando junto a única conexao do bairro",
                 "twist": "Orlando tambem está preso na rota porque nunca se despediu do proprio futuro",
                 "climax": "Ele abre todos os guarda-chuvas no teto do onibus para inverter a chuva",
@@ -222,7 +250,11 @@ class MockLLMProvider:
                 "protagonist_desire": "Provar que o depoimento foi manipulado sem expor a testemunha",
                 "emotional_need": "Permitir que sua precisão tambem carregue raiva",
                 "conflict": "A única prova está em segundos de silencio que o tribunal considera irrelevantes",
-                "obstacles": ["vídeos comprimidos", "peritos comprados", "uma testemunha aterrorizada"],
+                "obstacles": [
+                    "vídeos comprimidos",
+                    "peritos comprados",
+                    "uma testemunha aterrorizada",
+                ],
                 "stakes": "Um acordo toxico pode condenar trabalhadores a aceitar culpa inexistente",
                 "twist": "As pausas formam um pedido de socorro feito em codigo visual",
                 "climax": "Maya reconstroi o depoimento ao vivo com os gestos omitidos",
@@ -243,7 +275,11 @@ class MockLLMProvider:
                 "protagonist_desire": "Impedir uma obra viaria antes que ela mate de novo",
                 "emotional_need": "Voltar a confiar no proprio senso de orientacao moral",
                 "conflict": "Corrigir o mapa pode salvar o bairro, mas incrimina o antigo parceiro de Tadeu",
-                "obstacles": ["mapas adulterados", "engenheiros apressando a obra", "uma memória falhando"],
+                "obstacles": [
+                    "mapas adulterados",
+                    "engenheiros apressando a obra",
+                    "uma memória falhando",
+                ],
                 "stakes": "O bairro inteiro pode ser redesenhado para esconder mortes previsiveis",
                 "twist": "Tadeu assinou o primeiro mapa defeituoso sem ler a legenda escondida",
                 "climax": "Ele projeta o mapa ferido na fachada da prefeitura durante a votacao",
@@ -264,7 +300,11 @@ class MockLLMProvider:
                 "protagonist_desire": "Manter a turma segura ate o fim do dia",
                 "emotional_need": "Entender presenca como compromisso, não prisão",
                 "conflict": "Para devolver os alunos ao chao, Samira precisa prometer permanecer onde sempre foge",
-                "obstacles": ["direcao negando o fenomeno", "alunos transformando levitacao em desafio", "pais ausentes"],
+                "obstacles": [
+                    "direcao negando o fenomeno",
+                    "alunos transformando levitacao em desafio",
+                    "pais ausentes",
+                ],
                 "stakes": "A turma pode desaparecer pelo teto antes de acreditar em qualquer futuro",
                 "twist": "Samira tambem flutuava quando era aluna daquela escola",
                 "climax": "Ela prende a propria cadeira ao chao e da aula olhando para cima",
@@ -308,7 +348,11 @@ class MockLLMProvider:
         hook = str(idea.get("hook") or "Um sinal visual rompe a rotina.").strip()
         conflict = str(idea.get("conflict") or "A escolha certa cobra um preco imediato.").strip()
         twist = str(idea.get("twist") or "A pista mais confiavel estáva incompleta.").strip()
-        payoff = str(idea.get("payoff") or idea.get("resolution") or "A decisão final muda o sentido da perda.").strip()
+        payoff = str(
+            idea.get("payoff")
+            or idea.get("resolution")
+            or "A decisão final muda o sentido da perda."
+        ).strip()
         location_options = [
             "ESTACAO SUBTERRANEA",
             "COZINHA DE MADRUGADA",
@@ -321,8 +365,7 @@ class MockLLMProvider:
         ]
         location = location_options[sum(ord(char) for char in title) % len(location_options)]
         scene_count = int(
-            variables.get("expected_scene_count")
-            or _expected_scene_count(target_duration_seconds)
+            variables.get("expected_scene_count") or _expected_scene_count(target_duration_seconds)
         )
         scene_templates = [
             (
@@ -361,9 +404,7 @@ class MockLLMProvider:
                 else ""
             )
             ending = "\n\nFADE OUT." if index == scene_count - 1 else ""
-            scenes.append(
-                f"CENA {index + 1:02d}\n{slugline}\n\n{action}{bridge}{ending}"
-            )
+            scenes.append(f"CENA {index + 1:02d}\n{slugline}\n\n{action}{bridge}{ending}")
         content = "\n\n".join([f"TITULO: {title}", "FADE IN:", *scenes])
         return {
             "title": title,

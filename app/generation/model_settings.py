@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -153,8 +153,7 @@ async def llm_provider_for_task(
     settings = get_settings()
     setting = await get_model_setting(session, project_id, task)
     provider = str(
-        getattr(setting, "provider", "")
-        or effective_provider_for_channel(settings, "text")
+        getattr(setting, "provider", "") or effective_provider_for_channel(settings, "text")
     )
     configured_model = (
         getattr(setting, "model", None)

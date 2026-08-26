@@ -86,8 +86,7 @@ def load_runtime_preferences(path: Path = PREFERENCES_PATH) -> dict[str, str]:
         normalized_value = str(value)
         if (
             normalized_key in PROVIDER_PREFERENCE_KEYS
-            and normalized_value.strip().casefold()
-            not in PROVIDER_VALUES_BY_KEY[normalized_key]
+            and normalized_value.strip().casefold() not in PROVIDER_VALUES_BY_KEY[normalized_key]
         ):
             continue
         preferences[normalized_key.lower()] = normalized_value
@@ -105,8 +104,7 @@ def save_runtime_preferences(values: dict[str, str], path: Path = PREFERENCES_PA
             raise ValueError(f"Invalid control character in preference: {key}")
         if len(value) > PREFERENCE_VALUE_MAX_LENGTH:
             raise ValueError(
-                f"Preference value too long for {key}: "
-                f"{len(value)} > {PREFERENCE_VALUE_MAX_LENGTH}"
+                f"Preference value too long for {key}: {len(value)} > {PREFERENCE_VALUE_MAX_LENGTH}"
             )
         normalized[key] = value
 

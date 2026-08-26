@@ -179,9 +179,7 @@ async def render_ideas_page(
                                                 time.monotonic()
                                                 - float(progress_state["started_at"])
                                             ),
-                                            latest_title=str(
-                                                progress_state["latest_title"]
-                                            ),
+                                            latest_title=str(progress_state["latest_title"]),
                                         ),
                                     )
                                 refresh_idea_filter_options()
@@ -266,9 +264,7 @@ async def render_ideas_page(
                 deleted = await delete_lab_idea_from_ui(idea_id, "saved")
                 if not deleted:
                     return
-                saved_ideas[:] = [
-                    idea for idea in saved_ideas if str(idea.get("id")) != idea_id
-                ]
+                saved_ideas[:] = [idea for idea in saved_ideas if str(idea.get("id")) != idea_id]
                 refresh_idea_filter_options()
                 saved_results.refresh()
                 safe_notify("Ideia apagada definitivamente.", color="warning")
@@ -343,9 +339,7 @@ async def render_ideas_page(
                 }
 
             def current_idea_duration_filter_options() -> dict[str, str]:
-                values = {
-                    float(coerce_duration_minutes(value)) for value in STORY_DURATION_OPTIONS
-                }
+                values = {float(coerce_duration_minutes(value)) for value in STORY_DURATION_OPTIONS}
                 return {
                     "all": "Todas",
                     **{f"{value:g}": f"{value:g} min" for value in sorted(values)},
@@ -387,9 +381,7 @@ async def render_ideas_page(
                     ui.button(
                         icon="filter_alt_off",
                         on_click=clear_idea_filters,
-                    ).props("flat round dense").classes("text-[#aeb3ae]").tooltip(
-                        "Limpar filtros"
-                    )
+                    ).props("flat round dense").classes("text-[#aeb3ae]").tooltip("Limpar filtros")
                 with ui.row().classes("w-full gap-2 items-end flex-wrap"):
                     idea_search = (
                         ui.input(
@@ -538,9 +530,7 @@ async def render_ideas_page(
                                 ui.button(
                                     "Descartar",
                                     icon="delete",
-                                    on_click=lambda idea_id=saved_idea_id: delete_saved(
-                                        idea_id
-                                    ),
+                                    on_click=lambda idea_id=saved_idea_id: delete_saved(idea_id),
                                 ).props("flat no-caps").classes("text-red-300")
                                 ui.button(
                                     "Desenvolver",

@@ -220,9 +220,7 @@ class OpenAICompatibleLLMProvider:
         try:
             with self._urlopen(http_request, timeout_seconds) as response:
                 raw_body = response.read()
-                content_type = str(
-                    getattr(response, "headers", {}).get("content-type", "")
-                ).lower()
+                content_type = str(getattr(response, "headers", {}).get("content-type", "")).lower()
                 if "text/event-stream" in content_type:
                     try:
                         parsed = self._parse_event_stream_response(raw_body)
@@ -383,9 +381,7 @@ class OpenAICompatibleLLMProvider:
             if not isinstance(chunk, dict):
                 continue
             if error := chunk.get("error"):
-                raise RuntimeError(
-                    f"{config.display_name} retornou erro: {redact_secrets(error)}"
-                )
+                raise RuntimeError(f"{config.display_name} retornou erro: {redact_secrets(error)}")
             model = model or str(chunk.get("model") or "")
             if isinstance(chunk.get("usage"), dict):
                 usage = chunk["usage"]
@@ -423,8 +419,7 @@ class OpenAICompatibleLLMProvider:
         if not isinstance(choices, list) or not choices:
             keys = ", ".join(sorted(response.keys())) or "nenhuma chave"
             raise RuntimeError(
-                f"{config.display_name} retornou resposta sem choices. "
-                f"Chaves recebidas: {keys}"
+                f"{config.display_name} retornou resposta sem choices. Chaves recebidas: {keys}"
             )
 
         first_choice = choices[0]

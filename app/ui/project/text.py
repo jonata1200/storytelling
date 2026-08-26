@@ -1,4 +1,4 @@
-﻿from typing import Any
+from typing import Any
 
 from app.storytelling.service import coerce_duration_minutes
 from app.ui.shared.page_config import clean_idea_title

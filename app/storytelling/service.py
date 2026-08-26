@@ -1,4 +1,4 @@
-﻿import re
+import re
 import unicodedata
 from decimal import Decimal
 from uuid import UUID
@@ -101,12 +101,6 @@ from app.video_generation.durations import (
 from app.workflows.state_machine import advance_project_status
 
 SCRIPT_GENERATION_MAX_ATTEMPTS = 3
-
-
-
-
-
-
 
 
 def _revision_match_text(value: str) -> str:
@@ -265,9 +259,7 @@ def _script_revision_size_targets(
 
 
 async def _ensure_script_video_package_duration(session: AsyncSession, script: Script) -> int:
-    target_duration_seconds = _video_package_total_duration_seconds(
-        script.target_duration_seconds
-    )
+    target_duration_seconds = _video_package_total_duration_seconds(script.target_duration_seconds)
     if target_duration_seconds != script.target_duration_seconds:
         script.target_duration_seconds = target_duration_seconds
         await session.flush()
@@ -348,16 +340,6 @@ async def create_briefing(
     return briefing
 
 
-
-
-
-
-
-
-
-
-
-
 async def generate_story_hooks(
     session: AsyncSession,
     project_id: UUID,
@@ -372,12 +354,7 @@ async def generate_story_hooks(
     project = await ProjectRepository(session).get_project(project_id)
     idea = await session.get(StoryIdea, story_idea_id)
     briefing = await get_latest_briefing(session, project_id)
-    if (
-        project is None
-        or idea is None
-        or idea.project_id != project_id
-        or briefing is None
-    ):
+    if project is None or idea is None or idea.project_id != project_id or briefing is None:
         return None
 
     narrative_contract = _idea_script_contract(idea, briefing)
@@ -441,12 +418,7 @@ async def generate_script(
     project = await ProjectRepository(session).get_project(project_id)
     idea = await session.get(StoryIdea, story_idea_id)
     briefing = await get_latest_briefing(session, project_id)
-    if (
-        project is None
-        or idea is None
-        or idea.project_id != project_id
-        or briefing is None
-    ):
+    if project is None or idea is None or idea.project_id != project_id or briefing is None:
         return None
 
     if target_duration_minutes is not None:
@@ -531,9 +503,7 @@ async def generate_script(
         raise GenerationOutputError("generate_script: resposta sem roteiro")
     if story_hook is not None:
         payload["story_hook"] = story_hook
-    artifact = await _create_artifact(
-        session, project_id, ArtifactType.SCRIPT, title, payload
-    )
+    artifact = await _create_artifact(session, project_id, ArtifactType.SCRIPT, title, payload)
     await _add_dependency(session, idea.artifact_id, artifact.id)
     script = Script(
         project_id=project_id,
@@ -690,9 +660,7 @@ async def revise_script(
     return script
 
 
-async def _script_embedded_production_plan(
-    session: AsyncSession, script: Script
-) -> dict | None:
+async def _script_embedded_production_plan(session: AsyncSession, script: Script) -> dict | None:
     result = await session.execute(
         select(ScriptVersion)
         .where(ScriptVersion.script_id == script.id)
@@ -804,9 +772,7 @@ async def generate_scenes_and_shots(
             ),
             1,
         ):
-            shot_context = (
-                f"generate_scenes_and_shots.scenes[{scene_index}].shots[{shot_index}]"
-            )
+            shot_context = f"generate_scenes_and_shots.scenes[{scene_index}].shots[{shot_index}]"
             shot_payload = _required_mapping(raw_shot_payload, shot_context)
             shot_artifact = await _create_artifact(
                 session,
@@ -880,9 +846,7 @@ async def _mark_existing_scene_plan_stale(
     await session.flush()
 
 
-async def mark_scene_plan_stale(
-    session: AsyncSession, project_id: UUID, script_id: UUID
-) -> None:
+async def mark_scene_plan_stale(session: AsyncSession, project_id: UUID, script_id: UUID) -> None:
     await _mark_existing_scene_plan_stale(session, project_id, script_id)
 
 

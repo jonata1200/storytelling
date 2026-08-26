@@ -194,9 +194,7 @@ ACTION_NOW_COPY = {
     "revise_script": "Agora: revisando o roteiro e preservando o que ja existe.",
     "generate_assets": "Agora: criando prompts visuais e preparando referencias.",
     "approve_visual_prompt": "Agora: aprovando os prompts visuais solicitados.",
-    "approve_storyboard_prompt": (
-        "Agora: aprovando os prompts de storyboard solicitados."
-    ),
+    "approve_storyboard_prompt": ("Agora: aprovando os prompts de storyboard solicitados."),
     "generate_storyboard": "Agora: criando quadros de storyboard e animatic.",
     "generate_video": "Agora: preparando o pacote manual de video a partir do storyboard.",
 }
@@ -360,9 +358,7 @@ def _progress_for_step(step_key: str, counts: dict[str, Any]) -> tuple[int, int,
         if expected_refs > 0:
             return min(_safe_count(counts, "visual_refs"), expected_refs), expected_refs, "imagem"
         completed_groups = sum(
-            1
-            for key in ("characters", "locations")
-            if _safe_count(counts, key) > 0
+            1 for key in ("characters", "locations") if _safe_count(counts, key) > 0
         )
         return completed_groups, 2, "grupo"
 

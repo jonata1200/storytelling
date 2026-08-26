@@ -85,6 +85,8 @@ def test_shot_generation_spec_serializes_without_provider_names() -> None:
     spec = ShotGenerationSpec(
         shot_id=uuid4(),
         scene_id=uuid4(),
+        scene_title="Praça",
+        scene_summary="Ana atravessa a praça",
         duration_seconds=4.5,
         characters=["Ana"],
         location="Praça",
@@ -92,6 +94,7 @@ def test_shot_generation_spec_serializes_without_provider_names() -> None:
         action="caminha",
         emotion="esperança",
         camera="travelling lateral",
+        visual_composition="plano médio lateral",
         lighting="amanhecer",
         continuity={"wardrobe": "casaco azul"},
         visual_references=["storage/generated_images/ana.png"],

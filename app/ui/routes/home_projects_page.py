@@ -38,9 +38,7 @@ async def render_projects_page(
             with ui.column().classes("w-full gap-3"):
                 with ui.row().classes("w-full items-start justify-between gap-3 flex-nowrap"):
                     with ui.column().classes("gap-1 min-w-0 flex-1"):
-                        ui.label("Projetos").classes(
-                            "brand-type text-2xl md:text-4xl font-bold"
-                        )
+                        ui.label("Projetos").classes("brand-type text-2xl md:text-4xl font-bold")
                         ui.label("Acompanhe e continue suas produções de vídeo.").classes(
                             "text-xs md:text-base text-[#8f9590]"
                         )
@@ -59,9 +57,7 @@ async def render_projects_page(
                     "w-full border border-dashed border-[#363b36] rounded-2xl min-h-64 flex flex-col items-center justify-center text-[#969c97]"
                 ):
                     ui.icon("folder_open").classes("text-5xl")
-                    ui.label("Nenhum projeto criado ainda.").classes(
-                        "mt-3 text-lg font-semibold"
-                    )
+                    ui.label("Nenhum projeto criado ainda.").classes("mt-3 text-lg font-semibold")
                     ui.button(
                         "Começar uma criação",
                         icon="auto_awesome",
@@ -139,9 +135,7 @@ async def render_projects_page(
                     ui.button(
                         icon="filter_alt_off",
                         on_click=clear_project_filters,
-                    ).props("flat round dense").classes("text-[#aeb3ae]").tooltip(
-                        "Limpar filtros"
-                    )
+                    ).props("flat round dense").classes("text-[#aeb3ae]").tooltip("Limpar filtros")
 
                 @ui.refreshable
                 def project_results() -> None:
@@ -205,4 +199,3 @@ async def render_projects_page(
                             ui.label("Criar novo projeto").classes("mt-2 font-semibold")
 
                 project_results()
-

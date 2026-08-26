@@ -84,16 +84,17 @@ async def approve_continuous_video_segment(
         segment.segment_number + 1,
     )
     if next_segment is not None:
-        next_segment.source_segment_id = segment.id
-        next_segment.source_frame_asset_id = segment.final_frame_asset_id
         next_metadata = dict(next_segment.metadata_json or {})
-        next_metadata["source_segment_id"] = str(segment.id)
-        next_metadata["source_frame_asset_id"] = str(segment.final_frame_asset_id)
-        next_metadata["initial_frame_asset_id"] = str(segment.final_frame_asset_id)
-        if metadata.get("final_frame_storage_uri"):
-            next_metadata["source_frame_storage_uri"] = metadata["final_frame_storage_uri"]
-        next_metadata["continuity_source_summary"] = metadata["continuity_summary"]
-        next_segment.metadata_json = next_metadata
+        if not bool(next_metadata.get("continuity_break")):
+            next_segment.source_segment_id = segment.id
+            next_segment.source_frame_asset_id = segment.final_frame_asset_id
+            next_metadata["source_segment_id"] = str(segment.id)
+            next_metadata["source_frame_asset_id"] = str(segment.final_frame_asset_id)
+            next_metadata["initial_frame_asset_id"] = str(segment.final_frame_asset_id)
+            if metadata.get("final_frame_storage_uri"):
+                next_metadata["source_frame_storage_uri"] = metadata["final_frame_storage_uri"]
+            next_metadata["continuity_source_summary"] = metadata["continuity_summary"]
+            next_segment.metadata_json = next_metadata
     await _emit_continuous_video_segment_event(
         session,
         segment=segment,
@@ -214,6 +215,20 @@ def _reset_continuous_video_segment_for_regeneration(
     reason: str,
 ) -> None:
     metadata = dict(segment.metadata_json or {})
+    previous_asset_id = segment.generated_video_asset_id or segment.asset_id
+    if previous_asset_id is not None:
+        variants = list(metadata.get("variants") or [])
+        snapshot = {
+            "asset_id": str(previous_asset_id),
+            "provider": segment.provider,
+            "model": segment.model,
+            "review_status": segment.review_status,
+            "review_note": metadata.get("review_note"),
+            "archived_at": datetime.now(UTC).isoformat(),
+        }
+        if not any(item.get("asset_id") == snapshot["asset_id"] for item in variants):
+            variants.append(snapshot)
+        metadata["variants"] = variants
     if segment.final_frame_asset_id is not None:
         metadata["previous_final_frame_asset_id"] = str(segment.final_frame_asset_id)
     if metadata.get("initial_frame_asset_id"):
@@ -237,6 +252,33 @@ def _reset_continuous_video_segment_for_regeneration(
     segment.external_operation_id = None
     metadata["review_status"] = CONTINUOUS_VIDEO_REVIEW_PENDING
     segment.metadata_json = metadata
+
+
+async def select_continuous_video_segment_variant(
+    session: AsyncSession,
+    project_id: UUID,
+    segment_id: UUID,
+    asset_id: UUID,
+) -> ContinuousVideoSegment | None:
+    segment = await session.get(ContinuousVideoSegment, segment_id)
+    if segment is None or segment.project_id != project_id:
+        return None
+    metadata = dict(segment.metadata_json or {})
+    variants = list(metadata.get("variants") or [])
+    known = {str(item.get("asset_id")) for item in variants}
+    current = segment.generated_video_asset_id or segment.asset_id
+    if current:
+        known.add(str(current))
+    if str(asset_id) not in known:
+        raise ValueError("Asset não pertence ao histórico de variantes deste Shot")
+    segment.asset_id = asset_id
+    segment.generated_video_asset_id = asset_id
+    metadata["selected_variant_asset_id"] = str(asset_id)
+    metadata["variant_selected_at"] = datetime.now(UTC).isoformat()
+    segment.metadata_json = metadata
+    _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_READY)
+    await session.flush()
+    return segment
 
 
 async def invalidate_continuous_video_downstream_segments(
@@ -506,6 +548,12 @@ async def regenerate_rejected_continuous_video_segment(
     )
     if review_status != CONTINUOUS_VIDEO_REVIEW_REJECTED:
         raise ValueError("Somente segmentos rejeitados podem ser regenerados por este fluxo.")
+    metadata = dict(segment.metadata_json or {})
+    note = str(metadata.get("review_note") or "").strip()
+    if note:
+        segment.prompt = f"{segment.prompt.rstrip()}\nRevision direction: {note}."
+        metadata["rejection_note_applied_to_prompt"] = True
+        segment.metadata_json = metadata
     return await generate_continuous_video_segment(
         session,
         project_id,

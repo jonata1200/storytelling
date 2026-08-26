@@ -14,9 +14,7 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
-    parent_project_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("projects.id"), nullable=True
-    )
+    parent_project_id: Mapped[UUID | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     episode_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     content_type: Mapped[str] = mapped_column(String(80), default="short_drama", nullable=False)
     aspect_ratio: Mapped[str] = mapped_column(String(20), default="9:16", nullable=False)
@@ -33,8 +31,6 @@ class ProjectProductionSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         server_default="manual_package",
         nullable=False,
     )
-    audio_mode: Mapped[str] = mapped_column(
-        String(80), default="dialogue_only", nullable=False
-    )
+    audio_mode: Mapped[str] = mapped_column(String(80), default="dialogue_only", nullable=False)
     motion_intensity: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)

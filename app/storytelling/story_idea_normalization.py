@@ -106,19 +106,12 @@ def _normalize_language_probe_text(value: object) -> str:
 
 
 def _story_idea_language_errors(payload: dict) -> list[str]:
-    combined = " ".join(
-        str(payload.get(field) or "")
-        for field in STORY_IDEA_LANGUAGE_TEXT_FIELDS
-    )
+    combined = " ".join(str(payload.get(field) or "") for field in STORY_IDEA_LANGUAGE_TEXT_FIELDS)
     probe = _normalize_language_probe_text(combined)
     portuguese_markers = sum(1 for marker in PORTUGUESE_LANGUAGE_MARKERS if marker in probe)
-    non_portuguese_markers = sum(
-        1 for marker in NON_PORTUGUESE_LANGUAGE_MARKERS if marker in probe
-    )
+    non_portuguese_markers = sum(1 for marker in NON_PORTUGUESE_LANGUAGE_MARKERS if marker in probe)
     if non_portuguese_markers >= 4 and portuguese_markers <= 2:
-        return [
-            "campos textuais parecem estar em outro idioma; responda em portugues do Brasil"
-        ]
+        return ["campos textuais parecem estar em outro idioma; responda em portugues do Brasil"]
     return []
 
 

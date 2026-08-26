@@ -23,6 +23,7 @@ from app.workflows.state_machine import advance_project_status
 
 SCRIPT_GENERATION_MAX_ATTEMPTS = 3
 
+
 async def get_latest_briefing(session: AsyncSession, project_id: UUID) -> Briefing | None:
     result = await session.execute(
         select(Briefing)

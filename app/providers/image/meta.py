@@ -90,9 +90,7 @@ class MetaImageProvider:
         file_path = request.output_dir / f"{uuid4().hex}{extension}"
         file_path.write_bytes(image_bytes)
         sha256 = hashlib.sha256(image_bytes).hexdigest()
-        usage: dict[str, Any] = (
-            response["usage"] if isinstance(response.get("usage"), dict) else {}
-        )
+        usage: dict[str, Any] = response["usage"] if isinstance(response.get("usage"), dict) else {}
         return ImageGenerationResult(
             file_path=file_path,
             storage_uri=file_path.as_posix(),
@@ -101,9 +99,7 @@ class MetaImageProvider:
             provider=self.provider_name,
             model=str(response.get("model") or request.model),
             prompt=request.prompt,
-            external_job_id=str(
-                response.get("id") or external_metadata.get("generation_id") or ""
-            ),
+            external_job_id=str(response.get("id") or external_metadata.get("generation_id") or ""),
             estimated_cost=str(usage.get("cost") or "0.000000"),
             metadata=external_metadata,
         )
@@ -117,9 +113,7 @@ class MetaImageProvider:
     ) -> dict[str, Any]:
         last_error: Exception | None = None
         for attempt in range(META_IMAGE_MAX_ATTEMPTS):
-            request = urllib.request.Request(
-                endpoint, data=payload, headers=headers, method="POST"
-            )
+            request = urllib.request.Request(endpoint, data=payload, headers=headers, method="POST")
             try:
                 return self._read_json(request, timeout_seconds)
             except urllib.error.HTTPError as exc:
@@ -140,9 +134,7 @@ class MetaImageProvider:
             time.sleep(META_IMAGE_RETRY_DELAYS_SECONDS[min(attempt, 1)])
         raise RuntimeError(f"{self.display_name} indisponível: {redact_secrets(last_error)}")
 
-    def _read_json(
-        self, request: urllib.request.Request, timeout_seconds: float
-    ) -> dict[str, Any]:
+    def _read_json(self, request: urllib.request.Request, timeout_seconds: float) -> dict[str, Any]:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             payload = json.loads(response.read().decode("utf-8"))
         if not isinstance(payload, dict):
@@ -162,16 +154,16 @@ class MetaImageProvider:
         if not isinstance(item, dict):
             raise RuntimeError(f"{self.display_name} não retornou imagem")
         metadata = {
-            key: value
-            for key, value in item.items()
-            if key not in {"b64_json", "base64", "url"}
+            key: value for key, value in item.items() if key not in {"b64_json", "base64", "url"}
         }
         encoded = item.get("b64_json") or item.get("base64")
         if isinstance(encoded, str) and encoded:
             try:
-                return base64.b64decode(encoded, validate=True), str(
-                    item.get("content_type") or ""
-                ), metadata
+                return (
+                    base64.b64decode(encoded, validate=True),
+                    str(item.get("content_type") or ""),
+                    metadata,
+                )
             except ValueError as exc:
                 raise RuntimeError(f"{self.display_name} retornou base64 inválido") from exc
         url = str(item.get("url") or "").strip()
@@ -186,11 +178,7 @@ class MetaImageProvider:
     def _validate_download_url(url: str, endpoint: str, configured_hosts: str) -> None:
         parsed = urllib.parse.urlparse(url)
         endpoint_host = urllib.parse.urlparse(endpoint).hostname or ""
-        allowed = {
-            host.strip().casefold()
-            for host in configured_hosts.split(",")
-            if host.strip()
-        }
+        allowed = {host.strip().casefold() for host in configured_hosts.split(",") if host.strip()}
         if endpoint_host:
             allowed.add(endpoint_host.casefold())
         if (

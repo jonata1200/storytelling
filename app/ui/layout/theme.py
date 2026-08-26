@@ -541,7 +541,3 @@ def apply_body_style() -> None:
         </style>
         """
     )
-
-
-
-

@@ -5,6 +5,8 @@ import re
 from typing import Any
 from uuid import UUID
 
+from app.generation.shot_generation_spec import ShotGenerationSpec
+from app.generation.shot_prompt_compiler import VibesPromptCompiler
 from app.storytelling.models import Scene, Script, Shot
 from app.video_generation.continuous import (
     _ABSTRACT_SEGMENT_TERMS,
@@ -43,8 +45,7 @@ def _prompt_is_too_generic(prompt: str) -> bool:
         return False
     quoted_parts = re.findall(r'"([^"]{8,})"', prompt)
     return not any(
-        len(re.findall(r"[^\W\d_]+", part, flags=re.UNICODE)) >= 3
-        for part in quoted_parts
+        len(re.findall(r"[^\W\d_]+", part, flags=re.UNICODE)) >= 3 for part in quoted_parts
     )
 
 
@@ -101,10 +102,7 @@ def _compact_segment_action(
         selected_sentences = sentences[:max_sentences]
         selected_keys = {sentence.casefold() for sentence in selected_sentences}
         for sentence in sentences[max_sentences:]:
-            if (
-                _is_dialogue_prompt_sentence(sentence)
-                and sentence.casefold() not in selected_keys
-            ):
+            if _is_dialogue_prompt_sentence(sentence) and sentence.casefold() not in selected_keys:
                 selected_sentences.append(sentence)
                 selected_keys.add(sentence.casefold())
         action = " ".join(selected_sentences).strip()
@@ -117,9 +115,7 @@ def _compact_segment_action(
 def _segment_action_guidance(action: str) -> str:
     normalized = action.casefold()
     if any(term in normalized for term in _ABSTRACT_SEGMENT_TERMS):
-        return (
-            "Mostre a emocao apenas por gestos, olhar, postura e interacao fisica."
-        )
+        return "Mostre a emocao apenas por gestos, olhar, postura e interacao fisica."
     return "Mostre apenas a acao visivel, sem narracao, legendas ou texto na tela."
 
 
@@ -138,11 +134,7 @@ def _visual_prompt_details(
     fallback_from_text: str,
     max_items: int = 3,
 ) -> list[str]:
-    selected_names = [
-        str(name or "").strip()
-        for name in names or []
-        if str(name or "").strip()
-    ]
+    selected_names = [str(name or "").strip() for name in names or [] if str(name or "").strip()]
     if not selected_names:
         selected_names = _names_present(fallback_from_text, visual_items)
     selected_keys = {name.casefold() for name in selected_names}
@@ -186,7 +178,7 @@ def _strip_leading_name(text: str, name: str) -> str:
     normalized_text = text.strip()
     name_lower = name.casefold()
     if normalized_text.casefold().startswith(name_lower):
-        remainder = normalized_text[len(name):].lstrip(", ;:-")
+        remainder = normalized_text[len(name) :].lstrip(", ;:-")
         return remainder if remainder else text
     return text
 
@@ -378,8 +370,10 @@ def _script_action_units_for_chunks(paragraphs: list[str]) -> list[str]:
             clean_line = line.strip()
             if not clean_line:
                 continue
-            if _is_transition_marker(clean_line) or _is_scene_marker(clean_line) or _is_slugline(
-                clean_line
+            if (
+                _is_transition_marker(clean_line)
+                or _is_scene_marker(clean_line)
+                or _is_slugline(clean_line)
             ):
                 pending_speaker = ""
                 continue
@@ -494,6 +488,10 @@ def _ordered_shot_units(scenes: list[Scene], shots_by_scene: dict[UUID, list[Sho
             )
             units.append(
                 {
+                    "shot_id": shot.id,
+                    "shot": shot,
+                    "scene": scene,
+                    "continuity_break": bool((shot.payload or {}).get("continuity_break")),
                     "scene_number": scene.scene_number,
                     "shot_numbers": [shot.shot_number],
                     "duration": int(shot.duration_seconds or 0),
@@ -533,6 +531,24 @@ def _segment_sources(
             }
             for chunk in chunks
         ]
+    shot_units_with_ids = [unit for unit in shot_units if unit.get("shot_id")]
+    if shot_units_with_ids:
+        return [
+            {
+                "shot_id": unit["shot_id"],
+                "shot": unit["shot"],
+                "scene": unit["scene"],
+                "continuity_break": unit["continuity_break"],
+                "text": unit["text"],
+                "scene_numbers": [unit["scene_number"]],
+                "shot_numbers": list(unit["shot_numbers"]),
+                "duration": max(1, int(unit["duration"] or segment_duration_seconds)),
+                "camera_movement": unit["camera_movement"],
+                "emotion": unit["emotion"],
+                "visual_composition": unit["visual_composition"],
+            }
+            for unit in shot_units_with_ids
+        ]
     segments: list[dict] = []
     current: list[dict] = []
     current_duration = 0
@@ -546,9 +562,7 @@ def _segment_sources(
                     "text": " ".join(str(item["text"]) for item in current),
                     "scene_numbers": [item["scene_number"] for item in current],
                     "shot_numbers": [
-                        shot_number
-                        for item in current
-                        for shot_number in item["shot_numbers"]
+                        shot_number for item in current for shot_number in item["shot_numbers"]
                     ],
                     "camera_movement": str(last_unit.get("camera_movement") or "").strip(),
                     "emotion": str(last_unit.get("emotion") or "").strip(),
@@ -621,9 +635,7 @@ def _segment_prompt(
     )
 
     # Diálogo
-    dialogue = str(
-        (visual_context or {}).get("dialogue", "") or ""
-    ).strip()
+    dialogue = str((visual_context or {}).get("dialogue", "") or "").strip()
     if not dialogue:
         dialogue = _extract_dialogue_from_source(source_text)
 
@@ -714,6 +726,7 @@ def _extract_dialogue_from_source(source_text: str) -> str:
     2. Formato ja processado: Dialogo falado por ARTHUR: "O resgate..."
     """
     import re
+
     dialogues: list[str] = []
     # Detectar formato ja processado: "Dialogo falado por SPEAKER: \"text\""
     processed = re.findall(
@@ -736,7 +749,7 @@ def _extract_dialogue_from_source(source_text: str) -> str:
             continue
         if pending_speaker:
             clean_speaker = re.sub(r"\s+", " ", str(pending_speaker)).strip(" .:-")
-            if line.startswith('"') or line.startswith('\u201c'):
+            if line.startswith('"') or line.startswith("\u201c"):
                 dialogue_text = line
             else:
                 dialogue_text = f'"{line}"'
@@ -843,20 +856,40 @@ def build_continuous_video_segment_payloads(
     prev_scene_numbers: list[int] | None = None
     prev_characters: list[str] | None = None
     for index, source in enumerate(sources, 1):
+        shot_duration = max(1, int(source.get("duration") or segment_duration_seconds))
         source_text = str(source.get("text") or "").strip()
         action = _normalize_segment_action(_compact_segment_action(source_text))
+        continuity_break = bool(source.get("continuity_break"))
         continuity = (
             "comece estabelecendo o momento inicial da historia"
-            if index == 1
+            if index == 1 or continuity_break
             else "continue diretamente o movimento e o estado emocional do segmento anterior"
         )
         characters = _names_present(source_text, visual_context.get("characters", []))
         locations = _names_present(source_text, visual_context.get("locations", []))
+        source_shot = source.get("shot")
+        if isinstance(source_shot, Shot):
+            source_payload = dict(source_shot.payload or {})
+            configured_characters = source_payload.get("characters")
+            if not isinstance(configured_characters, list):
+                configured_characters = []
+            characters = list(
+                dict.fromkeys(
+                    [*characters, *(str(item) for item in configured_characters)]
+                )
+            )
+            configured_location = str(source_payload.get("location") or "").strip()
+            if configured_location and configured_location not in locations:
+                locations.append(configured_location)
         scene_numbers = source.get("scene_numbers", [])
 
         # Classificar tipo do segmento
         segment_type = _classify_segment_type(
-            index, scene_numbers, prev_scene_numbers, characters, prev_characters,
+            index,
+            scene_numbers,
+            prev_scene_numbers,
+            characters,
+            prev_characters,
         )
 
         # Dados do Shot para o prompt
@@ -878,10 +911,46 @@ def build_continuous_video_segment_payloads(
             shot_emotion=shot_emotion,
             shot_visual_composition=shot_visual_composition,
         )
+        shot = source_shot
+        scene = source.get("scene")
+        shot_spec: ShotGenerationSpec | None = None
+        compiler_version = CONTINUOUS_VIDEO_PROMPT_VERSION
+        if isinstance(shot, Shot) and isinstance(scene, Scene):
+            shot_payload = dict(shot.payload or {})
+            raw_states = shot_payload.get("character_states")
+            character_states = raw_states if isinstance(raw_states, dict) else {}
+            shot_spec = ShotGenerationSpec(
+                shot_id=shot.id,
+                scene_id=scene.id,
+                scene_title=scene.title,
+                scene_summary=scene.summary,
+                duration_seconds=float(shot_duration),
+                characters=characters,
+                location=locations[0] if locations else None,
+                props=[str(item) for item in shot_payload.get("props", [])],
+                action=shot.action,
+                emotion=shot.emotion,
+                camera=shot.camera_movement,
+                camera_movement=shot.camera_movement,
+                visual_composition=shot.visual_composition,
+                lighting=str(shot_payload.get("lighting") or ""),
+                character_states=character_states,
+                continuity={
+                    **dict(shot_payload.get("continuity") or {}),
+                    "continuity_break": continuity_break,
+                    "spatial_orientation": shot_payload.get("spatial_continuity") or "",
+                },
+                visual_references=["approved"] if characters or locations else [],
+            )
+            compiled = VibesPromptCompiler().compile(shot_spec)
+            prompt = compiled.prompt
+            compiler_version = compiled.compiler_version
 
         prev_scene_numbers = scene_numbers
         prev_characters = characters
         metadata = {
+            "shot_id": str(source["shot_id"]) if source.get("shot_id") else None,
+            "continuity_break": continuity_break,
             "action": action,
             "characters": characters,
             "locations": locations,
@@ -896,12 +965,16 @@ def build_continuous_video_segment_payloads(
             "previous_segment_fingerprint": previous_segment_fingerprint,
             "custom_prompt": False,
             "prompt_version": CONTINUOUS_VIDEO_PROMPT_VERSION,
+            "prompt_compiler_version": compiler_version,
+            "shot_generation_spec": (
+                shot_spec.model_dump(mode="json") if shot_spec is not None else None
+            ),
         }
         fingerprint = continuous_video_request_fingerprint(
             project_id=project_id,
             segment_number=index,
             prompt=prompt,
-            duration_seconds=segment_duration_seconds,
+            duration_seconds=shot_duration,
             provider=provider,
             model=model,
             script_fingerprint=script_fingerprint,
@@ -912,10 +985,11 @@ def build_continuous_video_segment_payloads(
         payloads.append(
             ContinuousVideoSegmentCreate(
                 script_id=script.id,
+                shot_id=source.get("shot_id"),
                 segment_number=index,
                 title=f"Segmento {index:02d}",
                 prompt=prompt,
-                duration_seconds=segment_duration_seconds,
+                duration_seconds=shot_duration,
                 provider=provider,
                 model=model,
                 review_status=CONTINUOUS_VIDEO_REVIEW_PENDING,
@@ -926,4 +1000,3 @@ def build_continuous_video_segment_payloads(
         )
         previous_segment_fingerprint = fingerprint
     return payloads
-

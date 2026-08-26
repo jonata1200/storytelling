@@ -45,16 +45,13 @@ def _render_model_settings(project_id: UUID, settings_list: list[ProjectModelSet
                 f"{configured_text_provider.upper()}_API_KEY ausente ou inválida: "
                 "modelos reais não serão chamados"
             ).classes(
-                "text-xs px-2 py-1 rounded-md bg-amber-950 text-amber-200 "
-                "border border-amber-800"
+                "text-xs px-2 py-1 rounded-md bg-amber-950 text-amber-200 border border-amber-800"
             )
         _muted("Escolha o modelo Meta usado em cada etapa narrativa.")
         for task in NARRATIVE_TASKS:
             task_setting = settings_by_task.get(task)
             selected_model = (
-                task_setting.model
-                if task_setting is not None
-                else app_settings.meta_default_model
+                task_setting.model if task_setting is not None else app_settings.meta_default_model
             )
             with ui.row().classes("w-full items-end gap-2"):
                 ui.label(TASK_LABELS[task]).classes("w-28 text-sm text-slate-300")
@@ -165,5 +162,3 @@ def _render_asset_canvas(summary: dict[str, Any]) -> None:
                         with ui.card().classes(_card_classes("w-full p-3")):
                             ui.icon(icon_name).classes("text-cyan-300")
                             ui.label(str(name)).classes("text-sm font-semibold")
-
-

@@ -50,9 +50,7 @@ class ArtifactCreate(BaseModel):
 
         serialized = json.dumps(value, default=str, ensure_ascii=True)
         if len(serialized.encode("utf-8")) > ARTIFACT_PAYLOAD_MAX_BYTES:
-            raise ValueError(
-                f"payload excede o limite de {ARTIFACT_PAYLOAD_MAX_BYTES} bytes"
-            )
+            raise ValueError(f"payload excede o limite de {ARTIFACT_PAYLOAD_MAX_BYTES} bytes")
         return value
 
 

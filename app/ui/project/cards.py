@@ -14,8 +14,8 @@ def render_project_card(
 ) -> None:
     with ui.dialog() as rename_dialog, ui.card().classes("entity-card rounded-2xl p-6 min-w-96"):
         ui.label("Renomear projeto").classes("brand-type text-2xl font-bold")
-        name_input = ui.input("Nome do projeto", value=project.title).props("outlined").classes(
-            "w-full"
+        name_input = (
+            ui.input("Nome do projeto", value=project.title).props("outlined").classes("w-full")
         )
         with ui.row().classes("w-full justify-end gap-2 mt-2"):
             ui.button("Cancelar", on_click=rename_dialog.close).props("flat no-caps")
@@ -29,9 +29,9 @@ def render_project_card(
 
     with ui.dialog() as delete_dialog, ui.card().classes("entity-card rounded-2xl p-6 min-w-96"):
         ui.label("Excluir projeto?").classes("brand-type text-2xl font-bold")
-        ui.label(
-            f'O projeto "{project.title}" será removido da lista de projetos.'
-        ).classes("text-sm text-[#8d938e]")
+        ui.label(f'O projeto "{project.title}" será removido da lista de projetos.').classes(
+            "text-sm text-[#8d938e]"
+        )
         with ui.row().classes("w-full justify-end gap-2 mt-2"):
             ui.button("Cancelar", on_click=delete_dialog.close).props("flat no-caps")
             ui.button(
@@ -55,11 +55,7 @@ def render_project_card(
             with ui.row().classes("gap-2 mt-2 flex-wrap"):
                 ui.button("Renomear", icon="edit", on_click=rename_dialog.open).props(
                     "flat no-caps"
-                ).classes("text-[#aeb3ae]").on(
-                    "click.stop", lambda: None
-                )
+                ).classes("text-[#aeb3ae]").on("click.stop", lambda: None)
                 ui.button("Excluir", icon="delete", on_click=delete_dialog.open).props(
                     "flat no-caps"
-                ).classes("text-red-300").on(
-                    "click.stop", lambda: None
-                )
+                ).classes("text-red-300").on("click.stop", lambda: None)

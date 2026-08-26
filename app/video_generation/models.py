@@ -94,9 +94,7 @@ class ClipReview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class ContinuousVideoPlan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "continuous_video_plans"
-    __table_args__ = (
-        UniqueConstraint("project_id", name="uq_continuous_video_plans_project_id"),
-    )
+    __table_args__ = (UniqueConstraint("project_id", name="uq_continuous_video_plans_project_id"),)
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     mode: Mapped[str] = mapped_column(
@@ -145,6 +143,7 @@ class ContinuousVideoSegment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     script_id: Mapped[UUID | None] = mapped_column(ForeignKey("scripts.id"), nullable=True)
+    shot_id: Mapped[UUID | None] = mapped_column(ForeignKey("shots.id"), nullable=True, index=True)
     segment_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(220), default="", nullable=False)
     prompt: Mapped[str] = mapped_column(Text, default="", nullable=False)

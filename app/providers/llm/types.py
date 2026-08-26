@@ -24,5 +24,4 @@ class LLMResult(BaseModel):
 
 
 class LLMProvider(Protocol):
-    async def generate_structured(self, request: LLMRequest) -> LLMResult:
-        ...
+    async def generate_structured(self, request: LLMRequest) -> LLMResult: ...

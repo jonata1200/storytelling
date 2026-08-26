@@ -18,9 +18,7 @@ from app.visual_bible.models import (
 )
 from app.workflows.models import ArtifactDependency
 
-VISUAL_RESET_BLOCKER_MODELS = (
-    ("video_clips", VideoClip),
-)
+VISUAL_RESET_BLOCKER_MODELS = (("video_clips", VideoClip),)
 
 
 def _delete_local_storage_file(storage_uri: str) -> bool:
@@ -108,9 +106,7 @@ async def reset_visual_bible(
         asset_storage_uris = [str(row[0] or "") for row in storage_result.all()]
 
     if reference_ids:
-        await session.execute(
-            delete(VisualReference).where(VisualReference.id.in_(reference_ids))
-        )
+        await session.execute(delete(VisualReference).where(VisualReference.id.in_(reference_ids)))
     if character_ids:
         await session.execute(
             delete(CharacterVersion).where(CharacterVersion.character_id.in_(character_ids))
@@ -219,9 +215,7 @@ async def delete_visual_target(
         asset_storage_uris = [str(row[0] or "") for row in storage_result.all()]
 
     if reference_ids:
-        await session.execute(
-            delete(VisualReference).where(VisualReference.id.in_(reference_ids))
-        )
+        await session.execute(delete(VisualReference).where(VisualReference.id.in_(reference_ids)))
     if character_ids:
         await session.execute(
             delete(CharacterVersion).where(CharacterVersion.character_id.in_(character_ids))

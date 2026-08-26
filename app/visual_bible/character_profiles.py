@@ -1,4 +1,4 @@
-﻿import hashlib
+import hashlib
 import re
 
 from app.generation.prompt_language import ensure_portuguese_prompt_text
@@ -204,9 +204,7 @@ def _character_visual_defaults(name: str) -> dict[str, object]:
         "brasileira litoranea",
         "brasileira de origem nordestina",
     ]
-    height_cm = 155 + (
-        int(hashlib.sha1(f"{name}:height".encode()).hexdigest()[:8], 16) % 36
-    )
+    height_cm = 155 + (int(hashlib.sha1(f"{name}:height".encode()).hexdigest()[:8], 16) % 36)
     return {
         "origin": _seeded_choice(name, origins, 0),
         "height_cm": height_cm,
@@ -325,6 +323,3 @@ def _character_profile(raw: object) -> dict:
         "asset_kind": "character",
         "canonical_prompt": canonical_prompt,
     }
-
-
-

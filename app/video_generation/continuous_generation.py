@@ -386,10 +386,11 @@ async def _finalize_segment_video(
         )
         next_segment = next_result.scalars().first()
         if next_segment:
-            next_segment.source_frame_asset_id = last_frame_asset_id
             metadata_next = dict(next_segment.metadata_json or {})
-            metadata_next["initial_frame_asset_id"] = str(last_frame_asset_id)
-            next_segment.metadata_json = metadata_next
+            if not bool(metadata_next.get("continuity_break")):
+                next_segment.source_frame_asset_id = last_frame_asset_id
+                metadata_next["initial_frame_asset_id"] = str(last_frame_asset_id)
+                next_segment.metadata_json = metadata_next
 
     segment.metadata_json = metadata
 

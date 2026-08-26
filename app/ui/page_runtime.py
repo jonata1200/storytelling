@@ -95,11 +95,7 @@ def _sync_ai_action_events_to_chat(project_id: UUID, summary_or_action: dict[str
     nicegui_app = _ui_pages().nicegui_app
     assistant_state.nicegui_app = nicegui_app
     summary = summary_or_action if "production_settings" in summary_or_action else {}
-    ai_action = (
-        _project_ai_action(summary)
-        if summary
-        else summary_or_action
-    )
+    ai_action = _project_ai_action(summary) if summary else summary_or_action
     if summary:
         counts = summary.get("counts")
         count_map = counts if isinstance(counts, dict) else {}

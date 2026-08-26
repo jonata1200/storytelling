@@ -55,9 +55,7 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
         default = "meta" if channel == "image" else DEFAULT_VIDEO_PROVIDER
         allowed = SUPPORTED_IMAGE_PROVIDERS if channel == "image" else SUPPORTED_VIDEO_PROVIDERS
         configured_provider = getattr(settings, f"{channel}_provider", None) or default
-        return normalize_provider_name(
-            configured_provider, f"{channel.upper()}_PROVIDER", allowed
-        )
+        return normalize_provider_name(configured_provider, f"{channel.upper()}_PROVIDER", allowed)
     channel_provider = getattr(settings, f"{channel}_provider", None)
     configured_provider = channel_provider or getattr(settings, "ai_provider", DEFAULT_PROVIDER)
     return normalize_provider_name(

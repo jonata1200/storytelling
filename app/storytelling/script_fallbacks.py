@@ -71,16 +71,6 @@ def _fallback_script_content_from_bible(
     )
 
 
-
-
-
-
-
-
-
-
-
-
 def _fallback_script_content_from_idea(
     idea_payload: dict, title: str, target_duration_seconds: int
 ) -> str:

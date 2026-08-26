@@ -140,9 +140,8 @@ def _pending_frame_count(
     )
     if status in {"ready", "ready_for_review", "done", "approved", "succeeded"}:
         return 0
-    initial_frame_asset_id = (
-        getattr(segment, "source_frame_asset_id", None)
-        or metadata.get("initial_frame_asset_id")
+    initial_frame_asset_id = getattr(segment, "source_frame_asset_id", None) or metadata.get(
+        "initial_frame_asset_id"
     )
     if frame_strategy == CONTINUOUS_VIDEO_FRAME_STRATEGY_CONTINUITY:
         count = 1
@@ -186,9 +185,7 @@ def _row_from_segment(
     return ContinuousVideoSegmentRow(
         id=segment.id,
         number=int(getattr(segment, "segment_number", 0) or 0),
-        title=str(
-            getattr(segment, "title", "") or f"Segmento {int(segment.segment_number):02d}"
-        ),
+        title=str(getattr(segment, "title", "") or f"Segmento {int(segment.segment_number):02d}"),
         prompt=str(getattr(segment, "prompt", "") or ""),
         action=str(metadata.get("action") or ""),
         visual_summary=_visual_summary(metadata),
@@ -204,8 +201,7 @@ def _row_from_segment(
             or metadata.get("initial_frame_asset_id")
         ),
         final_frame_asset_id=(
-            getattr(segment, "final_frame_asset_id", None)
-            or metadata.get("final_frame_asset_id")
+            getattr(segment, "final_frame_asset_id", None) or metadata.get("final_frame_asset_id")
         ),
         validation_errors=continuous_video_segment_validation_errors(segment),
     )
@@ -236,20 +232,12 @@ def build_continuous_video_view_model(summary: dict[str, Any]) -> ContinuousVide
         if frame_strategy == CONTINUOUS_VIDEO_FRAME_STRATEGY_CONTINUITY:
             if row.final_frame_asset_id is not None or pending_frame_count > 0:
                 chain_source_available = True
-    generated = sum(
-        1 for row in rows if row.status in {"ready", "done", "approved", "succeeded"}
-    )
+    generated = sum(1 for row in rows if row.status in {"ready", "done", "approved", "succeeded"})
     failed = sum(1 for row in rows if row.status in {"failed", "rejected"})
-    running = sum(
-        1 for row in rows if row.status in {"preparing", "generating", "running"}
-    )
+    running = sum(1 for row in rows if row.status in {"preparing", "generating", "running"})
     pending = len(rows) - generated
     next_row = next(
-        (
-            row
-            for row in rows
-            if row.status in {"pending", "retry_scheduled", "failed", "rejected"}
-        ),
+        (row for row in rows if row.status in {"pending", "retry_scheduled", "failed", "rejected"}),
         None,
     )
     can_prepare = any(

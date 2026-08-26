@@ -1,4 +1,4 @@
-﻿from nicegui import ui
+from nicegui import ui
 
 from app.config.preferences import save_preferences
 from app.config.settings import get_settings
@@ -93,9 +93,7 @@ def workspace_header(
             ).classes("text-[#9da29d] shrink-0")
             with ui.column().classes("gap-0 min-w-0"):
                 ui.label(project.title).classes("font-semibold truncate max-w-72")
-                ui.label("Episodio 1").classes(
-                    "workspace-episode text-[11px] text-[#818681]"
-                )
+                ui.label("Episodio 1").classes("workspace-episode text-[11px] text-[#818681]")
             if counts.get("stale_artifacts", 0):
                 ui.badge(f"{counts['stale_artifacts']} desatualizado(s)").classes(
                     "bg-amber-900 text-amber-100 shrink-0"
@@ -103,13 +101,17 @@ def workspace_header(
         with ui.row().classes("workspace-nav desktop-nav items-center gap-1"):
             for label, key in WORKSPACE_TABS:
                 allowed, reason = workspace_section_access(key, counts, workflow_mode)
-                button = ui.button(
-                    label,
-                    icon=None if allowed else "lock",
-                    on_click=lambda k=key: ui.navigate.to(f"/projects/{project.id}/{k}"),
-                ).props("flat no-caps" if allowed else "flat no-caps disable").classes(
-                    f"nav-pill rounded-full px-3 {'nav-active' if active == key else ''} "
-                    f"{'nav-locked cursor-not-allowed' if not allowed else ''}"
+                button = (
+                    ui.button(
+                        label,
+                        icon=None if allowed else "lock",
+                        on_click=lambda k=key: ui.navigate.to(f"/projects/{project.id}/{k}"),
+                    )
+                    .props("flat no-caps" if allowed else "flat no-caps disable")
+                    .classes(
+                        f"nav-pill rounded-full px-3 {'nav-active' if active == key else ''} "
+                        f"{'nav-locked cursor-not-allowed' if not allowed else ''}"
+                    )
                 )
                 if not allowed:
                     button.tooltip(reason)
@@ -135,5 +137,3 @@ def workspace_header(
                 ui.label(label).classes("mobile-nav-label")
             if not allowed:
                 nav_button.tooltip(reason)
-
-

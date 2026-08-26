@@ -1,4 +1,4 @@
-﻿from uuid import UUID
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -68,9 +68,7 @@ def _validated_production_payload(payload: dict) -> dict:
     if "aspect_ratio" in validated:
         validated["aspect_ratio"] = normalize_image_aspect_ratio(validated["aspect_ratio"])
     if "video_resolution" in validated:
-        validated["video_resolution"] = normalize_video_resolution(
-            validated["video_resolution"]
-        )
+        validated["video_resolution"] = normalize_video_resolution(validated["video_resolution"])
     for key, allowed_values in validators.items():
         if key in validated and validated[key] not in allowed_values:
             allowed = ", ".join(sorted(allowed_values))
@@ -79,9 +77,7 @@ def _validated_production_payload(payload: dict) -> dict:
         try:
             intensity = int(float(validated["motion_intensity"]))
         except (TypeError, ValueError) as exc:
-            raise ValueError(
-                "motion_intensity deve ser um numero inteiro entre 1 e 10"
-            ) from exc
+            raise ValueError("motion_intensity deve ser um numero inteiro entre 1 e 10") from exc
         if intensity < 1 or intensity > 10:
             raise ValueError("motion_intensity deve ficar entre 1 e 10")
         validated["motion_intensity"] = intensity
@@ -107,9 +103,7 @@ async def get_or_create_production_settings(
     episode_number: int = 1,
 ) -> ProjectProductionSettings:
     result = await session.execute(
-        select(ProjectProductionSettings).where(
-            ProjectProductionSettings.project_id == project_id
-        )
+        select(ProjectProductionSettings).where(ProjectProductionSettings.project_id == project_id)
     )
     settings = result.scalars().first()
     if settings is not None:

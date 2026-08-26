@@ -20,24 +20,22 @@ def render_visual_bible_area(project_id: UUID, summary: dict[str, Any]) -> None:
     with ui.row().classes("w-full items-center justify-between gap-3"):
         with ui.column().classes("gap-1"):
             ui.label("Visual Bible").classes("text-3xl font-bold")
-            ui.label(
-                "Personagens, locais e referências canônicas versionadas."
-            ).classes("text-sm text-slate-400")
+            ui.label("Personagens, locais e referências canônicas versionadas.").classes(
+                "text-sm text-slate-400"
+            )
         ui.badge(f"{len(references)} referências").classes("bg-slate-800")
 
     if not characters and not locations:
-        ui.label(
-            "Gere os perfis visuais a partir do roteiro antes de criar imagens."
-        ).classes("text-amber-200")
+        ui.label("Gere os perfis visuais a partir do roteiro antes de criar imagens.").classes(
+            "text-amber-200"
+        )
         return
 
     for target_kind, targets in (("character", characters), ("location", locations)):
         ui.label("Personagens" if target_kind == "character" else "Locais").classes(
             "text-xl font-semibold mt-4"
         )
-        with ui.element("div").classes(
-            "grid grid-cols-1 xl:grid-cols-2 gap-4 w-full"
-        ):
+        with ui.element("div").classes("grid grid-cols-1 xl:grid-cols-2 gap-4 w-full"):
             for target in targets:
                 target_refs = [
                     item

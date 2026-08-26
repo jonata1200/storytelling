@@ -1,4 +1,4 @@
-﻿from app.storytelling.models import Briefing, StoryIdea
+from app.storytelling.models import Briefing, StoryIdea
 
 
 def _canonical_character_name(value: object, fallback: str = "Protagonista") -> str:

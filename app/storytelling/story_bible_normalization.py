@@ -1,4 +1,4 @@
-﻿import re
+import re
 from typing import cast
 
 from app.storytelling.models import Briefing

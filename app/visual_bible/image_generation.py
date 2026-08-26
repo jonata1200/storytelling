@@ -75,9 +75,7 @@ async def generate_visual_reference(
     model = provider_model(settings, provider_name, "image")
     if not model:
         raise ValueError(f"Modelo de imagem não configurado para {provider_name}")
-    prior_references = await approved_visual_references(
-        session, project_id, target_kind, target_id
-    )
+    prior_references = await approved_visual_references(session, project_id, target_kind, target_id)
     references = [
         ProviderImageReference(
             uri=asset.storage_uri,
@@ -92,9 +90,7 @@ async def generate_visual_reference(
             model=model,
             aspect_ratio="9:16",
             references=references,
-            output_dir=generated_output_dir(
-                "image", project_id, settings.local_storage_path
-            ),
+            output_dir=generated_output_dir("image", project_id, settings.local_storage_path),
             metadata={
                 "target_kind": target_kind,
                 "target_id": str(target_id),
@@ -124,9 +120,7 @@ async def generate_visual_reference(
         "generation_seed": result.metadata.get("seed"),
         "external_generation_id": result.external_job_id,
         "provider_job_id": result.external_job_id,
-        "source_mode": str(
-            getattr(settings, f"{provider_name}_image_integration_mode", "api")
-        ),
+        "source_mode": str(getattr(settings, f"{provider_name}_image_integration_mode", "api")),
         "approved": False,
         "provider_metadata": result.metadata,
         "estimated_cost": result.estimated_cost,

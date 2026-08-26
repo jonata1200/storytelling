@@ -1,4 +1,4 @@
-﻿from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetVersion
 from app.assets.schemas import AssetCreate

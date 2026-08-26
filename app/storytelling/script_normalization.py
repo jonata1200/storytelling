@@ -128,8 +128,10 @@ def _json_mapping_from_text(value: object) -> dict | None:
             .replace("\\t", "\t")
         )
     text_key = str(content or "").upper()
-    if "FADE IN" in text_key and "CENA" in text_key and any(
-        marker in text_key for marker in ("INT.", "EXT.", "INT/EXT.")
+    if (
+        "FADE IN" in text_key
+        and "CENA" in text_key
+        and any(marker in text_key for marker in ("INT.", "EXT.", "INT/EXT."))
     ):
         return {"content": str(content)}
     return None
@@ -364,9 +366,7 @@ def _looks_like_location_dialogue_cue(cue_key: str, location_keys: set[str]) -> 
 
 def _location_dialogue_cue_errors(content: str) -> list[str]:
     lines = str(content or "").splitlines()
-    location_keys = {
-        key for line in lines if (key := _location_key_from_slugline(line.strip()))
-    }
+    location_keys = {key for line in lines if (key := _location_key_from_slugline(line.strip()))}
     errors: list[str] = []
     for index, raw_line in enumerate(lines):
         line = raw_line.strip()
@@ -655,7 +655,6 @@ def _normalize_embedded_production_plan(
         target_duration_seconds,
         script_content,
     )
-
 
 
 from app.storytelling.script_fallbacks import (  # noqa: E402,F401

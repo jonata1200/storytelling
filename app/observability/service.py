@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 from collections import Counter
 from decimal import Decimal
@@ -122,8 +122,7 @@ async def list_project_events(
 
 def _breakdown(counter: Counter[str]) -> list[OperationalBreakdownRead]:
     return [
-        OperationalBreakdownRead(key=key, count=count)
-        for key, count in sorted(counter.items())
+        OperationalBreakdownRead(key=key, count=count) for key, count in sorted(counter.items())
     ]
 
 
@@ -407,8 +406,7 @@ async def readiness_dashboard(
         )
     )
     components.extend(
-        _provider_channel_readiness(app_settings, channel)
-        for channel in ("text", "image", "video")
+        _provider_channel_readiness(app_settings, channel) for channel in ("text", "image", "video")
     )
     overall = "ready" if all(item.status == "ready" for item in components) else "degraded"
     if any(item.status == "down" for item in components):

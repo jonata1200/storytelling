@@ -202,6 +202,7 @@ def register_home_pages(
                                 ).props("round unelevated").classes(
                                     "prompt-send-button acid-bg shadow-lg"
                                 )
+
     @ui.page("/projects", response_timeout=15)
     async def projects_page() -> None:
         await render_projects_page(

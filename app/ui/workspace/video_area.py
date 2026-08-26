@@ -444,9 +444,7 @@ def render_video_area(
                         if is_preparing_segment:
                             with ui.row().classes("items-center gap-2 mt-3 text-sm text-[#d1d4d1]"):
                                 ui.spinner(size="sm").classes("acid")
-                                ui.label(
-                                    "Gerando vídeo contínuo. Atualize para verificar."
-                                )
+                                ui.label("Gerando vídeo contínuo. Atualize para verificar.")
                         if visual_summary:
                             ui.label(visual_summary).classes("text-xs text-[#8d938e] mt-2")
                         ui.label(str(getattr(segment, "prompt", "") or "")).classes(

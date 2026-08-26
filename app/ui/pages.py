@@ -429,7 +429,9 @@ async def _create_project_from_form(
             schedule_initial_script_generation(project_id, background_source_idea)
             message = f"Projeto criado. A IA iniciou o roteiro de {duration:g} minutos."
         elif generate_initial_idea:
-            message = "Projeto criado. A IA está preparando a ideia base para você escolher um gancho."
+            message = (
+                "Projeto criado. A IA está preparando a ideia base para você escolher um gancho."
+            )
         elif source_idea is not None:
             message = "Projeto criado. Escolha a duração do roteiro para desenvolver a história."
         else:
@@ -567,6 +569,7 @@ def _render_loading_status(status: LoadingStatus) -> None:
             ui.label(f"{round(status.ratio * 100)}%")
         progress_bar = ui.linear_progress(value=status.ratio, show_value=False).classes("w-full")
         progress_bar.props("instant-feedback rounded")
+
 
 def _generation_loading_dialog(title: str, message: str | LoadingStatus) -> Any:
     with (

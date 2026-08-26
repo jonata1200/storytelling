@@ -135,11 +135,7 @@ class OpenRouterVideoProvider:
         error = None
         raw_error = response.get("error")
         if raw_error:
-            error = (
-                raw_error.get("message")
-                if isinstance(raw_error, dict)
-                else str(raw_error)
-            )
+            error = raw_error.get("message") if isinstance(raw_error, dict) else str(raw_error)
         usage = response.get("usage")
         usage_cost = None
         if isinstance(usage, dict):
@@ -147,9 +143,7 @@ class OpenRouterVideoProvider:
             if raw_cost is not None:
                 usage_cost = str(raw_cost)
         unsigned_urls = [
-            str(url)
-            for url in (response.get("unsigned_urls") or [])
-            if str(url).strip()
+            str(url) for url in (response.get("unsigned_urls") or []) if str(url).strip()
         ]
         return VideoJobUpdate(
             status=status,
@@ -292,8 +286,10 @@ class OpenRouterVideoProvider:
         api_key: str,
         url: str,
     ) -> dict[str, Any]:
-        target = url if url.startswith("http://") or url.startswith("https://") else (
-            f"{base_url.rstrip('/')}/{url.lstrip('/')}"
+        target = (
+            url
+            if url.startswith("http://") or url.startswith("https://")
+            else (f"{base_url.rstrip('/')}/{url.lstrip('/')}")
         )
         request = urllib.request.Request(
             target,
@@ -311,9 +307,7 @@ class OpenRouterVideoProvider:
                 return cast(dict[str, Any], json.loads(response.read().decode("utf-8")))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:400]
-            raise RuntimeError(
-                f"OpenRouter vídeo poll HTTP {exc.code}: {detail}"
-            ) from exc
+            raise RuntimeError(f"OpenRouter vídeo poll HTTP {exc.code}: {detail}") from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise RuntimeError(f"OpenRouter vídeo poll indisponível: {exc}") from exc
 
@@ -325,9 +319,7 @@ class OpenRouterVideoProvider:
         unsigned_urls: list[str] | None = None,
     ) -> tuple[bytes, str]:
         candidate_urls = list(unsigned_urls or [])
-        candidate_urls.append(
-            f"{base_url.rstrip('/')}/videos/{job.id}/content"
-        )
+        candidate_urls.append(f"{base_url.rstrip('/')}/videos/{job.id}/content")
         last_error: BaseException | None = None
         for url in candidate_urls:
             if not str(url or "").strip():

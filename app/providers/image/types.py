@@ -59,5 +59,4 @@ class ImageGenerationResult(BaseModel):
 class ImageProvider(Protocol):
     provider_name: str
 
-    async def generate(self, request: ImageGenerationRequest) -> ImageGenerationResult:
-        ...
+    async def generate(self, request: ImageGenerationRequest) -> ImageGenerationResult: ...

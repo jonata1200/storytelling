@@ -33,15 +33,11 @@ async def post_reference_plan(
     payload: GenerateVisualReferencesRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> VisualReferencePlan:
-    target = await _get_visual_target(
-        session, project_id, payload.target_kind, payload.target_id
-    )
+    target = await _get_visual_target(session, project_id, payload.target_kind, payload.target_id)
     if target is None:
         raise HTTPException(status_code=404, detail="Entidade visual não encontrada")
     profile, _artifact_id = target
-    shots_result = await session.execute(
-        select(Shot.payload).where(Shot.project_id == project_id)
-    )
+    shots_result = await session.execute(select(Shot.payload).where(Shot.project_id == project_id))
     return plan_visual_references(
         payload.target_kind,
         payload.target_id,
@@ -59,9 +55,7 @@ async def post_generate_references(
     payload: GenerateVisualReferencesRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[VisualReferenceRead]:
-    target = await _get_visual_target(
-        session, project_id, payload.target_kind, payload.target_id
-    )
+    target = await _get_visual_target(session, project_id, payload.target_kind, payload.target_id)
     if target is None:
         raise HTTPException(status_code=404, detail="Entidade visual não encontrada")
     profile, _artifact_id = target
@@ -147,9 +141,7 @@ async def post_reject_reference(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> VisualReferenceRead:
     try:
-        reference = await set_visual_reference_status(
-            session, project_id, reference_id, "rejected"
-        )
+        reference = await set_visual_reference_status(session, project_id, reference_id, "rejected")
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return VisualReferenceRead.model_validate(reference)

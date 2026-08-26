@@ -301,8 +301,13 @@ def _profile_mapping(raw: object, fallback_name: str | None = None) -> dict:
                 _first_value(normalized, "role", "funcao", "função", fallback="")
             )
             normalized["name"] = (
-                normalized.get("nome") or normalized.get("title") or normalized.get("titulo")
-                or fallback_name or identifier_name or role_name or "Item"
+                normalized.get("nome")
+                or normalized.get("title")
+                or normalized.get("titulo")
+                or fallback_name
+                or identifier_name
+                or role_name
+                or "Item"
             )
         return normalized
     text = str(raw or "").strip()
@@ -350,21 +355,78 @@ def _looks_like_temporal_location_name(value: object) -> bool:
 
 # Common location suffixes/prefixes that indicate sub-areas of the same building
 LOCATION_SUBAREA_KEYWORDS = {
-    "hall", "corredor", "elevador", "escada", "entrada", "saida",
-    "sala", "consultorio", "escritorio", "quarto", "banheiro",
-    "cozinha", "sala de espera", "recepcao",
-    "parking", "estacionamento", "garagem",
+    "hall",
+    "corredor",
+    "elevador",
+    "escada",
+    "entrada",
+    "saida",
+    "sala",
+    "consultorio",
+    "escritorio",
+    "quarto",
+    "banheiro",
+    "cozinha",
+    "sala de espera",
+    "recepcao",
+    "parking",
+    "estacionamento",
+    "garagem",
 }
 
 BUILDING_KEYWORDS = {
-    "hospital", "escola", "universidade", "museu", "igreja", "templo",
-    "banco", "hotel", "escritorio", "escritório", "empresa", "sede",
-    "fabrica", "fábrica", "prisao", "prisão", "tribunal", "casa", "mansao", "mansão",
-    "apartamento", "condominio", "condomínio", "edificio", "edifício", "predio", "prédio",
-    "estacao", "estação", "estacao orbital", "estação orbital", "nave", "espaconave",
-    "espaçonave", "base", "laboratorio", "laboratório", "observatorio", "observatório",
-    "armazem", "armazém", "galpao", "galpão", "hangar", "abrigo", "bunker",
-    "complexo", "torre", "plataforma", "centro", "clinica", "clínica",
+    "hospital",
+    "escola",
+    "universidade",
+    "museu",
+    "igreja",
+    "templo",
+    "banco",
+    "hotel",
+    "escritorio",
+    "escritório",
+    "empresa",
+    "sede",
+    "fabrica",
+    "fábrica",
+    "prisao",
+    "prisão",
+    "tribunal",
+    "casa",
+    "mansao",
+    "mansão",
+    "apartamento",
+    "condominio",
+    "condomínio",
+    "edificio",
+    "edifício",
+    "predio",
+    "prédio",
+    "estacao",
+    "estação",
+    "estacao orbital",
+    "estação orbital",
+    "nave",
+    "espaconave",
+    "espaçonave",
+    "base",
+    "laboratorio",
+    "laboratório",
+    "observatorio",
+    "observatório",
+    "armazem",
+    "armazém",
+    "galpao",
+    "galpão",
+    "hangar",
+    "abrigo",
+    "bunker",
+    "complexo",
+    "torre",
+    "plataforma",
+    "centro",
+    "clinica",
+    "clínica",
 }
 
 
@@ -388,10 +450,27 @@ def _is_subarea_of_building(name: str) -> bool:
 
 def _location_significant_token_set(name: str) -> set[str]:
     stopwords = {
-        "de", "da", "do", "das", "dos",
-        "na", "no", "nas", "nos",
-        "em", "o", "a", "os", "as",
-        "para", "com", "ao", "aos", "à", "às", "e",
+        "de",
+        "da",
+        "do",
+        "das",
+        "dos",
+        "na",
+        "no",
+        "nas",
+        "nos",
+        "em",
+        "o",
+        "a",
+        "os",
+        "as",
+        "para",
+        "com",
+        "ao",
+        "aos",
+        "à",
+        "às",
+        "e",
     }
     tokens = re.findall(r"[a-z0-9]+", _ascii_lower(name))
     meaningful = {t for t in tokens if t not in stopwords and len(t) > 1}
@@ -435,20 +514,20 @@ def _locations_share_building(loc1: dict, loc2: dict) -> bool:
 
 def _semantic_deduplicate_locations(locations: list[dict]) -> list[dict]:
     """Deduplicate locations that are semantically the same space.
-    
+
     For example, 'Hospital Do Hall De Entrada' and 'Hall de entrada do hospital'
     should be merged into a single location.
     """
     if len(locations) <= 1:
         return locations
-    
+
     merged: list[dict] = []
     used: set[int] = set()
-    
+
     for i, loc in enumerate(locations):
         if i in used:
             continue
-        
+
         # Find all locations that are semantically similar to this one
         similar_indices = [i]
         for j in range(i + 1, len(locations)):
@@ -456,7 +535,7 @@ def _semantic_deduplicate_locations(locations: list[dict]) -> list[dict]:
                 continue
             if _locations_share_building(loc, locations[j]):
                 similar_indices.append(j)
-        
+
         if len(similar_indices) == 1:
             # No similar locations found, keep as-is
             merged.append(loc)
@@ -479,7 +558,7 @@ def _semantic_deduplicate_locations(locations: list[dict]) -> list[dict]:
 
             best_idx = max(similar_indices, key=_location_quality_score)
             best_loc = dict(locations[best_idx])
-            
+
             # Combine evidence from all similar locations
             all_evidence = []
             all_scene_numbers = []
@@ -490,7 +569,7 @@ def _semantic_deduplicate_locations(locations: list[dict]) -> list[dict]:
                 scene_nums = locations[idx].get("scene_numbers", [])
                 if isinstance(scene_nums, list):
                     all_scene_numbers.extend(scene_nums)
-            
+
             # Remove duplicates while preserving order
             seen_evidence = set()
             unique_evidence = []
@@ -499,23 +578,23 @@ def _semantic_deduplicate_locations(locations: list[dict]) -> list[dict]:
                 if e_str not in seen_evidence:
                     seen_evidence.add(e_str)
                     unique_evidence.append(e)
-            
+
             seen_scenes = set()
             unique_scenes = []
             for s in all_scene_numbers:
                 if s not in seen_scenes:
                     seen_scenes.add(s)
                     unique_scenes.append(s)
-            
+
             best_loc["evidence_text"] = unique_evidence
             best_loc["scene_numbers"] = unique_scenes
-            
+
             # Mark all similar locations as used
             for idx in similar_indices:
                 used.add(idx)
-            
+
             merged.append(best_loc)
-    
+
     return merged
 
 
@@ -622,4 +701,3 @@ from app.visual_bible.script_profiles import (  # noqa: E402,F401
     _repair_missing_character_names,
     _script_character_names,
 )
-

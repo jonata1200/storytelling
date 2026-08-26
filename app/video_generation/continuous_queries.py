@@ -55,4 +55,3 @@ async def _project_visual_context(
         ).scalars()
     )
     return continuous_video_visual_context(characters, locations)
-

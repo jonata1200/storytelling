@@ -31,7 +31,7 @@ async def get_status(
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Projeto não encontrado")
-    
+
     return await get_finalization_status(session, project_id)
 
 
@@ -44,11 +44,11 @@ async def finalize_video(
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Projeto não encontrado")
-    
+
     try:
         asset = await concatenate_videos(session, project_id)
         await session.commit()
-        
+
         return {
             "success": True,
             "message": "Vídeo final criado com sucesso",
@@ -74,28 +74,28 @@ async def download_final_video(
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Projeto não encontrado")
-    
+
     asset = await get_final_video_asset(session, project_id)
     if asset is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Vídeo final não encontrado. Finalize primeiro.",
         )
-    
+
     storage_uri = getattr(asset, "storage_uri", None)
     if not storage_uri:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Arquivo de vídeo não encontrado",
         )
-    
+
     file_path = resolve_storage_path(storage_uri)
     if file_path is None or not file_path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Arquivo de vídeo não encontrado no disco",
         )
-    
+
     return FileResponse(
         path=str(file_path),
         media_type="video/mp4",
@@ -112,10 +112,10 @@ async def delete_final(
     project = await ProjectRepository(session).get_project(project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Projeto não encontrado")
-    
+
     deleted = await delete_final_video(session, project_id)
     await session.commit()
-    
+
     return {
         "success": True,
         "message": "Vídeo final deletado" if deleted else "Nenhum vídeo final para deletar",
