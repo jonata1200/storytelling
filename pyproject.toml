@@ -1,0 +1,68 @@
+[project]
+name = "Storytelling"
+version = "0.1.0"
+description = "AI-assisted Storytelling production system."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.13.2",
+    "asyncpg>=0.29.0",
+    "fastapi>=0.139.0",
+    "greenlet>=3.0.3",
+    "imageio-ffmpeg>=0.6.0",
+    "nicegui>=3.14.0",
+    "pydantic>=2.8.2",
+    "pydantic-settings>=2.4.0",
+    "redis>=5.0.7",
+    "sqlalchemy>=2.0.31",
+    "uvicorn[standard]>=0.30.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.27.0",
+    "mypy>=1.11.1",
+    "pytest>=8.3.2",
+    "pytest-asyncio>=0.23.8",
+    "ruff>=0.5.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+addopts = "-q -p no:cacheprovider"
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "unit: fast deterministic tests for isolated functions and value objects",
+    "integration: tests that cross service, workflow, persistence, or async boundaries",
+    "provider: provider contract tests for LLM, image, speech, media, or provider fallback behavior",
+    "smoke: opt-in tests that call real external providers or paid APIs",
+    "ui: NiceGUI page, workspace, routing facade, or UI helper tests",
+    "security: authentication, authorization, path traversal, model policy, or safety regression tests",
+]
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette\\.testclient` is deprecated.*:starlette.exceptions.StarletteDeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+check_untyped_defs = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_return_any = true
+ignore_missing_imports = true
