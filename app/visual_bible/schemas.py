@@ -47,6 +47,14 @@ class GenerateVisualReferencesRequest(BaseModel):
     view_types: list[str] | None = None
 
 
+class RegenerateVisualReferenceRequest(BaseModel):
+    prompt: str | None = Field(default=None, max_length=8000)
+
+
+class VisualReferenceDecisionRequest(BaseModel):
+    canonical: bool = False
+
+
 class VisualReferenceRead(BaseModel):
     id: UUID
     project_id: UUID
@@ -58,6 +66,8 @@ class VisualReferenceRead(BaseModel):
     prompt: str
     provider: str
     model: str
+    status: Literal["generated", "approved", "rejected"]
+    is_canonical: bool
     metadata_json: dict
     created_at: datetime
 

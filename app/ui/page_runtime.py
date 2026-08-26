@@ -14,6 +14,7 @@ from app.ui.visual.helpers import asset_url as _visual_asset_url
 from app.ui.workspace.finalization_area import render_finalization_area
 from app.ui.workspace.script_area import render_script_area, save_script_from_ui
 from app.ui.workspace.storyboard_video_area import render_video_area
+from app.ui.workspace.visual_bible_area import render_visual_bible_area
 
 INITIAL_SCRIPT_PROGRESS_KEYS = ("scripts", "scenes", "shots", "characters", "frames", "clips")
 
@@ -253,6 +254,7 @@ def register_ui_pages(pages: _PagesFacade) -> None:
         first_available_workspace_section=pages._first_available_workspace_section,
         workspace_header=pages._workspace_header,
         render_script_area=_render_script_area,
+        render_visual_bible_area=render_visual_bible_area,
         render_video_area=_render_video_area,
         render_finalization_area=_render_finalization_area,
     )

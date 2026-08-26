@@ -15,6 +15,7 @@ HOME_NAV_ITEMS = [
 
 WORKSPACE_NAV_ICONS = {
     "script": "description",
+    "visual": "palette",
     "storyboard": "view_comfy",
     "video": "movie",
     "finalization": "check_circle",

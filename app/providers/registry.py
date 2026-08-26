@@ -57,8 +57,15 @@ def _meta_text_factory() -> object:
     return MetaLLMProvider()
 
 
+def _meta_image_factory() -> object:
+    from app.providers.image.meta import MetaImageProvider
+
+    return MetaImageProvider()
+
+
 provider_registry = ProviderRegistry()
 provider_registry.register("text", "meta", _meta_text_factory)
+provider_registry.register("image", "meta", _meta_image_factory)
 provider_registry.register("text", "ollama_cloud", _ollama_cloud_factory)
 provider_registry.register("video", "openrouter", _openrouter_factory)
 

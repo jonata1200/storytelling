@@ -180,6 +180,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
         else "script"
     )
     load_script_details = active_section == "script"
+    load_visual = active_section == "visual"
     load_video = active_section == "video"
 
     async with AsyncSessionLocal() as session:
@@ -203,7 +204,11 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             )
             continuous_video_segments = list(continuous_video_segments_result.scalars())
         script = await latest(session, Script, project_id)
-        visual_refs: list[Any] = []
+        visual_refs = (
+            await active_many(session, VisualReference, project_id, 200)
+            if load_visual
+            else []
+        )
         clips = await latest_many(session, VideoClip, project_id, 100) if load_video else []
         visual_asset_ids = {
             reference.asset_id for reference in visual_refs if reference.asset_id is not None
@@ -231,9 +236,15 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             assets = list(asset_result.scalars())
         else:
             assets = []
-        characters_list: list[Any] = []
-        locations_list: list[Any] = []
-        all_visual_approved = False
+        characters_list = (
+            await active_many(session, Character, project_id, 100) if load_visual else []
+        )
+        locations_list = (
+            await active_many(session, Location, project_id, 100) if load_visual else []
+        )
+        all_visual_approved = bool(visual_refs) and all(
+            reference.status == "approved" for reference in visual_refs
+        )
         return {
             "project": project,
             "production_settings": production_settings,

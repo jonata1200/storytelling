@@ -306,6 +306,7 @@ async def _redis_check(name: str, url: str) -> ReadinessComponentRead:
 def _provider_model_env_name(provider: str, channel: ProviderChannel) -> str:
     suffix_by_channel = {
         "text": "DEFAULT_MODEL",
+        "image": "IMAGE_MODEL",
         "video": "VIDEO_MODEL",
     }
     return f"{provider.upper()}_{suffix_by_channel[channel]}"
@@ -319,14 +320,25 @@ def _provider_channel_readiness(
     display_name = provider_display_name(provider)
     api_key = provider_api_key(settings, provider)
     model = provider_model(settings, provider, channel)
+    base_url = provider_channel_base_url(settings, provider, channel)
     missing: list[str] = []
     if provider_requires_api_key(settings, provider) and not api_key:
         missing.append(f"{provider.upper()}_API_KEY")
     if not model:
         missing.append(_provider_model_env_name(provider, channel))
+    if provider_requires_api_key(settings, provider) and not base_url:
+        endpoint_field = f"{provider}_{channel}_endpoint"
+        base_field = f"{provider}_{channel}_base_url"
+        if hasattr(settings, endpoint_field):
+            missing.append(endpoint_field.upper())
+        elif hasattr(settings, base_field):
+            missing.append(base_field.upper())
+        else:
+            missing.append(f"{provider.upper()}_BASE_URL")
 
     labels = {
         "text": "texto",
+        "image": "imagem",
         "video": "vídeo",
     }
     channel_label = labels[channel]
@@ -343,7 +355,7 @@ def _provider_channel_readiness(
         details={
             "provider": provider,
             "model": model,
-            "base_url": provider_channel_base_url(settings, provider, channel),
+            "base_url": base_url,
             "api_key_configured": str(bool(api_key)).lower(),
             "fallbacks": (
                 str(getattr(settings, "text_provider_fallbacks", "") or "")
@@ -390,7 +402,7 @@ async def readiness_dashboard(
     )
     components.extend(
         _provider_channel_readiness(app_settings, channel)
-        for channel in ("text", "video")
+        for channel in ("text", "image", "video")
     )
     overall = "ready" if all(item.status == "ready" for item in components) else "degraded"
     if any(item.status == "down" for item in components):

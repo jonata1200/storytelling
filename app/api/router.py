@@ -13,6 +13,7 @@ from app.storage.router import router as storage_router
 from app.storytelling.router import router as storytelling_router
 from app.video_generation.finalization_router import router as finalization_router
 from app.video_generation.router import router as video_generation_router
+from app.visual_bible.router import router as visual_bible_router
 
 api_router = APIRouter(prefix="/api/v1")
 private_api_router = APIRouter(dependencies=[Depends(verify_api_token)])
@@ -27,4 +28,5 @@ private_api_router.include_router(finalization_router)
 private_api_router.include_router(jobs_router)
 private_api_router.include_router(storage_router)
 private_api_router.include_router(observability_router)
+private_api_router.include_router(visual_bible_router)
 api_router.include_router(private_api_router)

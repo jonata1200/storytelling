@@ -1,6 +1,6 @@
 ﻿from uuid import UUID
 
-from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -60,6 +60,15 @@ class LocationVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class VisualReference(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "visual_references"
+    __table_args__ = (
+        Index(
+            "uq_visual_reference_canonical_target",
+            "target_kind",
+            "target_id",
+            unique=True,
+            postgresql_where=text("is_canonical"),
+        ),
+    )
 
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     artifact_id: Mapped[UUID] = mapped_column(ForeignKey("artifacts.id"), nullable=False)
@@ -70,4 +79,10 @@ class VisualReference(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     provider: Mapped[str] = mapped_column(String(120), nullable=False)
     model: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24), default="generated", server_default="generated", nullable=False, index=True
+    )
+    is_canonical: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False, index=True
+    )
     metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)

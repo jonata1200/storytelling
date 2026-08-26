@@ -134,6 +134,10 @@ META_INTEGRATION_MODE=api
 META_API_KEY=sua_chave_meta
 META_BASE_URL=url_oficial_exibida_para_sua_conta
 META_DEFAULT_MODEL=muse-spark-1.2
+IMAGE_PROVIDER=meta
+META_IMAGE_INTEGRATION_MODE=api
+META_IMAGE_ENDPOINT=endpoint_oficial_disponibilizado_para_sua_conta
+META_IMAGE_MODEL=muse-image
 
 VIDEO_PROVIDER=openrouter
 OPENROUTER_API_KEY=sua_chave_openrouter

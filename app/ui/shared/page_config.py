@@ -149,6 +149,7 @@ PRODUCTION_STEPS = [
 
 WORKSPACE_TABS = [
     ("Roteiro", "script"),
+    ("Visual Bible", "visual"),
     ("Produ\u00e7\u00e3o de v\u00eddeo", "video"),
     ("Finaliza\u00e7\u00e3o", "finalization"),
 ]

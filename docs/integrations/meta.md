@@ -14,7 +14,7 @@ Fonte oficial: <https://ai.meta.com/llama/>.
 | Capacidade | Modo pretendido | Estado | Evidência necessária |
 | --- | --- | --- | --- |
 | Texto e JSON estruturado | API oficial | Pendente | Chamada real, documentação oficial, modelo e limites |
-| Geração de imagem | API oficial, se disponível | Pendente | Acesso da conta e download do arquivo original |
+| Geração de imagem | API oficial, se disponível | Adapter pronto; validação externa pendente | Endpoint/modelo da conta e chamada real |
 | Geração de imagem | Playwright autorizado, como fallback | Bloqueado por decisão | Confirmação dos termos e autorização da conta |
 
 ## Validação de Meta Text

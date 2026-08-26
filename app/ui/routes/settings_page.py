@@ -94,7 +94,7 @@ def register_settings_page(
                             )
 
                             with ui.element("div").classes(
-                                "grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5 w-full"
+                                "grid grid-cols-1 lg:grid-cols-3 gap-4 mt-5 w-full"
                             ):
                                 with ui.element("div").classes(
                                     provider_card_classes
@@ -131,8 +131,22 @@ def register_settings_page(
                                 with ui.element("div").classes(
                                     provider_card_classes
                                 ):
+                                    provider_header("image", "Imagem", "Meta Muse Image")
+                                    meta_image_endpoint = ui.input(
+                                        "Endpoint oficial de imagem",
+                                        value=current.meta_image_endpoint,
+                                        placeholder="Disponibilizado pela Meta para sua conta",
+                                    ).props("outlined stack-label").classes("w-full")
+                                    meta_image_model = ui.input(
+                                        "Modelo de imagem",
+                                        value=current.meta_image_model,
+                                    ).props("outlined stack-label").classes("w-full")
+
+                                with ui.element("div").classes(
+                                    provider_card_classes
+                                ):
                                     provider_header(
-                                        "movie_filter", "Imagem e vídeo", "OpenRouter"
+                                        "movie_filter", "Vídeo", "OpenRouter"
                                     )
                                     openrouter_video_base_url = (
                                         ui.input(
@@ -170,6 +184,7 @@ def register_settings_page(
                                     values = {
                                         "AI_PROVIDER": "meta",
                                         "TEXT_PROVIDER": "meta",
+                                        "IMAGE_PROVIDER": "meta",
                                         "VIDEO_PROVIDER": "openrouter",
                                         "TEXT_PROVIDER_FALLBACKS": "ollama_cloud",
                                         "META_INTEGRATION_MODE": "api",
@@ -178,6 +193,13 @@ def register_settings_page(
                                         ).strip(),
                                         "META_DEFAULT_MODEL": str(
                                             meta_default_model.value or ""
+                                        ).strip(),
+                                        "META_IMAGE_INTEGRATION_MODE": "api",
+                                        "META_IMAGE_ENDPOINT": str(
+                                            meta_image_endpoint.value or ""
+                                        ).strip(),
+                                        "META_IMAGE_MODEL": str(
+                                            meta_image_model.value or ""
                                         ).strip(),
                                         "OPENROUTER_VIDEO_BASE_URL": str(
                                             openrouter_video_base_url.value or ""

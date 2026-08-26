@@ -52,7 +52,10 @@ class Settings(BaseSettings):
     meta_api_key: str | None = Field(default=None, repr=False)
     meta_base_url: str = ""
     meta_default_model: str = DEFAULT_META_TEXT_MODEL
-    meta_image_model: str = ""
+    meta_image_model: str = "muse-image"
+    meta_image_endpoint: str = ""
+    meta_image_download_hosts: str = ""
+    meta_image_timeout_seconds: float = Field(default=180, ge=15, le=600)
     meta_browser_profile_path: Path = Path("./runtime/browser_profiles/meta")
     ollama_cloud_api_key: str | None = Field(default=None, repr=False)
     ollama_cloud_base_url: str = "https://ollama.com/api"

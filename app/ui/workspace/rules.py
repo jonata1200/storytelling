@@ -1,6 +1,6 @@
 from app.video_generation.continuous import CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS
 
-WORKSPACE_SECTIONS = ("script", "video", "finalization")
+WORKSPACE_SECTIONS = ("script", "visual", "video", "finalization")
 CONTINUOUS_VIDEO_WORKFLOW_MODE = "continuous_fast"
 
 
@@ -53,6 +53,10 @@ def workspace_section_access(
     script_ready = step_ready("script", counts)
     _ = is_continuous_video_workflow(workflow_mode)
     if section == "script":
+        return True, ""
+    if section == "visual":
+        if not script_ready:
+            return False, "Crie o roteiro antes de acessar a Visual Bible."
         return True, ""
     if section == "video":
         if not script_ready:

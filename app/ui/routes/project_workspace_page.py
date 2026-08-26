@@ -24,6 +24,7 @@ def register_project_workspace_pages(
     first_available_workspace_section: WorkspaceFallbackResolver,
     workspace_header: WorkspaceHeaderRenderer,
     render_script_area: WorkspaceAreaRenderer,
+    render_visual_bible_area: WorkspaceAreaRenderer,
     render_video_area: WorkspaceAreaRenderer,
     render_finalization_area: WorkspaceAreaRenderer,
 ) -> None:
@@ -35,7 +36,7 @@ def register_project_workspace_pages(
     @ui.page("/projects/{project_id}/{section}", response_timeout=15)
     async def project_studio(project_id: str, section: str) -> None:
         body_style()
-        if section not in {"script", "video", "finalization"}:
+        if section not in {"script", "visual", "video", "finalization"}:
             ui.navigate.to(f"/projects/{project_id}/script")
             return
         try:
@@ -70,6 +71,8 @@ def register_project_workspace_pages(
             ):
                 if section == "script":
                     render_script_area(project_uuid, summary)
+                elif section == "visual":
+                    render_visual_bible_area(project_uuid, summary)
                 elif section == "video":
                     render_video_area(project_uuid, summary)
                 elif section == "finalization":

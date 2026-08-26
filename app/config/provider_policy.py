@@ -97,6 +97,9 @@ def provider_base_url(settings: Any, provider: str) -> str:
 
 
 def provider_channel_base_url(settings: Any, provider: str, channel: ProviderChannel) -> str:
+    endpoint_field = f"{provider}_{channel}_endpoint"
+    if hasattr(settings, endpoint_field):
+        return str(getattr(settings, endpoint_field, "") or "").strip()
     channel_specific = str(getattr(settings, f"{provider}_{channel}_base_url", "") or "").strip()
     if channel_specific:
         return channel_specific
