@@ -136,10 +136,18 @@ async def test_single_shot_regeneration_preserves_and_selects_variant() -> None:
         review_status="rejected",
         asset_id=old_asset_id,
         generated_video_asset_id=old_asset_id,
-        metadata_json={"review_note": "corrigir posição"},
+        external_operation_id="external-old",
+        metadata_json={
+            "review_note": "corrigir posição",
+            "video_job_id": "external-old",
+            "video_polling_url": "https://provider.invalid/jobs/external-old",
+        },
     )
     _reset_continuous_video_segment_for_regeneration(segment, reason="shot_regeneration")
     assert segment.metadata_json["variants"][0]["asset_id"] == str(old_asset_id)
+    assert segment.generated_video_asset_id is None
+    assert segment.external_operation_id is None
+    assert "video_job_id" not in segment.metadata_json
     selected = await select_continuous_video_segment_variant(
         _VariantSession(segment),
         project_id,

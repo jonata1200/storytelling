@@ -29,6 +29,11 @@ def render_video_area(
     safe_close_ui_element = deps.safe_close_ui_element
     _asset_content_url = deps._asset_content_url
     _generate_continuous_video_from_ui = deps._generate_continuous_video_from_ui
+    _cancel_continuous_video_segment_from_ui = deps._cancel_continuous_video_segment_from_ui
+    _approve_continuous_video_segment_from_ui = (
+        deps._approve_continuous_video_segment_from_ui
+    )
+    _reject_continuous_video_segment_from_ui = deps._reject_continuous_video_segment_from_ui
     _plan_continuous_video_segments_from_ui = deps._plan_continuous_video_segments_from_ui
     _delete_all_continuous_video_segments_from_ui = (
         deps._delete_all_continuous_video_segments_from_ui
@@ -43,6 +48,7 @@ def render_video_area(
     _video_clip_asset_url = deps._video_clip_asset_url
     continuous_view_model = build_continuous_video_view_model(summary)
     continuous_segments = list(summary.get("continuous_video_segments", []))
+    qa_results_by_segment = dict(summary.get("qa_results_by_segment", {}))
     segments_are_planned = bool(continuous_segments)
     segment_total_duration = sum(
         int(getattr(segment, "duration_seconds", 0) or 0) for segment in continuous_segments
@@ -182,6 +188,7 @@ def render_video_area(
 
             with ui.grid().classes("w-full grid-cols-1 xl:grid-cols-2 gap-4 mt-4"):
                 for idx, segment in enumerate(continuous_segments):
+                    qa_result = qa_results_by_segment.get(segment.id)
                     metadata = (
                         getattr(segment, "metadata_json", {})
                         if isinstance(getattr(segment, "metadata_json", {}), dict)
@@ -447,10 +454,56 @@ def render_video_area(
                                 ui.label("Gerando vídeo contínuo. Atualize para verificar.")
                         if visual_summary:
                             ui.label(visual_summary).classes("text-xs text-[#8d938e] mt-2")
+                        if qa_result is not None:
+                            with ui.row().classes("items-center gap-2 mt-2 flex-wrap"):
+                                ui.badge(f"QA {qa_result.total_score}/100").classes(
+                                    "blue-status-badge bg-[#243342]"
+                                )
+                                ui.badge(
+                                    "Revisão humana" if qa_result.needs_human_review
+                                    else "Falha objetiva"
+                                ).classes("blue-status-badge bg-[#26301f]")
+                            if qa_result.reasons:
+                                ui.label("; ".join(str(x) for x in qa_result.reasons[:3])).classes(
+                                    "text-xs text-[#d1d4d1] mt-1"
+                                )
                         ui.label(str(getattr(segment, "prompt", "") or "")).classes(
                             "text-sm text-[#d1d4d1] whitespace-pre-wrap mt-3"
                         )
                         with ui.row().classes("w-full flex-wrap justify-end gap-2 mt-2"):
+                            if is_preparing_segment and getattr(segment, "generation_job_id", None):
+                                ui.button(
+                                    "Cancelar",
+                                    icon="stop",
+                                    on_click=lambda segment_id=segment.id: (
+                                        _cancel_continuous_video_segment_from_ui(
+                                            project_id, segment_id
+                                        )
+                                    ),
+                                ).props("flat dense no-caps").classes(
+                                    "text-[#ffb4b4] rounded-xl"
+                                )
+                            if status_value in {"ready", "ready_for_review"}:
+                                ui.button(
+                                    "Aprovar",
+                                    icon="check",
+                                    on_click=lambda segment_id=segment.id: (
+                                        _approve_continuous_video_segment_from_ui(
+                                            project_id, segment_id
+                                        )
+                                    ),
+                                ).props("unelevated dense no-caps").classes("acid-bg rounded-xl")
+                                ui.button(
+                                    "Rejeitar",
+                                    icon="close",
+                                    on_click=lambda segment_id=segment.id: (
+                                        _reject_continuous_video_segment_from_ui(
+                                            project_id, segment_id
+                                        )
+                                    ),
+                                ).props("flat dense no-caps").classes(
+                                    "text-[#ffb4b4] rounded-xl"
+                                )
                             if initial_frame_url or final_frame_url or video_url:
                                 ui.button(
                                     "Visualizar",

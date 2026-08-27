@@ -4,6 +4,20 @@
 
 Tornar o pipeline Meta + Vibes confiável para tarefas longas, browser automation, múltiplos shots e falhas externas, preservando o `GenerationJob` existente como fonte de verdade.
 
+## Estado da implementação (2026-08-27)
+
+Implementação de aplicação concluída e validada para fila Redis Streams, worker separado,
+heartbeat/reclaim, locks e concorrência, retomada por external ID, cancelamento/retry,
+QA multimodal Meta, regeneração limitada, review humano, UI de status/QA e observabilidade.
+
+Bloqueio operacional restante: o adapter concreto de browser do Vibes depende de uma sessão
+autorizada e dos seletores da interface disponibilizada à conta. O projeto mantém a porta
+`VibesBrowserBackend`, perfil/lock dedicados e falha segura, sem incorporar cookies, credenciais
+ou endpoints privados. A fase só deve ser declarada encerrada em produção depois de instalar esse
+adapter autorizado e executar o smoke test real do provider.
+
+Validação local: `pytest`, `ruff check .`, `mypy app` e `docker compose config --quiet` aprovados.
+
 ## Princípio
 
 Texto rápido pode continuar no executor interno enquanto fizer sentido.

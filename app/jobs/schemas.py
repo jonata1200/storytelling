@@ -31,6 +31,7 @@ class JobRead(BaseModel):
 
     id: UUID
     project_id: UUID
+    external_job_id: str | None
     job_type: GenerationJobType
     status: GenerationJobStatus
     progress: int

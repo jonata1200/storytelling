@@ -106,6 +106,8 @@ class GenerationJobType(StrEnum):
     VIDEO = "VIDEO"
     SPEECH = "SPEECH"
     ANALYSIS = "ANALYSIS"
+    INGREDIENT = "INGREDIENT"
+    QA = "QA"
 
 
 class ClipReviewDecision(StrEnum):

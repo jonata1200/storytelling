@@ -11,8 +11,9 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-from sqlalchemy import text
-from app.database.session import AsyncSessionLocal
+from sqlalchemy import text  # noqa: E402
+
+from app.database.session import AsyncSessionLocal  # noqa: E402
 
 # Arquivos JSON do Idea Lab
 IDEA_LAB_FILES = [

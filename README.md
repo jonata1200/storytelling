@@ -158,6 +158,10 @@ APP_DEBUG=true
 APP_SECRET_KEY=change-me-in-development
 DATABASE_URL=postgresql+asyncpg://storytelling:storytelling@localhost:5433/storytelling
 REDIS_URL=redis://localhost:6379/0
+QA_META_MULTIMODAL_ENABLED=true
+QA_AUTO_REJECT_OBJECTIVE_FAILURES=true
+SHOT_AUTO_REGENERATION_ENABLED=true
+SHOT_AUTO_REGENERATION_MAX_ATTEMPTS=2
 ```
 
 ## Comandos da Aplicação
@@ -167,6 +171,18 @@ Iniciar a aplicação em primeiro plano:
 ```powershell
 .\scripts\story.ps1 run
 ```
+
+Em outro terminal, iniciar o worker de mídia/QA (obrigatório para Meta Image e Vibes):
+
+```powershell
+.\.venv\Scripts\storytelling-worker.exe
+```
+
+O worker usa PostgreSQL como fonte de verdade e Redis Streams somente para despacho.
+Reiniciar o FastAPI não cancela jobs já persistidos ou submetidos ao provider.
+Ao usar `docker compose up`, o serviço `worker` é iniciado automaticamente depois dos
+healthchecks de PostgreSQL e Redis. O worker recupera jobs órfãos, retoma polling quando há
+um external ID persistido e mantém browser automation fora do processo FastAPI.
 
 Iniciar em segundo plano:
 

@@ -241,6 +241,9 @@ def _reset_continuous_video_segment_for_regeneration(
         "package_ready_at",
         "package_error",
         "error",
+        "video_job_id",
+        "video_polling_url",
+        "video_generation_started_at",
     ):
         metadata.pop(key, None)
     metadata["regeneration_reason"] = reason
@@ -248,6 +251,8 @@ def _reset_continuous_video_segment_for_regeneration(
     segment.status = GenerationJobStatus.PENDING
     segment.review_status = CONTINUOUS_VIDEO_REVIEW_PENDING
     segment.final_frame_asset_id = None
+    segment.generated_video_asset_id = None
+    segment.asset_id = None
     segment.generation_job_id = None
     segment.external_operation_id = None
     metadata["review_status"] = CONTINUOUS_VIDEO_REVIEW_PENDING

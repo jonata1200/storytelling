@@ -57,7 +57,7 @@ from app.video_generation.continuous import (
     _emit_continuous_video_segment_event,
     _set_continuous_video_review_status,
 )
-from app.video_generation.models import ContinuousVideoSegment
+from app.video_generation.models import ContinuousVideoSegment, GenerationJob
 
 VIDEO_POLL_INTERVAL_SECONDS = 10.0
 VIDEO_MAX_POLL_ATTEMPTS = 180  # ~30 minutos por rodada de polling
@@ -111,6 +111,14 @@ async def _submit_video_job(
     provider = _video_provider()
     job = await provider.submit(request)
     segment.external_operation_id = job.id
+    if segment.generation_job_id is not None:
+        generation_job = await session.get(GenerationJob, segment.generation_job_id)
+        if generation_job is not None:
+            generation_job.external_job_id = job.id
+            response_payload = dict(generation_job.response_payload or {})
+            response_payload["polling_url"] = job.polling_url
+            response_payload["submitted_at"] = datetime.now(UTC).isoformat()
+            generation_job.response_payload = response_payload
     segment.provider = provider.provider_name
     segment.model = request.model
     segment.status = GenerationJobStatus.RUNNING
@@ -483,8 +491,21 @@ async def generate_video_for_segment(
     Retorna (sucesso, mensagem).
     """
     try:
-        # Submeter job
-        job_id = await _submit_video_job(session, project_id, segment, production_settings)
+        metadata = dict(segment.metadata_json or {})
+        existing_job_id = str(
+            segment.external_operation_id or metadata.get("video_job_id") or ""
+        ).strip()
+        if existing_job_id and metadata.get("video_polling_url"):
+            job_id = existing_job_id
+            logger.info(
+                "video_job_resume project_id=%s shot_id=%s job_id=%s",
+                project_id,
+                segment.shot_id,
+                job_id,
+            )
+        else:
+            # External ID é persistido/commitado por _submit_video_job antes do polling.
+            job_id = await _submit_video_job(session, project_id, segment, production_settings)
 
         if progress_callback:
             result = progress_callback(0, 1, f"Segmento {segment.segment_number:03d} submetido")
@@ -509,6 +530,22 @@ async def generate_video_for_segment(
             await asyncio.sleep(VIDEO_POLL_INTERVAL_SECONDS)
             job_update = await _poll_video_job(job)
             poll_count += 1
+            await _emit_continuous_video_segment_event(
+                session,
+                segment=segment,
+                status="polling",
+                provider=str(segment.provider or _resolve_video_provider()),
+                model=str(segment.model or ""),
+                message=f"Polling do Shot retornou {job_update.status}.",
+                details={
+                    "shot_id": str(segment.shot_id) if segment.shot_id else None,
+                    "generation_job_id": (
+                        str(segment.generation_job_id) if segment.generation_job_id else None
+                    ),
+                    "provider_job_id": job.id,
+                    "poll_attempt": poll_count,
+                },
+            )
             if job_update.unsigned_urls:
                 job.unsigned_urls = job_update.unsigned_urls
 
@@ -527,6 +564,15 @@ async def generate_video_for_segment(
             raise RuntimeError(error_msg)
 
         # Finalizar: baixar vídeo, salvar asset, extrair último frame
+        await _emit_continuous_video_segment_event(
+            session,
+            segment=segment,
+            status="downloading",
+            provider=str(segment.provider or _resolve_video_provider()),
+            model=str(segment.model or ""),
+            message="Baixando resultado do Shot.",
+            details={"shot_id": str(segment.shot_id) if segment.shot_id else None},
+        )
         await _finalize_segment_video(session, project_id, segment, job, None)
 
         return True, f"Segmento {segment.segment_number:03d} concluído com sucesso"

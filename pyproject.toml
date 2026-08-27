@@ -18,6 +18,9 @@ dependencies = [
     "uvicorn[standard]>=0.30.3",
 ]
 
+[project.scripts]
+storytelling-worker = "app.workers.main:main"
+
 [project.optional-dependencies]
 dev = [
     "httpx>=0.27.0",

@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
+from redis.asyncio import from_url
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -304,6 +305,103 @@ async def list_project_jobs(session: AsyncSession, project_id: UUID) -> list[Gen
         .order_by(GenerationJob.created_at.desc())
     )
     return list(result.scalars())
+
+
+async def create_or_get_media_job(
+    session: AsyncSession,
+    project_id: UUID,
+    *,
+    job_type: GenerationJobType,
+    operation: str,
+    payload: dict[str, Any],
+    provider: str,
+    model: str,
+    attempt_key: str = "initial",
+    max_attempts: int = 3,
+) -> JobEnqueueDecision:
+    if job_type not in {
+        GenerationJobType.IMAGE,
+        GenerationJobType.VIDEO,
+        GenerationJobType.INGREDIENT,
+        GenerationJobType.QA,
+    }:
+        raise ValueError("A fila externa aceita somente jobs de mídia, ingredient ou QA")
+    if await ProjectRepository(session).get_project(project_id) is None:
+        raise ValueError("Projeto não encontrado.")
+    request_payload = {"operation": operation, **dict(payload), "attempt_key": attempt_key}
+    key = job_idempotency_key(project_id, operation, request_payload)
+    result = await session.execute(
+        select(GenerationJob).where(GenerationJob.idempotency_key == key)
+    )
+    job = result.scalars().first()
+    if job is not None:
+        return JobEnqueueDecision(job=job, should_dispatch=pending_job_is_stale(job))
+    job = GenerationJob(
+        project_id=project_id,
+        job_type=job_type,
+        status=GenerationJobStatus.PENDING,
+        progress=0,
+        attempts=0,
+        max_attempts=max_attempts,
+        provider=provider,
+        model=model,
+        idempotency_key=key,
+        request_payload=request_payload,
+        response_payload={},
+    )
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    return JobEnqueueDecision(job=job, should_dispatch=True)
+
+
+async def dispatch_media_job(job: GenerationJob) -> str:
+    from app.config.settings import get_settings
+    from app.workers.queue import RedisJobQueue
+
+    settings = get_settings()
+    redis = from_url(settings.redis_url)
+    try:
+        queue = RedisJobQueue(
+            redis, stream=settings.worker_queue_name, group=settings.worker_consumer_group
+        )
+        await queue.ensure_group()
+        return await queue.enqueue(job.id)
+    finally:
+        await redis.aclose()
+
+
+async def cancel_generation_job(
+    session: AsyncSession, job_id: UUID
+) -> GenerationJob | None:
+    job = await session.get(GenerationJob, job_id)
+    if job is None:
+        return None
+    if job.status not in {GenerationJobStatus.SUCCEEDED, GenerationJobStatus.CANCELLED}:
+        job.status = GenerationJobStatus.CANCELLED
+        job.completed_at = datetime.now(UTC)
+        response = dict(job.response_payload or {})
+        response["remote_cancellation"] = "unsupported_or_not_attempted"
+        response["cancelled_locally_at"] = job.completed_at.isoformat()
+        job.response_payload = response
+        await session.commit()
+    return job
+
+
+async def retry_generation_job(session: AsyncSession, job_id: UUID) -> GenerationJob | None:
+    job = await session.get(GenerationJob, job_id)
+    if job is None:
+        return None
+    if job.status != GenerationJobStatus.FAILED:
+        raise ValueError("Somente job com falha pode ser reenfileirado")
+    if job.attempts >= job.max_attempts:
+        raise ValueError("Job atingiu o limite de tentativas e exige revisão humana")
+    job.status = GenerationJobStatus.PENDING
+    job.error = None
+    job.completed_at = None
+    await session.commit()
+    await dispatch_media_job(job)
+    return job
 
 
 def dispatch_project_job(job_id: UUID) -> None:

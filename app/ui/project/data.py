@@ -20,7 +20,7 @@ from app.projects.repository import ProjectRepository
 from app.projects.service import list_projects
 from app.projects.versioning import INACTIVE_DERIVED_STATUSES
 from app.storytelling.models import Briefing, Scene, Script, Shot, StoryIdea
-from app.video_generation.models import ContinuousVideoSegment, GenerationJob, VideoClip
+from app.video_generation.models import ContinuousVideoSegment, GenerationJob, QAResult, VideoClip
 from app.visual_bible.models import Character, Location, VisualReference
 
 logger = logging.getLogger(__name__)
@@ -192,6 +192,7 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
         )
         cost_summary = await project_cost_summary(session, project_id)
         continuous_video_segments = []
+        qa_results_by_segment: dict[UUID, QAResult] = {}
         if load_video:
             continuous_video_segments_result = await session.execute(
                 select(ContinuousVideoSegment)
@@ -199,6 +200,13 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
                 .order_by(ContinuousVideoSegment.segment_number)
             )
             continuous_video_segments = list(continuous_video_segments_result.scalars())
+            qa_result_rows = await session.execute(
+                select(QAResult)
+                .where(QAResult.project_id == project_id)
+                .order_by(QAResult.created_at.desc())
+            )
+            for qa_result in qa_result_rows.scalars():
+                qa_results_by_segment.setdefault(qa_result.segment_id, qa_result)
         script = await latest(session, Script, project_id)
         visual_refs = (
             await active_many(session, VisualReference, project_id, 200) if load_visual else []
@@ -259,5 +267,6 @@ async def project_summary(project_id: UUID, section: str = "script") -> dict[str
             "assets": assets,
             "all_visual_prompts_approved": all_visual_approved,
             "continuous_video_segments": continuous_video_segments,
+            "qa_results_by_segment": qa_results_by_segment,
             "clips": clips,
         }

@@ -27,5 +27,28 @@ services:
       timeout: 5s
       retries: 5
 
+  worker:
+    build: .
+    container_name: storytelling-worker
+    command: ["python", "-m", "app.workers.main"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-storytelling}:${POSTGRES_PASSWORD:-storytelling}@postgres:5432/${POSTGRES_DB:-storytelling}
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: ${APP_ENV:-local}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-change-me-in-development}
+      META_API_KEY: ${META_API_KEY:-}
+      META_BASE_URL: ${META_BASE_URL:-}
+      META_IMAGE_ENDPOINT: ${META_IMAGE_ENDPOINT:-}
+      VIBES_BROWSER_AUTOMATION_ENABLED: ${VIBES_BROWSER_AUTOMATION_ENABLED:-false}
+    volumes:
+      - ./storage:/app/storage
+      - ./runtime:/app/runtime
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:

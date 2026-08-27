@@ -92,6 +92,27 @@ class ClipReview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class QAResult(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "qa_results"
+
+    project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    shot_id: Mapped[UUID] = mapped_column(ForeignKey("shots.id"), nullable=False, index=True)
+    segment_id: Mapped[UUID] = mapped_column(
+        ForeignKey("continuous_video_segments.id"), nullable=False, index=True
+    )
+    generation_job_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("generation_jobs.id"), nullable=True, index=True
+    )
+    total_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    dimension_scores: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    reasons: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    objective_failures: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    decision: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    needs_human_review: Mapped[bool] = mapped_column(default=True, nullable=False)
+    compiler_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+
 class ContinuousVideoPlan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "continuous_video_plans"
     __table_args__ = (UniqueConstraint("project_id", name="uq_continuous_video_plans_project_id"),)

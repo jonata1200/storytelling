@@ -39,6 +39,18 @@ class Settings(BaseSettings):
 
     database_url: str = Field(default="", repr=False)
     redis_url: str = Field(default="redis://localhost:6379/0", repr=False)
+    worker_queue_name: str = "storytelling:media-jobs"
+    worker_consumer_group: str = "storytelling-workers"
+    worker_heartbeat_seconds: int = Field(default=10, ge=2, le=60)
+    worker_reclaim_seconds: int = Field(default=120, ge=30, le=3600)
+    worker_vibes_concurrency: int = Field(default=1, ge=1, le=2)
+    worker_meta_image_concurrency: int = Field(default=2, ge=1, le=4)
+    shot_auto_regeneration_enabled: bool = True
+    shot_auto_regeneration_max_attempts: int = Field(default=2, ge=0, le=5)
+    qa_auto_reject_objective_failures: bool = True
+    qa_meta_multimodal_enabled: bool = True
+    qa_meta_timeout_seconds: float = Field(default=120, ge=15, le=600)
+    worker_rate_limit_seconds: float = Field(default=0.25, ge=0, le=30)
 
     storage_backend: str = "local"
     local_storage_path: Path = Path("./storage")

@@ -12,6 +12,8 @@ from nicegui import ui
 from app.config.settings import get_settings
 from app.costs.service import estimate_operation_cost
 from app.database.session import AsyncSessionLocal
+from app.core.enums import GenerationJobType
+from app.jobs.service import cancel_generation_job, create_or_get_media_job, dispatch_media_job
 from app.production.service import get_or_create_production_settings, update_production_settings
 from app.ui.shared.generation_progress import (
     OPERATION_CANCELLED_MESSAGE,
@@ -53,7 +55,7 @@ from app.video_generation.continuous import (
     update_continuous_video_segment_frame_prompt,
     update_continuous_video_segment_prompt,
 )
-from app.video_generation.continuous_review import generate_continuous_video_segments
+from app.video_generation.models import ContinuousVideoSegment
 
 SectionTitle = Callable[[str, str, str | None, Any | None], None]
 LoadingDialogFactory = Callable[[str, Any], Any]
@@ -366,39 +368,42 @@ async def _generate_continuous_video_from_ui(
             prepare_kwargs: dict[str, Any] = {"segment_ids": segment_ids}
             if progress_callback is not None:
                 prepare_kwargs["progress_callback"] = progress_callback
-            _segments, validation_errors = await prepare_continuous_video_package(
+            segments, validation_errors = await prepare_continuous_video_package(
                 session,
                 project_id,
                 **prepare_kwargs,
             )
+            queued = []
+            settings = get_settings()
+            for segment in segments:
+                if segment_ids is not None and segment.id not in segment_ids:
+                    continue
+                metadata = dict(segment.metadata_json or {})
+                variant_number = len(metadata.get("variants") or []) + 1
+                decision = await create_or_get_media_job(
+                    session,
+                    project_id,
+                    job_type=GenerationJobType.VIDEO,
+                    operation="generate_shot",
+                    payload={"segment_id": str(segment.id), "shot_id": str(segment.shot_id)},
+                    provider=settings.video_provider or "vibes",
+                    model=segment.model,
+                    attempt_key=f"variant-{variant_number}",
+                    max_attempts=settings.shot_auto_regeneration_max_attempts + 1,
+                )
+                if decision.should_dispatch:
+                    await dispatch_media_job(decision.job)
+                segment.generation_job_id = decision.job.id
+                queued.append(decision.job)
             await session.commit()
-            generated, generation_errors = await generate_continuous_video_segments(
-                session,
-                project_id,
-                segment_ids=segment_ids,
-                progress_callback=progress_callback,
-            )
-        failed = [
-            segment
-            for segment in generated
-            if str(getattr(segment, "review_status", "") or "").lower() == "failed"
-        ]
-        if failed:
-            metadata = failed[0].metadata_json if isinstance(failed[0].metadata_json, dict) else {}
-            message = str(
-                metadata.get("error")
-                or metadata.get("video_generation_error")
-                or "Não foi possível gerar os vídeos."
-            )
-            notified = _safe_notify(message, color="negative")
-        elif generation_errors or validation_errors:
+        if validation_errors:
             notified = _safe_notify(
-                "Alguns segmentos não foram gerados. Revise os erros antes de continuar.",
+                "Alguns Shots não foram enfileirados. Revise os erros antes de continuar.",
                 color="warning",
             )
-        elif generated:
+        elif queued:
             notified = _safe_notify(
-                f"{len(generated)} vídeo(s) gerado(s) e salvos!",
+                f"{len(queued)} Shot(s) enviados ao worker de vídeo.",
                 color="positive",
             )
         else:
@@ -415,6 +420,20 @@ async def _generate_continuous_video_from_ui(
         _show_ai_error_unless_context_gone(exc)
     finally:
         _safe_close_ui_element_quietly(loading_dialog)
+
+
+async def _cancel_continuous_video_segment_from_ui(project_id: UUID, segment_id: UUID) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            segment = await session.get(ContinuousVideoSegment, segment_id)
+            if segment is None or segment.project_id != project_id or segment.generation_job_id is None:
+                _safe_notify("Job do Shot não encontrado.", color="warning")
+                return
+            await cancel_generation_job(session, segment.generation_job_id)
+        _safe_notify("Cancelamento local registrado; o provider pode não aceitar cancelamento remoto.", color="warning")
+        _safe_reload()
+    except Exception as exc:
+        _show_ai_error_unless_context_gone(exc)
 
 
 async def _regenerate_continuous_video_segment_prompts_from_ui(
