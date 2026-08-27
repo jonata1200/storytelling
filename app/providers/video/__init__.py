@@ -1,3 +1,3 @@
-from app.providers.video.openrouter import OpenRouterVideoProvider
+from app.providers.video.vibes import VibesVideoProvider
 
-__all__ = ["OpenRouterVideoProvider"]
+__all__ = ["VibesVideoProvider"]

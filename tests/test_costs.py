@@ -39,14 +39,14 @@ def test_estimate_operation_cost_uses_default_policy() -> None:
     estimate = estimate_operation_cost(
         "video_generation",
         Decimal("12.5"),
-        provider="openrouter",
+        provider="vibes",
         model="video/model",
     )
 
     assert estimate.unit == "second"
-    assert estimate.unit_cost == Decimal("0.030000")
-    assert estimate.estimated == Decimal("0.375000")
-    assert estimate.maximum == Decimal("0.431250")
+    assert estimate.unit_cost == Decimal("0.050000")
+    assert estimate.estimated == Decimal("0.625000")
+    assert estimate.maximum == Decimal("0.718750")
 
 
 def test_budget_allows_blocks_when_projected_cost_exceeds_limit() -> None:
@@ -83,16 +83,16 @@ def test_mock_provider_cost_policy_is_zero() -> None:
     assert estimate.estimated == Decimal("0.000000")
 
 
-def test_openrouter_cost_policy_uses_model_overrides() -> None:
+def test_vibes_cost_policy_uses_default_until_provider_reports_cost() -> None:
     video = estimate_operation_cost(
         "video_generation",
         Decimal("1"),
-        provider="openrouter",
-        model="bytedance/seedance-2.0-mini",
+        provider="vibes",
+        model="vibes",
     )
 
     assert video.unit == "second"
-    assert video.unit_cost == Decimal("0.015000")
+    assert video.unit_cost == Decimal("0.050000")
 
 
 def test_operation_cost_text_formats_estimates_and_zero_quantity() -> None:
@@ -100,18 +100,18 @@ def test_operation_cost_text_formats_estimates_and_zero_quantity() -> None:
         operation_cost_text(
             "video_generation",
             Decimal("2"),
-            provider="openrouter",
-            model="bytedance/seedance-2.0-mini",
+            provider="vibes",
+            model="vibes",
             label="2 segundo(s)",
         )
-        == "Estimativa: US$ 0.030000 para 2 segundo(s)."
+        == "Estimativa: US$ 0.100000 para 2 segundo(s)."
     )
     assert (
         operation_cost_text(
             "video_generation",
             Decimal("0"),
-            provider="openrouter",
-            model="bytedance/seedance-2.0-mini",
+            provider="vibes",
+            model="vibes",
             label="0 segundo(s)",
         )
         == "Nenhum custo previsto agora."

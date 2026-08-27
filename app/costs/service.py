@@ -40,17 +40,8 @@ DEFAULT_OPERATION_COSTS_USD: dict[str, tuple[str, Decimal]] = {
     "video_generation": ("second", Decimal("0.050000")),
 }
 
-PROVIDER_OPERATION_COST_OVERRIDES_USD: dict[str, dict[str, tuple[str, Decimal]]] = {
-    "openrouter": {
-        "video_generation": ("second", Decimal("0.030000")),
-    },
-}
-MODEL_OPERATION_COST_OVERRIDES_USD: dict[tuple[str, str, str], tuple[str, Decimal]] = {
-    ("openrouter", "bytedance/seedance-2.0-mini", "video_generation"): (
-        "second",
-        Decimal("0.015000"),
-    ),
-}
+PROVIDER_OPERATION_COST_OVERRIDES_USD: dict[str, dict[str, tuple[str, Decimal]]] = {}
+MODEL_OPERATION_COST_OVERRIDES_USD: dict[tuple[str, str, str], tuple[str, Decimal]] = {}
 
 
 def _money(value: Decimal) -> Decimal:
@@ -76,7 +67,7 @@ def estimate_batch_cost(
     }
 
 
-def operation_cost_policies(provider: str = "openrouter") -> list[OperationCostPolicyRead]:
+def operation_cost_policies(provider: str = "vibes") -> list[OperationCostPolicyRead]:
     return [
         OperationCostPolicyRead(
             provider=provider,
@@ -150,7 +141,7 @@ def final_budget_cost(
 def estimate_operation_cost(
     operation: str,
     quantity: Decimal,
-    provider: str = "openrouter",
+    provider: str = "vibes",
     model: str | None = None,
     uncertainty_ratio: Decimal = Decimal("0.15"),
 ) -> OperationCostEstimateRead:

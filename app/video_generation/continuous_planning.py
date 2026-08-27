@@ -605,7 +605,7 @@ def _segment_prompt(
     shot_emotion: str = "",
     shot_visual_composition: str = "",
 ) -> str:
-    """Gera prompt cinematografico para o seedance.
+    """Gera prompt cinematográfico para o provider de vídeo.
 
     Estrutura em 3 blocos:
     1. GERAÇÃO: o que o video deve criar (ação + câmera + atmosfera + diálogo)

@@ -39,18 +39,6 @@ class ProviderRegistry:
         return self.resolve(channel, effective_provider_for_channel(settings, channel))
 
 
-def _ollama_cloud_factory() -> object:
-    from app.providers.llm.ollama_cloud import OllamaCloudLLMProvider
-
-    return OllamaCloudLLMProvider()
-
-
-def _openrouter_factory() -> object:
-    from app.providers.video.openrouter import OpenRouterVideoProvider
-
-    return OpenRouterVideoProvider()
-
-
 def _vibes_factory() -> object:
     from app.providers.video.vibes import VibesVideoProvider
 
@@ -72,8 +60,6 @@ def _meta_image_factory() -> object:
 provider_registry = ProviderRegistry()
 provider_registry.register("text", "meta", _meta_text_factory)
 provider_registry.register("image", "meta", _meta_image_factory)
-provider_registry.register("text", "ollama_cloud", _ollama_cloud_factory)
-provider_registry.register("video", "openrouter", _openrouter_factory)
 provider_registry.register("video", "vibes", _vibes_factory)
 
 

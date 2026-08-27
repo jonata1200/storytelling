@@ -148,7 +148,7 @@ async def _fake_idea_generation(provider: object, request: LLMRequest) -> LLMRes
     return LLMResult(
         content={"ideas": ideas},
         model=request.model,
-        provider="ollama_cloud",
+        provider="meta",
     )
 
 
@@ -160,9 +160,9 @@ async def test_generate_freeform_ideas_returns_ten_ai_suggested_ideas(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama_cloud",
-            text_provider="ollama_cloud",
-            ollama_cloud_api_key="ollama-secret",
+            ai_provider="meta",
+            text_provider="meta",
+            meta_api_key="meta-secret",
         ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
@@ -184,9 +184,9 @@ async def test_generate_freeform_ideas_respects_selected_genre(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama_cloud",
-            text_provider="ollama_cloud",
-            ollama_cloud_api_key="ollama-secret",
+            ai_provider="meta",
+            text_provider="meta",
+            meta_api_key="meta-secret",
         ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
@@ -204,9 +204,9 @@ async def test_generate_freeform_ideas_respects_selected_emotion(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama_cloud",
-            text_provider="ollama_cloud",
-            ollama_cloud_api_key="ollama-secret",
+            ai_provider="meta",
+            text_provider="meta",
+            meta_api_key="meta-secret",
         ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
@@ -224,9 +224,9 @@ async def test_generate_freeform_ideas_respects_duration_and_clamps_count(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama_cloud",
-            text_provider="ollama_cloud",
-            ollama_cloud_api_key="ollama-secret",
+            ai_provider="meta",
+            text_provider="meta",
+            meta_api_key="meta-secret",
         ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", _fake_idea_generation)
@@ -252,9 +252,9 @@ async def test_generate_freeform_idea_batches_yields_incremental_batches(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama_cloud",
-            text_provider="ollama_cloud",
-            ollama_cloud_api_key="ollama-secret",
+            ai_provider="meta",
+            text_provider="meta",
+            meta_api_key="meta-secret",
         ),
     )
     monkeypatch.setattr(idea_lab, "_generate_with_runtime_fallback", fake_batch_generation)
@@ -277,20 +277,20 @@ async def test_generate_freeform_idea_batches_yields_incremental_batches(
 
 
 @pytest.mark.asyncio
-async def test_generate_freeform_ideas_requires_ollama_cloud_key(
+async def test_generate_freeform_ideas_requires_meta_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama_cloud",
-            text_provider="ollama_cloud",
-            ollama_cloud_api_key=None,
+            ai_provider="meta",
+            text_provider="meta",
+            meta_api_key=None,
         ),
     )
 
-    with pytest.raises(ValueError, match="OLLAMA_CLOUD_API_KEY"):
+    with pytest.raises(ValueError, match="META_API_KEY"):
         await generate_freeform_ideas(count=3)
 
 
@@ -299,7 +299,7 @@ async def test_generate_freeform_ideas_reports_provider_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FailingProvider:
-        provider_name = "ollama_cloud"
+        provider_name = "meta"
 
         async def generate_structured(self, request: object) -> NoReturn:
             raise RuntimeError("Provider HTTP 429: rate limit")
@@ -308,15 +308,15 @@ async def test_generate_freeform_ideas_reports_provider_failure(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama_cloud",
-            text_provider="ollama_cloud",
-            ollama_cloud_api_key="ollama-secret",
+            ai_provider="meta",
+            text_provider="meta",
+            meta_api_key="meta-secret",
         ),
     )
     monkeypatch.setattr(
         idea_lab,
         "configured_text_llm_provider",
-        lambda settings: (FailingProvider(), "provider/text-model", "ollama_cloud"),
+        lambda settings: (FailingProvider(), "provider/text-model", "meta"),
     )
 
     with pytest.raises(RuntimeError, match="Não foi possível gerar ideias"):
@@ -328,7 +328,7 @@ async def test_generate_freeform_ideas_reports_provider_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class SlowProvider:
-        provider_name = "ollama_cloud"
+        provider_name = "meta"
 
         async def generate_structured(self, request: LLMRequest) -> LLMResult:
             await asyncio.sleep(0.05)
@@ -338,15 +338,15 @@ async def test_generate_freeform_ideas_reports_provider_timeout(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama_cloud",
-            text_provider="ollama_cloud",
-            ollama_cloud_api_key="ollama-secret",
+            ai_provider="meta",
+            text_provider="meta",
+            meta_api_key="meta-secret",
         ),
     )
     monkeypatch.setattr(
         idea_lab,
         "configured_text_llm_provider",
-        lambda settings: (SlowProvider(), "provider/text-model", "ollama_cloud"),
+        lambda settings: (SlowProvider(), "provider/text-model", "meta"),
     )
     monkeypatch.setattr(idea_lab, "IDEA_PROVIDER_TIMEOUT_SECONDS", 0.001)
 
@@ -359,7 +359,7 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class InvalidThenValidProvider:
-        provider_name = "ollama_cloud"
+        provider_name = "meta"
 
         def __init__(self) -> None:
             self.prompts: list[str] = []
@@ -419,15 +419,15 @@ async def test_generate_freeform_ideas_retries_when_idea_contract_is_incomplete(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama_cloud",
-            text_provider="ollama_cloud",
-            ollama_cloud_api_key="ollama-secret",
+            ai_provider="meta",
+            text_provider="meta",
+            meta_api_key="meta-secret",
         ),
     )
     monkeypatch.setattr(
         idea_lab,
         "configured_text_llm_provider",
-        lambda settings: (provider, "provider/text-model", "ollama_cloud"),
+        lambda settings: (provider, "provider/text-model", "meta"),
     )
 
     ideas = await generate_freeform_ideas(count=1, genre="Suspense")
@@ -443,7 +443,7 @@ async def test_generate_freeform_ideas_keeps_partial_valid_provider_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class PartialProvider:
-        provider_name = "ollama_cloud"
+        provider_name = "meta"
 
         async def generate_structured(self, request: LLMRequest) -> LLMResult:
             return LLMResult(
@@ -482,15 +482,15 @@ async def test_generate_freeform_ideas_keeps_partial_valid_provider_response(
         idea_lab,
         "get_settings",
         lambda: Settings(
-            ai_provider="ollama_cloud",
-            text_provider="ollama_cloud",
-            ollama_cloud_api_key="ollama-secret",
+            ai_provider="meta",
+            text_provider="meta",
+            meta_api_key="meta-secret",
         ),
     )
     monkeypatch.setattr(
         idea_lab,
         "configured_text_llm_provider",
-        lambda settings: (PartialProvider(), "provider/text-model", "ollama_cloud"),
+        lambda settings: (PartialProvider(), "provider/text-model", "meta"),
     )
 
     ideas = await generate_freeform_ideas(count=3, genre="Drama")

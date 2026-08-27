@@ -19,8 +19,8 @@ def test_cost_entry_create_accepts_valid_values():
     entry = CostEntryCreate(
         project_id="00000000-0000-0000-0000-000000000001",
         entry_type="ACTUAL",
-        provider="openrouter",
-        model="bytedance/seedance-2.0-mini",
+        provider="vibes",
+        model="vibes",
         operation="video_generation",
         quantity=Decimal("1"),
         unit="second",
@@ -37,7 +37,7 @@ def test_cost_entry_create_rejects_zero_quantity():
         CostEntryCreate(
             project_id="00000000-0000-0000-0000-000000000001",
             entry_type="ACTUAL",
-            provider="openrouter",
+            provider="vibes",
             model="test",
             operation="video_generation",
             quantity=Decimal("0"),
@@ -53,7 +53,7 @@ def test_cost_entry_create_rejects_negative_unit_cost():
         CostEntryCreate(
             project_id="00000000-0000-0000-0000-000000000001",
             entry_type="ACTUAL",
-            provider="openrouter",
+            provider="vibes",
             model="test",
             operation="video_generation",
             quantity=Decimal("1"),

@@ -259,7 +259,7 @@ async def test_structured_generation_records_recovered_raw_response(
             return LLMResult(
                 content={"content": "FADE IN:\n\nCENA 01\nINT. CASA - DIA\n\nA porta abre."},
                 model=request.model,
-                provider="ollama_cloud",
+                provider="meta",
                 raw_content="FADE IN:\n\nCENA 01\nINT. CASA - DIA\n\nA porta abre.",
                 recovery_strategy="screenplay_text",
             )

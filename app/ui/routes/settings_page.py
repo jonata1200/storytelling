@@ -143,46 +143,18 @@ def register_settings_page(
                                     )
 
                                 with ui.element("div").classes(provider_card_classes):
-                                    provider_header("movie_filter", "Vídeo", "Vibes / legado")
-                                    video_provider = (
-                                        ui.select(
-                                            {"vibes": "Vibes", "openrouter": "OpenRouter (legado)"},
-                                            label="Provider de vídeo",
-                                            value=current.video_provider or "vibes",
-                                        )
-                                        .props("outlined stack-label")
-                                        .classes("w-full")
-                                    )
+                                    provider_header("movie_filter", "Vídeo", "Vibes")
                                     ui.label(
                                         "Vibes usa modo browser autorizado e perfil dedicado; "
                                         "não há API pública documentada."
                                     ).classes("text-xs text-slate-400")
-                                    openrouter_video_base_url = (
-                                        ui.input(
-                                            "URL base OpenRouter",
-                                            value=current.openrouter_video_base_url,
-                                            placeholder="https://openrouter.ai/api/v1",
-                                        )
-                                        .props("outlined stack-label")
-                                        .classes("w-full")
-                                    )
-                                    openrouter_api_key = (
-                                        ui.input(
-                                            "Chave OpenRouter",
-                                            placeholder=(
-                                                "Chave configurada; digite para substituir"
-                                                if current.openrouter_api_key
-                                                else "sk-or-..."
-                                            ),
-                                            password=True,
-                                            password_toggle_button=True,
-                                        )
-                                        .props("outlined stack-label")
-                                        .classes("w-full")
-                                    )
                                     ui.input(
                                         "Modelo de vídeo",
-                                        value=current.openrouter_video_model,
+                                        value=current.vibes_video_model,
+                                    ).props("outlined stack-label disable").classes("w-full")
+                                    ui.input(
+                                        "Perfil de browser",
+                                        value=str(current.vibes_browser_profile_path),
                                     ).props("outlined stack-label disable").classes("w-full")
 
                             ui.separator().classes("my-5")
@@ -191,11 +163,9 @@ def register_settings_page(
                                 typed_meta_api_key = str(meta_api_key.value or "").strip()
                                 try:
                                     values = {
-                                        "AI_PROVIDER": "meta",
                                         "TEXT_PROVIDER": "meta",
                                         "IMAGE_PROVIDER": "meta",
-                                        "VIDEO_PROVIDER": str(video_provider.value or "vibes"),
-                                        "TEXT_PROVIDER_FALLBACKS": "ollama_cloud",
+                                        "VIDEO_PROVIDER": "vibes",
                                         "META_INTEGRATION_MODE": "api",
                                         "META_BASE_URL": str(meta_base_url.value or "").strip(),
                                         "META_DEFAULT_MODEL": str(
@@ -208,23 +178,14 @@ def register_settings_page(
                                         "META_IMAGE_MODEL": str(
                                             meta_image_model.value or ""
                                         ).strip(),
-                                        "OPENROUTER_VIDEO_BASE_URL": str(
-                                            openrouter_video_base_url.value or ""
-                                        ).strip()
-                                        or "https://openrouter.ai/api/v1",
-                                        "OPENROUTER_VIDEO_MODEL": "bytedance/seedance-2.0-mini",
-                                        "OPENROUTER_VIDEO_GENERATE_AUDIO": "true",
+                                        "VIBES_INTEGRATION_MODE": "browser",
+                                        "VIBES_VIDEO_MODEL": "vibes",
                                     }
                                 except ValueError as exc:
                                     ui.notify(str(exc), color="negative")
                                     return
                                 if typed_meta_api_key:
                                     values["META_API_KEY"] = typed_meta_api_key
-                                typed_openrouter_api_key = str(
-                                    openrouter_api_key.value or ""
-                                ).strip()
-                                if typed_openrouter_api_key:
-                                    values["OPENROUTER_API_KEY"] = typed_openrouter_api_key
                                 save_preferences(values)
                                 ui.notify("Configurações de IA salvas.", color="positive")
 

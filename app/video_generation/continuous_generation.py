@@ -70,13 +70,12 @@ logger = logging.getLogger(__name__)
 
 
 def _effective_video_model(production_settings: Any, provider_name: str | None = None) -> str:
-    """Retorna o modelo do projeto ou do provider de vídeo configurado."""
+    """Retorna somente o modelo Vibes ativo; modelos históricos ficam apenas em metadata."""
     per_project = str(getattr(production_settings, "video_model", "") or "").strip()
-    if per_project and per_project not in {"", "manual_package"}:
-        return per_project
     settings = get_settings()
     provider = provider_name or effective_provider_for_channel(settings, "video")
-    return provider_model(settings, provider, "video")
+    configured = provider_model(settings, provider, "video")
+    return per_project if per_project == configured else configured
 
 
 def _resolve_video_provider() -> str:

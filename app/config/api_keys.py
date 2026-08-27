@@ -39,9 +39,7 @@ def api_key_variable_name(provider: str) -> str:
     normalized = str(provider or "").strip().casefold()
     if not _VALID_PROVIDER_IDENTIFIER.match(normalized):
         raise ValueError(f"Nome de provider invalido para variavel de env: {provider!r}")
-    return {
-        "ollama_cloud": "OLLAMA_CLOUD_API_KEY",
-    }.get(normalized, f"{normalized.upper()}_API_KEY")
+    return f"{normalized.upper()}_API_KEY"
 
 
 def provider_for_creation_channel(settings: Any, channel: CreationChannel) -> str:

@@ -17,8 +17,9 @@ async def test_first_video_segment_uses_prompt_without_synthetic_frames(
         continuous_generation,
         "get_settings",
         lambda: SimpleNamespace(
-            openrouter_video_model="bytedance/seedance-2.0-mini",
-            openrouter_video_generate_audio=True,
+            video_provider="vibes",
+            vibes_video_model="vibes",
+            vibes_video_generate_audio=True,
             local_storage_path=tmp_path,
         ),
     )

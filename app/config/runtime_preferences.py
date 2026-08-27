@@ -20,9 +20,7 @@ from app.config.provider_policy import (
 # Se a aplicação evoluir para multi-processo, migrar este armazenamento para o banco.
 
 PREFERENCE_KEYS = {
-    "AI_PROVIDER",
     "TEXT_PROVIDER",
-    "TEXT_PROVIDER_FALLBACKS",
     "IMAGE_PROVIDER",
     "VIDEO_PROVIDER",
     "META_INTEGRATION_MODE",
@@ -40,13 +38,6 @@ PREFERENCE_KEYS = {
     "VIBES_BASE_URL",
     "VIBES_VIDEO_MODEL",
     "VIBES_BROWSER_PROFILE_PATH",
-    "OLLAMA_CLOUD_BASE_URL",
-    "OLLAMA_CLOUD_DEFAULT_MODEL",
-    "OLLAMA_CLOUD_API_KEY",
-    "OPENROUTER_API_KEY",
-    "OPENROUTER_VIDEO_MODEL",
-    "OPENROUTER_VIDEO_BASE_URL",
-    "OPENROUTER_VIDEO_GENERATE_AUDIO",
     "VIDEO_GENERATION_CONCURRENCY",
     "USER_THEME",
     "APP_API_TOKEN",
@@ -56,7 +47,6 @@ PREFERENCE_VALUE_MAX_LENGTH = 4096
 _runtime_prefs_lock = threading.Lock()
 logger = logging.getLogger(__name__)
 PROVIDER_PREFERENCE_KEYS = {
-    "AI_PROVIDER",
     "TEXT_PROVIDER",
     "IMAGE_PROVIDER",
     "VIDEO_PROVIDER",
@@ -139,3 +129,26 @@ def save_runtime_preferences(values: dict[str, str], path: Path = PREFERENCES_PA
             logger.info("runtime_preferences_updated", extra={"keys": sorted(normalized)})
         finally:
             temporary_path.unlink(missing_ok=True)
+
+
+def cleanup_obsolete_runtime_preferences(path: Path = PREFERENCES_PATH) -> bool:
+    """Reescreve preferências antigas mantendo somente chaves atuais e sem expor valores."""
+    if not path.is_file():
+        return False
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(raw, dict):
+        return False
+    clean = {
+        str(key).upper(): str(value)
+        for key, value in raw.items()
+        if str(key).upper() in PREFERENCE_KEYS
+    }
+    if len(clean) == len(raw):
+        return False
+    path.unlink(missing_ok=True)
+    if clean:
+        save_runtime_preferences(clean, path)
+    return True

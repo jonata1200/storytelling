@@ -421,17 +421,15 @@ def test_openai_compatible_still_rejects_non_json_for_other_tasks() -> None:
 
 
 def test_llm_provider_for_name_supports_text_providers() -> None:
-    settings = Settings(
-        ollama_cloud_api_key="ollama-secret",
-    )
+    settings = Settings(meta_api_key="meta-secret")
 
-    ollama_provider = cast(Any, model_settings.llm_provider_for_name(settings, "ollama_cloud"))
+    meta_provider = cast(Any, model_settings.llm_provider_for_name(settings, "meta"))
 
-    assert ollama_provider.provider_name == "ollama_cloud"
+    assert meta_provider.provider_name == "meta"
 
 
 def test_llm_provider_for_name_rejects_removed_text_providers() -> None:
-    settings = Settings(ollama_cloud_api_key="ollama-secret")
+    settings = Settings(meta_api_key="meta-secret")
 
     with pytest.raises(ValueError, match="Provider de texto não suportado"):
         model_settings.llm_provider_for_name(settings, "groq")

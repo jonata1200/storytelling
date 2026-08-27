@@ -15,11 +15,7 @@ from app.config.provider_policy import (
     provider_requires_api_key,
     validate_model_name,
 )
-from app.config.settings import (
-    OLLAMA_CLOUD_TEXT_MODELS,
-    get_settings,
-    normalize_ollama_cloud_text_model,
-)
+from app.config.settings import get_settings
 from app.generation.models import ProjectModelSetting
 from app.providers.llm.types import LLMProvider
 from app.providers.registry import resolve_text_provider
@@ -65,12 +61,6 @@ def configured_text_llm_provider(settings: Any) -> tuple[LLMProvider, str, str]:
 
 def validate_text_provider_model(provider: str, value: object) -> str:
     model = validate_model_name(value, provider=provider)
-    if provider == "ollama_cloud":
-        normalized = normalize_ollama_cloud_text_model(model)
-        if normalized != model:
-            allowed = ", ".join(OLLAMA_CLOUD_TEXT_MODELS)
-            raise ValueError(f"Modelo Ollama Cloud inválido: {model}. Use: {allowed}")
-        return normalized
     return model
 
 
@@ -155,6 +145,12 @@ async def llm_provider_for_task(
     provider = str(
         getattr(setting, "provider", "") or effective_provider_for_channel(settings, "text")
     )
+    if provider not in SUPPORTED_TEXT_PROVIDERS:
+        provider = effective_provider_for_channel(settings, "text")
+        if setting is not None:
+            setting.provider = provider
+            setting.model = provider_model(settings, provider, "text")
+            await session.commit()
     configured_model = (
         getattr(setting, "model", None)
         if setting is not None

@@ -4,6 +4,30 @@
 
 Tornar Meta + Vibes os únicos providers da aplicação e remover completamente código, configuração, UI e testes ativos específicos de Ollama Cloud e OpenRouter.
 
+## Estado da implementação (2026-08-27)
+
+Cutover de código concluído:
+
+- Meta é o único provider registrado para texto e imagem; Vibes é o único para vídeo.
+- Adapters, factories, settings, credenciais, pricing, UI e testes exclusivos dos providers
+  removidos foram apagados.
+- Preferências antigas são ignoradas no boot e podem ser limpas por
+  `cleanup_obsolete_runtime_preferences`; model settings de projetos antigos migram para Meta
+  sob demanda.
+- Assets, diretórios e metadata históricos continuam sendo lidos sem troca do provider original.
+- A busca de resíduos em código ativo retorna apenas fixtures de paths históricos intencionais em
+  `tests/test_storage_governance.py` e `tests/_project_creation_flow_cases.py`.
+- `pytest`, `ruff check .`, `mypy app`, `git diff --check` e
+  `docker compose config --quiet` estão aprovados.
+
+Gates externos ainda pendentes antes de declarar o cutover pronto para produção:
+
+- aprovar as fases anteriores e o smoke real de ponta a ponta com a conta Meta/Vibes;
+- criar backup do banco e tag/commit de rollback;
+- instalar/autorizar o adapter browser real do Vibes e executar os smokes pagos;
+- rotacionar credenciais antigas nos respectivos serviços (ação externa);
+- executar auditoria de dependências quando `pip-audit` estiver disponível.
+
 Esta fase só começa após Meta Text, Meta Visual e Vibes Video estarem aprovados no fluxo de ponta a ponta.
 
 ## Pré-condições

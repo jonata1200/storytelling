@@ -448,7 +448,7 @@ def _repair_missing_character_names(
 
 
 # ---------------------------------------------------------------------------
-# Extração via LLM (Ollama Cloud)
+# Extração via Meta LLM
 # ---------------------------------------------------------------------------
 
 
@@ -457,7 +457,7 @@ async def _llm_extract_characters_and_locations(
     project_id: object,
     script_content: str,
 ) -> tuple[list[dict], list[dict]]:
-    """Extrai personagens e locais do roteiro usando LLM (Ollama Cloud).
+    """Extrai personagens e locais do roteiro usando Meta LLM.
 
     Retorna (personagens, locais) como listas de perfis.
     """

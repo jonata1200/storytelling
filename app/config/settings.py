@@ -5,29 +5,11 @@ from typing import Any, cast
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.config.provider_policy import (
-    SUPPORTED_IMAGE_PROVIDERS,
-    SUPPORTED_TEXT_PROVIDERS,
-    SUPPORTED_VIDEO_PROVIDERS,
-    normalize_api_key,
-    normalize_provider_name,
-)
+from app.config.provider_policy import normalize_api_key
 
 DEFAULT_APP_SECRET_KEY = "change-me-in-development"
 
-LOCKED_OLLAMA_CLOUD_TEXT_MODEL = "mistral-large-3:675b-cloud"
 DEFAULT_META_TEXT_MODEL = "muse-spark-1.2"
-
-OLLAMA_CLOUD_TEXT_MODELS = (
-    "deepseek-v4-flash:0731-cloud",
-    "gemma4:31b-cloud",
-    "gpt-oss:120b-cloud",
-    "minimax-m2.7:cloud",
-    "mistral-large-3:675b-cloud",
-    "nemotron-3-nano:30b-cloud",
-    "nemotron-3-super:cloud",
-    "qwen3.5:397b-cloud",
-)
 
 
 class Settings(BaseSettings):
@@ -56,9 +38,7 @@ class Settings(BaseSettings):
     local_storage_path: Path = Path("./storage")
     max_generated_asset_bytes: int = 750 * 1024 * 1024
 
-    ai_provider: str = "meta"
     text_provider: str | None = "meta"
-    text_provider_fallbacks: str = "ollama_cloud"
     image_provider: str | None = "meta"
     meta_integration_mode: str = "api"
     meta_image_integration_mode: str = "api"
@@ -70,16 +50,9 @@ class Settings(BaseSettings):
     meta_image_download_hosts: str = ""
     meta_image_timeout_seconds: float = Field(default=180, ge=15, le=600)
     meta_browser_profile_path: Path = Path("./runtime/browser_profiles/meta")
-    ollama_cloud_api_key: str | None = Field(default=None, repr=False)
-    ollama_cloud_base_url: str = "https://ollama.com/api"
-    ollama_cloud_default_model: str = LOCKED_OLLAMA_CLOUD_TEXT_MODEL
     ffmpeg_path: str = ""
     video_generation_concurrency: int = Field(default=2, ge=1, le=4)
     video_provider: str | None = "vibes"
-    openrouter_api_key: str | None = Field(default=None, repr=False)
-    openrouter_video_model: str = "bytedance/seedance-2.0-mini"
-    openrouter_video_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_video_generate_audio: bool = True
     vibes_integration_mode: str = "browser"
     vibes_api_key: str | None = Field(default=None, repr=False)
     vibes_base_url: str = ""
@@ -93,23 +66,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def reject_insecure_non_local_defaults(self) -> "Settings":
-        self.ollama_cloud_api_key = normalize_api_key(self.ollama_cloud_api_key)
-        self.ollama_cloud_default_model = normalize_ollama_cloud_text_model(
-            self.ollama_cloud_default_model
-        )
-        self.openrouter_api_key = normalize_api_key(self.openrouter_api_key)
         self.meta_api_key = normalize_api_key(self.meta_api_key)
         self.vibes_api_key = normalize_api_key(self.vibes_api_key)
-        self.ai_provider = normalize_provider_name(self.ai_provider, "AI_PROVIDER")
-        self.text_provider = self._optional_provider(
-            self.text_provider, "TEXT_PROVIDER", SUPPORTED_TEXT_PROVIDERS
-        )
-        self.image_provider = self._optional_provider(
-            self.image_provider, "IMAGE_PROVIDER", SUPPORTED_IMAGE_PROVIDERS
-        )
-        self.video_provider = self._optional_provider(
-            self.video_provider, "VIDEO_PROVIDER", SUPPORTED_VIDEO_PROVIDERS
-        )
+        # Cutover: valores antigos ainda presentes no ambiente são ignorados com segurança.
+        self.text_provider = "meta"
+        self.image_provider = "meta"
+        self.video_provider = "vibes"
         self.meta_integration_mode = self._integration_mode(
             self.meta_integration_mode, "META_INTEGRATION_MODE"
         )
@@ -148,16 +110,6 @@ class Settings(BaseSettings):
         return self
 
     @staticmethod
-    def _optional_provider(
-        value: str | None,
-        field_name: str,
-        allowed: tuple[str, ...],
-    ) -> str | None:
-        if not str(value or "").strip():
-            return None
-        return normalize_provider_name(value, field_name, allowed)
-
-    @staticmethod
     def _integration_mode(value: object, field_name: str) -> str:
         mode = str(value or "").strip().casefold()
         if mode not in {"api", "browser"}:
@@ -175,21 +127,6 @@ class Settings(BaseSettings):
                 f"{field_name} deve ficar dentro de {root}. Recebido: {value}"
             ) from exc
         return resolved
-
-
-def normalize_ollama_cloud_text_model(value: object) -> str:
-    model = str(value or "").strip()
-    if model in OLLAMA_CLOUD_TEXT_MODELS:
-        return model
-    import logging
-
-    logging.getLogger(__name__).warning(
-        "ollama_cloud_text_model_invalid received=%r default=%s",
-        value,
-        LOCKED_OLLAMA_CLOUD_TEXT_MODEL,
-    )
-    return LOCKED_OLLAMA_CLOUD_TEXT_MODEL
-
 
 @lru_cache
 def get_settings() -> Settings:

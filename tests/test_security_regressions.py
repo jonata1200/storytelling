@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 import app.providers.media_utils as media_utils
 import app.server as server
 import app.video_generation.planning as video_generation_planning
-from app.config.runtime_preferences import load_runtime_preferences, save_runtime_preferences
+from app.config.runtime_preferences import (
+    cleanup_obsolete_runtime_preferences,
+    load_runtime_preferences,
+    save_runtime_preferences,
+)
 from app.config.settings import Settings
 from app.core.enums import ProjectStatus
 from app.factory import create_app
@@ -86,26 +90,27 @@ def test_runtime_preferences_are_allowlisted_and_reject_control_characters(
     path = tmp_path / "preferences.json"
     save_runtime_preferences({"USER_THEME": "light"}, path)
     assert load_runtime_preferences(path) == {"user_theme": "light"}
-    save_runtime_preferences({"AI_PROVIDER": "ollama_cloud"}, path)
-    assert load_runtime_preferences(path)["ai_provider"] == "ollama_cloud"
     save_runtime_preferences(
         {
-            "TEXT_PROVIDER_FALLBACKS": "",
-            "OLLAMA_CLOUD_API_KEY": "ollama-secret",
-            "OLLAMA_CLOUD_DEFAULT_MODEL": "mistral-large-3:675b-cloud",
-            "OPENROUTER_API_KEY": "or-secret",
+            "TEXT_PROVIDER": "meta",
+            "META_API_KEY": "meta-secret",
         },
         path,
     )
     preferences = load_runtime_preferences(path)
-    assert preferences["text_provider_fallbacks"] == ""
-    assert preferences["ollama_cloud_api_key"] == "ollama-secret"
-    assert preferences["ollama_cloud_default_model"] == "mistral-large-3:675b-cloud"
-    assert preferences["openrouter_api_key"] == "or-secret"
+    assert preferences["text_provider"] == "meta"
+    assert preferences["meta_api_key"] == "meta-secret"
     with pytest.raises(ValueError, match="not allowed"):
         save_runtime_preferences({"DATABASE_URL": "attacker"}, path)
     with pytest.raises(ValueError, match="control character"):
-        save_runtime_preferences({"OLLAMA_CLOUD_DEFAULT_MODEL": "mock\nAPP_DEBUG=true"}, path)
+        save_runtime_preferences({"META_DEFAULT_MODEL": "mock\nAPP_DEBUG=true"}, path)
+
+
+def test_runtime_preferences_cleanup_removes_obsolete_unknown_keys(tmp_path: Path) -> None:
+    path = tmp_path / "preferences.json"
+    path.write_text('{"USER_THEME":"dark","REMOVED_PROVIDER_KEY":"secret"}', encoding="utf-8")
+    assert cleanup_obsolete_runtime_preferences(path) is True
+    assert load_runtime_preferences(path) == {"user_theme": "dark"}
 
 
 def test_runtime_json_corruption_falls_back_safely(tmp_path: Path) -> None:

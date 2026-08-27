@@ -11,9 +11,9 @@ from app.config.settings import Settings
 
 def test_validate_model_name_blocks_free_and_mock_models() -> None:
     with pytest.raises(ValueError, match="free"):
-        validate_model_name("video:free", provider="openrouter")
+        validate_model_name("video:free", provider="vibes")
     with pytest.raises(ValueError, match="mock"):
-        validate_model_name("mock-media", provider="openrouter")
+        validate_model_name("mock-media", provider="vibes")
 
 
 def test_provider_policy_resolves_all_channels() -> None:
@@ -21,8 +21,8 @@ def test_provider_policy_resolves_all_channels() -> None:
     assert effective_provider_for_channel(settings, "text") == "meta"
     assert effective_provider_for_channel(settings, "image") == "meta"
     assert effective_provider_for_channel(settings, "video") == "vibes"
-    assert provider_model(settings, "openrouter", "video") == settings.openrouter_video_model
+    assert provider_model(settings, "vibes", "video") == settings.vibes_video_model
 
 
 def test_ensure_provider_api_key_trims_secret() -> None:
-    assert ensure_provider_api_key("  secret  ", "openrouter") == "secret"
+    assert ensure_provider_api_key("  secret  ", "meta") == "secret"

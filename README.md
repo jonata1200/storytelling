@@ -129,7 +129,6 @@ Configure as chaves no `.env` ou pela tela de Configurações de IA:
 
 ```env
 TEXT_PROVIDER=meta
-TEXT_PROVIDER_FALLBACKS=ollama_cloud
 META_INTEGRATION_MODE=api
 META_API_KEY=sua_chave_meta
 META_BASE_URL=url_oficial_exibida_para_sua_conta
@@ -144,9 +143,6 @@ VIBES_INTEGRATION_MODE=browser
 VIBES_VIDEO_MODEL=vibes
 VIBES_BROWSER_PROFILE_PATH=./runtime/browser_profiles/vibes
 VIBES_BROWSER_AUTOMATION_ENABLED=false # habilite só após instalar/autorizar o backend browser
-# Legado temporário para comparação/cutover:
-OPENROUTER_API_KEY=sua_chave_openrouter
-OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0-mini
 FFMPEG_PATH=C:\caminho\para\ffmpeg.exe
 ```
 

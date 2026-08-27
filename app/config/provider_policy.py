@@ -6,17 +6,10 @@ IntegrationMode = Literal["api", "browser"]
 
 DEFAULT_PROVIDER = "meta"
 DEFAULT_VIDEO_PROVIDER = "vibes"
-SUPPORTED_TEXT_PROVIDERS = ("meta", "ollama_cloud")
-# OpenRouter remains accepted temporarily so existing local/runtime configuration
-# can be loaded during the migration. No generic image adapter is registered for it.
-SUPPORTED_IMAGE_PROVIDERS = ("meta", "openrouter")
-SUPPORTED_VIDEO_PROVIDERS = ("vibes", "openrouter")
-SUPPORTED_AI_PROVIDERS = (
-    "meta",
-    "vibes",
-    "ollama_cloud",
-    "openrouter",
-)
+SUPPORTED_TEXT_PROVIDERS = ("meta",)
+SUPPORTED_IMAGE_PROVIDERS = ("meta",)
+SUPPORTED_VIDEO_PROVIDERS = ("vibes",)
+SUPPORTED_AI_PROVIDERS = ("meta", "vibes")
 SUPPORTED_MODEL_PROVIDERS = frozenset(SUPPORTED_TEXT_PROVIDERS)
 MOCK_MODEL_IDS = {
     "mock",
@@ -56,8 +49,7 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
         allowed = SUPPORTED_IMAGE_PROVIDERS if channel == "image" else SUPPORTED_VIDEO_PROVIDERS
         configured_provider = getattr(settings, f"{channel}_provider", None) or default
         return normalize_provider_name(configured_provider, f"{channel.upper()}_PROVIDER", allowed)
-    channel_provider = getattr(settings, f"{channel}_provider", None)
-    configured_provider = channel_provider or getattr(settings, "ai_provider", DEFAULT_PROVIDER)
+    configured_provider = getattr(settings, f"{channel}_provider", None) or DEFAULT_PROVIDER
     return normalize_provider_name(
         configured_provider, f"{channel.upper()}_PROVIDER", SUPPORTED_TEXT_PROVIDERS
     )
@@ -65,8 +57,6 @@ def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> s
 
 def provider_display_name(provider: str) -> str:
     names = {
-        "ollama_cloud": "Ollama Cloud",
-        "openrouter": "OpenRouter",
         "meta": "Meta",
         "vibes": "Vibes",
     }
