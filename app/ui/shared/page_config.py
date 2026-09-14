@@ -135,18 +135,18 @@ PRODUCTION_STEPS = [
         "palette",
     ),
     ProductionStep(
-        "video",
-        "Vídeo",
-        "Gere quatro opções por segmento e encadeie a continuidade pela opção escolhida.",
-        "Planejar vídeo",
-        "movie",
+        "storyboard",
+        "Storyboards",
+        "Gere os frames de cada cena e planeje a sequência de quadros da história.",
+        "Planejar storyboards",
+        "view_comfy",
     ),
 ]
 
 WORKSPACE_TABS = [
     ("Roteiro", "script"),
     ("Bíblia Visual", "visual"),
-    ("V\u00eddeo", "video"),
+    ("Storyboards", "storyboard"),
 ]
 
 STEP_LOADING_COPY = {

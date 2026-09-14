@@ -31,7 +31,7 @@ from app.video_generation.continuous_sources import (
 from app.video_generation.models import ContinuousVideoSegment
 from app.video_generation.schemas import ContinuousVideoSegmentCreate
 
-CONTINUOUS_VIDEO_PROMPT_VERSION = "human_v13_no_camera_no_plans_no_lighting"
+CONTINUOUS_VIDEO_PROMPT_VERSION = "human_v14_action_only"
 
 
 def _last_word(text: str) -> str:

@@ -56,10 +56,34 @@ async def emit_continuous_video_segment_event(
             model=model,
             operation=operation,
             estimated_cost=estimated_cost,
-            message=message,
+            message=_safe_event_message(message),
             details=payload,
         ),
     )
+
+
+def _safe_event_message(
+    text: str | None,
+    *,
+    limit: int = 1900,
+) -> str:
+    """Trunca mensagens longas com indicador de truncamento.
+
+    O schema OperationalEventCreate.message tem max_length=2000. Call logs
+    do Playwright podem ter 5000+ chars (stack trace + argumentos). Sem
+    truncar, o Pydantic levanta ValidationError dentro de uma transação
+    SQLAlchemy → MissingGreenlet cascata que trava o worker.
+
+    Mantém os primeiros `limit` chars + sufixo informativo. O erro completo
+    fica em metadata.details (campo livre, sem limite).
+    """
+    if text is None:
+        return ""
+    raw = str(text)
+    if len(raw) <= limit:
+        return raw
+    head = raw[:limit]
+    return f"{head}\n[...truncado, {len(raw)} → {limit} chars]"
 
 
 async def _prepare_continuous_video_segment_fast(

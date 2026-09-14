@@ -316,6 +316,15 @@ async def test_generate_script_embeds_chosen_hook_in_prompt_and_payload(
     )
     monkeypatch.setattr(storytelling_service, "_create_artifact", fake_create_artifact)
     monkeypatch.setattr(storytelling_service, "_add_dependency", fake_add_dependency)
+
+    # Garante que o projeto NÃO está com title_locked — o teste valida que o
+    # título devolvido pelo LLM é preservado (projeto da dashboard).
+    async def fake_not_locked(_session: Any, _pid: Any) -> bool:
+        return False
+
+    from app.projects import service as project_service_in_hook
+
+    monkeypatch.setattr(project_service_in_hook, "_project_title_is_locked", fake_not_locked)
     monkeypatch.setattr(
         storytelling_service,
         "_advance_project_status_when_reachable",

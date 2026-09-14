@@ -235,13 +235,161 @@ async def resume_after_user_browser_close(profile_path: Path) -> bool:
     return True
 
 
-def launch_authorization_console(profile_path: Path, destination: str) -> bool:
+async def close_browser(profile_path: Path) -> bool:
+    """Fecha os navegadores gerenciados e impede reabertura automática.
+
+    Marca o estado de "fechado pelo usuário" no perfil, então a automação não
+    reabre o navegador por conta própria até uma retomada explícita (Autorizar
+    Meta/Vibes ou nova geração). Usado quando uma geração falha e o usuário
+    quer impedir que o navegador continue abrindo sozinho.
+    """
+    await run_browser_bridge(
+        "close-browser",
+        {"profilePath": str(profile_path)},
+        timeout_seconds=30,
+    )
+    return True
+
+
+def _iter_chrome_processes() -> list[dict[str, Any]]:
+    """Lista processos Chrome rodando no Windows.
+
+    Retorna lista de dicts {"ProcessId": int, "CommandLine": str} para
+    cada chrome.exe ativo. Em qualquer falha (wmic/PowerShell ausente,
+    timeout, permissão), retorna lista vazia — o caller deve tratar
+    "sem informação" como "pode abrir" (fail-open) para não bloquear a
+    autorização quando o detector não funciona.
+
+    O CommandLine inclui os argumentos completos (ex.: --user-data-dir=...)
+    mesmo quando o Chrome está rodando como serviço.
+    """
+    if sys.platform != "win32":
+        return []
+    # Tenta PowerShell Get-CimInstance (preferido sobre wmic deprecated).
+    ps_command = (
+        "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" "
+        "| Select-Object ProcessId, CommandLine "
+        "| ConvertTo-Csv -NoTypeInformation"
+    )
+    try:
+        completed = subprocess.run(  # noqa: S603
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                ps_command,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if completed.returncode != 0 or not completed.stdout:
+        return []
+    # CSV: "ProcessId","CommandLine" — CommandLine pode ter aspas internas.
+    processes: list[dict[str, Any]] = []
+    lines = completed.stdout.splitlines()
+    if not lines:
+        return []
+    for line in lines[1:]:  # pula header
+        if not line.strip():
+            continue
+        # Formato: "<pid>","<commandline>". CSV-escaped.
+        try:
+            import csv
+            from io import StringIO
+
+            row = next(csv.reader(StringIO(line)))
+        except (csv.Error, StopIteration, ValueError):
+            continue
+        if len(row) < 2:
+            continue
+        try:
+            pid = int(row[0])
+        except ValueError:
+            continue
+        processes.append({"ProcessId": pid, "CommandLine": row[1]})
+    return processes
+
+
+def _chrome_uses_profile(
+    profile_path: Path,
+    chrome_processes: list[dict[str, Any]] | None = None,
+) -> bool:
+    """True se algum Chrome rodando tem `--user-data-dir=profile_path`.
+
+    A comparação de caminho é case-insensitive e tolerante a barras
+    invertidas/avançadas (Windows resolve() cuida disso).
+    """
+    if chrome_processes is None:
+        chrome_processes = _iter_chrome_processes()
+    profile = Path(profile_path)
+    try:
+        target = str(profile.resolve(strict=False)).casefold()
+    except OSError:
+        target = str(profile).casefold()
+    target_normalized = target.replace("/", "\\").rstrip("\\")
+    marker = "--user-data-dir="
+    for proc in chrome_processes:
+        cmdline = str(proc.get("CommandLine") or "")
+        if marker not in cmdline.lower():
+            continue
+        # Extrai o argumento --user-data-dir=...
+        lower_cmdline = cmdline.lower()
+        idx = lower_cmdline.find(marker)
+        while idx != -1:
+            start = idx + len(marker)
+            # Valor pode estar entre aspas.
+            if start < len(cmdline) and cmdline[start] == '"':
+                end = cmdline.find('"', start + 1)
+                if end == -1:
+                    break
+                value = cmdline[start + 1 : end]
+            else:
+                # Pega até o próximo espaço ou aspas.
+                end = start
+                while end < len(cmdline) and cmdline[end] not in (" ", '"', "\t"):
+                    end += 1
+                value = cmdline[start:end]
+            value_normalized = value.casefold().replace("/", "\\").rstrip("\\")
+            if value_normalized == target_normalized:
+                return True
+            # Próxima ocorrência do marker (caso tenha mais de um).
+            idx = lower_cmdline.find(marker, idx + 1)
+    return False
+
+
+def _any_project_chrome_in_use(
+    meta_profile: Path,
+    chrome_processes: list[dict[str, Any]] | None = None,
+) -> str | None:
+    """Retorna o nome do profile do projeto que está em uso por um Chrome.
+
+    "meta" se o Chrome está usando meta_profile, None se nenhum dos dois está em uso.
+    """
+    if chrome_processes is None:
+        chrome_processes = _iter_chrome_processes()
+    if _chrome_uses_profile(meta_profile, chrome_processes):
+        return "meta"
+    return None
+
+
+def launch_authorization_console(profile_path: Path) -> bool:
     """Start at most one authorization console per persistent browser profile."""
     script = browser_bridge_script().with_name("authorize-meta-browser.ps1")
     if not script.is_file():
         raise BrowserBridgeError("Script de autorização Meta não encontrado.")
-    target = "vibes" if destination == "vibes" else "image"
     resolved_profile_path = profile_path.resolve(strict=False)
+    if _chrome_uses_profile(resolved_profile_path):
+        logger.info(
+            "launch_authorization_console_skipped profile=%s reason=chrome_already_using_profile",
+            resolved_profile_path,
+        )
+        return False
     command = [
         "powershell",
         "-ExecutionPolicy",
@@ -249,7 +397,7 @@ def launch_authorization_console(profile_path: Path, destination: str) -> bool:
         "-File",
         str(script),
         "-Target",
-        target,
+        "image",
         "-ProfilePath",
         str(resolved_profile_path),
     ]

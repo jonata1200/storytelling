@@ -86,14 +86,17 @@ def test_frame_prompt_locks_identity_and_final_pose() -> None:
 
     prompts = segment_frame_prompts(segment)  # type: ignore[arg-type]
 
-    assert "Use as mesmas imagens anteriores de Clara" in prompts["initial"]
+    assert "Use as mesmas imagens anteriores" not in prompts["initial"]
     assert "pose final da ação" in prompts["final"]
-    assert "mesma iluminação do frame inicial" in prompts["final"]
+    # v3 dos frames: a trava de iluminação foi removida — a consistência de
+    # luz vem do chat/referências onde todas as imagens são geradas.
+    assert "mesma iluminação" not in prompts["final"]
+    assert "Iluminação" not in prompts["initial"]
     assert "logo depois dessa ação" not in prompts["final"]
 
 
 def test_vibes_compiler_v12_omits_camera_and_plans() -> None:
-    assert VIBES_SHOT_PROMPT_COMPILER_VERSION == "vibes_shot_v13_no_camera_no_plans_no_lighting"
+    assert VIBES_SHOT_PROMPT_COMPILER_VERSION == "vibes_shot_v14_action_only"
     spec = ShotGenerationSpec(
         shot_id=uuid4(),
         scene_id=uuid4(),
@@ -159,8 +162,8 @@ def test_vibes_compiler_v11_omits_generic_camera_placeholder() -> None:
 
     assert "câmera" not in compiled.prompt.casefold()
     assert "movimento curto" not in compiled.prompt
-    # Local com período colado é limpo e capitalizado
-    assert "Em Rua do Bairro," in compiled.prompt
+    # v14: o prompt é só a ação — local não entra mais no texto.
+    assert compiled.prompt == "Antônio empurra o carrinho."
     assert "Amanhecer" not in compiled.prompt
 
 

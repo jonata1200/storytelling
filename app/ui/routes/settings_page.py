@@ -1,5 +1,6 @@
 # ruff: noqa: E501
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -11,6 +12,8 @@ from app.config.settings import OLLAMA_CLOUD_TEXT_MODELS, get_settings
 from app.database.session import AsyncSessionLocal
 from app.observability.service import provider_channel_health
 from app.providers.browser_bridge import (
+    _any_project_chrome_in_use,
+    close_browser,
     launch_authorization_console,
     resume_after_user_browser_close,
 )
@@ -92,7 +95,7 @@ def register_settings_page(
                             )
 
                             with ui.element("div").classes(
-                                "grid grid-cols-1 lg:grid-cols-3 gap-4 mt-5 w-full"
+                                "grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5 w-full"
                             ):
                                 with ui.element("div").classes(provider_card_classes):
                                     provider_header("edit_note", "Texto e QA", "Ollama Cloud")
@@ -167,7 +170,7 @@ def register_settings_page(
                                             pass  # Bridge offline: o flag, se houver, é limpo pelo console.
                                         try:
                                             started = launch_authorization_console(
-                                                current.meta_browser_profile_path, "image"
+                                                current.meta_browser_profile_path
                                             )
                                             ui.notify(
                                                 (
@@ -184,52 +187,37 @@ def register_settings_page(
                                         "Autorizar Meta", icon="login", on_click=authorize_meta
                                     ).props("outline no-caps")
 
-                                with ui.element("div").classes(provider_card_classes):
-                                    provider_header("movie_filter", "Vídeo", "Vibes")
-                                    ui.label(
-                                        "Vibes usa o mesmo perfil autorizado da Meta; "
-                                        "não há API pública documentada."
-                                    ).classes("text-xs text-slate-400")
-                                    ui.input(
-                                        "Modelo de vídeo",
-                                        value=current.vibes_video_model,
-                                    ).props("outlined stack-label disable").classes("w-full")
-                                    vibes_browser_automation_enabled = ui.switch(
-                                        "Habilitar automação de vídeos",
-                                        value=current.vibes_browser_automation_enabled,
-                                    ).props("color=primary")
-                                    ui.input(
-                                        "Perfil de browser",
-                                        value=str(current.vibes_browser_profile_path),
-                                    ).props("outlined stack-label disable").classes("w-full")
+                            ui.separator().classes("my-5")
 
-                                    async def authorize_vibes() -> None:
-                                        try:
-                                            # Retomada explícita: limpa o flag de
-                                            # fechamento manual do perfil Vibes.
-                                            await resume_after_user_browser_close(
-                                                current.vibes_browser_profile_path
-                                            )
-                                        except Exception:
-                                            pass  # Bridge offline: o flag, se houver, é limpo pelo console.
-                                        try:
-                                            started = launch_authorization_console(
-                                                current.vibes_browser_profile_path, "vibes"
-                                            )
-                                            ui.notify(
-                                                (
-                                                    "Janela de autorização Vibes aberta. Conclua o login nela."
-                                                    if started
-                                                    else "A janela de autorização Meta/Vibes já está aberta."
-                                                ),
-                                                color="info",
-                                            )
-                                        except Exception as exc:
-                                            ui.notify(f"Falha ao autorizar Vibes: {exc}", color="negative")
+                            with ui.element("div").classes(
+                                "border border-[#2d332e] rounded-lg p-4 flex flex-col gap-2"
+                            ):
+                                ui.label("Navegador de automação").classes("font-semibold")
+                                ui.label(
+                                    "Se uma geração falhar e o navegador continuar "
+                                    "abrindo sozinho, feche-o aqui. A automação não reabre "
+                                    "o navegador até você autorizar novamente."
+                                ).classes("text-xs text-slate-400")
 
-                                    ui.button(
-                                        "Autorizar Vibes", icon="login", on_click=authorize_vibes
-                                    ).props("outline no-caps")
+                                async def close_browsers() -> None:
+                                    try:
+                                        await close_browser(current.meta_browser_profile_path)
+                                        ui.notify(
+                                            "Navegador fechado. A automação não reabrirá "
+                                            "o navegador até você autorizar novamente.",
+                                            color="positive",
+                                        )
+                                    except Exception as exc:
+                                        ui.notify(
+                                            f"Não foi possível fechar o navegador: {exc}",
+                                            color="negative",
+                                        )
+
+                                ui.button(
+                                    "Fechar navegador",
+                                    icon="close",
+                                    on_click=close_browsers,
+                                ).props("outline no-caps").classes("text-red-300 border-red-900")
 
                             ui.separator().classes("my-5")
 
@@ -239,7 +227,6 @@ def register_settings_page(
                                     values = {
                                         "TEXT_PROVIDER": "ollama_cloud",
                                         "IMAGE_PROVIDER": "meta",
-                                        "VIDEO_PROVIDER": "vibes",
                                         "OLLAMA_CLOUD_INTEGRATION_MODE": "api",
                                         "OLLAMA_CLOUD_BASE_URL": str(
                                             ollama_base_url.value or ""
@@ -254,13 +241,6 @@ def register_settings_page(
                                         "META_BROWSER_AUTOMATION_ENABLED": (
                                             "true"
                                             if meta_browser_automation_enabled.value
-                                            else "false"
-                                        ),
-                                        "VIBES_INTEGRATION_MODE": "browser",
-                                        "VIBES_VIDEO_MODEL": "vibes",
-                                        "VIBES_BROWSER_AUTOMATION_ENABLED": (
-                                            "true"
-                                            if vibes_browser_automation_enabled.value
                                             else "false"
                                         ),
                                     }
@@ -300,7 +280,6 @@ def register_settings_page(
                                     health_rows = []
                                 display_names = {
                                     "meta": "Meta AI (imagens)",
-                                    "vibes": "Vibes (vídeos)",
                                 }
                                 for row in health_rows:
                                     name = display_names.get(row.provider, row.provider)

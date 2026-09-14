@@ -4,7 +4,6 @@ from typing import Any, cast
 from app.config.provider_policy import ProviderChannel, effective_provider_for_channel
 from app.providers.image.types import ImageProvider
 from app.providers.llm.types import LLMProvider
-from app.providers.video.types import VideoProvider
 
 ProviderFactory = Callable[[], object]
 
@@ -16,7 +15,6 @@ class ProviderRegistry:
         self._factories: dict[ProviderChannel, dict[str, ProviderFactory]] = {
             "text": {},
             "image": {},
-            "video": {},
         }
 
     def register(self, channel: ProviderChannel, name: str, factory: ProviderFactory) -> None:
@@ -39,12 +37,6 @@ class ProviderRegistry:
         return self.resolve(channel, effective_provider_for_channel(settings, channel))
 
 
-def _vibes_factory() -> object:
-    from app.providers.video.vibes import VibesVideoProvider
-
-    return VibesVideoProvider()
-
-
 def _ollama_cloud_factory() -> object:
     from app.providers.llm.ollama_cloud import OllamaCloudLLMProvider
 
@@ -60,7 +52,6 @@ def _meta_image_factory() -> object:
 provider_registry = ProviderRegistry()
 provider_registry.register("text", "ollama_cloud", _ollama_cloud_factory)
 provider_registry.register("image", "meta", _meta_image_factory)
-provider_registry.register("video", "vibes", _vibes_factory)
 
 
 def resolve_text_provider(settings: Any, name: str | None = None) -> LLMProvider:
@@ -73,6 +64,5 @@ def resolve_image_provider(settings: Any, name: str | None = None) -> ImageProvi
     return cast(ImageProvider, provider_registry.resolve("image", provider))
 
 
-def resolve_video_provider(settings: Any, name: str | None = None) -> VideoProvider:
-    provider = name or effective_provider_for_channel(settings, "video")
-    return cast(VideoProvider, provider_registry.resolve("video", provider))
+def resolve_video_provider(settings: Any, name: str | None = None) -> Any:
+    raise NotImplementedError("Video provider has been removed.")

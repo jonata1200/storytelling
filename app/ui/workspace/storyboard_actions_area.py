@@ -48,6 +48,7 @@ from app.video_generation.continuous import (
     continuous_video_segment_validation_errors,
     delete_all_continuous_video_segments,
     delete_continuous_video_segment,
+    delete_continuous_video_variant_assets,
     list_continuous_video_segments,
     plan_continuous_video_segments,
     prepare_continuous_video_package,
@@ -60,7 +61,9 @@ from app.video_generation.continuous import (
     update_continuous_video_segment_prompt,
 )
 from app.video_generation.models import ContinuousVideoSegment, GenerationJob
-from app.video_generation.continuous_review import select_continuous_video_segment_variant
+from app.video_generation.continuous_review import (
+    select_continuous_video_segment_variant,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -574,8 +577,16 @@ async def _generate_continuous_video_from_ui(
                     ]
                     continue
                 metadata = dict(segment.metadata_json or {})
-                batch_number = (len(metadata.get("variants") or []) // 4) + 1
-                if metadata.get("variants"):
+                existing_variants = list(metadata.get("variants") or [])
+                # Contador persistente de lotes: garante attempt_key único mesmo
+                # depois de as variantes antigas serem removidas (o novo lote
+                # SUBSTITUI as opções anteriores, não as acumula).
+                batch_number = max(
+                    int(metadata.get("video_batch_count") or 0) + 1,
+                    (len(existing_variants) // 4) + 1,
+                )
+                metadata["video_batch_count"] = batch_number
+                if existing_variants:
                     downstream_with_video = any(
                         item.segment_number > segment.segment_number
                         and (
@@ -602,6 +613,19 @@ async def _generate_continuous_video_from_ui(
                             next_metadata.pop("initial_frame_asset_id", None)
                             next_metadata.pop("continuity_source_variant_asset_id", None)
                             next_segment.metadata_json = next_metadata
+                    # Coleta os assets das opções antigas para removê-los (banco +
+                    # disco): o novo lote substitui as opções anteriores.
+                    old_variant_asset_ids: set[UUID] = set()
+                    for variant in existing_variants:
+                        raw_id = variant.get("asset_id")
+                        if raw_id:
+                            try:
+                                old_variant_asset_ids.add(UUID(str(raw_id)))
+                            except (ValueError, TypeError):
+                                pass
+                    current_video_id = segment.generated_video_asset_id or segment.asset_id
+                    if current_video_id is not None:
+                        old_variant_asset_ids.add(current_video_id)
                     segment.asset_id = None
                     segment.generated_video_asset_id = None
                     segment.final_frame_asset_id = None
@@ -614,10 +638,14 @@ async def _generate_continuous_video_from_ui(
                         "video_job_id",
                         "video_polling_url",
                         "video_unsigned_urls",
+                        "variants",
                     ):
                         metadata.pop(key, None)
                     metadata["awaiting_variant_selection"] = False
                     segment.metadata_json = metadata
+                    await delete_continuous_video_variant_assets(
+                        session, old_variant_asset_ids
+                    )
                 decision = await create_or_get_media_job(
                     session,
                     project_id,
@@ -897,6 +925,8 @@ def _asset_content_url(asset_id: Any) -> str:
     return f"/api/v1/assets/{asset_id}/content"
 
 
+
+
 def _render_continuous_media_preview(
     title: str,
     media_url: str,
@@ -906,8 +936,13 @@ def _render_continuous_media_preview(
     remove_on_click: Callable[[], Any] | None = None,
 ) -> None:
     if large:
+        # A caixa precisa derivar a LARGURA da ALTURA (max 72vh) mantendo 9:16.
+        # Usar w-full + aspect-[9/16] + max-h juntos distorce: o max-height
+        # limita a altura, a largura fica 100% e a caixa vira panorâmica
+        # (medido: 520x450, ratio 1.16) e o object-cover recorta a imagem
+        # 9:16 como se fosse 16:9. height + aspect-ratio resolve.
         container_classes = (
-            "visual-placeholder w-full aspect-[9/16] max-h-[72vh] flex items-center "
+            "visual-placeholder h-[min(72vh,142vw)] aspect-[9/16] mx-auto flex items-center "
             "justify-center bg-black overflow-hidden"
         )
     else:

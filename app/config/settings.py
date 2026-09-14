@@ -40,7 +40,6 @@ class Settings(BaseSettings):
     worker_consumer_group: str = "storytelling-workers"
     worker_heartbeat_seconds: int = Field(default=10, ge=2, le=60)
     worker_reclaim_seconds: int = Field(default=120, ge=30, le=3600)
-    worker_vibes_concurrency: int = Field(default=1, ge=1, le=2)
     worker_meta_image_concurrency: int = Field(default=2, ge=1, le=4)
     shot_auto_regeneration_enabled: bool = True
     shot_auto_regeneration_max_attempts: int = Field(default=2, ge=0, le=5)
@@ -77,13 +76,6 @@ class Settings(BaseSettings):
     meta_browser_profile_path: Path = Path("./runtime/browser_profiles/meta")
     ffmpeg_path: str = ""
     video_generation_concurrency: int = Field(default=2, ge=1, le=4)
-    video_provider: str | None = "vibes"
-    vibes_integration_mode: str = "browser"
-    vibes_api_key: str | None = Field(default=None, repr=False)
-    vibes_base_url: str = ""
-    vibes_video_model: str = "vibes"
-    vibes_browser_automation_enabled: bool = False
-    vibes_browser_profile_path: Path = Path("./runtime/browser_profiles/vibes")
     user_theme: str = "dark"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -91,27 +83,19 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def reject_insecure_non_local_defaults(self) -> "Settings":
         self.ollama_cloud_api_key = normalize_api_key(self.ollama_cloud_api_key)
-        self.vibes_api_key = normalize_api_key(self.vibes_api_key)
         # Cutover: providers fixos por decisão de produto. Valores de
-        # TEXT_PROVIDER / IMAGE_PROVIDER / VIDEO_PROVIDER no ambiente são
+        # TEXT_PROVIDER / IMAGE_PROVIDER no ambiente são
         # intencionalmente ignorados até que novos adapters sejam suportados.
         self.text_provider = "ollama_cloud"
         self.image_provider = "meta"
-        self.video_provider = "vibes"
         self.ollama_cloud_integration_mode = self._integration_mode(
             self.ollama_cloud_integration_mode, "OLLAMA_CLOUD_INTEGRATION_MODE"
         )
         self.meta_image_integration_mode = self._integration_mode(
             self.meta_image_integration_mode, "META_IMAGE_INTEGRATION_MODE"
         )
-        self.vibes_integration_mode = self._integration_mode(
-            self.vibes_integration_mode, "VIBES_INTEGRATION_MODE"
-        )
         self.meta_browser_profile_path = self._browser_profile_path(
             self.meta_browser_profile_path, "META_BROWSER_PROFILE_PATH"
-        )
-        self.vibes_browser_profile_path = self._browser_profile_path(
-            self.vibes_browser_profile_path, "VIBES_BROWSER_PROFILE_PATH"
         )
         if self.app_env.lower() not in {"local", "development", "test"}:
             if self.app_secret_key == DEFAULT_APP_SECRET_KEY:

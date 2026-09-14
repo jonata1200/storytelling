@@ -1,7 +1,7 @@
 from app.video_generation.continuous import CONTINUOUS_VIDEO_MIN_APPROVED_SEGMENTS
 from app.visual_bible.reference_planning import VISUAL_REFERENCE_VIEW_COUNTS
 
-WORKSPACE_SECTIONS = ("script", "visual", "video")
+WORKSPACE_SECTIONS = ("script", "visual", "storyboard")
 CONTINUOUS_VIDEO_WORKFLOW_MODE = "continuous_fast"
 
 
@@ -32,7 +32,7 @@ def step_ready(step_key: str, counts: dict[str, int]) -> bool:
         "script": counts.get("scripts", 0) > 0,
         "scenes": counts.get("scenes", 0) > 0 and counts.get("shots", 0) > 0,
         "visual": visual_assets_ready(counts),
-        "video": counts.get("clips", 0) > 0,
+        "storyboard": continuous_video_ready(counts),
     }
     return readiness[step_key]
 
@@ -68,23 +68,23 @@ def workspace_section_access(
         if not script_ready:
             return False, "Crie o roteiro antes de acessar a Bíblia Visual."
         return True, ""
-    if section == "storyboard":
-        return workspace_section_access("video", counts, workflow_mode)
     if section == "video":
+        return workspace_section_access("storyboard", counts, workflow_mode)
+    if section == "storyboard":
         if not script_ready:
-            return False, "Crie o roteiro antes de acessar vídeo."
+            return False, "Crie o roteiro antes de acessar os Storyboards."
         if not visual_assets_ready(counts):
             pending, expected = pending_visual_assets(counts)
             if expected > 0:
                 return (
                     False,
-                    "Gere todas as imagens de referência antes de acessar a produção de "
-                    f"vídeo ({expected - pending}/{expected} criadas).",
+                    "Gere todas as imagens de referência antes de acessar os "
+                    f"Storyboards ({expected - pending}/{expected} criadas).",
                 )
             return (
                 False,
                 "Crie os perfis e todas as imagens de referência na Bíblia Visual antes de "
-                "acessar a produção de vídeo.",
+                "acessar os Storyboards.",
             )
         return True, ""
     return False, "Etapa desconhecida."

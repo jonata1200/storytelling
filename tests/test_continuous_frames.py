@@ -73,13 +73,16 @@ def test_storyboard_prompts_are_human_and_descriptive() -> None:
 
     assert prompts["initial"].startswith("Crie uma imagem de ")
     assert prompts["final"].startswith("Crie uma imagem.")
-    # Modelo conciso do frame inicial (decisão do usuário): ação direta +
-    # uma frase de cena + citação de referências. Sem iluminação, figurino,
-    # props ou "Mostre o momento inicial em que".
+    # v3 dos frames (decisão do usuário): APENAS a ação, com os personagens
+    # pelo nome. Sem contexto de cena, sem iluminação, figurino, props ou
+    # "Mostre o momento inicial em que" — a identidade vem das referências
+    # do chat onde todas as imagens são geradas.
     assert "atravessa a sala" in prompts["initial"]
     assert "Mostre o momento inicial" not in prompts["initial"]
-    assert "A cena se passa em Bunker e mostra Clara em cena." in prompts["initial"]
-    assert "A iluminação deve ser" not in prompts["initial"]
+    assert "A cena se passa" not in prompts["initial"]
+    assert "A cena acontece" not in prompts["initial"]
+    assert "Iluminação" not in prompts["initial"]
+    assert "Iluminação" not in prompts["final"]
     assert "Os personagens devem aparecer assim" not in prompts["initial"]
     assert "Deixe visíveis os objetos importantes" not in prompts["initial"]
     assert "enquadramento" not in prompts["initial"].casefold()
@@ -90,10 +93,12 @@ def test_storyboard_prompts_are_human_and_descriptive() -> None:
     # recusava "rosto ... exatamente ... referências"); frame final descreve a
     # pose da ação e trava a iluminação ao frame inicial.
     assert "rosto" not in prompts["initial"].casefold()
-    assert "Use as mesmas imagens anteriores de Clara e Bunker" in prompts["initial"]
+    assert "Use as mesmas imagens anteriores" not in prompts["initial"]
     assert "pose final da ação" in prompts["final"]
     assert "logo depois dessa ação" not in prompts["final"]
-    assert "mesma iluminação do frame inicial" in prompts["final"]
+    # v3: a trava de iluminação do frame final foi removida — o próprio
+    # chat/referências mantêm a luz consistente entre os frames.
+    assert "mesma iluminação" not in prompts["final"]
     assert "Preserve rigorosamente" not in prompts["initial"]
     assert "movimento borrado" not in prompts["initial"]
     assert len(prompts["initial"]) <= continuous_frames.FRAME_PROMPT_MAX_CHARS
@@ -157,8 +162,11 @@ def test_storyboard_prompt_deduplicates_locations_and_ignores_narrative_states()
 
     prompt = continuous_frames.segment_frame_prompts(segment)["initial"]  # type: ignore[arg-type]
 
-    assert prompt.count("Auditório da Filarmônica") == 2
+    # v3: sem linha de contexto, nenhum dado de local entra no prompt —
+    # nem em duplicidade. Estados narrativos (continuity_notes) ficam fora.
+    assert "Auditório da Filarmônica" not in prompt
     assert "AUDITÓRIO DA FILARMÔNICA" not in prompt
+    assert "A cena acontece" not in prompt
     assert "Ele apenas aponta" not in prompt
     assert "Os personagens devem aparecer assim" not in prompt
     assert "…" not in prompt

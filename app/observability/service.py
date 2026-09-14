@@ -151,22 +151,21 @@ async def provider_channel_health(
     """Últimas N gerações por canal de provedor, com contagem de falhas (ARQ-03).
 
     Consulta `operational_events` de tipo `worker_job` (emitidos pelo worker a
-    cada geração IMAGE/VIDEO) e agrega por canal: Meta AI (imagem) e Vibes
-    (vídeo). Responde "últimas 10 gerações: quantas falharam e por quê" sem
+    cada geração IMAGE) e agrega por canal: Meta AI (imagem). Responde "últimas 10 gerações: quantas falharam e por quê" sem
     precisar abrir o banco manualmente.
     """
     result = await session.execute(
         select(OperationalEvent)
         .where(
             OperationalEvent.event_type == "worker_job",
-            OperationalEvent.provider.in_(("meta", "vibes")),
+            OperationalEvent.provider == "meta",
         )
         .order_by(OperationalEvent.created_at.desc())
         .limit(limit * 20)
     )
     events = list(result.scalars())
 
-    channels: dict[str, list[OperationalEvent]] = {"meta": [], "vibes": []}
+    channels: dict[str, list[OperationalEvent]] = {"meta": []}
     for event in events:
         provider = str(event.provider or "").lower()
         if provider in channels and len(channels[provider]) < limit:
@@ -396,7 +395,6 @@ def _provider_model_env_name(provider: str, channel: ProviderChannel) -> str:
     suffix_by_channel = {
         "text": "DEFAULT_MODEL",
         "image": "IMAGE_MODEL",
-        "video": "VIDEO_MODEL",
     }
     return f"{provider.upper()}_{suffix_by_channel[channel]}"
 
@@ -434,17 +432,10 @@ def _provider_channel_readiness(
         and not bool(getattr(settings, "meta_browser_automation_enabled", False))
     ):
         missing.append("META_BROWSER_AUTOMATION_ENABLED")
-    if (
-        channel == "video"
-        and provider == "vibes"
-        and not bool(getattr(settings, "vibes_browser_automation_enabled", False))
-    ):
-        missing.append("VIBES_BROWSER_AUTOMATION_ENABLED")
 
     labels = {
         "text": "texto",
         "image": "imagem",
-        "video": "vídeo",
     }
     channel_label = labels[channel]
     ready = not missing
@@ -507,7 +498,7 @@ async def readiness_dashboard(
         )
     )
     components.extend(
-        _provider_channel_readiness(app_settings, channel) for channel in ("text", "image", "video")
+        _provider_channel_readiness(app_settings, channel) for channel in ("text", "image")
     )
     overall = "ready" if all(item.status == "ready" for item in components) else "degraded"
     if any(item.status == "down" for item in components):

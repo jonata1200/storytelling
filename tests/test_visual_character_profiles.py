@@ -1,4 +1,10 @@
-from app.visual_bible.character_profiles import PHOTO_STYLE_DETAIL
+from app.visual_bible.character_profiles import (
+    ERA_WARDROBE_POOLS,
+    FEMININE_EVERYDAY_OUTFITS,
+    PHOTO_STYLE_DETAIL,
+    _age_stage,
+    _is_placeholder_visual_value,
+)
 from app.visual_bible.profiles import _character_profile, _location_profile
 from app.visual_bible.prompt_balance import (
     CHARACTER_PROMPT_MAX_WORDS,
@@ -9,6 +15,7 @@ from app.visual_bible.prompt_balance import (
     prompt_word_count,
     repair_portuguese_mojibake,
 )
+from app.visual_bible.script_profile_contracts import extraction_prompt, visual_design_prompt
 
 
 def test_character_profile_uses_role_appropriate_outfit_when_evidence_is_missing() -> None:
@@ -136,8 +143,12 @@ def test_character_and_location_prompts_have_balanced_visual_density() -> None:
     assert character["canonical_prompt"].startswith("Crie a imagem de Clara")
     assert "deve usar camisa bege" in character["canonical_prompt"]
     assert location["canonical_prompt"].startswith("Crie a imagem de Cozinha da casa")
-    assert "Organize o espaço com" in location["canonical_prompt"]
-    assert "Os materiais visíveis devem incluir" in location["canonical_prompt"]
+    # O prompt do local é UM ÚNICO PERÍODO: orações ligadas por vírgulas,
+    # sem frases separadas (relato do usuário, 2026-09).
+    assert location["canonical_prompt"].count(".") == 1
+    assert "Organize o espaço com" not in location["canonical_prompt"]
+    assert "o espaço organizado com" in location["canonical_prompt"]
+    assert "materiais visíveis como" in location["canonical_prompt"]
     assert "proporções anatômicas" not in character["canonical_prompt"]
     assert "continuidade visual" not in location["canonical_prompt"]
 
@@ -264,13 +275,85 @@ def test_child_variant_gets_child_age_measures_and_wording() -> None:
     assert "deve aparentar criança" in prompt
     assert "1,72 m" not in prompt
     assert "81 kg" not in prompt
-    assert float(profile["height_cm"]) < 140
-    assert float(profile["weight_kg"]) < 45
+    # Menores não recebem medidas numéricas: a idade escrita basta
+    # (relato do usuário, 2026-09).
+    assert profile["height_cm"] == ""
+    assert profile["weight_kg"] == ""
+    assert "de altura" not in prompt
+    assert "de pesar" not in prompt
 
     girl = _character_profile({"name": "Menina Alice", "role": "criança perdida"})
     assert girl["gender"] == "personagem feminino"
     assert "deve ser uma menina" in girl["canonical_prompt"]
     assert girl["apparent_age"] == "criança"
+
+
+def test_written_age_words_detect_children_and_drop_numeric_measures() -> None:
+    # Caso real do banco ("Menina", 2026-09): idade "oito anos" escrita por
+    # extenso recebia 1,65 m / 66 kg de adulto e "deve ser uma mulher".
+    profile = _character_profile(
+        {"name": "Menina", "gender": "feminino", "apparent_age": "oito anos"}
+    )
+    prompt = profile["canonical_prompt"]
+
+    assert profile["height_cm"] == ""
+    assert profile["weight_kg"] == ""
+    assert "de altura" not in prompt
+    assert "de pesar" not in prompt
+    assert "deve aparentar oito anos" in prompt
+    assert "deve ser uma menina" in prompt
+    assert "deve ser uma mulher" not in prompt
+
+    teen = _character_profile(
+        {"name": "Ana", "gender": "feminino", "apparent_age": "16 anos"}
+    )
+    assert teen["height_cm"] == ""
+    assert teen["weight_kg"] == ""
+
+    adult = _character_profile(
+        {"name": "Ruth", "gender": "feminino", "apparent_age": "45 anos"}
+    )
+    assert adult["height_cm"] != ""
+    assert adult["weight_kg"] != ""
+
+
+def test_footwear_placeholder_from_extraction_falls_back_to_concrete_choice() -> None:
+    # Caso real do banco ("Marcus", 2026-09): a extração LLM grava
+    # "não especificado" e o prompt canônico virava "deve calçar não
+    # especificado".
+    profile = _character_profile(
+        {
+            "name": "Marcus",
+            "gender": "masculino",
+            "apparent_age": "pessoa adulta",
+            "base_outfit": "camisa social branca amassada e calças escuras",
+            "footwear": "não especificado",
+        }
+    )
+
+    assert profile["footwear"] == "sapatos marrons de couro"
+    assert "deve calçar não especificado" not in profile["canonical_prompt"]
+    assert "deve calçar sapatos marrons de couro" in profile["canonical_prompt"]
+
+
+def test_footwear_survives_prompt_word_budget_trim() -> None:
+    # Personagem com muitos detalhes: o corte do orçamento de palavras não
+    # pode remover o calçado (continuidade visual do corpo inteiro).
+    profile = _character_profile(
+        {
+            "name": "Ana",
+            "role": "médica",
+            "gender": "feminino",
+            "apparent_age": "pessoa adulta",
+            "distinctive_features": (
+                "usa um colar de prata herdado da avó e sempre carrega um "
+                "caderno pequeno de capa de couro marrom com elástico"
+            ),
+        }
+    )
+
+    assert profile["footwear"]
+    assert f"deve calçar {profile['footwear']}" in profile["canonical_prompt"]
 
 
 def test_temporal_variant_gets_age_from_name_without_adult_measures() -> None:
@@ -356,3 +439,136 @@ def test_narrative_actions_never_enter_the_canonical_prompt() -> None:
     )
     assert "com trava" not in action_only["canonical_prompt"]
     assert "trava" not in action_only["canonical_prompt"]
+
+
+def test_contextual_fallback_avoids_modern_pieces_in_historical_context() -> None:
+    # Contexto de época (anos 1920): o fallback não pode dar jeans/tênis —
+    # relato do usuário (2026-09): roupas do prompt não tinham nada a ver
+    # com a história nem com o contexto do personagem.
+    profile = _character_profile(
+        {
+            "name": "Dona Lourdes",
+            "role": "protagonista",
+            "gender": "feminino",
+        },
+        '{"time_period":"anos 1920","country_context":"Brasil"}',
+    )
+    outfit = profile["base_outfit"]
+    assert "jeans" not in outfit
+    assert "tênis" not in outfit
+    assert "camiseta" not in outfit
+
+
+def test_contextual_fallback_uses_rural_wardrobe_in_rural_context() -> None:
+    profile = _character_profile(
+        {"name": "Seu Chico", "role": "colono", "gender": "masculino"},
+        '{"country_context":"Brasil","locations":["Fazenda Santa Rosa"]}',
+    )
+    outfit = profile["base_outfit"]
+    footwear = profile["footwear"]
+    assert outfit in (
+        "camisa de algodão cru gasta com suspensórios e calça de tecido grosso remendada",
+        "camisa xadrez de franela, colete de lã e chapéu de palha",
+    )
+    assert footwear in ("botas de couro gastas com sola grossa", "chinelos de couro artesanais")
+
+
+def test_modern_everyday_context_keeps_everyday_wardrobe() -> None:
+    # Sem época/ambiente no contexto, o cotidiano moderno continua válido.
+    profile = _character_profile(
+        {"name": "Clara", "role": "protagonista", "gender": "feminino"},
+        '{"genre":"drama contemporâneo"}',
+    )
+    assert profile["base_outfit"] in FEMININE_EVERYDAY_OUTFITS
+
+
+def test_institutional_role_uniform_survives_historical_context() -> None:
+    # Uniformes que existem em qualquer época (médico, policial, cozinheiro)
+    # continuam entrando mesmo em contexto histórico.
+    profile = _character_profile(
+        {"name": "Joana", "role": "enfermeira", "gender": "feminino"},
+        '{"time_period":"anos 1940"}',
+    )
+    assert profile["base_outfit"] == (
+        "uniforme hospitalar verde-claro com crachá branco preso ao peito"
+    )
+
+
+def test_pre1960_flexible_role_gets_era_wardrobe() -> None:
+    # Função sem uniforme fixo em época histórica recebe figurino de época,
+    # não o "camisa azul e sarja bege" de hoje.
+    profile = _character_profile(
+        {"name": "Helena", "role": "professora", "gender": "feminino"},
+        '{"time_period":"anos 1920"}',
+    )
+    assert profile["base_outfit"] in ERA_WARDROBE_POOLS["pre1960"][0]
+
+
+def test_future_context_gets_technical_wardrobe() -> None:
+    profile = _character_profile(
+        {"name": "Íris", "role": "piloto", "gender": "feminino"},
+        '{"time_period":"2087","country_context":"colônia espacial"}',
+    )
+    assert profile["base_outfit"] in ERA_WARDROBE_POOLS["futuristic"][0]
+    assert profile["footwear"] in ERA_WARDROBE_POOLS["futuristic"][2]
+
+
+def test_wardrobe_prompt_rules_are_present_in_prompts() -> None:
+    extraction = extraction_prompt("CENA 1\nINT. FAZENDA - DIA", 1, 1, "")
+    design = visual_design_prompt([], [], "")
+
+    assert "FIGURINO" in extraction
+    assert "ÉPOCA" in extraction
+    assert "ANCORAGEM DO FIGURINO" in design
+    assert "jeans" in design
+
+
+def test_age_stage_parses_numbers_and_written_words() -> None:
+    assert _age_stage("oito anos") == "child"
+    assert _age_stage("8 anos") == "child"
+    assert _age_stage("dez anos") == "child"
+    assert _age_stage("criança") == "child"
+    assert _age_stage("menino de 7 anos") == "child"
+    assert _age_stage("16 anos") == "adolescent"
+    assert _age_stage("adolescente") == "adolescent"
+    assert _age_stage("pessoa adulta") == ""
+    assert _age_stage("45 anos") == ""
+    assert _age_stage("") == ""
+
+
+def test_placeholder_visual_values_are_detected() -> None:
+    assert _is_placeholder_visual_value("não especificado") is True
+    assert _is_placeholder_visual_value("Não especificado.") is True
+    assert _is_placeholder_visual_value("calçados adequados") is True
+    assert _is_placeholder_visual_value("roupa discreta") is True
+    assert _is_placeholder_visual_value("nenhum") is True
+    assert _is_placeholder_visual_value("n/a") is True
+    assert _is_placeholder_visual_value("tênis branco de couro") is False
+    assert _is_placeholder_visual_value("") is False
+
+
+def test_location_prompt_is_a_single_flowing_period() -> None:
+    # Relato do usuário (2026-09): prompts de local saíam como várias frases
+    # separadas; agora são um único período corrido.
+    profile = _location_profile(
+        {
+            "name": "Cozinha da casa",
+            "description": "cozinha modesta brasileira, estreita, funcional e silenciosa.",
+            "layout": "bancada junto à parede, mesa pequena ao centro",
+            "materials": "granito gasto, madeira clara",
+            "palette": "bege, verde desbotado",
+            "lighting": "luz fria da manhã",
+            "key_objects": "fogão antigo, panelas de barro",
+        }
+    )
+    prompt = profile["canonical_prompt"]
+
+    assert prompt.endswith(".")
+    assert prompt.count(".") == 1
+    assert "!" not in prompt and "?" not in prompt
+    assert prompt.startswith("Crie a imagem de Cozinha da casa,")
+    assert "o espaço organizado com" in prompt
+    assert "materiais visíveis como" in prompt
+    assert "cores predominantes em" in prompt
+    assert "iluminação de" in prompt
+    assert "objetos como" in prompt

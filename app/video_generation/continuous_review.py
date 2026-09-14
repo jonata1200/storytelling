@@ -86,15 +86,11 @@ async def approve_continuous_video_segment(
         segment.segment_number + 1,
     )
     if next_segment is not None:
-        next_metadata = dict(next_segment.metadata_json or {})
-        if not bool(next_metadata.get("continuity_break")):
-            next_segment.source_segment_id = segment.id
-            next_segment.source_frame_asset_id = segment.final_frame_asset_id
-            next_metadata["source_segment_id"] = str(segment.id)
-            next_metadata["source_frame_asset_id"] = str(segment.final_frame_asset_id)
-            next_metadata["initial_frame_asset_id"] = str(segment.final_frame_asset_id)
-            if metadata.get("final_frame_storage_uri"):
-                next_metadata["source_frame_storage_uri"] = metadata["final_frame_storage_uri"]
+            # CORREÇÃO: a propagação automática do frame extraído para o
+            # próximo segmento foi REMOVIDA. Apenas registramos uma referência
+            # leve (continuity_source_summary) para o toggle do próximo
+            # segmento decidir se o frame é herdado.
+            next_metadata = dict(next_segment.metadata_json or {})
             next_metadata["continuity_source_summary"] = metadata["continuity_summary"]
             next_segment.metadata_json = next_metadata
     await _emit_continuous_video_segment_event(
@@ -324,27 +320,30 @@ async def select_continuous_video_segment_variant(
         segment.final_frame_asset_id = extracted_frame_id
         metadata["extracted_last_frame_asset_id"] = str(extracted_frame_id)
 
-        next_segment = next(
-            (
-                item
-                for item in await list_continuous_video_segments(session, project_id)
-                if item.segment_number == segment.segment_number + 1
-            ),
-            None,
-        )
-        if next_segment is not None:
-            next_metadata = dict(next_segment.metadata_json or {})
-            if not bool(next_metadata.get("continuity_break")):
-                next_segment.source_frame_asset_id = extracted_frame_id
-                next_metadata["initial_frame_asset_id"] = str(extracted_frame_id)
-                next_metadata["continuity_source_variant_asset_id"] = str(asset_id)
-                next_segment.metadata_json = next_metadata
+    # A propagação automática do frame extraído para o próximo segmento
+    # foi removida: cada segmento sempre gera seu próprio frame inicial.
+    next_segment = next(
+        (
+            item
+            for item in await list_continuous_video_segments(session, project_id)
+            if item.segment_number == segment.segment_number + 1
+        ),
+        None,
+    )
+    if next_segment is not None:
+        # A propagação automática do frame extraído para o próximo
+        # segmento foi removida. Apenas o segmento atual mantém o frame
+        # extraído (segment.final_frame_asset_id); o próximo segmento
+        # sempre gera um frame inicial novo.
+        pass
     metadata["variant_selected_at"] = datetime.now(UTC).isoformat()
     metadata["awaiting_variant_selection"] = False
     segment.metadata_json = metadata
     _set_continuous_video_review_status(segment, CONTINUOUS_VIDEO_REVIEW_READY)
     await session.flush()
     return segment
+
+
 
 
 async def invalidate_continuous_video_downstream_segments(

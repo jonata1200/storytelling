@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 
 import app.providers.media_utils as media_utils
 import app.server as server
-import app.video_generation.planning as video_generation_planning
 from app.config.runtime_preferences import (
     cleanup_obsolete_runtime_preferences,
     load_runtime_preferences,
@@ -141,11 +140,6 @@ def test_local_storage_helpers_reject_files_outside_storage_root(
         "get_settings",
         lambda: SimpleNamespace(local_storage_path=storage_root),
     )
-    monkeypatch.setattr(
-        video_generation_planning,
-        "get_settings",
-        lambda: SimpleNamespace(local_storage_path=storage_root),
-    )
 
     data_url = media_utils.local_uri_to_data_url(inside.as_posix())
     assert data_url is not None and data_url.startswith("data:")
@@ -161,8 +155,6 @@ def test_local_storage_helpers_reject_files_outside_storage_root(
     # Fail-closed: paths outside storage_root return None instead of the raw uri.
     assert media_utils.local_uri_to_data_url(outside.as_posix()) is None
     assert media_utils.local_uri_to_data_url("http://example.com/storage/avatar.png") is None
-    assert video_generation_planning._local_storage_path(inside.as_posix()) == inside.resolve()
-    assert video_generation_planning._local_storage_path(outside.as_posix()) is None
 
 
 def test_generation_payload_validation_rejects_missing_lists() -> None:

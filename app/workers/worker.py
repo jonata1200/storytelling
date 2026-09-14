@@ -17,6 +17,7 @@ from app.jobs.service import mark_job_failed, mark_job_running, mark_job_succeed
 from app.observability.redaction import redact_secrets
 from app.observability.schemas import OperationalEventCreate
 from app.observability.service import emit_project_event
+from app.providers.browser_bridge import UserClosedBrowserError
 from app.video_generation.models import GenerationJob
 from app.workers.queue import QueueMessage, RedisJobQueue, redis_lock
 
@@ -53,12 +54,9 @@ class MediaWorker:
         self._active_job_ids: set[Any] = set()
         self._last_started: dict[GenerationJobType, float] = {}
         self._limits = {
-            GenerationJobType.VIDEO: asyncio.Semaphore(settings.worker_vibes_concurrency),
             # Todas as imagens Meta compartilham um único perfil de navegador. Executá-las
             # em paralelo apenas cria contenção no mesmo perfil e não aumenta a vazão.
             GenerationJobType.IMAGE: asyncio.Semaphore(1),
-            GenerationJobType.INGREDIENT: asyncio.Semaphore(1),
-            GenerationJobType.QA: asyncio.Semaphore(settings.worker_meta_image_concurrency),
         }
 
     async def run(self) -> None:
@@ -89,7 +87,6 @@ class MediaWorker:
         removed = 0
         profile_paths = {
             self.settings.meta_browser_profile_path.resolve(),
-            self.settings.vibes_browser_profile_path.resolve(),
         }
         lock_keys = {
             f"{self.settings.worker_queue_name}:profile-lock:{profile_path}"
@@ -220,16 +217,8 @@ class MediaWorker:
             try:
                 async with AsyncExitStack() as stack:
                     await stack.enter_async_context(limit)
-                    if job.job_type in {
-                        GenerationJobType.IMAGE,
-                        GenerationJobType.VIDEO,
-                        GenerationJobType.INGREDIENT,
-                    }:
-                        profile_path = (
-                            self.settings.meta_browser_profile_path
-                            if job.job_type == GenerationJobType.IMAGE
-                            else self.settings.vibes_browser_profile_path
-                        )
+                    if job.job_type == GenerationJobType.IMAGE:
+                        profile_path = self.settings.meta_browser_profile_path
                         profile_key = (
                             f"{self.settings.worker_queue_name}:profile-lock:"
                             f"{profile_path.resolve()}"
@@ -240,9 +229,7 @@ class MediaWorker:
                                 profile_key,
                                 ttl_seconds=_profile_lock_ttl_seconds(job.job_type),
                                 owner=self.consumer,
-                                # Renova o TTL durante o job: lote de vídeo (30 min
-                                # de poll) + QA pode exceder o TTL estático de
-                                # 2100s e liberaria o perfil para outro job.
+                                # Renova o TTL durante o job
                                 renew_interval_seconds=max(
                                     10.0, self.settings.worker_reclaim_seconds / 2
                                 ),
@@ -275,6 +262,16 @@ class MediaWorker:
                         ),
                     )
                     await session.commit()
+                    # CORREÇÃO: verificar cancelamento ANTES de chamar o handler.
+                    # Sem isto, o job continua rodando mesmo após o usuário
+                    # clicar "Cancelar" — o vídeo é gerado e o QA é enfileirado.
+                    await session.refresh(job)
+                    if job.status == GenerationJobStatus.CANCELLED:
+                        logger.info(
+                            "media_worker_job_cancelled_before_handler job_id=%s",
+                            job.id,
+                        )
+                        return False
                     response = await handler(job)
                     if lost_event is not None and lost_event.is_set():
                         # O lock do job foi perdido durante o processamento: outro worker
@@ -313,9 +310,74 @@ class MediaWorker:
                     await session.commit()
             except asyncio.CancelledError:
                 raise
+            except UserClosedBrowserError as exc:
+                # Navegador fechado manualmente é FALHA TERMINAL: sem retry
+                # automático (a automação não reabre o navegador contra a
+                # vontade do usuário — contrato de UserClosedBrowserError).
+                # O job para em FAILED com a mensagem de retomada e a UI
+                # orienta o usuário a usar "Autorizar Meta".
+                await session.rollback()
+                # ROLLBACK SEMPRE EXPIRA os atributos do ORM (independe de
+                # expire_on_commit=False): qualquer acesso lazy depois disso
+                # dispara load síncrono fora do greenlet (MissingGreenlet).
+                # Recarrega o job async-seguro antes de escrever a falha.
+                job = await session.get(GenerationJob, message.job_id)
+                if job is not None:
+                    await mark_job_failed(
+                        session,
+                        job,
+                        error=str(exc),
+                        message="Automação interrompida: navegador fechado manualmente.",
+                    )
+                    logger.warning(
+                        "media_worker_job_user_closed_browser job_id=%s", job.id
+                    )
             except Exception as exc:
                 await session.rollback()
-                await mark_job_failed(session, job, error=redact_secrets(exc))
+                # Recarrega após rollback (mesmo motivo do ramo acima):
+                # atributos expirados + acesso lazy = MissingGreenlet, que
+                # mascarava o erro original e deixava o job órfão em RUNNING.
+                job = await session.get(GenerationJob, message.job_id)
+                if job is None:
+                    logger.warning(
+                        "media_worker_job_missing_after_rollback job_id=%s",
+                        message.job_id,
+                    )
+                    return False
+                try:
+                    await mark_job_failed(session, job, error=redact_secrets(exc))
+                except Exception as failure_exc:
+                    # A gravação da falha não pode mascarar o erro original:
+                    # crash secundário aqui deixava o job órfão em RUNNING —
+                    # o loop de recuperação reenfileirava a cada ciclo e
+                    # queimava todas as tentativas do job.
+                    logger.exception(
+                        "media_worker_mark_failed_failed job_id=%s original_error=%s",
+                        job.id,
+                        redact_secrets(exc),
+                    )
+                    try:
+                        await session.rollback()
+                        job = await session.get(GenerationJob, message.job_id)
+                        if job is not None:
+                            await mark_job_failed(
+                                session,
+                                job,
+                                error=f"{redact_secrets(exc)} (falha secundaria ao registrar: "
+                                f"{redact_secrets(failure_exc)})",
+                            )
+                        else:
+                            job = None
+                    except Exception:
+                        logger.exception(
+                            "media_worker_mark_failed_unrecoverable job_id=%s",
+                            message.job_id,
+                        )
+                        job = None
+                if job is None:
+                    # Sem job recarregável não há como emitir evento coerente.
+                    await self.queue.ack(message.message_id)
+                    return False
                 await emit_project_event(
                     session,
                     OperationalEventCreate(

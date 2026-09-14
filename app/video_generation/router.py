@@ -2,10 +2,13 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.assets.models import Asset
 from app.core.auth import verify_api_token
 from app.database.session import get_session
+from app.storage.service import resolve_storage_path
 from app.video_generation.continuous import (
     approve_continuous_video_segment,
     delete_all_continuous_video_segments,
@@ -16,7 +19,9 @@ from app.video_generation.continuous import (
     reject_continuous_video_segment,
     update_continuous_video_segment_prompt,
 )
-from app.video_generation.continuous_review import select_continuous_video_segment_variant
+from app.video_generation.continuous_review import (
+    select_continuous_video_segment_variant,
+)
 from app.video_generation.schemas import (
     ContinuousVideoPlanningRead,
     ContinuousVideoPlanRead,
@@ -93,6 +98,86 @@ async def get_continuous_video_segments(
     return [ContinuousVideoSegmentRead.model_validate(segment) for segment in segments]
 
 
+@router.get(
+    "/{project_id}/continuous/segments/download",
+    include_in_schema=False,
+)
+async def get_continuous_video_segments_download(
+    project_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    """Baixa todos os frames do storyboard em um único ZIP, na ordem dos segmentos.
+
+    Cada arquivo é nomeado com o número e o título do segmento, dentro de uma
+    pasta com o nome do projeto (ex.: ``meu-projeto/segmento-01-abertura.webp``).
+    """
+    import io
+    import zipfile
+
+    from app.projects.repository import ProjectRepository
+    from app.video_generation.storyboard_export import storyboard_zip_entry_name
+
+    project = await ProjectRepository(session).get_project(project_id)
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Projeto não encontrado.",
+        )
+    project_title = str(project.title or "").strip()
+
+    segments = await list_continuous_video_segments(session, project_id)
+    selected: list[tuple[int, str]] = []
+    for segment in segments:
+        asset_id = segment.source_frame_asset_id
+        if not asset_id:
+            continue
+        asset = await session.get(Asset, asset_id)
+        if asset is not None and asset.storage_uri:
+            selected.append((segment.segment_number, str(asset.storage_uri)))
+
+    if not selected:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nenhum frame gerado para download.",
+        )
+
+    # Mapeia número do segmento -> título para nomear os arquivos do ZIP.
+    title_by_number = {
+        int(segment.segment_number): str(segment.title or "").strip() for segment in segments
+    }
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        for segment_number, storage_uri in selected:
+            path = resolve_storage_path(storage_uri)
+            if path is None or not path.is_file():
+                continue
+            arcname = storyboard_zip_entry_name(
+                project_title,
+                segment_number,
+                title_by_number.get(segment_number, ""),
+                path.suffix,
+            )
+            archive.write(path, arcname=arcname)
+
+    if not buffer.getvalue():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Os arquivos dos frames selecionados não estão disponíveis.",
+        )
+
+    from app.video_generation.storyboard_export import storyboard_zip_filename
+
+    zip_filename = storyboard_zip_filename(project_title)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{zip_filename}"',
+        },
+    )
+
+
 @router.delete(
     "/{project_id}/continuous/segments",
     # SEC-01.3: endpoint destrutivo em massa exige token mesmo em local.
@@ -148,6 +233,8 @@ async def patch_continuous_video_segment_prompt(
     if segment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Segment not found")
     return ContinuousVideoSegmentRead.model_validate(segment)
+
+
 
 
 @router.post(

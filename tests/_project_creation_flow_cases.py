@@ -832,5 +832,5 @@ def test_production_steps_do_not_include_story_bible() -> None:
 def test_workspace_tabs_start_with_script() -> None:
     tab_keys = [key for _, key in pages.WORKSPACE_TABS]
 
-    assert tab_keys == ["script", "visual", "video"]
+    assert tab_keys == ["script", "visual", "storyboard"]
 

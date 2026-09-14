@@ -134,6 +134,10 @@ async def _generate_initial_script(
     script = await generate_script(session, project_id, idea.id)
     if script is None:
         raise ValueError("não foi possível gerar roteiro")
+    # Sincroniza o nome do projeto com o título que o roteiro ganhou (a IA do
+    # roteiro pode devolver um título próprio; se não devolver, o normalize
+    # usa o título da ideia como fallback). O lock (title_locked=True em
+    # projetos vindos do laboratório de ideias) é respeitado pelo service.
     await _sync_project_title_from_story(
         session,
         project_id,

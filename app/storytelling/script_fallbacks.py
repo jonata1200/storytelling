@@ -27,7 +27,6 @@ def _fallback_script_content_from_bible(
             prop = str(first_prop.get("name") or prop)
     return "\n\n".join(
         [
-            f"TITULO: {title}",
             "FADE IN:",
             (
                 f"CENA 01 - INT. {location} - FIM DE TARDE\n\n"
@@ -117,7 +116,6 @@ def _fallback_script_content_from_idea(
         )
     return "\n\n".join(
         [
-            f"TITULO: {title}",
             "FADE IN:",
             *expanded_beats,
         ]

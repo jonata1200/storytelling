@@ -170,11 +170,12 @@ async def generate_visual_bible(
     protagonist_hint = _story_idea_protagonist_name(
         story_idea.protagonist if story_idea is not None else ""
     )
+    story_context = _visual_story_context(story_idea, briefing)
     character_items, location_items = await _llm_extract_characters_and_locations(
         session,
         project_id,
         script.content,
-        story_context=_visual_story_context(story_idea, briefing),
+        story_context=story_context,
     )
     character_items = await _filter_excluded_items(
         session, project_id, "character", character_items
@@ -194,7 +195,10 @@ async def generate_visual_bible(
         for item in character_items
         if not _looks_like_non_character_name(str(item.get("name") or ""))
     ]
-    character_profiles = [_character_profile(item) for item in character_items]
+    # O contexto canônico alimenta também o fallback determinístico de
+    # figurino: sem época/ambiente, histórias de época recebiam cotidiano
+    # moderno (jeans/tênis) quando a extração não preenchia o campo.
+    character_profiles = [_character_profile(item, story_context) for item in character_items]
     location_profiles = [
         _location_profile(item) for item in _semantic_deduplicate_locations(location_items)
     ]
@@ -290,3 +294,50 @@ async def _get_visual_target(
     if target is None or target.project_id != project_id:
         return None
     return dict(target.canonical_profile or {}), target.artifact_id
+
+
+async def update_visual_profile_prompt(
+    session: AsyncSession,
+    project_id: UUID,
+    target_kind: str,
+    target_id: UUID,
+    canonical_prompt: str,
+) -> Character | Location | None:
+    """Salva a edição do prompt canônico base de um personagem/local.
+
+    Atualiza ``canonical_profile.canonical_prompt`` e registra uma nova versão
+    do artifact do perfil. O prompt é gravado SEM as instruções técnicas de
+    vista (essas são reconstruídas na camada do provedor), então uma
+    regeneração posterior deriva a base corretamente.
+    """
+    from app.projects.versioning import create_artifact_version
+
+    cleaned = str(canonical_prompt or "").strip()
+    if not cleaned:
+        raise ValueError("O prompt canônico não pode ficar vazio.")
+
+    target: Character | Location | None
+    if target_kind == "character":
+        target = await session.get(Character, target_id, with_for_update=True)
+    elif target_kind == "location":
+        target = await session.get(Location, target_id, with_for_update=True)
+    else:
+        return None
+    if target is None or target.project_id != project_id:
+        return None
+
+    profile = dict(target.canonical_profile or {})
+    profile["canonical_prompt"] = cleaned
+    target.canonical_profile = profile
+
+    artifact = await session.get(Artifact, target.artifact_id)
+    if artifact is not None:
+        await create_artifact_version(
+            session,
+            artifact,
+            profile,
+            change_note="Canonical prompt edited by user",
+        )
+    await session.commit()
+    await session.refresh(target)
+    return target

@@ -423,17 +423,7 @@ async def set_visual_reference_status(
     return reference
 
 
-def prepare_vibes_ingredient_metadata(
-    reference: VisualReference,
-    *,
-    ingredient_id: str,
-    ingredient_type: str,
-) -> bool:
-    from app.vibes.ingredients import mark_ingredient_synced
-
-    return mark_ingredient_synced(
-        reference, ingredient_id=ingredient_id, ingredient_type=ingredient_type
-    )
+# prepare_vibes_ingredient_metadata was removed because Vibes has been deleted
 
 
 async def _visual_target(

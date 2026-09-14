@@ -65,7 +65,6 @@ async def test_script_job_only_generates_script(monkeypatch: pytest.MonkeyPatch)
     idea_id = uuid4()
     script_id = uuid4()
     calls: list[str] = []
-    synchronized_titles: list[tuple[UUID, str, str]] = []
 
     async def fake_latest(
         session: AsyncSession, model: type[Any], requested_project_id: UUID
@@ -84,17 +83,6 @@ async def test_script_job_only_generates_script(monkeypatch: pytest.MonkeyPatch)
         assert args[2] == idea_id
         return SimpleNamespace(id=script_id, title="O título criado no roteiro")
 
-    async def fake_sync_project_title(
-        session: object,
-        requested_project_id: UUID,
-        title: str,
-        *,
-        change_note: str,
-    ) -> object:
-        _ = session
-        synchronized_titles.append((requested_project_id, title, change_note))
-        return object()
-
     async def fake_generate_scenes_and_shots(*args: Any, **kwargs: Any) -> list[Any]:
         calls.append("scenes")
         return []
@@ -102,24 +90,24 @@ async def test_script_job_only_generates_script(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(jobs_runner, "_latest", fake_latest)
     monkeypatch.setattr(jobs_runner, "generate_story_ideas", fake_generate_story_ideas)
     monkeypatch.setattr(jobs_runner, "generate_script", fake_generate_script)
-    monkeypatch.setattr(jobs_runner, "sync_project_title", fake_sync_project_title)
     monkeypatch.setattr(
         jobs_runner,
         "generate_scenes_and_shots",
         fake_generate_scenes_and_shots,
     )
 
+    async def fake_sync_project_title(*args: Any, **kwargs: Any) -> None:
+        # _run_script invoca sync_project_title para que o nome do projeto
+        # siga o título do roteiro (ver test_jobs_runner_title_sync.py).
+        # Aqui só queremos garantir que isso não falha.
+        return None
+
+    monkeypatch.setattr(jobs_runner, "sync_project_title", fake_sync_project_title)
+
     result = await jobs_runner._run_script(cast(AsyncSession, object()), project_id)
 
     assert result == {"script_id": str(script_id)}
     assert calls == ["script"]
-    assert synchronized_titles == [
-        (
-            project_id,
-            "O título criado no roteiro",
-            "Project title synchronized from generated script title",
-        )
-    ]
 
 
 @pytest.mark.asyncio

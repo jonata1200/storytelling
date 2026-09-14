@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.enums import GenerationJobStatus
-from app.ui.workspace import storyboard_video_area
+from app.ui.workspace import storyboard_actions_area
 from app.video_generation.models import GenerationJob
 
 
@@ -13,7 +13,7 @@ def _job(status: GenerationJobStatus, *, error: str | None = None) -> SimpleName
 
 
 def test_video_generation_outcome_reports_success() -> None:
-    message, color = storyboard_video_area._video_generation_outcome(
+    message, color = storyboard_actions_area._video_generation_outcome(
         [_job(GenerationJobStatus.SUCCEEDED)]  # type: ignore[list-item]
     )
 
@@ -22,7 +22,7 @@ def test_video_generation_outcome_reports_success() -> None:
 
 
 def test_video_generation_outcome_reports_failure_detail() -> None:
-    message, color = storyboard_video_area._video_generation_outcome(
+    message, color = storyboard_actions_area._video_generation_outcome(
         [_job(GenerationJobStatus.FAILED, error="provider indisponível")]  # type: ignore[list-item]
     )
 
@@ -73,13 +73,13 @@ async def test_wait_for_video_jobs_tracks_until_terminal(
 
     progress: list[tuple[int, int, str]] = []
     monkeypatch.setattr(
-        storyboard_video_area,
+        storyboard_actions_area,
         "AsyncSessionLocal",
         lambda: FakeSessionContext(),
     )
-    monkeypatch.setattr(storyboard_video_area.asyncio, "sleep", lambda _seconds: _noop())
+    monkeypatch.setattr(storyboard_actions_area.asyncio, "sleep", lambda _seconds: _noop())
 
-    jobs = await storyboard_video_area._wait_for_video_generation_jobs(
+    jobs = await storyboard_actions_area._wait_for_video_generation_jobs(
         [first_id, second_id],
         progress_callback=lambda done, total, detail: progress.append((done, total, detail)),
         poll_interval_seconds=0.1,
@@ -132,13 +132,13 @@ async def test_wait_for_video_jobs_reports_downloaded_variants(
 
     progress: list[tuple[int, int, str]] = []
     monkeypatch.setattr(
-        storyboard_video_area,
+        storyboard_actions_area,
         "AsyncSessionLocal",
         lambda: FakeSessionContext(),
     )
-    monkeypatch.setattr(storyboard_video_area.asyncio, "sleep", lambda _seconds: _noop())
+    monkeypatch.setattr(storyboard_actions_area.asyncio, "sleep", lambda _seconds: _noop())
 
-    await storyboard_video_area._wait_for_video_generation_jobs(
+    await storyboard_actions_area._wait_for_video_generation_jobs(
         [job_id],
         progress_callback=lambda done, total, detail: progress.append((done, total, detail)),
         poll_interval_seconds=0.1,

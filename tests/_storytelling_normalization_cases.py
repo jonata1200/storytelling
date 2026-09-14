@@ -33,7 +33,7 @@ from app.storytelling.service import (
 from app.ui import pages
 from app.ui.pages import DEFAULT_STORY_DURATION_MINUTES, _asset_url, _compact_project_title
 from app.ui.routes import home_pages
-from app.ui.workspace import storyboard_video_area
+from app.ui.workspace import storyboard_actions_area
 from app.video_generation.durations import VIDEO_CLIP_ALLOWED_SECONDS
 
 
@@ -829,6 +829,50 @@ def test_scene_plan_rejects_duplicate_actions_from_generated_plan() -> None:
         normalize_scene_plan_payload(payload, 12)
 
 
+def test_scene_plan_rewrites_repeated_action_beats_for_consecutive_shots() -> None:
+    """Cena com menos frases que planos não pode gerar shots gêmeos.
+
+    Caso real do usuário: a cena tinha 1 frase de ação e 2 planos de 8s; a
+    distribuição repetia a frase idêntica nos dois shots e os frames do
+    storyboard saíam cópias um do outro (segmentos 1 e 2).
+    """
+    script = """CENA 01
+INT. QUARTO - NOITE
+
+ELIAS abre os olhos em um corte seco.
+"""
+
+    payload = scene_plan_payload_from_script_content(script, 16)
+
+    assert payload is not None
+    shots = payload["scenes"][0]["shots"]
+    assert len(shots) == 2
+    actions = [str(shot["action"]) for shot in shots]
+    assert len(set(actions)) == len(actions), actions
+    assert actions[0] == "ELIAS abre os olhos em um corte seco."
+    assert actions[1].startswith("Continue esta mesma ação")
+    assert "ELIAS abre os olhos em um corte seco" in actions[1]
+
+
+def test_scene_plan_rewrites_repeated_action_beats_for_runs_of_three() -> None:
+    script = """CENA 01
+INT. QUARTO - NOITE
+
+ELIAS abre os olhos em um corte seco.
+"""
+
+    payload = scene_plan_payload_from_script_content(script, 24)
+
+    assert payload is not None
+    shots = payload["scenes"][0]["shots"]
+    assert len(shots) == 3
+    actions = [str(shot["action"]) for shot in shots]
+    assert len(set(actions)) == len(actions), actions
+    assert actions[0] == "ELIAS abre os olhos em um corte seco."
+    assert actions[1].startswith("Continue esta mesma ação")
+    assert actions[2].startswith("Continue esta mesma ação")
+
+
 def test_scene_plan_payload_adds_spatial_continuity_defaults() -> None:
     payload = normalize_scene_plan_payload(
         {
@@ -903,7 +947,7 @@ def test_fallback_script_content_from_bible_is_usable_when_model_returns_empty_s
         300,
     )
 
-    assert "TITULO: A mensagem atrasada" in content
+    assert "TITULO" not in content
     assert "FADE IN:" in content
     assert "CENA 01" in content
     assert "INT. CASA DA FAMILIA - FIM DE TARDE" in content

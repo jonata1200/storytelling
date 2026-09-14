@@ -193,39 +193,39 @@ def _character_visual_defaults(
 ) -> dict[str, object]:
     gender_key = _ascii_lower(gender)
     feminine = "fem" in gender_key or "mulher" in gender_key
-    age_key = _ascii_lower(apparent_age)
-    child = "crianca" in age_key or "criança" in age_key
-    adolescent = "adolescente" in age_key or "jovem" in age_key
-    heights: tuple[str, ...] = (
-        ("158", "162", "165", "168", "171")
-        if feminine
-        else (
-            "168",
-            "172",
-            "176",
-            "180",
-            "184",
+    stage = _age_stage(apparent_age)
+    child = stage == "child"
+    adolescent = stage == "adolescent"
+    # Crianças e adolescentes NÃO recebem medidas numéricas de altura/peso:
+    # a idade escrita ("deve aparentar oito anos") já determina as
+    # proporções corporais para o provedor de imagem, e um número de adulto
+    # (1,65 m / 66 kg para uma menina de 8 anos) conflita com ela.
+    if child or adolescent:
+        heights: tuple[str, ...] = ()
+        weights: tuple[str, ...] = ()
+    else:
+        heights = (
+            ("158", "162", "165", "168", "171")
+            if feminine
+            else (
+                "168",
+                "172",
+                "176",
+                "180",
+                "184",
+            )
         )
-    )
-    weights: tuple[str, ...] = (
-        ("54", "58", "62", "66", "70")
-        if feminine
-        else (
-            "66",
-            "71",
-            "76",
-            "81",
-            "86",
+        weights = (
+            ("54", "58", "62", "66", "70")
+            if feminine
+            else (
+                "66",
+                "71",
+                "76",
+                "81",
+                "86",
+            )
         )
-    )
-    # Menores e adolescentes não recebem medidas de adulto: altura/peso
-    # proporcionais à faixa etária derivada do nome (ex.: "Menino João").
-    if child:
-        heights = ("118", "126", "132")
-        weights = ("21", "25", "29")
-    elif adolescent:
-        heights = ("158", "164", "170") if not feminine else ("152", "158", "164")
-        weights = ("48", "54", "60") if not feminine else ("44", "50", "56")
     hair = (
         (
             "castanho-escuro, ondulado e na altura dos ombros",
@@ -241,8 +241,8 @@ def _character_visual_defaults(
     )
     return {
         "origin": "",
-        "height_cm": _stable_character_choice(name, heights, 1),
-        "weight_kg": _stable_character_choice(name, weights, 2),
+        "height_cm": _stable_character_choice(name, heights, 1) if heights else "",
+        "weight_kg": _stable_character_choice(name, weights, 2) if weights else "",
         "hair": _stable_character_choice(name, hair, 3),
         "eyes": _stable_character_choice(
             name, ("castanhos escuros", "castanhos claros", "verdes", "azuis"), 4
@@ -313,6 +313,68 @@ def _temporal_variant_age(name: str) -> str:
     return ""
 
 
+def _age_stage(apparent_age: object) -> str:
+    """Faixa etária a partir do texto de idade aparente ("oito anos", "criança").
+
+    A extração LLM costuma gravar a idade escrita por extenso ou em número
+    ("idade": "oito anos", "10 anos", "16 anos") — comparar só com a palavra
+    "criança" deixava meninas de 8 anos receberem 1,65 m e 66 kg de adulto.
+    """
+    key = _ascii_lower(apparent_age)
+    age_match = re.search(r"\b(\d{1,2})\s+anos?\b", key)
+    if age_match is not None:
+        years = int(age_match.group(1))
+        if years <= 12:
+            return "child"
+        if years <= 17:
+            return "adolescent"
+    # Idade escrita por extenso ("oito anos", "dez anos") é comum na
+    # extração LLM; cobrir 1-12 garante a detecção de crianças.
+    _AGE_NUMBER_WORDS = {
+        "um": 1,
+        "uma": 1,
+        "dois": 2,
+        "duas": 2,
+        "tres": 3,
+        "quatro": 4,
+        "cinco": 5,
+        "seis": 6,
+        "sete": 7,
+        "oito": 8,
+        "nove": 9,
+        "dez": 10,
+        "onze": 11,
+        "doze": 12,
+    }
+    word_match = re.search(r"\b([a-z]+)\s+anos?\b", key)
+    if word_match is not None:
+        word_years = _AGE_NUMBER_WORDS.get(word_match.group(1))
+        if word_years is not None:
+            return "child"
+    child_terms = ("crianca", "menina", "menino", "garota", "garoto", "bebe")
+    if any(term in key.split() for term in child_terms):
+        return "child"
+    if any(term in key.split() for term in ("adolescente", "jovem", "teen")):
+        return "adolescent"
+    return ""
+
+
+# A extração LLM preenche campos visuais com placeholders quando não sabe
+# ("footwear": "não especificado"). Copiá-los para o prompt canônico produz
+# instruções sem sentido ("deve calçar não especificado") — tratá-los como
+# ausência e cair no fallback contextual do figurino.
+_PLACEHOLDER_VALUE_RE = re.compile(
+    r"(?i)^\s*(?:nao\s+especificad[oa]|n[aã]o\s+especificad[oa]|nenhum|nada|"
+    r"desconhecid[oa]|indeterminad[oa]|indefinid[oa]|not\s+specified|\w*n/a\w*|"
+    r"cal[cç]ados?\s+adequados?|cal[cç]ados?\s+com[uu]ns|roupa\s+discreta|"
+    r"vestu[áa]rio\s+cotidiano|corte\s+neutro)\s*[.:!]?\.?\s*$"
+)
+
+
+def _is_placeholder_visual_value(value: object) -> bool:
+    return bool(_PLACEHOLDER_VALUE_RE.match(str(value or "")))
+
+
 def _character_prompt_subject(name: object, gender: object) -> str:
     clean_name = concise_prompt_fragment(_prompt_text(name), 10)
     first_word = _ascii_lower(clean_name).split()[0] if clean_name else ""
@@ -347,37 +409,51 @@ def _human_height(value: object) -> str:
 
 
 ROLE_APPROPRIATE_OUTFITS = (
+    # (marcadores de função, figurino, institucional).
+    # "institucional" = uniforme que existe desde o início do século XX e
+    # sobrevive a praticamente qualquer época (mecânico, enfermagem, polícia,
+    # medicina, cozinha). Os flexíveis (professor, crítico, artesão) cedem
+    # lugar ao figurino de época quando o contexto da história é histórico —
+    # um professor dos anos 1920 não usa "camisa azul e sarja bege" de hoje.
     (
         ("mecanico", "mecanica", "oficina", "automotivo", "automotiva"),
         "macacão azul-marinho de sarja com manchas de graxa sobre camiseta cinza",
+        True,
     ),
     (
         ("enfermeiro", "enfermeira", "enfermagem"),
         "uniforme hospitalar verde-claro com crachá branco preso ao peito",
+        True,
     ),
     (
         ("medico", "medica", "doutor", "doutora", "cirurgiao", "cirurgia"),
         "jaleco branco sobre camisa azul-clara e calça social cinza",
+        True,
     ),
     (
         ("guarda", "policial", "seguranca", "vigilante"),
         "camisa cáqui de manga longa, calça cargo marrom e cinto preto de serviço",
+        True,
     ),
     (
         ("cozinheiro", "cozinheira", "chef"),
         "dólmã branca de algodão, avental preto na cintura e calça xadrez escura",
+        True,
     ),
     (
         ("professor", "professora", "docente"),
         "camisa azul de algodão, calça de sarja bege e cinto marrom",
+        False,
     ),
     (
         ("restaurador", "restauradora", "artesao", "artesa", "atelier", "atelie"),
         "avental bege manchado de tinta sobre camisa branca e calça de sarja marrom",
+        False,
     ),
     (
         ("critico", "critica", "curador", "curadora", "galerista"),
         "blazer preto bem cortado sobre camisa branca e calça social grafite",
+        False,
     ),
 )
 
@@ -415,22 +491,283 @@ MASCULINE_EVERYDAY_FOOTWEAR = (
     "tênis branco de lona com cadarços",
 )
 
+# Pools de figurino por ÉPOCA detectada no contexto canônico da história.
+# O fallback determinístico é a última rede de segurança (extração e direção
+# de arte LLM podem falhar em preencher o figurino): sem isso, o cotidiano
+# moderno (jeans + tênis) invadia histórias de época e ambientes onde essas
+# peças não existem (relato do usuário, 2026-09). Pools descrevem peças
+# concretas e evitam citar calçados para que o calçado próprio seja mantido.
+ERA_WARDROBE_POOLS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
+    "pre1960": (
+        (
+            "vestido de chita florido na altura da canela com mangas compridas e avental de bolso",
+            "saia longa de lã, blusa de gola alta fechada e casaco curto de tecido grosso",
+            "vestido de corte reto com cintura marcada, mangas três-quartos e broche discreto",
+        ),
+        (
+            "terno de lã de duas peças com colete, camisa branca de gola fechada e chapéu fedora",
+            "camisa de algodão com suspensórios, calça de brim de cintura alta e boné de aba reta",
+            "jaleco de trabalho com botões, calça de tecido grosso e chapéu de palha de aba larga",
+        ),
+        (
+            "sapatos de couro de salto baixo com fivela",
+            "botas de couro de cano médio com cadarços",
+        ),
+    ),
+    "futuristic": (
+        (
+            "macacão técnico de fibra sintética com gola alta e fechos embutidos",
+            "jaqueta térmica de corte minimalista com calça de tecido técnico e cinto utilitário",
+        ),
+        (
+            "macacão técnico de fibra sintética com gola alta e fechos embutidos",
+            "jaqueta térmica de corte minimalista com calça de tecido técnico e cinto utilitário",
+        ),
+        ("botas técnicas de sola grossa com fechos embutidos",),
+    ),
+}
 
-def _role_appropriate_outfit(name: str, role: object, gender: object) -> str:
+# Famílias de figurino por AMBIENTE detectado no contexto (aplicadas quando
+# a época é contemporânea ou indefinida). Cada família evita peças modernas
+# que destoem do ambiente (ex.: jeans/tênis em zona rural tradicional).
+CONTEXT_WARDROBE_FAMILIES: tuple[
+    tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]], ...
+] = (
+    (
+        (
+            "fazenda",
+            "sitio",
+            "roca",
+            "lavoura",
+            "colheita",
+            "sertao",
+            "plantacao",
+            "cafe",
+            "pecuaria",
+            "boiada",
+            "zona rural",
+            "zona da mata",
+            "vau",
+        ),
+        (
+            "vestido simples de algodão grosso com mangas compridas e lenço na cabeça",
+            "blusa de chita, saia larga de tecido rústico e avental manchado de terra",
+        ),
+        (
+            "camisa de algodão cru gasta com suspensórios e calça de tecido grosso remendada",
+            "camisa xadrez de franela, colete de lã e chapéu de palha",
+        ),
+        ("botas de couro gastas com sola grossa", "chinelos de couro artesanais"),
+    ),
+    (
+        ("praia", "litoral", "pescador", "pesca", "porto", "marina", "maré"),
+        (
+            "vestido leve de algodão claro com mangas curtas e chapéu de palha",
+            "blusa branca de linho e saia curta de tecido leve",
+        ),
+        (
+            "camisa listrada leve de algodão, calça curta de brim e boné de pescador",
+            "regata clara de algodão com calça de brim dobrada na canela",
+        ),
+        ("sandálias de couro simples", "chinelos de borracha"),
+    ),
+    (
+        ("neve", "nevando", "nevasca", "inverno rigoroso", "frio intenso", "montanha", "geada"),
+        (
+            "casaco de lã comprido com cachecol grosso e luvas de tricô sobre blusa de gola alta",
+            "parka acolchoada com capuz sobre calça de tecido encorpado",
+        ),
+        (
+            "casaco de lã pesado com gola alta de tricô e cachecol enrolado",
+            "parka impermeável acolchoada sobre camisa de flanela",
+        ),
+        ("botas de couro forradas com sola de borracha",),
+    ),
+    (
+        ("favela", "periferia", "cortico", "conjunto habitacional", "morro "),
+        (
+            "blusa básica de algodão com calça jeans resistente e boné",
+            "vestido simples de tecido fino com acessórios discretos",
+        ),
+        (
+            "camiseta básica com bermuda de brim e boné",
+            "camisa de time gasta com calça jeans resistente",
+        ),
+        ("chinelos de borracha simples", "tênis de lona desbotado"),
+    ),
+    (
+        (
+            "mansao",
+            "palacete",
+            "milion",
+            "aristocr",
+            "alta sociedade",
+            "magnata",
+            "banqueiro",
+            "luxo",
+        ),
+        (
+            "vestido de seda de corte sofisticado com joias discretas",
+            "conjunto de alfaiataria em blazer com calça de linho fina",
+        ),
+        (
+            "terno escuro de alfaiataria impecável com camisa de seda",
+            "blazer de linho com camisa clara e relógio de pulso clássico",
+        ),
+        # Pool neutro: o mesmo contexto veste homens e mulheres, e "scarpins"
+        # num homem destoa do figurino (calçado deve ser congruente com a roupa).
+        ("sapatos de couro polido de sola fina", "sapatos sociais de couro preto"),
+    ),
+    (
+        ("guerra", "exercito", "soldado", "batalha", "trincheira", "quartel", "farda"),
+        ("farda cáqui de campanha com insígnias discretas e cinto de equipamento",),
+        ("farda cáqui de campanha com insígnias discretas e cinto de equipamento",),
+        ("botas militares de cano alto com cadarços",),
+    ),
+    (
+        ("convento", "mosteiro", "seminario", "freira", "padre ", "clero"),
+        ("hábito religioso de tecido simples com cordão na cintura e crucifixo discreto",),
+        ("túnica sóbria de mangas compridas com cordão na cintura",),
+        ("sandálias de couro simples",),
+    ),
+)
+
+
+def _era_wardrobe_key(story_context: str) -> str:
+    """Detecta a família de época no contexto canônico da história."""
+    context = _ascii_lower(story_context)
+    if any(
+        marker in context
+        for marker in (
+            "1920",
+            "1930",
+            "1940",
+            "1950",
+            "anos 20",
+            "anos 30",
+            "anos 40",
+            "anos 50",
+            "seculo xix",
+            "século xix",
+            "seculo 19",
+            "século 19",
+            "seculo xx",
+            "século xx",
+            "seculo 20",
+            "século 20",
+            "colonial",
+            "imperio",
+            "império",
+            "vitoriano",
+            "vitoriana",
+            "era industrial",
+            "velho oeste",
+            "cangaço",
+            "cangaco",
+            "medieval",
+            "renascenca",
+            "renascença",
+        )
+    ):
+        return "pre1960"
+    if any(
+        marker in context
+        for marker in (
+            "2077",
+            "2087",
+            "2099",
+            "futuro",
+            "futurista",
+            "distopia",
+            "distópica",
+            "nave espacial",
+            "espaconave",
+            "colonia espacial",
+            "colônia espacial",
+            "cyberpunk",
+            " cibernetico",
+            " cibernético",
+            "inteligencia artificial",
+            "inteligência artificial",
+        )
+    ):
+        return "futuristic"
+    # Contemporânea ou época não detectada: sem pool de época (o cotidiano
+    # moderno é o fallback plausível).
+    return ""
+
+
+def _role_appropriate_outfit(
+    name: str, role: object, gender: object, story_context: str = ""
+) -> str:
     normalized_role = _ascii_lower(repair_portuguese_mojibake(role))
-    for markers, outfit in ROLE_APPROPRIATE_OUTFITS:
+    era_key = _era_wardrobe_key(story_context)
+    for markers, outfit, institutional in ROLE_APPROPRIATE_OUTFITS:
         if any(marker in normalized_role for marker in markers):
-            return outfit
+            # Uniformes institucionais (médico, policial, mecânico) existem
+            # em qualquer época. Figurinos flexíveis (professor, crítico,
+            # artesão) cedem ao figurino de época em contextos históricos
+            # ou futuristas — um professor dos anos 1920 não usa sarja
+            # bege de hoje.
+            if institutional or era_key == "":
+                return outfit
+            break
 
     normalized_gender = _ascii_lower(repair_portuguese_mojibake(gender))
     if "fem" in normalized_gender or "mulher" in normalized_gender:
-        return _stable_character_choice(name, FEMININE_EVERYDAY_OUTFITS, 8)
+        return _contextual_wardrobe_choice(name, "feminine", story_context)
     if "masc" in normalized_gender or "homem" in normalized_gender:
-        return _stable_character_choice(name, MASCULINE_EVERYDAY_OUTFITS, 8)
-    return _stable_character_choice(name, NEUTRAL_EVERYDAY_OUTFITS, 8)
+        return _contextual_wardrobe_choice(name, "masculine", story_context)
+    return _contextual_wardrobe_choice(name, "neutral", story_context)
 
 
-def _role_appropriate_footwear(name: str, role: object, gender: object) -> str:
+def _contextual_wardrobe_choice(name: str, gender_key: str, story_context: str) -> str:
+    """Figurino de fallback por família de ambiente e época da história.
+
+    Ordem: família de AMBIENTE (fazenda, litoral, neve...) tem prioridade sobre
+    a época contemporânea; sem ambiente batido, época histórica/futurista usa
+    o pool de época. Só cai no cotidiano moderno quando o contexto não indica
+    nada — exatamente onde jeans/tênis são plausíveis.
+    """
+    context = _ascii_lower(story_context)
+    for markers, feminine, masculine, _footwear in CONTEXT_WARDROBE_FAMILIES:
+        if any(marker in context for marker in markers):
+            pool = feminine if gender_key == "feminine" else masculine
+            return _stable_character_choice(name, pool, 8)
+    era_key = _era_wardrobe_key(story_context)
+    if era_key in ERA_WARDROBE_POOLS:
+        feminine, masculine, _footwear = ERA_WARDROBE_POOLS[era_key]
+        pool = feminine if gender_key == "feminine" else masculine
+        return _stable_character_choice(name, pool, 8)
+    # Época contemporânea ou indefinida: cotidiano moderno é plausível.
+    pools = {
+        "feminine": FEMININE_EVERYDAY_OUTFITS,
+        "masculine": MASCULINE_EVERYDAY_OUTFITS,
+    }
+    return _stable_character_choice(name, pools.get(gender_key, NEUTRAL_EVERYDAY_OUTFITS), 8)
+
+
+def _contextual_footwear_choice(name: str, gender_key: str, story_context: str) -> str:
+    """Calçado de fallback coerente com ambiente/época da história."""
+    context = _ascii_lower(story_context)
+    for markers, _feminine, _masculine, footwear in CONTEXT_WARDROBE_FAMILIES:
+        if any(marker in context for marker in markers):
+            return _stable_character_choice(name, footwear, 9)
+    era_key = _era_wardrobe_key(story_context)
+    if era_key in ERA_WARDROBE_POOLS:
+        _feminine, _masculine, footwear = ERA_WARDROBE_POOLS[era_key]
+        return _stable_character_choice(name, footwear, 9)
+    footwear_pools = {
+        "feminine": FEMININE_EVERYDAY_FOOTWEAR,
+    }
+    return _stable_character_choice(
+        name, footwear_pools.get(gender_key, MASCULINE_EVERYDAY_FOOTWEAR), 9
+    )
+
+
+def _role_appropriate_footwear(
+    name: str, role: object, gender: object, story_context: str = ""
+) -> str:
     normalized_role = _ascii_lower(role)
     if any(term in normalized_role for term in ("mecan", "oficina", "guarda", "policial")):
         return "botas pretas de segurança com cadarços"
@@ -440,9 +777,10 @@ def _role_appropriate_footwear(name: str, role: object, gender: object) -> str:
         return "sapatos pretos antiderrapantes"
     if any(term in normalized_role for term in ("professor", "docente")):
         return "sapatos marrons de couro sem brilho"
-    if "fem" in _ascii_lower(gender) or "mulher" in _ascii_lower(gender):
-        return _stable_character_choice(name, FEMININE_EVERYDAY_FOOTWEAR, 9)
-    return _stable_character_choice(name, MASCULINE_EVERYDAY_FOOTWEAR, 9)
+    normalized_gender = _ascii_lower(gender)
+    if "fem" in normalized_gender or "mulher" in normalized_gender:
+        return _contextual_footwear_choice(name, "feminine", story_context)
+    return _contextual_footwear_choice(name, "masculine", story_context)
 
 
 # A extração/design às vezes descreve em distinctive_features e nos olhos
@@ -501,7 +839,7 @@ def _physical_traits_fragment(value: object, *, eyes: bool = False) -> str:
     return ", ".join(kept)
 
 
-def _character_profile(raw: object) -> dict:
+def _character_profile(raw: object, story_context: str = "") -> dict:
     raw = _profile_mapping(raw)
     name = str(raw.get("name") or "Personagem")
     identity_base_name, identity_variant_note = _character_identity_base(name)
@@ -525,10 +863,19 @@ def _character_profile(raw: object) -> dict:
     )
     defaults = _character_visual_defaults(identity_base_name, gender, apparent_age)
     origin = _first_value(raw, "origin", "origem", "nacionalidade", fallback=defaults["origin"])
-    height_cm = _first_value(
-        raw, "height_cm", "altura_cm", "altura", fallback=defaults["height_cm"]
+    # Crianças e adolescentes não recebem altura/peso nem da extração LLM:
+    # a idade escrita no prompt basta (relato do usuário, 2026-09).
+    is_minor = _age_stage(apparent_age) in {"child", "adolescent"}
+    height_cm = (
+        ""
+        if is_minor
+        else _first_value(raw, "height_cm", "altura_cm", "altura", fallback=defaults["height_cm"])
     )
-    weight_kg = _first_value(raw, "weight_kg", "peso_kg", "peso", fallback=defaults["weight_kg"])
+    weight_kg = (
+        ""
+        if is_minor
+        else _first_value(raw, "weight_kg", "peso_kg", "peso", fallback=defaults["weight_kg"])
+    )
     body_type = _first_value(
         raw, "body_type", "tipo_fisico", "corpo", fallback=defaults["body_type"]
     )
@@ -544,27 +891,42 @@ def _character_profile(raw: object) -> dict:
     )
     eyes = _first_value(raw, "eyes", "olhos", fallback=defaults["eyes"])
     hair = _first_value(raw, "hair", "cabelo", fallback=defaults["hair"])
-    base_outfit = _first_value(
+    # O fallback de figurino/calçado é sensível ao contexto canônico (época,
+    # ambiente, classe): sem ele, histórias de época recebem jeans e tênis
+    # quando a extração e a direção de arte LLM falham em preencher o campo.
+    raw_outfit = _first_value(
         raw,
         "base_outfit",
         "figurino_base",
         "roupa",
         "figurino",
-        fallback=(
-            defaults["base_outfit"]
-            or _role_appropriate_outfit(identity_base_name, role, gender)
-        ),
+        fallback="",
     )
-    footwear = _first_value(
+    base_outfit = (
+        raw_outfit
+        if raw_outfit and not _is_placeholder_visual_value(raw_outfit)
+        else (
+            defaults["base_outfit"]
+            or _role_appropriate_outfit(identity_base_name, role, gender, story_context)
+        )
+    )
+    # Placeholder da extração LLM ("não especificado") conta como ausência:
+    # cai no fallback contextual em vez de virar "deve calçar não especificado".
+    raw_footwear = _first_value(
         raw,
         "footwear",
         "calcados",
         "calçados",
         "sapatos",
-        fallback=(
+        fallback="",
+    )
+    footwear = (
+        raw_footwear
+        if raw_footwear and not _is_placeholder_visual_value(raw_footwear)
+        else (
             defaults["footwear"]
-            or _role_appropriate_footwear(identity_base_name, role, gender)
-        ),
+            or _role_appropriate_footwear(identity_base_name, role, gender, story_context)
+        )
     )
     palette = _first_value(
         raw, "palette", "paleta", "paleta_de_cores", fallback=defaults["palette"]
@@ -605,8 +967,7 @@ def _character_profile(raw: object) -> dict:
     gender_key = _ascii_lower(gender)
     generic_subject = _ascii_lower(subject).startswith(("um homem", "uma mulher"))
     age_text = _prompt_text(apparent_age)
-    age_key = _ascii_lower(age_text)
-    is_child = "crianca" in age_key or "criança" in age_key
+    is_child = _age_stage(age_text) == "child"
     if not generic_subject:
         if "fem" in gender_key or "mulher" in gender_key:
             details.append("deve ser uma mulher" if not is_child else "deve ser uma menina")
@@ -662,11 +1023,13 @@ def _character_profile(raw: object) -> dict:
     if prompt_word_count(_assemble_prompt(kept)) > budget:
         # Descarta do FIM os detalhes não estruturais até caber, em vez de
         # deixar o truncamento rasgar o último detalhe no meio (ex.: "deve
-        # aparentar."). Gênero e idade aparente são estruturais e não cedem.
+        # aparentar."). Gênero, idade aparente e calçado são estruturais e
+        # não cedem — o calçado é exigência de continuidade visual do
+        # usuário (2026-09): "deve calçar" não pode sumir do prompt.
         for index in range(len(kept) - 1, -1, -1):
             if prompt_word_count(_assemble_prompt(kept)) <= budget:
                 break
-            if not kept[index].startswith(("deve ser ", "deve aparentar ")):
+            if not kept[index].startswith(("deve ser ", "deve aparentar ", "deve calçar ")):
                 kept.pop(index)
         while prompt_word_count(_assemble_prompt(kept)) > budget and kept:
             kept.pop()

@@ -29,7 +29,7 @@ from app.storytelling.service import (
 )
 from app.ui import pages
 from app.ui.pages import DEFAULT_STORY_DURATION_MINUTES, _asset_url, _compact_project_title
-from app.ui.workspace import script_area, storyboard_video_area
+from app.ui.workspace import script_area, storyboard_actions_area
 
 
 @pytest.mark.asyncio
@@ -301,7 +301,7 @@ async def test_dashboard_creation_registers_prompt_as_idea_before_hook_selection
     assert captured["generate_initial_script"] is False
     assert captured["generate_initial_idea"] is False
     assert captured["source_idea"]["premise"] == "Uma fotografia muda cada vez que é limpa"
-    assert captured["source_idea"]["title"] == "Uma Fotografia Muda Cada Vez que É Limpa"
+    assert captured["source_idea"]["title"] == "Nova história"
 
 
 def test_initial_story_bible_pipeline_was_removed() -> None:

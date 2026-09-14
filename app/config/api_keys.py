@@ -45,7 +45,7 @@ def api_key_variable_name(provider: str) -> str:
 
 
 def provider_for_creation_channel(settings: Any, channel: CreationChannel) -> str:
-    if channel in {"text", "image", "video"}:
+    if channel in {"text", "image"}:
         return effective_provider_for_channel(settings, channel)
     normalized = str(channel or "").strip().casefold()
     if normalized not in SUPPORTED_AI_PROVIDERS:
@@ -71,10 +71,10 @@ def required_channels_for_creation_step(step: str) -> tuple[CreationChannel, ...
         "generate_assets",
         "storyboard_prompts",
         "generate_storyboard_prompts",
+        "storyboard",
+        "continuous_video",
     }:
         channels.append("image")
-    if normalized in VIDEO_CREATION_STEPS:
-        channels.append("video")
     return tuple(channels)
 
 

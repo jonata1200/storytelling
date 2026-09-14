@@ -9,6 +9,10 @@ import pytest
 from app.core.title_case import clean_idea_title, standardize_title_case
 
 
+async def _not_locked(_session: Any, _project_id: Any) -> bool:
+    return False
+
+
 def test_standardize_title_case_matches_ui_implementation() -> None:
     # Casos canônicos (mesmos do test_title_standardization.py) para garantir
     # que a implementação movida para app.core.title_case se comporta igual.
@@ -115,6 +119,7 @@ async def test_sync_project_title_standardizes_raw_llm_title(monkeypatch: Any) -
 
     monkeypatch.setattr(project_service, "Project", lambda *a, **k: project)
     monkeypatch.setattr(project_service, "ProjectVersion", FakeProjectVersion)
+    monkeypatch.setattr(project_service, "_project_title_is_locked", _not_locked)
 
     # project.title é atributo lido após a escrita — monkeypatch em get já
     # devolve a instância; a função grava em project.title.

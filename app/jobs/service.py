@@ -104,8 +104,13 @@ async def _set_project_job_action(
     # objeto cacheado ficaria expirado/detached e acessar metadata_json lançaria
     # DetachedInstanceError, mascarando o erro original. O dedup de eventos usa
     # um dict externo chaveado por project_id em vez de atributos ad-hoc.
-    settings = await get_or_create_production_settings(session, job.project_id)
-    last_action = _project_action_last.get(job.project_id)
+    # project_id é capturado ANTES de qualquer IO do session: após rollback os
+    # atributos do ORM podem expirar e um acesso lazy (job.project_id) dispara
+    # load síncrono fora do greenlet (MissingGreenlet) — relato do worker,
+    # 2026-09 (job de referência visual órfão em RUNNING).
+    project_id = job.project_id
+    settings = await get_or_create_production_settings(session, project_id)
+    last_action = _project_action_last.get(project_id)
     if (
         last_action is not None
         and last_action["status"] == status
@@ -145,7 +150,7 @@ async def _set_project_job_action(
         "events": events[-60:],
     }
     settings.metadata_json = metadata
-    _project_action_last[job.project_id] = {
+    _project_action_last[project_id] = {
         "status": status,
         "message": message,
         "error": error,
@@ -248,6 +253,14 @@ async def create_or_resume_project_job(
 
 
 async def mark_job_running(session: AsyncSession, job: GenerationJob, message: str) -> None:
+    # CORREÇÃO: não ressuscitar jobs que foram cancelados entre o dispatch
+    # e o pick do worker. Sem esta checagem, o status CANCELLED é
+    # sobrescrito por RUNNING e o vídeo é gerado mesmo após Cancelar.
+    if job.status not in {
+        GenerationJobStatus.PENDING,
+        GenerationJobStatus.RUNNING,
+    }:
+        return
     job.status = GenerationJobStatus.RUNNING
     job.progress = max(job.progress, 5)
     job.attempts += 1

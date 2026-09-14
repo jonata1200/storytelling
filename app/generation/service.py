@@ -189,8 +189,15 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "faça cada cena terminar com uma nova pressão ou revelação, e construa um "
         "payoff que mude a forma como a audiência entende o protagonista. "
         "Use formato cinematográfico de filme, não formato de documento de planejamento: "
-        "titulo, FADE IN:, linhas de acao no presente, personagens em caixa alta na "
+        "FADE IN:, linhas de acao no presente, personagens em caixa alta na "
         "primeira aparição e blocos de diálogo com nome do personagem em caixa alta. "
+        "NÃO escreva uma linha de título dentro do roteiro (no campo content). "
+        "TITULO DA HISTORIA: alem do roteiro, devolva o campo JSON \"title\" com um "
+        "titulo curto, original e memoravel para a historia (ate 80 caracteres, em "
+        "portugues do Brasil, no mesmo idioma do roteiro). O titulo deve refletir a "
+        "promessa emocional da ideia, nao ser uma copia literal do prompt do usuario. "
+        "Para projetos do laboratorio de ideias (title_locked=true) o titulo sera "
+        "ignorado pelo aplicativo, mas preencha mesmo assim para manter consistencia."
         "CABECALHO DE CENA OBRIGATORIO: cada cena comeca com UMA unica linha no padrao "
         "'CENA NN - INT./EXT. LOCAL - PERIODO' (ex.: 'CENA 04 - EXT. PRACA CENTRAL - "
         "DIA'): numero da cena com dois digitos, depois o local com INT. ou EXT., e "
@@ -369,7 +376,7 @@ DEFAULT_TEMPLATES: dict[str, str] = {
         "Não transforme o roteiro em lista técnica com campos de objetivo/personagens/local/"
         "duração/storyboard/video/camera. {retry_guidance}"
         "Responda somente JSON neste formato exato: "
-        '{{"title":"...","language":"pt-BR","target_duration_seconds":300,'
+        '{{"language":"pt-BR","target_duration_seconds":300,'
         '"word_count":650,"content":"ROTEIRO CINEMATOGRAFICO REVISADO COMPLETO AQUI"}}'
     ),
     "director_agent_chat": "{prompt}",
@@ -467,6 +474,45 @@ def text_provider_fallback_names(settings: object, primary_provider: str) -> lis
             continue
         names.append(normalized)
     return names
+
+
+_LEGACY_GENERATE_SCRIPT_NO_TITLE_INSTRUCTION = (
+    "o nome do projeto já é o título da história"
+)
+
+
+async def migrate_persisted_generate_script_template(
+    session: AsyncSession,
+) -> bool:
+    """Migra templates generate_script persistidos que ainda carregam a
+    instrução antiga (que proibia a IA de nomear o roteiro).
+
+    Como DEFAULT_TEMPLATES não é sobrescrito em get_or_create_prompt_template
+    (proteção contra customizações do operador), esta função é a ponte
+    para aplicar a mudança do campo 'title' aos templates já persistidos.
+
+    Só atualiza se a instrução antiga estiver presente — customizações do
+    operador ficam intactas.
+
+    Retorna True se houve mudança, False caso contrário.
+    """
+    result = await session.execute(
+        select(PromptTemplate)
+        .where(PromptTemplate.task == "generate_script", PromptTemplate.active.is_(True))
+        .order_by(PromptTemplate.version.desc())
+    )
+    template = result.scalars().first()
+    if template is None:
+        return False
+    current_text = template.template_text or ""
+    if _LEGACY_GENERATE_SCRIPT_NO_TITLE_INSTRUCTION not in current_text:
+        return False
+    new_text = DEFAULT_TEMPLATES.get("generate_script")
+    if not new_text or new_text == current_text:
+        return False
+    template.template_text = new_text
+    await session.commit()
+    return True
 
 
 async def get_or_create_prompt_template(session: AsyncSession, task: str) -> PromptTemplate:

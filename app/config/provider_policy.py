@@ -1,15 +1,13 @@
 from collections.abc import Iterable
 from typing import Any, Literal
 
-ProviderChannel = Literal["text", "image", "video"]
+ProviderChannel = Literal["text", "image"]
 IntegrationMode = Literal["api", "browser"]
 
 DEFAULT_PROVIDER = "ollama_cloud"
-DEFAULT_VIDEO_PROVIDER = "vibes"
 SUPPORTED_TEXT_PROVIDERS = ("ollama_cloud",)
 SUPPORTED_IMAGE_PROVIDERS = ("meta",)
-SUPPORTED_VIDEO_PROVIDERS = ("vibes",)
-SUPPORTED_AI_PROVIDERS = ("ollama_cloud", "meta", "vibes")
+SUPPORTED_AI_PROVIDERS = ("ollama_cloud", "meta")
 SUPPORTED_MODEL_PROVIDERS = frozenset(SUPPORTED_TEXT_PROVIDERS)
 MOCK_MODEL_IDS = {
     "mock",
@@ -43,9 +41,9 @@ def normalize_provider_name(
 
 def effective_provider_for_channel(settings: Any, channel: ProviderChannel) -> str:
     """Resolve the effective provider for a channel using settings."""
-    if channel in {"image", "video"}:
-        default = "meta" if channel == "image" else DEFAULT_VIDEO_PROVIDER
-        allowed = SUPPORTED_IMAGE_PROVIDERS if channel == "image" else SUPPORTED_VIDEO_PROVIDERS
+    if channel == "image":
+        default = "meta"
+        allowed = SUPPORTED_IMAGE_PROVIDERS
         configured_provider = getattr(settings, f"{channel}_provider", None) or default
         return normalize_provider_name(configured_provider, f"{channel.upper()}_PROVIDER", allowed)
     configured_provider = getattr(settings, f"{channel}_provider", None) or DEFAULT_PROVIDER
@@ -58,7 +56,6 @@ def provider_display_name(provider: str) -> str:
     names = {
         "ollama_cloud": "Ollama Cloud",
         "meta": "Meta",
-        "vibes": "Vibes",
     }
     return names.get(provider, provider)
 
@@ -108,6 +105,8 @@ def provider_integration_mode(
     channel: ProviderChannel | None = None,
 ) -> IntegrationMode:
     provider_name = str(provider or "").strip().casefold()
+    if provider_name == "meta":
+        return str(getattr(settings, "meta_image_integration_mode", "browser") or "browser").strip().casefold()  # type: ignore[return-value]
     channel_mode = (
         str(getattr(settings, f"{provider_name}_{channel}_integration_mode", "") or "")
         if channel

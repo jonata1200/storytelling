@@ -339,6 +339,39 @@ async def list_continuous_video_segments(
     return list(result.scalars())
 
 
+async def list_selected_video_segments(
+    session: AsyncSession,
+    project_id: UUID,
+) -> list[tuple[int, str]]:
+    """Retorna ``(segment_number, storage_uri)`` dos vídeos selecionados, em ordem.
+
+    Um segmento conta como "selecionado" quando o usuário escolheu uma das
+    opções geradas (``metadata_json.selected_variant_asset_id``). A ordem segue
+    ``segment_number``, que é a ordem do roteiro. Segmentos sem seleção ou cujo
+    asset não existe são ignorados.
+    """
+    from app.assets.models import Asset
+
+    segments = await list_continuous_video_segments(session, project_id)
+    selected: list[tuple[int, str]] = []
+    for segment in segments:
+        metadata = dict(segment.metadata_json or {})
+        raw_asset_id = metadata.get("selected_variant_asset_id")
+        if not raw_asset_id:
+            continue
+        try:
+            asset_id = UUID(str(raw_asset_id))
+        except (ValueError, TypeError):
+            continue
+        asset = await session.get(Asset, asset_id)
+        storage_uri = str(getattr(asset, "storage_uri", "") or "").strip()
+        if not storage_uri:
+            continue
+        selected.append((int(segment.segment_number), storage_uri))
+    selected.sort(key=lambda item: item[0])
+    return selected
+
+
 async def delete_all_continuous_video_segments(
     session: AsyncSession,
     project_id: UUID,
@@ -390,10 +423,9 @@ async def delete_all_continuous_video_segments(
             uri = str(getattr(asset, "storage_uri", "") or "").strip()
             if uri:
                 storage_uris.append(uri)
-        # Delete asset versions and assets
-        await session.execute(delete(AssetVersion).where(AssetVersion.asset_id.in_(asset_ids)))
-        await session.execute(delete(Asset).where(Asset.id.in_(asset_ids)))
-    # Unlink FK references to avoid constraint violations
+    # Unlink FK references BEFORE deleting assets: as colunas de frame/vídeo dos
+    # segmentos apontam para assets (fk_continuous_video_segments_*_assets). Se o
+    # asset for deletado primeiro, o DELETE viola a FK e derruba a operação.
     for segment in segments:
         segment.source_segment_id = None
         segment.source_video_asset_id = None
@@ -403,6 +435,10 @@ async def delete_all_continuous_video_segments(
         segment.generated_video_asset_id = None
         segment.final_frame_asset_id = None
     await session.flush()
+    if asset_ids:
+        # Delete asset versions and assets
+        await session.execute(delete(AssetVersion).where(AssetVersion.asset_id.in_(asset_ids)))
+        await session.execute(delete(Asset).where(Asset.id.in_(asset_ids)))
     for segment in segments:
         await session.delete(segment)
     plan_result = await session.execute(
@@ -466,9 +502,8 @@ async def delete_continuous_video_segment(
             uri = str(getattr(asset, "storage_uri", "") or "").strip()
             if uri:
                 storage_uris.append(uri)
-        await session.execute(delete(AssetVersion).where(AssetVersion.asset_id.in_(asset_ids)))
-        await session.execute(delete(Asset).where(Asset.id.in_(asset_ids)))
-    # Desvincula FKs antes de apagar a linha (mesma ordem do delete em massa).
+    # Desvincula FKs ANTES de apagar os assets: as colunas de frame/vídeo do
+    # segmento apontam para assets; deletar o asset primeiro viola a FK.
     segment.source_segment_id = None
     segment.source_video_asset_id = None
     segment.source_frame_asset_id = None
@@ -476,12 +511,149 @@ async def delete_continuous_video_segment(
     segment.asset_id = None
     segment.generated_video_asset_id = None
     segment.final_frame_asset_id = None
+    # Limpa também as FKs REVERSAS (outros segmentos que tinham este como
+    # source_segment_id). Sem isso, o flush disparado por
+    # session.delete(segment) lá embaixo levanta ForeignKeyViolationError
+    # no PostgreSQL: o DB verifica que este id ainda é referenciado por
+    # uma FK de outro segmento. A renumeração posterior já cuidaria disso,
+    # mas a deleção do segmento atual acontece ANTES — daí a violação.
     await session.flush()
+    await _clear_reverse_source_segment_fk(session, segment.id)
+    if asset_ids:
+        await session.execute(delete(AssetVersion).where(AssetVersion.asset_id.in_(asset_ids)))
+        await session.execute(delete(Asset).where(Asset.id.in_(asset_ids)))
     await session.delete(segment)
     await session.flush()
     for uri in storage_uris:
         _delete_local_storage_file(uri)
+    # Renumera os segmentos restantes para preencher o gap deixado pela deleção
+    # e ajustar as referências de continuidade (source_segment_id) que ficaram
+    # apontando para um segmento agora inexistente.
+    await _renumber_continuous_video_segments_after_delete(
+        session, segment.project_id, deleted_segment_id=segment_id
+    )
     return True
+
+
+async def _clear_reverse_source_segment_fk(
+    session: AsyncSession,
+    deleted_segment_id: UUID,
+) -> int:
+    """Zera source_segment_id e source_frame_asset_id em todos os
+    segmentos que tinham `deleted_segment_id` como source_segment_id.
+
+    Necessário porque PostgreSQL valida FK no momento do DELETE do
+    segmento alvo. A renumeração posterior cuida do re-encadeamento
+    (apontar para o novo anterior correto), mas isso é separado da
+    limpeza imediata para evitar a violação.
+
+    Retorna o número de segmentos atualizados.
+    """
+    result = await session.execute(
+        select(ContinuousVideoSegment).where(
+            ContinuousVideoSegment.source_segment_id == deleted_segment_id
+        )
+    )
+    dependents = list(result.scalars().all())
+    for dependent in dependents:
+        dependent.source_segment_id = None
+        dependent.source_frame_asset_id = None
+    if dependents:
+        await session.flush()
+    return len(dependents)
+
+
+async def _renumber_continuous_video_segments_after_delete(
+    session: AsyncSession,
+    project_id: UUID,
+    deleted_segment_id: UUID,
+) -> None:
+    """Renumera segmentos restantes após deleção de um segmento.
+
+    Algoritmo em DUAS PASSADAS para respeitar a UniqueConstraint
+    (project_id, segment_number):
+      1. Desloca todos os segmentos restantes para números intermediários
+         (negativos) — evita colisão transitória com os números atuais.
+         Flush para garantir que o offset persistiu antes da próxima passada.
+      2. Atribui os números finais (1, 2, 3...) preservando a ordem
+         original por segment_number.
+
+    Ajustes em cada segmento renumerado:
+      - `source_segment_id` que aponta para o segmento deletado é limpo.
+      - `metadata.renumbered_at` é registrado para auditoria.
+      - Source frame de quem ainda tem upstream válido é preservado.
+    """
+    # Seleciona segmentos restantes do mesmo projeto, em ordem.
+    result = await session.execute(
+        select(ContinuousVideoSegment)
+        .where(ContinuousVideoSegment.project_id == project_id)
+        .order_by(ContinuousVideoSegment.segment_number)
+    )
+    remaining = list(result.scalars().all())
+    if not remaining:
+        return
+
+    now_iso = datetime.now(UTC).isoformat()
+
+    # Captura o número original de cada segmento ANTES da passada 1, para
+    # só marcar `renumbered_at` em quem efetivamente mudou de número (o
+    # flash para -N e volta para o mesmo N não conta como renumeração).
+    original_numbers: dict[int, int] = {
+        id(segment): segment.segment_number for segment in remaining
+    }
+
+    # PASSADA 1: desloca para números negativos (offset) para evitar colisão
+    # com a UniqueConstraint(project_id, segment_number).
+    for index, segment in enumerate(remaining, start=1):
+        new_number = -(index)  # -1, -2, -3...
+        segment.segment_number = new_number
+        # Limpa a referência ao segmento deletado quando ela existir.
+        if segment.source_segment_id == deleted_segment_id:
+            segment.source_segment_id = None
+            segment.source_frame_asset_id = None
+    await session.flush()
+
+    # PASSADA 2: atribui números finais 1, 2, 3...
+    renumbered_any = False
+    for index, segment in enumerate(remaining, start=1):
+        segment.segment_number = index
+        if original_numbers[id(segment)] != index:
+            metadata = dict(segment.metadata_json or {})
+            metadata["renumbered_at"] = now_iso
+            segment.metadata_json = metadata
+            renumbered_any = True
+    if renumbered_any:
+        await session.flush()
+
+
+async def delete_continuous_video_variant_assets(
+    session: AsyncSession,
+    asset_ids: set[UUID],
+) -> None:
+    """Deleta assets de variantes de vídeo descartadas (banco + disco).
+
+    Usado quando um novo lote substitui as opções anteriores: as variantes
+    antigas deixam de ser referenciadas pelo segmento e precisam ser removidas
+    para não virarem órfãs no storage.
+    """
+    from app.assets.models import Asset, AssetVersion
+
+    if not asset_ids:
+        return
+    storage_uris: list[str] = []
+    assets_result = await session.execute(select(Asset).where(Asset.id.in_(asset_ids)))
+    for asset in assets_result.scalars():
+        uri = str(getattr(asset, "storage_uri", "") or "").strip()
+        if uri:
+            storage_uris.append(uri)
+    # Flush pendente (ex.: segmento com FKs de asset zeradas) antes de deletar,
+    # para não violar as FKs de continuous_video_segments -> assets.
+    await session.flush()
+    await session.execute(delete(AssetVersion).where(AssetVersion.asset_id.in_(asset_ids)))
+    await session.execute(delete(Asset).where(Asset.id.in_(asset_ids)))
+    await session.flush()
+    for uri in storage_uris:
+        _delete_local_storage_file(uri)
 
 
 async def get_continuous_video_segment_by_number(

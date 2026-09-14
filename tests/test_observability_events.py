@@ -50,39 +50,6 @@ def test_redact_secrets_masks_provider_api_key_assignments() -> None:
     assert "[REDACTED]" in redacted
 
 
-def test_provider_channel_readiness_reports_new_provider_components() -> None:
-    settings = Settings(
-        ai_provider="ollama_cloud",
-        text_provider="",
-        video_provider="vibes",
-        ollama_cloud_api_key="fake-ollama-secret",
-        ollama_cloud_base_url="https://ollama.com/api",
-        ollama_cloud_default_model=DEFAULT_OLLAMA_TEXT_MODEL,
-        vibes_api_key="vibes-secret",
-        vibes_browser_automation_enabled=True,
-    )
-
-    text = _provider_channel_readiness(settings, "text")
-    video = _provider_channel_readiness(settings, "video")
-
-    assert text.name == "text_provider"
-    assert video.name == "video_provider"
-    assert {text.status, video.status} == {"ready"}
-    assert text.details["provider"] == "ollama_cloud"
-    assert video.details["model"] == settings.vibes_video_model
-
-
-def test_video_provider_readiness_requires_authorized_browser() -> None:
-    settings = Settings(video_provider="vibes")
-
-    video = _provider_channel_readiness(settings, "video")
-
-    assert video.name == "video_provider"
-    assert video.status == "degraded"
-    assert video.details["provider"] == "vibes"
-    assert "VIBES_BROWSER_AUTOMATION_ENABLED" in video.message
-
-
 def test_provider_channel_readiness_reports_no_text_fallbacks() -> None:
     settings = Settings(
         ai_provider="ollama_cloud",
@@ -131,21 +98,6 @@ def test_provider_channel_readiness_reports_ollama_cloud() -> None:
     assert text.details["provider"] == "ollama_cloud"
     assert text.details["model"] == DEFAULT_OLLAMA_TEXT_MODEL
     assert text.details["fallbacks"] == ""
-
-
-def test_provider_channel_readiness_reports_vibes_video() -> None:
-    settings = Settings(
-        video_provider="vibes",
-        vibes_api_key="vibes-secret",
-        vibes_browser_automation_enabled=True,
-    )
-
-    video = _provider_channel_readiness(settings, "video")
-
-    assert video.status == "ready"
-    assert video.details["provider"] == "vibes"
-    assert video.details["model"] == settings.vibes_video_model
-    assert video.details["api_key_configured"] == "true"
 
 
 class _FakeEventSession:

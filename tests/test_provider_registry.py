@@ -20,7 +20,7 @@ class _Provider:
     provider_name = "test"
 
 
-@pytest.mark.parametrize("channel", ["text", "image", "video"])
+@pytest.mark.parametrize("channel", ["text", "image"])
 def test_registry_resolves_each_channel(channel: str) -> None:
     registry = ProviderRegistry()
     registry.register(channel, "test", _Provider)  # type: ignore[arg-type]
@@ -31,7 +31,7 @@ def test_registry_resolves_each_channel(channel: str) -> None:
 
 def test_registry_rejects_provider_without_registered_adapter() -> None:
     with pytest.raises(ValueError, match="não possui adapter registrado"):
-        ProviderRegistry().resolve("video", "missing")
+        ProviderRegistry().resolve("image", "missing")
 
 
 def test_provider_channels_accept_migration_targets() -> None:
@@ -39,28 +39,26 @@ def test_provider_channels_accept_migration_targets() -> None:
         _env_file=None,
         text_provider="ollama_cloud",
         image_provider="meta",
-        video_provider="vibes",
     )
 
     assert effective_provider_for_channel(settings, "text") == "ollama_cloud"
     assert effective_provider_for_channel(settings, "image") == "meta"
-    assert effective_provider_for_channel(settings, "video") == "vibes"
 
 
 def test_api_mode_requires_key_and_browser_mode_does_not() -> None:
     api = Settings(_env_file=None, ollama_cloud_integration_mode="api")
-    browser = Settings(_env_file=None, vibes_integration_mode="browser")
+    browser = Settings(_env_file=None, meta_image_integration_mode="browser")
 
     assert provider_requires_api_key(api, "ollama_cloud") is True
-    assert provider_requires_api_key(browser, "vibes") is False
+    assert provider_requires_api_key(browser, "meta") is False
 
 
 def test_browser_profile_rejects_path_traversal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    with pytest.raises(ValueError, match="VIBES_BROWSER_PROFILE_PATH"):
-        Settings(_env_file=None, vibes_browser_profile_path=Path("../outside"))
+    with pytest.raises(ValueError, match="META_BROWSER_PROFILE_PATH"):
+        Settings(_env_file=None, meta_browser_profile_path=Path("../outside"))
 
 
 def test_image_output_rejects_path_outside_storage(

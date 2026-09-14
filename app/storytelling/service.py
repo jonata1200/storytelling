@@ -499,7 +499,18 @@ async def generate_script(
         if last_error is not None:
             raise last_error
         raise GenerationOutputError("generate_script: resposta vazia do modelo")
-    title = _required_str(payload, "title", "generate_script")
+    # O título do roteiro vem do campo "title" devolvido pela IA (ela recebe
+    # instrução para gerar um título curto e original em PT-BR). Se o LLM
+    # não devolver, o normalize_script_payload aplica setdefault com o
+    # default_title=idea.title como fallback.
+    # Para projetos vindos do laboratório de ideias (title_locked=True), o
+    # roteiro deve ficar com o mesmo título da ideia — sobrescrevemos o
+    # title do payload para evitar que o usuário veja o roteiro com nome
+    # diferente do projeto.
+    from app.projects.service import _project_title_is_locked
+    if await _project_title_is_locked(session, project_id):
+        payload["title"] = idea.title
+    title = str(payload.get("title") or idea.title or "").strip() or idea.title
     if not str(payload.get("content") or "").strip():
         raise GenerationOutputError("generate_script: resposta sem roteiro")
     if story_hook is not None:
@@ -631,9 +642,9 @@ async def revise_script(
             )
     if payload is None or execution is None:
         return None
-    title = _required_str(payload, "title", "revise_script")
+    # O título do roteiro não é mais gerado pela IA: preserva o título atual
+    # (que espelha o nome do projeto). A revisão não altera o título.
     content = _required_str(payload, "content", "revise_script")
-    script.title = title
     script.language = _required_str(payload, "language", "revise_script")
     script.target_duration_seconds = _required_int(
         payload, "target_duration_seconds", "revise_script"

@@ -15,6 +15,9 @@ def _prepare(monkeypatch: Any, tmp_path: Path, popen: Mock) -> Path:
     monkeypatch.setattr(browser_bridge, "browser_bridge_script", lambda: tmp_path / "bridge.mjs")
     (tmp_path / "authorize-meta-browser.ps1").touch()
     browser_bridge._authorization_processes.clear()
+    # Por padrão, mockar o detector de Chrome como vazio (sem Chrome real
+    # rodando — os testes não dependem do detector de processos).
+    monkeypatch.setattr(browser_bridge, "_iter_chrome_processes", lambda: [])
     return tmp_path / "profile"
 
 
@@ -24,8 +27,8 @@ def test_authorization_console_reuses_running_process(monkeypatch: Any, tmp_path
     popen = Mock(return_value=process)
     profile = _prepare(monkeypatch, tmp_path, popen)
 
-    assert browser_bridge.launch_authorization_console(profile, "image") is True
-    assert browser_bridge.launch_authorization_console(profile, "vibes") is False
+    assert browser_bridge.launch_authorization_console(profile) is True
+    assert browser_bridge.launch_authorization_console(profile) is False
     popen.assert_called_once()
 
 
@@ -35,16 +38,9 @@ def test_authorization_console_restarts_finished_process(monkeypatch: Any, tmp_p
     popen = Mock(side_effect=[finished, Mock()])
     profile = _prepare(monkeypatch, tmp_path, popen)
 
-    assert browser_bridge.launch_authorization_console(profile, "image") is True
-    assert browser_bridge.launch_authorization_console(profile, "image") is True
+    assert browser_bridge.launch_authorization_console(profile) is True
+    assert browser_bridge.launch_authorization_console(profile) is True
     assert popen.call_count == 2
-
-
-def test_image_and_video_keep_independent_browser_profiles() -> None:
-    settings = Settings(_env_file=None)
-
-    assert settings.vibes_browser_profile_path != settings.meta_browser_profile_path
-    assert settings.vibes_browser_profile_path.name == "vibes"
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node não instalado")

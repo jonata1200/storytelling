@@ -79,7 +79,8 @@ def test_vibes_compiler_omits_large_secondary_cast() -> None:
     assert "também estão em cena" not in three_off_cast.prompt
 
     one_off_cast = VibesPromptCompiler().compile(_spec(["Rafael", "Lúcia"]))
-    assert "Lúcia também está em cena" in one_off_cast.prompt
+    # v14: o prompt é só a ação — coadjuvantes não entram mais no texto.
+    assert one_off_cast.prompt == "Rafael ajusta o controle da câmera."
 
 
 def test_action_fragment_detector_flags_cue_only_beats() -> None:
@@ -128,3 +129,49 @@ def test_frame_prompt_falls_back_to_scene_context_when_beat_is_only_fragment() -
 
     assert "Mostre o momento inicial em que DANIEL." not in prompts["initial"]
     assert "Daniel aparece no vão da porta" in prompts["initial"]
+
+
+def test_frame_prompt_is_action_only_with_named_characters() -> None:
+    """v3 dos frames: só a ação, personagens pelo nome, sem contexto.
+
+    Todas as imagens do projeto são geradas no mesmo chat — a identidade vem
+    das referências do chat, e local/iluminação saem do texto (decisão do
+    usuário, 2026-09).
+    """
+    segment = SimpleNamespace(
+        prompt="ELIAS abre os olhos em um corte seco.",
+        metadata_json={
+            "storyboard_action": "ELIAS abre os olhos em um corte seco.",
+            "characters": ["Elias"],
+            "locations": ["Quarto de Elias"],
+            "shot_generation_spec": {
+                "action": "ELIAS abre os olhos em um corte seco.",
+                "lighting": "luz noturna fraca da abajur lateral",
+            },
+        },
+    )
+
+    prompts = segment_frame_prompts(segment)  # type: ignore[arg-type]
+
+    assert prompts["initial"] == "Crie uma imagem de ELIAS abre os olhos em um corte seco."
+    assert "A cena acontece" not in prompts["initial"]
+    assert "Iluminação" not in prompts["initial"]
+    assert "Quarto de Elias" not in prompts["initial"]
+    assert "Iluminação" not in prompts["final"]
+    assert "mesma iluminação" not in prompts["final"]
+
+
+def test_frame_prompt_omits_empty_context_parts() -> None:
+    segment = SimpleNamespace(
+        prompt="ELIAS abre os olhos em um corte seco.",
+        metadata_json={
+            "storyboard_action": "ELIAS abre os olhos em um corte seco.",
+            "characters": [],
+            "locations": [],
+        },
+    )
+
+    prompts = segment_frame_prompts(segment)  # type: ignore[arg-type]
+
+    assert "A cena acontece" not in prompts["initial"]
+    assert "Iluminação:" not in prompts["initial"]

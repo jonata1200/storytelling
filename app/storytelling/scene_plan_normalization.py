@@ -92,22 +92,38 @@ def _partition_action_units(units: list[str], count: int, fallback: str) -> list
         clean_units[min((index * len(clean_units)) // count, len(clean_units) - 1)]
         for index in range(count)
     ]
-    totals = {unit: assignments.count(unit) for unit in clean_units}
-    occurrences: dict[str, int] = {}
-    beats: list[str] = []
-    for unit in assignments:
-        occurrences[unit] = occurrences.get(unit, 0) + 1
-        occurrence = occurrences[unit]
-        total = totals[unit]
-        if total == 1:
-            beats.append(unit)
-        elif occurrence == 1:
-            beats.append(f"Mostre o início desta ação sem antecipar o desfecho: {unit}")
-        elif occurrence == total:
-            beats.append(f"Continue e conclua esta ação: {unit}")
-        else:
-            beats.append(f"Continue esta mesma ação, preservando posições e objetos: {unit}")
-    return beats
+    return _differentiate_repeated_beats(assignments)
+
+
+def _differentiate_repeated_beats(beats: list[str]) -> list[str]:
+    """Transforma repetições consecutivas do mesmo beat em momentos distintos.
+
+    A distribuição round-robin das frases da cena repete a MESMA ação em
+    planos consecutivos ("ELIAS abre os olhos..." nos planos 1 e 2) quando a
+    cena tem menos frases que planos. Dois planos idênticos viram dois
+    segmentos de storyboard com o mesmo prompt — os frames saem cópias um do
+    outro. A reescrita mantém a primeira ocorrência com a frase original do
+    roteiro e prefixa as repetições consecutivas como continuação da mesma
+    ação, sem inventar conteúdo que não existe no roteiro.
+    """
+    differentiated = list(beats)
+    index = 0
+    while index < len(differentiated):
+        end = index
+        while (
+            end + 1 < len(differentiated)
+            and differentiated[end + 1] == differentiated[index]
+        ):
+            end += 1
+        run_length = end - index + 1
+        if run_length > 1:
+            for offset in range(1, run_length):
+                differentiated[index + offset] = (
+                    f"Continue esta mesma ação, preservando posições e objetos: "
+                    f"{differentiated[index + offset]}"
+                )
+        index = end + 1
+    return differentiated
 
 
 def _section_action_beats(section: dict, count: int) -> list[str]:

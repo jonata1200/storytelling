@@ -681,27 +681,30 @@ def _location_profile(raw: object) -> dict:
         "name": name,
         "description": description,
     }
-    parts = [f"Crie a imagem de {concise_prompt_fragment(name, 10)}"]
+    def _flowing_fragment(value: object, max_words: int) -> str:
+        """Fragmento sem pontuação de fim de frase: o prompt é UM período só."""
+        text = concise_prompt_fragment(_prompt_text(value), max_words)
+        return re.sub(r"\s*[.;:!]+\s*", ", ", text).strip(" ,").strip()
+
+    # O prompt do local é UM ÚNICO PERÍODO: orações ligadas por vírgulas em
+    # vez de frases separadas (relato do usuário, 2026-09) — modelos de
+    # imagem tratam bem descrições corridas e a pontuação interna das
+    # extrações LLM não quebra o texto em várias sentenças.
+    clauses = [f"Crie a imagem de {concise_prompt_fragment(name, 10)}"]
     if description:
-        parts[0] += f", {concise_prompt_fragment(_prompt_text(description), 28)}."
-    else:
-        parts[0] += "."
+        clauses[0] += f", {_flowing_fragment(description, 28)}"
     if layout:
-        parts.append(f"Organize o espaço com {concise_prompt_fragment(_prompt_text(layout), 24)}.")
+        clauses.append(f"o espaço organizado com {_flowing_fragment(layout, 24)}")
     if materials:
-        materials_text = concise_prompt_fragment(_prompt_text(materials), 16)
-        parts.append(f"Os materiais visíveis devem incluir {materials_text}.")
+        clauses.append(f"materiais visíveis como {_flowing_fragment(materials, 16)}")
     if palette:
-        palette_text = concise_prompt_fragment(_prompt_text(palette), 12)
-        parts.append(f"As cores predominantes devem ser {palette_text}.")
+        clauses.append(f"cores predominantes em {_flowing_fragment(palette, 12)}")
     if lighting:
-        parts.append(
-            f"A iluminação deve ser {concise_prompt_fragment(_prompt_text(lighting), 16)}."
-        )
+        clauses.append(f"iluminação de {_flowing_fragment(lighting, 16)}")
     if key_objects:
-        parts.append(f"Inclua {concise_prompt_fragment(_prompt_text(key_objects), 16)}.")
+        clauses.append(f"objetos como {_flowing_fragment(key_objects, 16)}")
     canonical_prompt = ensure_portuguese_prompt_text(
-        balanced_visual_prompt(parts, max_words=LOCATION_PROMPT_MAX_WORDS)
+        balanced_visual_prompt([", ".join(clauses) + "."], max_words=LOCATION_PROMPT_MAX_WORDS)
     )
 
     return {

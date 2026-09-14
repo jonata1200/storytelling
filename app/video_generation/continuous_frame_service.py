@@ -86,7 +86,7 @@ def _set_continuous_video_segment_package_status(segment: ContinuousVideoSegment
     from app.video_generation import continuous as api
 
     metadata = dict(segment.metadata_json or {})
-    if segment.source_frame_asset_id is not None and segment.final_frame_asset_id is not None:
+    if segment.source_frame_asset_id is not None:
         api._set_continuous_video_review_status(segment, api.CONTINUOUS_VIDEO_REVIEW_READY)
         metadata = dict(segment.metadata_json or {})
         segment.status = GenerationJobStatus.SUCCEEDED

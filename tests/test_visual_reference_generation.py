@@ -14,7 +14,6 @@ from app.providers.image.types import ImageGenerationResult
 from app.visual_bible.image_generation import (
     enqueue_visual_reference_generation,
     generate_visual_reference,
-    prepare_vibes_ingredient_metadata,
     sanitize_meta_image_prompt,
     validate_identity_prompt,
     visual_reference_aspect_ratio,
@@ -373,29 +372,9 @@ async def test_character_regeneration_supersedes_prior_reference_and_keeps_histo
     assert first.metadata_json["provider_job_id"] == "meta-generation"
 
 
-def test_identity_guardrail_and_vibes_sync_are_safe_and_idempotent() -> None:
+def test_identity_guardrail_is_safe_and_idempotent() -> None:
     with pytest.raises(ValueError, match="características permanentes"):
         validate_identity_prompt("mudar cabelo e trocar a idade")
-
-    reference = VisualReference(
-        project_id=uuid4(),
-        artifact_id=uuid4(),
-        asset_id=uuid4(),
-        target_kind="character",
-        target_id=uuid4(),
-        view_type="front",
-        prompt="canonical",
-        provider="meta",
-        model="muse-image",
-        status="approved",
-        metadata_json={},
-    )
-    assert prepare_vibes_ingredient_metadata(
-        reference, ingredient_id="ingredient-1", ingredient_type="character"
-    )
-    assert not prepare_vibes_ingredient_metadata(
-        reference, ingredient_id="ingredient-1", ingredient_type="character"
-    )
 
 
 async def _empty_approved(*_args: Any, **_kwargs: Any) -> list[Any]:

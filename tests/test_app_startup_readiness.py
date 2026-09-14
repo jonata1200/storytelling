@@ -51,4 +51,3 @@ async def test_readiness_dashboard_degrades_without_redis_and_providers(
     assert statuses["redis"] == "degraded"
     assert "worker" not in statuses
     assert statuses["text_provider"] == "degraded"
-    assert statuses["video_provider"] == "degraded"

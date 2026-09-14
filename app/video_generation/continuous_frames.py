@@ -138,21 +138,6 @@ def _static_image_beat(beat: str, character_names: list[str]) -> str:
     return result or beat
 
 
-def _human_frame_list(values: object) -> str:
-    items: list[str] = []
-    seen: set[str] = set()
-    for value in (values if isinstance(values, (list, tuple)) else []):
-        item = str(value).strip()
-        key = item.casefold()
-        if not item or key in seen:
-            continue
-        seen.add(key)
-        items.append(item)
-    if len(items) < 2:
-        return items[0] if items else ""
-    return f"{', '.join(items[:-1])} e {items[-1]}"
-
-
 def _action_inside_sentence(value: str) -> str:
     return re.sub(r"^(A|O|Uma|Um)\s+", lambda match: match.group(0).casefold(), value)
 
@@ -228,59 +213,26 @@ def segment_frame_prompts(segment: ContinuousVideoSegment) -> dict[str, str]:
     # O frame inicial é IMAGEM ESTÁTICA: sem direção de câmera e sem frases
     # apenas sonoras ("As rodas rangem."). O prompt de vídeo mantém tudo.
     initial_action = _static_image_beat(initial_action, raw_characters)
-    characters = _clean_excerpt(
-        _human_frame_list(list(metadata.get("characters") or [])[:4]), limit=100
-    )
-    locations = _clean_excerpt(
-        _human_frame_list(list(metadata.get("locations") or [])[:2]), limit=90
-    )
-    if characters and locations:
-        context = f"em {locations} e mostra {characters}"
-    elif locations:
-        context = f"em {locations}"
-    elif characters:
-        context = f"com {characters}"
-    else:
-        context = ""
-    shot_spec = metadata.get("shot_generation_spec")
-    shot_spec = shot_spec if isinstance(shot_spec, dict) else {}
-    lighting = _clean_excerpt(shot_spec.get("lighting"), limit=80).rstrip(". ")
     initial_sentence = _action_inside_sentence(initial_action.rstrip(" ."))
     final_sentence = (
         final_action if final_action.endswith((".", "!", "?", "…")) else f"{final_action}."
     )
-    identity_clause = ""
-    if characters or locations:
-        identity_targets = _human_frame_list(
-            [item for item in (characters, locations) if item]
-        )
-        identity_clause = f"Use as mesmas imagens anteriores de {identity_targets}."
-    if characters and locations:
-        initial_context = f"A cena se passa em {locations} e mostra {characters} em cena."
-    elif locations:
-        initial_context = f"A cena se passa em {locations}."
-    elif characters:
-        initial_context = f"A cena mostra {characters} em cena."
-    else:
-        initial_context = ""
+    # v3 dos frames: o prompt é SÓ a ação, com os personagens referenciados
+    # PELO NOME no próprio texto. Todas as imagens do projeto são geradas no
+    # mesmo chat, então a identidade visual vem das referências do chat — e
+    # local/iluminação saem do texto (decisão do usuário, 2026-09): linhas
+    # tipo "A cena acontece..."/"Iluminação: ..." poluíam o prompt sem
+    # aumentar a clareza da imagem pedida.
     initial_default = bounded_prompt(
-        [
-            f"Crie uma imagem de {initial_sentence}.",
-            initial_context,
-            identity_clause or "Siga as referências anexadas.",
-        ],
+        [f"Crie uma imagem de {initial_sentence}."],
         max_chars=FRAME_PROMPT_MAX_CHARS,
     )
     final_default = bounded_prompt(
         [
             "Crie uma imagem.",
             final_sentence,
-            f"A cena acontece {context}." if context else "",
             "Mostre a pose final da ação em andamento (o corpo já executou o movimento "
             "principal), não um retrato estático anterior ao movimento.",
-            f"Use a mesma iluminação do frame inicial desta cena: {lighting}."
-            if lighting
-            else "Use a mesma iluminação do frame inicial.",
         ],
         max_chars=420,
     )
@@ -490,8 +442,18 @@ async def _ensure_package_initial_frame(
     segment: ContinuousVideoSegment,
     _production_settings: Any,
 ) -> None:
-    if segment.source_frame_asset_id is None:
-        await _generate_frame(session, project_id, segment, "initial")
+    """Garante que o segmento tem um source_frame_asset_id.
+
+    Comportamento:
+      - Se já tem source_frame_asset_id, nada a fazer.
+      - Caso contrário, gera um frame inicial novo.
+
+    Cada segmento sempre recebe um frame inicial próprio, gerado do zero.
+    """
+    if segment.source_frame_asset_id is not None:
+        return
+
+    await _generate_frame(session, project_id, segment, "initial")
 
 
 async def _generate_segment_initial_frame(

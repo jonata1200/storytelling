@@ -49,6 +49,26 @@ def create_app(include_ui: bool = True) -> FastAPI:
 
     app.router.on_startup.append(schedule_stale_job_recovery)
 
+    async def _migrate_persisted_generate_script_template() -> None:
+        # Migra templates generate_script persistidos com a instrução
+        # antiga (que proibia a IA de nomear o roteiro). Idempotente e
+        # seguro para customizações do operador: só atualiza se a
+        # instrução antiga estiver presente no template persistido.
+        from app.database.session import AsyncSessionLocal
+        from app.generation.service import (
+            migrate_persisted_generate_script_template,
+        )
+
+        async with AsyncSessionLocal() as session:
+            try:
+                await migrate_persisted_generate_script_template(session)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning(
+                    "template_inline_migration_failed: %s", exc
+                )
+
+    app.router.on_startup.append(_migrate_persisted_generate_script_template)
+
     async def _dispose_engine_on_shutdown() -> None:
         from app.database.session import dispose_engine
 

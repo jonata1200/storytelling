@@ -1,7 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -204,7 +204,7 @@ def test_planning_creates_one_segment_per_shot_and_auditable_spec() -> None:
     assert [item.shot_id for item in payloads] == [shot.id for shot in shots]
     assert [item.duration_seconds for item in payloads] == [8, 8]
     assert payloads[0].metadata_json["prompt_compiler_version"] == (
-        "vibes_shot_v13_no_camera_no_plans_no_lighting"
+        "vibes_shot_v14_action_only"
     )
     assert payloads[1].metadata_json["continuity_break"] is True
     assert payloads[1].source_frame_asset_id is None
@@ -244,7 +244,8 @@ def test_planning_drops_characters_not_in_visual_bible() -> None:
     )
 
     assert "Voz Distorcida" not in payloads[0].prompt
-    assert "Lúcia" in payloads[0].prompt
+    # v14: o prompt é só a ação do roteiro — nomes de personagem não entram.
+    assert payloads[0].prompt == "Ana atravessa a praça."
 
 
 def test_planning_does_not_replace_shot_actions_with_long_shared_scene_summary() -> None:
@@ -366,6 +367,23 @@ def test_video_provider_prompt_caps_oversized_custom_prompt() -> None:
     assert "9:16" not in provider_prompt
 
 
+class _EmptySegmentListResult:
+    def scalars(self) -> "_EmptySegmentListResult":
+        # `result.scalars()` retorna o próprio objeto em chains simples;
+        # `list(result.scalars())` exige iterabilidade — retornamos self
+        # e implementamos __iter__ abaixo.
+        return self
+
+    def all(self) -> list[Any]:
+        return []
+
+    def first(self) -> None:
+        return None
+
+    def __iter__(self) -> "iter[Any]":
+        return iter([])
+
+
 class _VariantSession:
     def __init__(self, segment: ContinuousVideoSegment) -> None:
         self.segment = segment
@@ -375,6 +393,12 @@ class _VariantSession:
 
     async def flush(self) -> None:
         return None
+
+    async def execute(self, _stmt: Any) -> Any:
+        # Após a remoção da propagação automática, list_continuous_video_segments
+        # ainda é chamada para descobrir o "next_segment" (que pode ser None).
+        # Retornamos uma lista vazia — não há downstream.
+        return _EmptySegmentListResult()
 
 
 async def test_single_shot_regeneration_preserves_and_selects_variant() -> None:
@@ -492,8 +516,12 @@ async def test_selecting_variant_extracts_and_propagates_continuity_frame(
     assert selected is first
     assert first.final_frame_asset_id == extracted_frame_id
     assert first.metadata_json["awaiting_variant_selection"] is False
-    assert second.source_frame_asset_id == extracted_frame_id
-    assert second.metadata_json["continuity_source_variant_asset_id"] == str(variant_id)
+    # A propagação automática do frame para o próximo segmento foi REMOVIDA
+    # (ver test_continuous_video_no_auto_propagate). O frame fica apenas
+    # no segmento selecionado — o usuário decide via toggle no próximo
+    # segmento se quer herdar.
+    assert second.source_frame_asset_id is None
+    assert "continuity_source_variant_asset_id" not in second.metadata_json
 
 
 def test_migration_keeps_shot_nullable_and_backfill_conservative() -> None:
@@ -503,3 +531,63 @@ def test_migration_keeps_shot_nullable_and_backfill_conservative() -> None:
     assert 'sa.Column("shot_id", sa.Uuid(), nullable=True)' in source
     assert "count(*)" in source
     assert "jsonb_array_length" in source
+
+
+@pytest.mark.asyncio
+async def test_list_selected_video_segments_orders_by_segment_number(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id = uuid4()
+    asset_1 = uuid4()
+    asset_2 = uuid4()
+    asset_3 = uuid4()
+    assets = {
+        asset_1: SimpleNamespace(storage_uri="storage/seg-1.mp4"),
+        asset_2: SimpleNamespace(storage_uri="storage/seg-2.mp4"),
+        asset_3: SimpleNamespace(storage_uri="storage/seg-3.mp4"),
+    }
+
+    def segment(number: int, selected_asset_id: UUID | None) -> ContinuousVideoSegment:
+        metadata: dict[str, Any] = {}
+        if selected_asset_id is not None:
+            metadata["selected_variant_asset_id"] = str(selected_asset_id)
+        return ContinuousVideoSegment(
+            id=uuid4(),
+            project_id=project_id,
+            shot_id=uuid4(),
+            segment_number=number,
+            title=f"Shot {number}",
+            prompt="prompt",
+            duration_seconds=5,
+            provider="vibes",
+            model="vibes",
+            request_fingerprint="a" * 64,
+            idempotency_key=f"seg-{number}",
+            review_status="ready",
+            metadata_json=metadata,
+        )
+
+    # Ordem de inserção propositalmente fora de ordem: 3, 1, 2.
+    segments = [segment(3, asset_3), segment(1, asset_1), segment(2, asset_2)]
+
+    class Session:
+        async def get(self, model: object, identity: object) -> Any:
+            assert model is Asset
+            return assets.get(identity)
+
+    monkeypatch.setattr(continuous, "list_continuous_video_segments", _fake_list(segments))
+
+    result = await continuous.list_selected_video_segments(Session(), project_id)  # type: ignore[arg-type]
+
+    assert result == [
+        (1, "storage/seg-1.mp4"),
+        (2, "storage/seg-2.mp4"),
+        (3, "storage/seg-3.mp4"),
+    ]
+
+
+def _fake_list(segments: list[ContinuousVideoSegment]) -> Any:
+    async def _list(_session: object, _project_id: object) -> list[ContinuousVideoSegment]:
+        return segments
+
+    return _list

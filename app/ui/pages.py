@@ -73,7 +73,7 @@ from app.ui.page_runtime import (
     _render_script_area as _render_script_area,  # noqa: F401
 )
 from app.ui.page_runtime import (
-    _render_video_area as _render_video_area,  # noqa: F401
+    _render_storyboard_area as _render_storyboard_area,  # noqa: F401
 )
 from app.ui.page_runtime import (
     _save_script_from_ui as _save_script_from_ui,  # noqa: F401
@@ -125,7 +125,7 @@ from app.ui.project.data import (
     project_summary as _project_summary,  # noqa: F401
 )
 from app.ui.project.text import (
-    compact_project_title as _compact_project_title,
+    compact_project_title as _compact_project_title,  # noqa: F401
 )
 from app.ui.project.text import (
     format_idea_payload_for_project as _format_idea_payload_for_project,
@@ -375,6 +375,7 @@ async def _create_project_from_form(
                     "metadata_json": {
                         "one_line_idea": form["one_line_idea"],
                         "source_idea": form.get("source_idea_payload"),
+                        "title_locked": bool(form.get("title_locked")),
                     },
                 },
             )
@@ -436,12 +437,14 @@ async def _create_project_from_chat_prompt(prompt: str) -> None:
     named_title = re.search(
         r"\bchamad[oa]\s+([^.!?\n]+)", cleaned_prompt, flags=re.IGNORECASE
     )
-    # Padroniza também o título nomeado no prompt ("...chamada O ÚLTIMO TREM"):
-    # sem isso o ALL-CAPS do usuário/LLM entrava cru na story idea.
+    # O título do projeto/ideia NÃO é mais derivado do prompt: a IA que cria o
+    # roteiro é quem dá o nome definitivo (o título do roteiro é sincronizado
+    # com o projeto depois). Até lá, usa um placeholder — exceto quando o
+    # usuário nomeia explicitamente em "...chamada X", que é respeitado.
     title = (
-        standardize_title_case(str(named_title.group(1)).strip(" \"'”)“"))[:80]
+        standardize_title_case(str(named_title.group(1)).strip(' "\u2019\u201c\u201d'))[:80]
         if named_title is not None
-        else _compact_project_title(cleaned_prompt)
+        else "Nova história"
     )
     protagonist_match = re.search(
         r"\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+),\s+(?:uma|um)\s+"
@@ -523,6 +526,7 @@ async def _create_project_from_idea(idea: dict[str, Any]) -> None:
         ),
         "one_line_idea": _format_idea_payload_for_project(idea),
         "source_idea_payload": dict(idea),
+        "title_locked": True,
         "content_type": "short_drama",
         "aspect_ratio": "9:16",
         "workflow_mode": "continuous_fast",

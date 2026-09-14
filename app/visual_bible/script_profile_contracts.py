@@ -338,6 +338,13 @@ PERSONAGENS:
 - Extraia papel e, somente quando sustentados pelas fontes, origem, altura, peso, corpo, rosto,
   pele, olhos, cabelo, peças concretas do figurino, calçados, características físicas marcantes,
   acessórios, paleta, personalidade e arco.
+- FIGURINO: quando o trecho mostra ou sugere as roupas do personagem (ação, diálogo, descrição
+  física ou ambiente), preencha base_outfit e footwear com peças concretas coerentes com a
+  ÉPOCA, o LUGAR, a condição social e o CLIMA da história (use o contexto canônico acima como
+  âncora). Em contexto histórico ou rural, NÃO descreva peças modernas (jeans, tênis, camiseta
+  de algodão, moletom) que não existiriam naquele tempo e lugar; prefira peças de época
+  plausíveis com tecidos e estados de conservação do período. Nunca preencha com figurino
+  genérico que serviria para qualquer história.
 - distinctive_features descreve APENAS traço físico ou acessório PERMANENTE do corpo ou vestido
   (cicatriz, tatuagem, óculos, mancha de nascença, penteado fixo). NUNCA uma ação, gesto,
   reação, estado de humor ou momento da história (por exemplo "trava ao entrar na cozinha",
@@ -420,6 +427,13 @@ REGRAS:
   ambientes profissionais específicos, use uniforme ou roupa de trabalho plausível (por exemplo,
   mecânicos em oficina e profissionais de saúde em hospital). Fora desses contextos, use roupa
   cotidiana coerente com gênero, idade, condição social e tom da narrativa.
+- ANCORAGEM DO FIGURINO: cada base_outfit e footwear deve ser derivado da ÉPOCA (time_period),
+  do LUGAR (country_context, locações), da CONDIÇÃO SOCIAL e do CLIMA da história. Em contexto
+  histórico (anos 1920-1950, século XIX, colonial), NÃO use peças contemporâneas — nada de
+  jeans, tênis, camiseta de algodão, moletom ou tecidos sintéticos modernos; descreva peças de
+  época com tecidos, corte e estado de conservação do período. Em zona rural ou pesca, evite
+  looks urbanos; em clima frio, inclua camadas; em alta sociedade, alfaiataria e tecidos finos.
+  O figurino precisa ser reconhecível como pertencente a ESTA história, não a qualquer história.
 - Nunca use descrições genéricas como "vestuário cotidiano", "roupa discreta", "corte neutro"
   ou "calçados adequados". Informe peças, cores, materiais, estado de conservação e o tipo
   exato de calçado. Preencha também altura e peso com valores numéricos plausíveis.

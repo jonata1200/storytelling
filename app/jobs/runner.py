@@ -24,6 +24,7 @@ from app.projects.service import sync_project_title
 from app.projects.versioning import (
     INACTIVE_DERIVED_STATUSES,
 )
+from app.ui.shared.page_config import standardize_title_case
 from app.storytelling.models import Briefing, Scene, Script, StoryIdea
 from app.storytelling.service import (
     coerce_script_duration_minutes,
@@ -91,19 +92,26 @@ async def _apply_target_duration_to_briefing(
     await session.flush()
 
 
-async def _sync_project_title_from_script(
+async def _sync_script_title_to_project(
     session: AsyncSession,
     project_id: UUID,
-    script: Script,
+    script: Any,
 ) -> None:
-    title = str(getattr(script, "title", "") or "").strip()
-    if not title:
+    """Sincroniza o nome do projeto com o título do roteiro gerado.
+
+    O sync é no-op se o projeto estiver com title_locked=True (criado via
+    laboratório de ideias) ou se o título vier vazio. Projetos da dashboard
+    (title_locked=False) são renomeados para o título que a IA deu ao roteiro.
+    """
+    raw_title = getattr(script, "title", "")
+    clean_title = standardize_title_case(raw_title)
+    if not clean_title:
         return
     await sync_project_title(
         session,
         project_id,
-        title,
-        change_note="Project title synchronized from generated script title",
+        clean_title,
+        change_note="Project title synchronized from script title",
     )
 
 
@@ -132,7 +140,7 @@ async def _run_initial_script(
     )
     if script is None:
         raise ValueError("não foi possível gerar roteiro")
-    await _sync_project_title_from_script(session, project_id, script)
+    await _sync_script_title_to_project(session, project_id, script)
     return {"script_id": str(script.id)}
 
 
@@ -164,7 +172,7 @@ async def _run_script(
     )
     if script is None:
         raise ValueError("não foi possível gerar roteiro")
-    await _sync_project_title_from_script(session, project_id, script)
+    await _sync_script_title_to_project(session, project_id, script)
     return {"script_id": str(script.id)}
 
 

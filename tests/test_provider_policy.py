@@ -11,17 +11,15 @@ from app.config.settings import Settings
 
 def test_validate_model_name_blocks_free_and_mock_models() -> None:
     with pytest.raises(ValueError, match="free"):
-        validate_model_name("video:free", provider="vibes")
+        validate_model_name("image:free", provider="meta")
     with pytest.raises(ValueError, match="mock"):
-        validate_model_name("mock-media", provider="vibes")
+        validate_model_name("mock-media", provider="meta")
 
 
 def test_provider_policy_resolves_all_channels() -> None:
     settings = Settings(_env_file=None)
     assert effective_provider_for_channel(settings, "text") == "ollama_cloud"
     assert effective_provider_for_channel(settings, "image") == "meta"
-    assert effective_provider_for_channel(settings, "video") == "vibes"
-    assert provider_model(settings, "vibes", "video") == settings.vibes_video_model
 
 
 def test_ensure_provider_api_key_trims_secret() -> None:

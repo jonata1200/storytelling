@@ -12,7 +12,7 @@ from app.ui.shared import assistant_state
 from app.ui.shared.page_config import play_completion_sound
 from app.ui.visual.helpers import asset_url as _visual_asset_url
 from app.ui.workspace.script_area import render_script_area, save_script_from_ui
-from app.ui.workspace.video_area import render_video_area
+from app.ui.workspace.storyboard_area import render_storyboard_area
 from app.ui.workspace.visual_bible_area import render_visual_bible_area
 
 INITIAL_SCRIPT_PROGRESS_KEYS = ("scripts", "scenes", "shots", "characters", "frames", "clips")
@@ -231,8 +231,8 @@ def _render_script_area(project_id: UUID, summary: dict[str, Any]) -> None:
     )
 
 
-def _render_video_area(project_id: UUID, summary: dict[str, Any]) -> None:
-    render_video_area(
+def _render_storyboard_area(project_id: UUID, summary: dict[str, Any]) -> None:
+    render_storyboard_area(
         project_id,
         summary,
         section_title=_section_title,
@@ -274,5 +274,5 @@ def register_ui_pages(pages: _PagesFacade) -> None:
         workspace_header=pages._workspace_header,
         render_script_area=_render_script_area,
         render_visual_bible_area=render_visual_bible_area,
-        render_video_area=_render_video_area,
+        render_storyboard_area=_render_storyboard_area,
     )

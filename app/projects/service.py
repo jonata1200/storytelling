@@ -87,6 +87,11 @@ async def sync_project_title(
     project = await session.get(Project, project_id, with_for_update=True)
     if project is None or getattr(project, "deleted_at", None) is not None:
         return None
+    # Projetos criados a partir de uma ideia do laboratório têm o título
+    # travado: o nome escolhido pelo usuário (ou pela ideia) não deve ser
+    # sobrescrito pelo título que a IA der ao roteiro.
+    if await _project_title_is_locked(session, project_id):
+        return project
     if project.title.strip() == cleaned_title:
         return project
     project.title = cleaned_title
@@ -102,6 +107,19 @@ async def sync_project_title(
     await session.commit()
     await session.refresh(project)
     return project
+
+
+async def _project_title_is_locked(session: AsyncSession, project_id: UUID) -> bool:
+    """True quando o título do projeto não deve ser sincronizado com o roteiro.
+
+    O flag vive em ``project_production_settings.metadata_json.title_locked``,
+    definido na criação de projetos a partir de ideias do laboratório.
+    """
+    from app.production.service import get_or_create_production_settings
+
+    settings = await get_or_create_production_settings(session, project_id)
+    metadata = settings.metadata_json if isinstance(settings.metadata_json, dict) else {}
+    return bool(metadata.get("title_locked"))
 
 
 async def delete_project(session: AsyncSession, project_id: UUID) -> bool:
@@ -254,7 +272,18 @@ def _validated_table_identifiers(table_names: tuple[str, ...]) -> tuple[str, ...
     concatenação em texto SQL exige allowlist explícita contra o metadata do
     SQLAlchemy para impedir injeção de identificadores.
     """
+    from app.assets import models as asset_models  # noqa: F401
+    from app.costs import models as cost_models  # noqa: F401
     from app.database.base import Base
+    from app.generation import models as generation_models  # noqa: F401
+    from app.observability import models as observability_models  # noqa: F401
+    from app.production import models as production_models  # noqa: F401
+    from app.projects import models as project_models  # noqa: F401
+    from app.storyboards import models as storyboard_models  # noqa: F401
+    from app.storytelling import models as storytelling_models  # noqa: F401
+    from app.video_generation import models as video_generation_models  # noqa: F401
+    from app.visual_bible import models as visual_bible_models  # noqa: F401
+    from app.workflows import models as workflow_models  # noqa: F401
 
     known_tables = set(Base.metadata.tables)
     for name in table_names:

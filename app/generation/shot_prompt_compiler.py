@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from app.generation.shot_generation_spec import ShotGenerationSpec
 
-VIBES_SHOT_PROMPT_COMPILER_VERSION = "vibes_shot_v13_no_camera_no_plans_no_lighting"
+VIBES_SHOT_PROMPT_COMPILER_VERSION = "vibes_shot_v14_action_only"
 VIDEO_PROMPT_MAX_CHARS = 420
 
 # Legado dos compiladores v10/v11 (câmera/enquadramento). Desde a v12 o
@@ -165,34 +165,12 @@ class VibesPromptCompiler:
         *,
         rejection_note: str | None = None,
     ) -> CompiledShotPrompt:
+        # v14: o prompt de vídeo é APENAS a ação do roteiro. Local, coadjuvantes
+        # e props eram contexto que mais atrapalhava que ajudava — o modelo de
+        # vídeo já recebe as referências visuais (ingredients/frames) por fora,
+        # então repetir nomes e objetos no texto só gerava elementos desconexos.
         action = compact_text(strip_camera_directions(spec.action) or spec.action, 190)
-        # Local canônico: sem prefixo INT./EXT. e sem período colado
-        # ("Rua do Bairro - Amanhecer" -> "Rua do Bairro"); casing natural.
-        location = compact_text(_clean_compiled_location(spec.location), 80)
-        action_context = (
-            f"Em {location}, {action}."
-            if location and location.casefold() not in action.casefold()
-            else f"{action}."
-        )
-        lines = [action_context]
-        # Só menciona coadjuvantes quando a ação deixa claro quem está em cena e
-        # a lista é curta: listar todo elenco não citado ("Voz Gravada e Corte
-        # Para: também estão em cena") gera elementos desconexos no vídeo.
-        missing_characters = [
-            name for name in spec.characters[:4] if name.casefold() not in action.casefold()
-        ]
-        if 0 < len(missing_characters) <= 2:
-            verb = "está" if len(missing_characters) == 1 else "estão"
-            lines.append(f"{human_list(missing_characters)} também {verb} em cena.")
-        missing_props = [
-            item for item in spec.props[:3] if item.casefold() not in action.casefold()
-        ]
-        if missing_props:
-            lines.append(f"Objetos importantes: {compact_text(human_list(missing_props), 80)}.")
-        # v12: NADA de Enquadramento/planos, "A câmera ..." nem "Iluminação:" —
-        # o modelo de vídeo decide cobertura, movimento e luz sozinho. A linha
-        # de iluminação virava ruído repetitivo (\"Iluminação: luz externa.\" em
-        # quase todo segmento) e não acrescenta informação à ação.
+        lines = [f"{action}."]
         if rejection_note:
             lines.append(f"Ajuste: {compact_text(rejection_note, 100)}.")
         prompt = bounded_prompt(lines)

@@ -15,10 +15,8 @@ WorkspaceFallbackResolver = Callable[[dict[str, int], object], str]
 WorkspaceHeaderRenderer = Callable[[Project, str, dict[str, int], object], None]
 WorkspaceAreaRenderer = Callable[[UUID, dict[str, Any]], None]
 
-# Seções válidas do workspace. A antiga seção "storyboard" (legado) não existe
-# mais: o acesso a /storyboard redireciona para /video (INC-02 — fonte única
-# de verdade para o fluxo de vídeo). A etapa de finalização foi removida.
-WORKSPACE_ROUTE_SECTIONS = ("script", "visual", "video")
+# Seções válidas do workspace. A etapa de finalização foi removida.
+WORKSPACE_ROUTE_SECTIONS = ("script", "visual", "storyboard")
 
 
 def register_project_workspace_pages(
@@ -30,7 +28,7 @@ def register_project_workspace_pages(
     workspace_header: WorkspaceHeaderRenderer,
     render_script_area: WorkspaceAreaRenderer,
     render_visual_bible_area: WorkspaceAreaRenderer,
-    render_video_area: WorkspaceAreaRenderer,
+    render_storyboard_area: WorkspaceAreaRenderer,
 ) -> None:
     @ui.page("/projects/{project_id}", response_timeout=60)
     async def project_workspace(project_id: str) -> None:
@@ -40,8 +38,8 @@ def register_project_workspace_pages(
     @ui.page("/projects/{project_id}/{section}", response_timeout=60)
     async def project_studio(project_id: str, section: str) -> None:
         body_style()
-        if section == "storyboard":
-            ui.navigate.to(f"/projects/{project_id}/video")
+        if section == "video":
+            ui.navigate.to(f"/projects/{project_id}/storyboard")
             return
         if section not in WORKSPACE_ROUTE_SECTIONS:
             ui.navigate.to(f"/projects/{project_id}/script")
@@ -80,5 +78,5 @@ def register_project_workspace_pages(
                     render_script_area(project_uuid, summary)
                 elif section == "visual":
                     render_visual_bible_area(project_uuid, summary)
-                elif section == "video":
-                    render_video_area(project_uuid, summary)
+                elif section == "storyboard":
+                    render_storyboard_area(project_uuid, summary)

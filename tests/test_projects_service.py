@@ -39,6 +39,10 @@ class _FakeSession:
         self.refreshed.append(item)
 
 
+async def _not_locked(_session: Any, _project_id: Any) -> bool:
+    return False
+
+
 @pytest.mark.asyncio
 async def test_sync_project_title_updates_title_once(
     monkeypatch: pytest.MonkeyPatch,
@@ -53,6 +57,7 @@ async def test_sync_project_title_updates_title_once(
     )
     session = _FakeSession(project)
     monkeypatch.setattr(project_service, "ProjectRepository", _FakeProjectRepository)
+    monkeypatch.setattr(project_service, "_project_title_is_locked", _not_locked)
 
     synced = await project_service.sync_project_title(
         session,  # type: ignore[arg-type]

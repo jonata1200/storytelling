@@ -356,6 +356,19 @@ def _remove_forbidden_transitions(content: str) -> str:
     return FORBIDDEN_TRANSITION_RE.sub("", str(content or ""))
 
 
+def _remove_script_title_line(content: str) -> str:
+    """Remove a linha de título do corpo do roteiro.
+
+    O nome do projeto já é o título da história; uma linha "TITULO: X" (ou
+    "Título: X") no topo do conteúdo é redundante e deve ser descartada.
+    """
+    return re.sub(
+        r"(?im)^[^\S\r\n]*T[IÍ]TULO\s*:?[^\r\n]*(?:\r?\n|$)",
+        "",
+        str(content or ""),
+    )
+
+
 def _remove_forbidden_camera_directions(content: str) -> str:
     """Remove indicações de plano/câmera (PLANO DETALHE:, A câmera segue...).
 
@@ -690,7 +703,7 @@ def _screenplay_content_from_scene_items(
     target_duration_seconds: int,
 ) -> str:
     _ = target_duration_seconds
-    lines = [f"TITULO: {title}", "", "FADE IN:"]
+    lines = ["FADE IN:"]
     for index, raw_scene in enumerate(raw_scenes[:8], 1):
         scene = raw_scene if isinstance(raw_scene, dict) else {"action": raw_scene}
         scene_title = _first_non_empty(
@@ -849,13 +862,15 @@ def normalize_script_payload(
     normalized.setdefault("title", default_title)
     normalized.setdefault("language", language)
     normalized["target_duration_seconds"] = target_duration_seconds
-    normalized["content"] = _remove_forbidden_camera_directions(
-        _remove_forbidden_transitions(
-            _remove_screenplay_parentheticals(
-                _script_content_from_payload(
-                    normalized,
-                    default_title=default_title,
-                    target_duration_seconds=target_duration_seconds,
+    normalized["content"] = _remove_script_title_line(
+        _remove_forbidden_camera_directions(
+            _remove_forbidden_transitions(
+                _remove_screenplay_parentheticals(
+                    _script_content_from_payload(
+                        normalized,
+                        default_title=default_title,
+                        target_duration_seconds=target_duration_seconds,
+                    )
                 )
             )
         )

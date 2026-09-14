@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -25,7 +27,93 @@ async function inputPayload() {
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
 }
 
+const execFileAsync = promisify(execFile);
+
+/**
+ * Finaliza instâncias Chrome órfãs para evitar conflito de lock file.
+ *
+ * Bug: quando chromium.launchPersistentContext é chamado com um profile
+ * já em uso por outro Chrome (zombie de job anterior, sessão travada), o
+ * Chrome nativo detecta o lock file e mata a nova instância imediatamente
+ * ("Abrindo em uma sessão de navegador existente" + <kill>), gerando
+ * "Target page, context or browser has been closed". O usuário fica com
+ * o popup travado e nenhum navegador abre.
+ *
+ * Solução: ANTES de launchPersistentContext, listar PIDs do Chrome e
+ * matá-los via taskkill. O lock file é liberado e o próximo launch
+ * consegue abrir a instância nova normalmente.
+ *
+ * Retorna a lista de PIDs finalizados ([] quando não havia zombie ou a
+ * detecção falhou). Fail-open: em caso de tasklist/taskkill ausente,
+ * retorna [] sem bloquear a geração.
+ */
+async function killZombieChromeForProfile(profilePath) {
+  if (process.platform !== "win32") return [];
+  const target = path.resolve(profilePath).toLowerCase().replace(/\//g, "\\").replace(/\\+$/, "");
+  // wmic retorna CommandLine mesmo para processos como serviço. CSV:
+  // "ProcessId","CommandLine".
+  let stdout;
+  try {
+    const result = await execFileAsync("wmic.exe", [
+      "process", "where", "name='chrome.exe'",
+      "get", "ProcessId,CommandLine",
+      "/format:csv",
+    ], { timeout: 10000 });
+    stdout = result.stdout;
+  } catch {
+    return [];
+  }
+  if (!stdout) return [];
+  const pidsToKill = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line.toLowerCase().includes("--user-data-dir=")) continue;
+    const match = line.match(/^"?(\d+)"?,/);
+    if (!match) continue;
+    const pid = Number(match[1]);
+    if (!pid) continue;
+    // Extrai todos os --user-data-dir= do CommandLine e compara normalizado.
+    const lower = line.toLowerCase();
+    let cursor = 0;
+    while (cursor < lower.length) {
+      const found = lower.indexOf("--user-data-dir=", cursor);
+      if (found === -1) break;
+      let valueStart = found + "--user-data-dir=".length;
+      // Pula aspas se houver.
+      if (line[valueStart] === "\"") valueStart += 1;
+      let valueEnd = valueStart;
+      while (valueEnd < line.length && line[valueEnd] !== " " && line[valueEnd] !== "\"" && line[valueEnd] !== "\t") {
+        valueEnd += 1;
+      }
+      const value = line.slice(valueStart, valueEnd).toLowerCase().replace(/\//g, "\\").replace(/\\+$/, "");
+      if (value === target) {
+        pidsToKill.push(pid);
+        break;
+      }
+      cursor = valueEnd;
+    }
+  }
+  if (!pidsToKill.length) return [];
+  const killed = [];
+  for (const pid of pidsToKill) {
+    try {
+      await execFileAsync("taskkill.exe", ["/F", "/PID", String(pid)], { timeout: 5000 });
+      killed.push(pid);
+    } catch {
+      // PID pode ter morrido entre wmic e taskkill — não é fatal.
+    }
+  }
+  if (killed.length) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return killed;
+}
+
 async function persistentPage(profilePath, headless) {
+  // Garante que nenhum Chrome zombie segura o lock do profile.
+  // Sem isso, launchPersistentContext pode falhar com
+  // "Target page, context or browser has been closed" (PID matado pelo
+  // próprio Chrome ao detectar lock conflitante).
+  await killZombieChromeForProfile(profilePath);
   const sessionKey = path.resolve(profilePath);
   if (bridgeServerMode) {
     const existing = managedSessions.get(sessionKey);
@@ -118,6 +206,15 @@ async function closeManagedSessions() {
     clearTimeout(session.idleTimer);
     await session.context.close().catch(() => {});
   }));
+}
+
+// Fecha todos os navegadores gerenciados e marca o estado de "fechado pelo
+// usuário" para que a automação NÃO reabra nenhum navegador por conta própria
+// até uma retomada explícita (Autorizar Meta/Vibes ou nova geração).
+async function closeAllBrowsers(payload) {
+  await saveUserClosedState(payload.profilePath);
+  await closeManagedSessions();
+  return { closed: true };
 }
 
 async function loginRequired(page) {
@@ -648,6 +745,50 @@ async function saveConversationUrl(profilePath, conversationKey, url) {
   await fs.writeFile(statePath, JSON.stringify({ url, updatedAt: new Date().toISOString() }));
 }
 
+// A conversa persistida pode ter sido EXCLUÍDA pelo usuário na Meta. Nesse
+// caso a URL salva morreu: limpa o estado para que a próxima geração recue
+// para um chat novo (a exclusão manual é a única exceção ao contrato
+// "todas as gerações no mesmo chat").
+async function clearConversationUrl(profilePath, conversationKey) {
+  await fs.rm(conversationStatePath(profilePath, conversationKey), { force: true }).catch(() => {});
+}
+
+// Detecta a página de "conversa indisponível" da Meta (ou o redirecionamento
+// para a home após abrir uma URL de conversa apagada). Retorna null quando o
+// estado parece normal.
+const DELETED_CONVERSATION_MARKERS = [
+  'esta conversa não está disponível',
+  'esta conversa nao esta disponivel',
+  'esta conversa não está mais disponível',
+  'conversa não foi encontrada',
+  'conversa nao foi encontrada',
+  'esta conversa não existe',
+  'conversation is no longer available',
+  'conversation no longer available',
+  'conversation not found',
+  "couldn't find this conversation",
+  'could not find this conversation',
+];
+
+async function deletedConversationState(page) {
+  let url;
+  try {
+    url = new URL(page.url());
+  } catch {
+    return null;
+  }
+  if (!['meta.ai', 'www.meta.ai'].includes(url.hostname)) return null;
+  // Redirecionada para a home/gerador: a conversa apontada não existe mais.
+  if (url.pathname === '/' || url.pathname === '/ai-image-generator/') {
+    return 'redirect-home';
+  }
+  const text = await page.evaluate(() => document.body?.innerText || '').catch(() => '');
+  const normalized = String(text || '').replace(/\s+/g, ' ').toLowerCase();
+  if (!normalized) return null;
+  const marker = DELETED_CONVERSATION_MARKERS.find(item => normalized.includes(item));
+  return marker ? `marker:${marker}` : null;
+}
+
 async function authorize(payload) {
   const destination = payload.destination === 'vibes' ? VIBES_URL : META_HOME_URL;
   const { context, page } = await persistentPage(payload.profilePath, false);
@@ -845,12 +986,12 @@ async function generateImage(payload) {
     // Reutiliza a conversa persistente do projeto para manter todas as
     // referências visuais no mesmo chat. O lazy-load de imagens de gerações
     // anteriores é mitigado pelo descarte de duplicados abaixo.
-    const conversationUrl = await loadConversationUrl(
+    const savedConversationUrl = await loadConversationUrl(
       payload.profilePath,
       payload.conversationKey,
     );
     await withDeadline(
-      page.goto(conversationUrl, {
+      page.goto(savedConversationUrl, {
         waitUntil: 'domcontentloaded',
         // Timeout explícito: o default da página (15s) derrubava a navegação
         // no meio do caminho em redes oscilantes, antes do orçamento de
@@ -861,6 +1002,28 @@ async function generateImage(payload) {
       'A navegação para a conversa do Meta AI demorou demais (orçamento de preparação).',
     );
     await withDeadline(settlePage(page), prepBudgetMs, 'A estabilização da página demorou demais.');
+    // A conversa salva pode ter sido EXCLUÍDA na Meta (exceção ao contrato
+    // "mesmo chat"): detecta o estado "indisponível" e recua para um chat
+    // NOVO em vez de falhar toda a geração.
+    if (savedConversationUrl !== IMAGE_URL) {
+      const deletedState = await deletedConversationState(page);
+      if (deletedState) {
+        console.log(
+          `[bridge] generate-image: conversa persistida indisponível (${deletedState}); ` +
+            'recuando para um chat novo.',
+        );
+        await clearConversationUrl(payload.profilePath, payload.conversationKey);
+        await withDeadline(
+          page.goto(IMAGE_URL, {
+            waitUntil: 'domcontentloaded',
+            timeout: prepBudgetMs,
+          }),
+          prepBudgetMs,
+          'A navegação para um novo chat do Meta AI demorou demais.',
+        );
+        await withDeadline(settlePage(page), prepBudgetMs, 'A estabilização da página demorou demais.');
+      }
+    }
     await withDeadline(ensureAuthorized(page), prepBudgetMs, 'A autorização do Meta AI demorou demais.');
     await withDeadline(
       uploadLocalReferences(page, payload.references || []),
@@ -1552,18 +1715,14 @@ async function executeAction(action, payload) {
     ? await authorizeAfterUserClose(payload)
     : action === 'generate-image'
       ? await generateImage(payload)
-      : action === 'submit-video'
-        ? await submitVideo(payload)
-        : action === 'poll-video'
-          ? await pollVideo(payload)
-          : action === 'generate-video'
-            ? await submitVideo(payload)
-            : action === 'resume-after-close'
-              ? await (async () => {
-                await clearUserClosedState(payload.profilePath);
-                return { resumed: true };
-              })()
-              : (() => { throw new Error(`Ação desconhecida: ${action}`); })();
+      : action === 'resume-after-close'
+        ? await (async () => {
+          await clearUserClosedState(payload.profilePath);
+          return { resumed: true };
+        })()
+        : action === 'close-browser'
+          ? await closeAllBrowsers(payload)
+          : (() => { throw new Error(`Ação desconhecida: ${action}`); })();
 }
 
 async function serveBridge() {

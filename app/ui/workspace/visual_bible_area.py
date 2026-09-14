@@ -9,10 +9,12 @@ from uuid import UUID, uuid4
 from nicegui import background_tasks, ui
 from redis.asyncio import from_url
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import get_settings
 from app.core.enums import GenerationJobStatus, GenerationJobType
 from app.database.session import AsyncSessionLocal
+from app.providers.browser_bridge import resume_after_user_browser_close
 from app.storytelling.models import Script
 from app.ui.shared.assistant_state import safe_client_navigation
 from app.ui.shared.generation_progress import (
@@ -66,7 +68,7 @@ from app.visual_bible.prompt_balance import (
     repair_portuguese_mojibake,
 )
 from app.visual_bible.reference_planning import TargetKind, plan_visual_references
-from app.visual_bible.service import generate_visual_bible
+from app.visual_bible.service import generate_visual_bible, update_visual_profile_prompt
 
 VISUAL_REFERENCE_POLL_INTERVAL_SECONDS = 2.0
 VISUAL_REFERENCE_STALLED_AFTER = timedelta(seconds=20)
@@ -441,6 +443,93 @@ def _start_visual_reference_generation_watch(
     return task
 
 
+async def _enqueue_reference_batch(
+    session: AsyncSession,
+    project_id: UUID,
+    prompt_inputs: list[tuple[str, Any, Any]],
+    generation_batch: UUID,
+) -> tuple[int, int, int, int, list[str], list[str]]:
+    """Enfileira as referências pendentes item a item, seguindo após falhas.
+
+    Uma falha ao enfileirar um item (perfil sem prompt canônico, erro de
+    banco, etc.) NÃO aborta o lote: as referências seguintes continuam sendo
+    criadas e os problemas são devolvidos no retorno (``skipped``/
+    ``failures``) para o resumo ao usuário. Depois, o worker processa o lote
+    em série e uma falha da Meta em UMA imagem já não impede as seguintes (o
+    job falha em FAILED e a fila segue para o próximo).
+
+    Retorna (queued, requested, already_complete, already_active, skipped,
+    failures).
+    """
+    reference_result = await session.execute(
+        select(VisualReference).where(
+            VisualReference.project_id == project_id,
+            VisualReference.status != "rejected",
+        )
+    )
+    job_result = await session.execute(
+        select(GenerationJob).where(
+            GenerationJob.project_id == project_id,
+            GenerationJob.job_type == GenerationJobType.IMAGE,
+            GenerationJob.status.in_(ACTIVE_VISUAL_REFERENCE_JOB_STATUSES),
+        )
+    )
+    completed_keys, active_keys = _visual_reference_resume_keys(
+        list(reference_result.scalars()),
+        list(job_result.scalars()),
+    )
+    queued = 0
+    requested = 0
+    already_complete = 0
+    already_active = 0
+    skipped: list[str] = []
+    failures: list[str] = []
+    for kind, target, prompt_input in prompt_inputs:
+        canonical_prompt = repair_portuguese_mojibake(prompt_input.value).strip()
+        if not canonical_prompt:
+            skipped.append(str(target.name))
+            continue
+        profile = {
+            **dict(target.canonical_profile or {}),
+            "canonical_prompt": canonical_prompt,
+        }
+        try:
+            plan = plan_visual_references(cast(TargetKind, kind), target.id, profile)
+        except Exception:
+            skipped.append(str(target.name))
+            continue
+        for item in plan.items:
+            requested += 1
+            item_key = _visual_reference_generation_key(kind, target.id, item.view_type)
+            if item_key in completed_keys:
+                already_complete += 1
+                continue
+            if item_key in active_keys:
+                already_active += 1
+                continue
+            try:
+                decision = await enqueue_visual_reference_generation(
+                    session,
+                    project_id,
+                    kind,
+                    target.id,
+                    item.view_type,
+                    prompt_override=item.prompt,
+                    attempt_key=(
+                        f"generate-{generation_batch}-{kind}-{target.id}-{item.view_type}"
+                    ),
+                )
+            except Exception:
+                # O enqueue pode deixar a session inválida (PendingRollback);
+                # restaura antes de tentar o próximo item do lote.
+                await session.rollback()
+                failures.append(f"{target.name} ({item.view_type})")
+                continue
+            queued += int(decision.should_dispatch)
+            active_keys.add(item_key)
+    return queued, requested, already_complete, already_active, skipped, failures
+
+
 def _cancel_bare_watch_on_completion(
     bare_watch_task: list[asyncio.Task[Any] | None],
     *,
@@ -646,71 +735,36 @@ def render_visual_bible_area(project_id: UUID, summary: dict[str, Any]) -> None:
         mark_dialog_task_cancelable(reference_dialog)
         keep_dialog_open = False
         try:
-            generation_batch = uuid4()
-            queued = 0
-            requested = 0
-            already_complete = 0
-            already_active = 0
+            # Disparar uma nova geração é ação explícita de retomada: limpa o
+            # estado "navegador fechado manualmente" do perfil (contrato de
+            # UserClosedBrowserError — a automação não reabre sozinha).
+            try:
+                await resume_after_user_browser_close(get_settings().meta_browser_profile_path)
+            except Exception:
+                pass  # Bridge offline: sem flag a limpar ou limpo pelo console.
             async with AsyncSessionLocal() as session:
-                reference_result = await session.execute(
-                    select(VisualReference).where(
-                        VisualReference.project_id == project_id,
-                        VisualReference.status != "rejected",
-                    )
-                )
-                job_result = await session.execute(
-                    select(GenerationJob).where(
-                        GenerationJob.project_id == project_id,
-                        GenerationJob.job_type == GenerationJobType.IMAGE,
-                        GenerationJob.status.in_(ACTIVE_VISUAL_REFERENCE_JOB_STATUSES),
-                    )
-                )
-                completed_keys, active_keys = _visual_reference_resume_keys(
-                    list(reference_result.scalars()),
-                    list(job_result.scalars()),
-                )
-                for kind, target, prompt_input in prompt_inputs:
-                    canonical_prompt = repair_portuguese_mojibake(prompt_input.value).strip()
-                    if not canonical_prompt:
-                        raise ValueError(f"Informe o prompt visual de {target.name}.")
-                    profile = {
-                        **dict(target.canonical_profile or {}),
-                        "canonical_prompt": canonical_prompt,
-                    }
-                    plan = plan_visual_references(cast(TargetKind, kind), target.id, profile)
-                    for item in plan.items:
-                        requested += 1
-                        item_key = _visual_reference_generation_key(
-                            kind,
-                            target.id,
-                            item.view_type,
-                        )
-                        if item_key in completed_keys:
-                            already_complete += 1
-                            continue
-                        if item_key in active_keys:
-                            already_active += 1
-                            continue
-                        decision = await enqueue_visual_reference_generation(
-                            session,
-                            project_id,
-                            kind,
-                            target.id,
-                            item.view_type,
-                            prompt_override=item.prompt,
-                            attempt_key=(
-                                f"generate-{generation_batch}-{kind}-{target.id}-{item.view_type}"
-                            ),
-                        )
-                        queued += int(decision.should_dispatch)
-                        active_keys.add(item_key)
+                (
+                    queued,
+                    requested,
+                    already_complete,
+                    already_active,
+                    skipped,
+                    failures,
+                ) = await _enqueue_reference_batch(session, project_id, prompt_inputs, uuid4())
             if queued:
                 details = [f"{queued} referência(s) pendente(s) enviada(s) ao worker"]
                 if already_complete:
                     details.append(f"{already_complete} já pronta(s)")
                 if already_active:
                     details.append(f"{already_active} já em andamento")
-                ui.notify("; ".join(details) + ".", color="positive")
+                for name in skipped:
+                    details.append(f"{name} sem prompt canônico (ignorada)")
+                for name in failures:
+                    details.append(f"{name} falhou ao enfileirar (o lote segue)")
+                ui.notify(
+                    "; ".join(details) + ".",
+                    color="warning" if failures or skipped else "positive",
+                )
             elif already_active:
                 ui.notify(
                     f"Nenhuma geração duplicada: {already_active} referência(s) já estão "
@@ -719,6 +773,13 @@ def render_visual_bible_area(project_id: UUID, summary: dict[str, Any]) -> None:
                 )
             elif requested and already_complete == requested:
                 ui.notify("Todas as referências visuais já estão prontas.", color="positive")
+            elif failures:
+                show_ai_error_popup(
+                    "Não foi possível enfileirar a geração de: "
+                    + ", ".join(failures)
+                    + ". As demais referências não foram afetadas.",
+                    title="Falha ao gerar referências visuais",
+                )
             else:
                 ui.notify("Não há referências pendentes para gerar.", color="info")
             if queued or already_active:
@@ -862,6 +923,31 @@ def _target_card(
 
         prompt_input.on_value_change(update_prompt_preview)
 
+        async def save_prompt() -> None:
+            new_prompt = repair_portuguese_mojibake(prompt_input.value).strip()
+            if not new_prompt:
+                ui.notify("Informe o prompt canônico antes de salvar.", color="warning")
+                return
+            try:
+                async with AsyncSessionLocal() as session:
+                    await update_visual_profile_prompt(
+                        session,
+                        project_id,
+                        target_kind,
+                        target.id,
+                        new_prompt,
+                    )
+                ui.notify("Prompt canônico salvo.", color="positive")
+            except Exception as exc:
+                show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
+
+        with ui.row().classes("w-full items-center justify-end gap-2 mt-2"):
+            ui.button(
+                "Salvar prompt",
+                icon="save",
+                on_click=save_prompt,
+            ).props("unelevated dense no-caps").classes("acid-bg rounded-xl")
+
         grid_classes = (
             "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 w-full"
             if target_kind == "character"
@@ -957,30 +1043,50 @@ def _target_card(
                             on_click=remove_reference,
                         ).props("flat dense no-caps").classes("text-red-300")
 
-                        async def regenerate(ref: Any = reference) -> None:
+                        async def generate_individual(
+                            ref: Any = reference,
+                            view: str = reference.view_type,
+                        ) -> None:
+                            """Gera apenas ESTA referência (vazia ou regeneração)."""
                             reference_dialog.open()
                             mark_dialog_task_cancelable(reference_dialog)
                             try:
-                                # INC-08: deriva o override do prompt canônico
-                                # BASE (metadata ou prompt salvo sem as
-                                # instruções técnicas de vista), nunca do
-                                # prompt final acumulado entre regenerações.
-                                metadata = dict(ref.metadata_json or {})
-                                base_prompt = str(
-                                    metadata.get("canonical_base_prompt") or ""
+                                # Mesma precedência da regeneração: usa o prompt
+                                # ATUAL do textarea; cai para a base salva no
+                                # metadata e por fim para o prompt final antigo.
+                                base_prompt = repair_portuguese_mojibake(
+                                    prompt_input.value
                                 ).strip()
+                                if not base_prompt:
+                                    metadata = dict(ref.metadata_json or {})
+                                    base_prompt = str(
+                                        metadata.get("canonical_base_prompt") or ""
+                                    ).strip()
                                 if not base_prompt:
                                     base_prompt = _strip_view_instructions(
                                         str(ref.prompt or ""), ref.target_kind
                                     )
+                                plan = plan_visual_references(
+                                    cast(TargetKind, ref.target_kind),
+                                    ref.target_id,
+                                    {"canonical_prompt": base_prompt},
+                                )
+                                item_prompt = next(
+                                    (
+                                        item.prompt
+                                        for item in plan.items
+                                        if item.view_type == view
+                                    ),
+                                    base_prompt,
+                                )
                                 async with AsyncSessionLocal() as session:
                                     await enqueue_visual_reference_generation(
                                         session,
                                         project_id,
                                         ref.target_kind,
                                         ref.target_id,
-                                        ref.view_type,
-                                        prompt_override=repair_portuguese_mojibake(base_prompt),
+                                        view,
+                                        prompt_override=repair_portuguese_mojibake(item_prompt),
                                         attempt_key=f"regenerate-{uuid4()}",
                                     )
                                 start_generation_watch(show_completion=True)
@@ -991,16 +1097,19 @@ def _target_card(
                                 safe_close_ui_element(reference_dialog)
                                 show_ai_error_popup(friendly_ai_error(exc), details=str(exc))
 
-                        regenerate_button = ui.button(
-                            "Gerar novamente",
-                            icon="refresh",
-                            on_click=regenerate,
+                        generate_individual_button = ui.button(
+                            "Gerar novamente" if asset is not None else "Gerar referência",
+                            icon="refresh" if asset is not None else "auto_awesome",
+                            on_click=generate_individual,
                         ).props(
                             "flat dense no-caps disable"
                             if generation_issue
                             else "flat dense no-caps"
                         )
-                        regenerate_button.tooltip(generation_issue or "Regenerar")
+                        generate_individual_button.tooltip(
+                            generation_issue
+                            or "Gera apenas esta referência dentro da mesma conversa do Meta AI"
+                        )
 
             async def upload_manual_image() -> None:
                 upload_dialog = ui.dialog()
@@ -1075,6 +1184,13 @@ def _target_card(
 
 def _balanced_target_prompt(target_kind: str, target: Any) -> str:
     profile = {**dict(target.canonical_profile or {}), "name": str(target.name)}
+    # Prefere o prompt canônico JÁ salvo (inclui edições do usuário). O rebuild
+    # via _character_profile/_location_profile só é usado como fallback quando o
+    # perfil não tem canonical_prompt (dados legados), senão a edição salva seria
+    # descartada a cada reload da página.
+    saved = repair_portuguese_mojibake(profile.get("canonical_prompt")).strip()
+    if saved:
+        return saved
     if target_kind == "character":
         profile.setdefault("role", str(getattr(target, "role", "") or "personagem"))
         normalized = _character_profile(profile)
